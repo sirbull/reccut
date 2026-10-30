@@ -13,6 +13,7 @@ import {
   Lock,
   LockOpen,
   Headphones,
+  Link2,
   Search,
   SquareDashed,
   StretchHorizontal,
@@ -42,7 +43,7 @@ import {
   isVisual,
   transitionWindow,
 } from '../../shared/model.js';
-import { moveClip, positionMove, positionTrim, rollEdit, slideClip, slipClip, splitClip, trimClip } from '../../shared/ops.js';
+import { groupLead, groupMembers, moveClip, positionMove, positionTrim, rollEdit, slideClip, slipClip, splitClip, trimClip } from '../../shared/ops.js';
 import {
   beginTransient,
   commit,
@@ -294,7 +295,8 @@ export function Timeline() {
       selection.value = [...set];
       return;
     }
-    if (!selection.value.includes(clipId)) selection.value = [clipId];
+    // Et klikk velger hele gruppen. Option (Alt) velger bare ett klipp.
+    if (!selection.value.includes(clipId)) selection.value = e.altKey ? [clipId] : groupMembers(proj, clipId);
 
     const base = { x: e.clientX, y: e.clientY, T, clip: structuredClone(clip), moved: false };
     const positionTool = tool.value === 'position' && clip.lane === 0;
@@ -324,7 +326,7 @@ export function Timeline() {
         return;
       }
       dragRef.current = { ...base, kind: 'vol', kfIndex: el.dataset.kf != null ? Number(el.dataset.kf) : null };
-    } else dragRef.current = { ...base, kind: 'move', ids: [...selection.value], originals: selection.value.map((id) => structuredClone(proj.clips[id])) };
+    } else dragRef.current = { ...base, kind: 'move', ids: [...selection.value], originals: selection.value.map((id) => structuredClone(proj.clips[id])), originalProject: proj };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
@@ -453,13 +455,17 @@ export function Timeline() {
     }
     if (d.kind === 'move') {
       const row = rowAt(e.clientY);
-      if (d.ids.length === 1) {
+      // En gruppe med et klipp i hovedsporet flyttes ved å flytte det klippet; resten følger med.
+      const lead = d.ids.length > 1 ? groupLead(d.originalProject, d.ids) : null;
+      const c = lead ? d.originalProject.clips[lead] : d.clip;
+      if (d.ids.length === 1 || lead) {
         const visual = isVisual(c);
         let lane = row.lane;
         if (c.type === 'caption') lane = CAPTION_LANE;
         else if (lane === CAPTION_LANE) lane = visual ? 1 : -1;
         else if (visual && lane < 0) lane = c.lane === 0 ? 0 : 1;
         else if (!visual && lane >= 0) lane = -1;
+        if (lead) lane = 0;
         if (lane === 0) {
           const p0 = project.value;
           const order = p0.primary.filter((id) => id !== c.id);
@@ -490,9 +496,10 @@ export function Timeline() {
           updateTransient((p) => moveClip(p, c.id, { start, lane }));
         }
       } else {
-        // Flere klipp: flytt bare de frie i tid.
+        // Flere klipp: flytt bare de frie i tid. Klipp gruppert med et klipp i hovedsporet blir der videoen er.
+        const anchored = new Set(d.originalProject.primary.map((id) => d.originalProject.clips[id].group).filter(Boolean));
         updateTransient((p) => {
-          for (const o of d.originals) if (o.lane !== 0 && p.clips[o.id]) p.clips[o.id].start = Math.max(0, o.start + dt);
+          for (const o of d.originals) if (o.lane !== 0 && !anchored.has(o.group) && p.clips[o.id]) p.clips[o.id].start = Math.max(0, o.start + dt);
         });
       }
     }
@@ -829,7 +836,7 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
   const expanded = clip.expanded && hasAudio && clip.type !== 'audio';
   const speed = speedOf(clip);
   const visual = isVisual(clip) && clip.type !== 'title';
-  const cls = ['tl-clip', `t-${clip.type}`, selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary'].filter(Boolean).join(' ');
+  const cls = ['tl-clip', `t-${clip.type}`, selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped'].filter(Boolean).join(' ');
   const label = clip.type === 'title' || clip.type === 'caption' ? clip.props.text || (clip.type === 'caption' ? 'Caption' : 'Title') : clip.name || media?.name || clip.type;
   const narrow = w < 24;
   const thumbStream = media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
@@ -848,6 +855,11 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
           {clip.reverse && <span class="badge speed" title="Reversed">Reverse</span>}
           {clip.ramp ? <span class="badge speed" title="Speed ramp">Ramp</span> : speed !== 1 && <span class="badge speed">{speed === 0 ? 'Freeze' : `${Math.round(speed * 100)}%`}</span>}
           {clip.solo && <span class="badge solo">S</span>}
+          {clip.group && (
+            <span class="badge group" title="Grouped. Option click to select one clip.">
+              <Link2 size={9} strokeWidth={2.6} />
+            </span>
+          )}
           <span class="name">{label}</span>
         </div>
       )}

@@ -346,7 +346,13 @@ function AudioEditSection({ clip }) {
           Detach Audio ({isMac ? 'Control Shift S' : 'Alt Shift E'})
         </Button>
       )}
+      {!isAv && (
+        <Button variant="secondary" onClick={() => import('./commands.js').then((m) => m.autoSyncAudio(clip.id))}>
+          Auto Sync Audio ({isMac ? 'Option Cmd G' : 'Ctrl Alt G'})
+        </Button>
+      )}
       <p class="hint">Negative values shorten the audio. With expanded audio you can drag the audio edges on the timeline ({isMac ? 'Control S' : 'Alt E'}).</p>
+      {!isAv && <p class="hint">Auto Sync Audio finds where this recording matches the sound in your video clips and lines it up under them.</p>}
     </Section>
   );
 }

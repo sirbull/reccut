@@ -32,7 +32,7 @@ function mediaLength(project, clip) {
 
 /* Trimming som tar hensyn til fart, ramper og baklengs. */
 
-function shiftKeyframes(c, delta) {
+export function shiftKeyframes(c, delta) {
   if (Math.abs(delta) < 1e-9) return;
   for (const [prop, list] of Object.entries(c.kf || {})) {
     if (prop === 'layout') continue;
@@ -75,16 +75,24 @@ function applyTrim(project, c, edge, d) {
 }
 
 // Frie klipp følger klippet i hovedsporet de ligger over, som tilkoblede klipp i Final Cut Pro.
+// Grupperte klipp følger klippet i hovedsporet i samme gruppe, også utenfor kantene.
 export function withSync(project, fn) {
   const before = new Map(project.primary.map((id) => [id, { start: project.clips[id].start, in: project.clips[id].in }]));
   const order = [...project.primary];
+  const groupParent = new Map();
+  for (const id of order) {
+    const g = project.clips[id].group;
+    if (g && !groupParent.has(g)) groupParent.set(g, id);
+  }
   const anchors = [];
   for (const c of Object.values(project.clips)) {
     if (c.lane === 0 || project.lanes?.[c.lane]?.locked) continue;
-    const parentId = order.find((id) => {
-      const p = project.clips[id];
-      return c.start >= p.start - 1e-6 && c.start < p.start + p.dur - 1e-6;
-    });
+    const parentId =
+      (c.group && groupParent.get(c.group)) ||
+      order.find((id) => {
+        const p = project.clips[id];
+        return c.start >= p.start - 1e-6 && c.start < p.start + p.dur - 1e-6;
+      });
     if (parentId) {
       const p = project.clips[parentId];
       anchors.push({ c, parentId, src: kfTime(p, c.start), offset: c.start - p.start });
@@ -107,8 +115,48 @@ export function withSync(project, fn) {
       }
     }
   }
+  cleanGroups(project);
   updateDuration(project);
   return result;
+}
+
+/* Grupper: klipp med samme clip.group flyttes og slettes sammen (Cmd/Ctrl+G). */
+
+export function groupMembers(project, id) {
+  const g = project.clips[id]?.group;
+  if (!g) return project.clips[id] ? [id] : [];
+  return Object.values(project.clips).filter((c) => c.group === g).map((c) => c.id);
+}
+
+// Klippet i hovedsporet som styrer gruppen, eller null om alle er frie.
+export function groupLead(project, ids) {
+  const groups = new Set(ids.map((id) => project.clips[id]?.group));
+  if (groups.size !== 1 || !ids.every((id) => project.clips[id]?.group)) return null;
+  const [g] = groups;
+  const members = Object.values(project.clips).filter((c) => c.group === g);
+  if (members.length !== ids.length) return null;
+  return project.primary.find((id) => project.clips[id].group === g) || null;
+}
+
+export function groupClips(project, ids) {
+  const list = ids.map((id) => project.clips[id]).filter((c) => c && c.lane !== CAPTION_LANE);
+  if (list.length < 2) return null;
+  const g = uid();
+  list.forEach((c) => (c.group = g));
+  return g;
+}
+
+export function ungroupClips(project, ids) {
+  const groups = new Set(ids.map((id) => project.clips[id]?.group).filter(Boolean));
+  for (const c of Object.values(project.clips)) if (groups.has(c.group)) delete c.group;
+  return groups.size;
+}
+
+// Grupper med bare ett klipp igjen fjernes.
+export function cleanGroups(project) {
+  const count = new Map();
+  for (const c of Object.values(project.clips)) if (c.group) count.set(c.group, (count.get(c.group) || 0) + 1);
+  for (const c of Object.values(project.clips)) if (c.group && count.get(c.group) < 2) delete c.group;
 }
 
 export function lanesOverlap(project, clip, lane) {
@@ -156,6 +204,7 @@ export function splitClip(project, id, T) {
   shiftKeyframes(c, c.in - oldIn);
   right.transition = undefined;
   right.axfade = undefined;
+  delete right.group;
   right.props.vFadeIn = 0;
   right.props.aFadeIn = 0;
   right.props.aLead = 0;
@@ -173,11 +222,25 @@ export function bladeAt(project, T, ids = null) {
   const targets = Object.values(project.clips).filter(
     (c) => (!ids || ids.includes(c.id)) && !project.lanes?.[c.lane]?.locked && T > c.start && T < c.start + c.dur
   );
-  return targets.map((c) => splitClip(project, c.id, T)).filter(Boolean);
+  const pieces = targets.map((c) => [c, splitClip(project, c.id, T)]).filter(([, r]) => r);
+  // Kuttes alle klippene i en gruppe, blir høyre deler en egen gruppe.
+  const fresh = new Map();
+  for (const [c, r] of pieces) {
+    if (!c.group || !groupMembers(project, c.id).every((id) => pieces.some(([x]) => x.id === id))) continue;
+    if (!fresh.has(c.group)) fresh.set(c.group, uid());
+    project.clips[r].group = fresh.get(c.group);
+  }
+  cleanGroups(project);
+  return pieces.map(([, r]) => r);
 }
 
 export function deleteClips(project, ids, { ripple = true } = {}) {
   const set = new Set(ids);
+  // Slettes klippet i hovedsporet, forsvinner også klippene som er gruppert med det.
+  for (const id of ids) {
+    const c = project.clips[id];
+    if (c?.lane === 0 && c.group) groupMembers(project, id).forEach((m) => project.clips[m].lane !== 0 && set.add(m));
+  }
   withSync(project, () => {
     for (const id of set) {
       const c = project.clips[id];
@@ -349,13 +412,22 @@ export function pasteClips(project, items, T) {
   const ids = [];
   const primary = items.filter((c) => c.lane === 0);
   const free = items.filter((c) => c.lane !== 0);
-  const fresh = (c) => ({ ...structuredClone(c), id: uid(), transition: undefined });
+  const groups = new Map();
+  const fresh = (c) => {
+    const n = { ...structuredClone(c), id: uid(), transition: undefined };
+    if (c.group) {
+      if (!groups.has(c.group)) groups.set(c.group, uid());
+      n.group = groups.get(c.group);
+    }
+    return n;
+  };
   if (primary.length) insertIntoPrimary(project, primary.map((c) => { const n = fresh(c); ids.push(n.id); return n; }), T);
   for (const c of free) {
     const n = fresh(c);
     placeFree(project, n, T + c.start, c.lane);
     ids.push(n.id);
   }
+  cleanGroups(project);
   return ids;
 }
 

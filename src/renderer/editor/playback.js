@@ -27,6 +27,12 @@ export function toggle() {
   skim.value = null;
   player.toggle();
 }
+// Shift mellomrom: spill bakover, eller stopp om det allerede spiller.
+export function playReverse() {
+  skim.value = null;
+  if (playing.value) player.pause();
+  else player.play(-1);
+}
 export function shuttle(dir) {
   skim.value = null;
   player.shuttle(dir);

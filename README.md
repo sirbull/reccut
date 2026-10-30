@@ -22,9 +22,12 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 * **Biblioteket som filmstriper**: hvert klipp vises som en liten tidslinje med bilder og lydbølge, under hverandre. Dra over et klipp for å velge et område, og legg det til med E, W, Q eller D (eller dra navnet til tidslinjen).
 * **Fart**: 10 %, 25 %, 50 %, 2x, 4x, 8x, 20x eller egen verdi, med valg om å beholde tonehøyden. **Frosset bilde** med Option F.
 * **Baklengs** (Reverse Clip): en baklengs kopi lages i bakgrunnen, så avspillingen blir jevn. Eksporten blir baklengs med lyd.
+* **Spill bakover**: Shift mellomrom, J eller knappen ved siden av avspillingsknappen spiller tidslinjen bakover. Har klippet en baklengs kopi, brukes den, så bilde og lyd går jevnt.
 * **Fartsramper** som i Final Cut Pro: Ramp to 0%, Ramp from 0%, Slow Down in the Middle, Speed Up, Slow Down og Speed Burst, eller egen start- og sluttfart. Kurven vises i inspektøren.
 * **Flere spor**: videospor over hovedsporet (V2, V3 og så videre) og lydspor under (A1, A2 og så videre), med sporhoder for skjul, demp og lås, og knapper for å legge til spor. Slipp et klipp på det tomme sporet øverst eller nederst for å lage et nytt.
 * **Utvid lyd** (Control S, Alt E på Windows) viser lyden for seg under bildet, så kantene kan dras for J- og L-kutt. **Koble fra lyd** (Control Shift S, Alt Shift E) gir egne lydklipp.
+* **Automatisk synk av lyd** (Auto Sync Audio): legg et lydopptak fra en ekstern mikrofon under tidslinjen, høyreklikk og velg Auto Sync Audio (Option Cmd G). Appen sammenligner lyden med lyden i videoklippene og legger opptaket rett under videoen det hører til. Er lydklippet lengre enn videoen, klippes det til; er det kortere, legges det bare på riktig sted. Passer det under flere klipp, kommer det opp et valg: synk med det første klippet, eller del opp og legg en bit under hvert klipp. Lyden kan grupperes med videoen og kameralyden dempes automatisk (valgene huskes, og finnes også i Preferences). Velger du også videoklipp, synkes det bare mot dem.
+* **Grupper klipp** (Cmd G): marker video og lyd og grupper dem, så følger lyden videoen når den flyttes, også om lyden starter før videoen. Et klikk velger hele gruppen, Option klikk velger ett klipp. Shift Cmd G løser opp gruppen. Grupperte klipp har et lenkemerke.
 * **Kryssfade i lyd**: marker to lydklipp som ligger inntil hverandre og trykk Cmd T. Standardlengden (1 sekund) settes i Preferences (Cmd ,).
 * Overwrite (D), Lift from Storyline (Option Cmd Opp), Overwrite to Storyline (Option Cmd Ned), Insert Gap (Option W), Solo (Option S) og Select Clip (C)
 * Importer nesten alle formater: MP4, MOV, MKV, WebM, AVI, WMV, FLV, MPEG, MXF, ProRes, DNxHR, 10-bit H.264, animert GIF, TIFF, TGA, HEIC, WAV, AIFF, MP3, AAC, FLAC, OGG, WMA, AC3 og flere. Det appen ikke kan spille av direkte konverteres i bakgrunnen. Filer som ikke kan leses avvises med en tydelig melding.
@@ -75,6 +78,7 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | Tast | Handling |
 | --- | --- |
 | Mellomrom | Spill av eller pause |
+| Shift mellomrom | Spill bakover |
 | J, K, L | Spill bakover, stopp, spill fremover (trykk flere ganger for raskere) |
 | Venstre og høyre pil | Ett bilde (med Shift: ti bilder) |
 | Opp og ned pil | Forrige eller neste kutt |
@@ -85,6 +89,8 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | Option F, Option W, Option S | Frosset bilde, sett inn mellomrom, solo |
 | Control S, Control Shift S | Utvid lyd, koble fra lyd (Alt E og Alt Shift E på Windows) |
 | Option Cmd Opp og Ned | Løft ut av hovedsporet, skriv over til hovedsporet |
+| Cmd G, Shift Cmd G | Grupper klipp, løs opp gruppe |
+| Option Cmd G | Automatisk synk av lyd |
 | Cmd , | Preferences |
 | Cmd B, Shift Cmd B | Kutt valgte klipp ved spillhodet, kutt alle |
 | Delete, Shift Delete | Slett og lukk, slett og behold mellomrom |

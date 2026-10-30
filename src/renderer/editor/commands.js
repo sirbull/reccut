@@ -1,8 +1,12 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
 import { CAPTION_LANE, EFFECTS, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
+import { applySync, clipAudioSource, planSync } from '../../shared/sync.js';
 import {
   adjacentAudioPairs,
+  groupClips,
+  groupMembers,
+  ungroupClips,
   detachAudio,
   freezeFrame,
   insertGap,
@@ -46,6 +50,8 @@ export const projectsOpen = signal(false);
 export const inspectorTab = signal(null);
 export const newProjectOpen = signal(false);
 export const prefsOpen = signal(false);
+// Valg når et lydklipp passer under flere videoklipp: { audioId, matches }.
+export const syncDialog = signal(null);
 
 let timelineView = null;
 export function registerTimelineView(v) {
@@ -464,6 +470,74 @@ export function openRetime() {
   inspectorTab.value = 'speed';
 }
 
+/* Automatisk synk av lyd: legg lydklippet under videoen det hører til. */
+
+const waveCache = new Map();
+async function loadWaves(project, ids) {
+  const paths = new Set();
+  for (const id of ids) {
+    const src = clipAudioSource(project, project.clips[id]);
+    if (src && !waveCache.has(src.stream.wave)) paths.add(src.stream.wave);
+  }
+  await Promise.all([...paths].map(async (path) => waveCache.set(path, await api.readWave(path).catch(() => null))));
+  return (path) => waveCache.get(path) || null;
+}
+
+export async function autoSyncAudio(audioId = null) {
+  const p = project.value;
+  const sel = selection.value.map((id) => p.clips[id]).filter(Boolean);
+  const audio = audioId ? p.clips[audioId] : sel.find((c) => c.type === 'audio');
+  if (!audio || audio.type !== 'audio') return toast('Select an audio clip to synchronize it with the video.');
+  if ((audio.speed ?? 1) !== 1 || audio.ramp || audio.reverse) return toast('Set the audio clip back to normal speed before synchronizing it.');
+  const media = p.media[audio.mediaId];
+  if (!clipAudioSource(p, audio)) {
+    return toast(media?.streams && Object.values(media.streams).some((s) => s.hasAudio) ? 'The audio is still being analyzed. Try again in a moment.' : 'This clip has no audio to synchronize.');
+  }
+  // Er det også valgt videoklipp, synkes det bare mot dem.
+  const videos = sel.filter((c) => c.type === 'video' || c.type === 'recording').map((c) => c.id);
+  const candidates = Object.values(p.clips).filter((c) => (c.type === 'video' || c.type === 'recording') && (!videos.length || videos.includes(c.id)));
+  const waveFor = await loadWaves(p, [audio.id, ...candidates.map((c) => c.id)]);
+  const matches = planSync(project.value, audio.id, waveFor, { only: videos.length ? videos : null });
+  if (!matches.length) return toast('Could not find matching audio in the video clips on the timeline.', { kind: 'error', timeout: 6000 });
+  if (matches.length > 1) {
+    syncDialog.value = { audioId: audio.id, matches };
+    return;
+  }
+  finishSync(audio.id, matches, 'first');
+}
+
+export function finishSync(audioId, matches, mode) {
+  const opts = { mode, muteCamera: prefs.value.syncMuteCamera, group: prefs.value.syncGroup };
+  let placed = [];
+  commit((q) => (placed = applySync(q, audioId, matches, opts)));
+  syncDialog.value = null;
+  if (!placed.length) return toast('The audio did not overlap the matching video.');
+  // Velg den første gruppen (video og lyd), så den kan flyttes med en gang.
+  selection.value = groupMembers(project.value, placed[0]);
+  const n = placed.length;
+  toast(n > 1 ? `Audio synchronized and placed under ${n} clips.` : 'Audio synchronized with the video.', { timeout: 3500 });
+}
+
+/* Grupper (Cmd/Ctrl G): lyden følger videoen når den flyttes. */
+
+export function groupSelected() {
+  const ids = selection.value;
+  if (ids.length < 2) return toast('Select two or more clips to group them.');
+  commit((q) => groupClips(q, ids));
+  toast('Clips grouped. They now move together.', { timeout: 2500 });
+}
+
+export function ungroupSelected() {
+  const ids = selection.value;
+  if (!ids.some((id) => project.value.clips[id]?.group)) return toast('The selection has no grouped clips.');
+  commit((q) => ungroupClips(q, ids));
+}
+
+// Klikk på et gruppert klipp velger hele gruppen.
+export function selectWithGroup(id) {
+  selection.value = groupMembers(project.value, id);
+}
+
 export function zoomAt(factor, T, offsetPx) {
   timelineView?.zoomAt?.(factor, T, offsetPx);
 }
@@ -554,6 +628,10 @@ export async function clipContextMenu(clipId, T) {
     items.push({ id: 'detach', label: 'Detach Audio', accelerator: isMac ? 'Ctrl+Shift+S' : 'Alt+Shift+E' });
   }
   if (hasAudio || c.type === 'audio') items.push({ id: 'solo', label: c.solo ? 'Unsolo' : 'Solo', accelerator: 'Alt+S' });
+  if (c.type === 'audio') items.push({ id: 'sync', label: 'Auto Sync Audio', accelerator: isMac ? 'Alt+Cmd+G' : 'Ctrl+Alt+G' });
+  items.push({ separator: true });
+  if (selection.value.length > 1) items.push({ id: 'group', label: 'Group Clips', accelerator: 'CmdOrCtrl+G' });
+  if (c.group) items.push({ id: 'ungroup', label: 'Ungroup', accelerator: 'Shift+CmdOrCtrl+G' });
   if (c.lane === 0 && c.type !== 'gap') items.push({ id: 'lift', label: 'Lift from Storyline', accelerator: isMac ? 'Alt+Cmd+Up' : 'Ctrl+Alt+Up' });
   if (c.lane > 0 && c.lane !== CAPTION_LANE && isVisual(c)) items.push({ id: 'overwriteDown', label: 'Overwrite to Storyline', accelerator: isMac ? 'Alt+Cmd+Down' : 'Ctrl+Alt+Down' });
   items.push({ separator: true });
@@ -577,6 +655,15 @@ export async function clipContextMenu(clipId, T) {
       break;
     case 'solo':
       toggleSolo();
+      break;
+    case 'sync':
+      autoSyncAudio(clipId);
+      break;
+    case 'group':
+      groupSelected();
+      break;
+    case 'ungroup':
+      ungroupSelected();
       break;
     case 'lift':
       liftSelected();

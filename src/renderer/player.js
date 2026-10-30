@@ -27,15 +27,17 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   let clockBase = 0;
   let raf = 0;
   let dirty = true;
-  let lastSeekStep = 0;
 
   function streamFor(clip, key) {
     const m = getProject().media[clip.mediaId];
     const s = m?.streams?.[key];
     if (!s) return null;
     // Baklengs klipp spiller den baklengs kopien framover når den er klar.
-    if (clip.reverse && s.reversed) return { path: s.reversed, rev: true, D: s.duration, hasVideo: s.hasVideo && m.kind !== 'image', hasAudio: s.hasAudio };
-    return { path: s.proxy || s.path, rev: false, hasVideo: s.hasVideo && m.kind !== 'image', hasAudio: s.hasAudio };
+    // Spilles tidslinjen bakover, brukes kopien for vanlige klipp, så bilde og lyd går jevnt.
+    const backward = playing.value && rate < 0;
+    const plain = s.proxy || s.path;
+    if (Boolean(clip.reverse) !== backward && s.reversed) return { path: s.reversed, alt: plain, rev: true, D: s.duration, hasVideo: s.hasVideo && m.kind !== 'image', hasAudio: s.hasAudio };
+    return { path: plain, alt: s.reversed, rev: false, hasVideo: s.hasVideo && m.kind !== 'image', hasAudio: s.hasAudio };
   }
 
   function getEl(clip, key) {
@@ -43,7 +45,8 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     let entry = pool.get(id);
     const stream = streamFor(clip, key);
     if (!stream) return null;
-    if (entry && entry.path !== stream.path) {
+    // Stillestående kan begge kopiene vise riktig bilde, så elementet byttes ikke unødvendig.
+    if (entry && entry.path !== stream.path && !(entry.path === stream.alt && !playing.value)) {
       disposeEntry(id, entry);
       entry = null;
     }
@@ -133,7 +136,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   function sync(T, isPlaying) {
     const p = getProject();
     const active = neededAt(p, T);
-    const upcoming = isPlaying && rate > 0 ? neededAt(p, T + PRELOAD) : new Map();
+    const upcoming = isPlaying ? neededAt(p, T + PRELOAD * Math.sign(rate)) : new Map();
     const seen = new Set();
 
     const scrubbing = !isPlaying && performance.now() < scrubUntil;
@@ -150,8 +153,9 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       const outside = src < -0.01 || target >= dur - 0.01;
       let speed = n.speed ?? 1;
       if (entry.rev) speed = -speed;
-      // Baklengs uten ferdig kopi: vis riktig bilde, men stille, til kopien er klar.
-      const moving = isPlaying && rate > 0 && speed > 0;
+      // Elementet spiller framover når retningen i filen er framover. Ellers vises riktig bilde, men stille.
+      const eff = rate * speed;
+      const moving = isPlaying && eff > 0;
       el.preservesPitch = n.clip.props?.preservePitch !== false;
       if (scrubbing && entry.gain && !outside) {
         // Lyd mens du skummer: et kort utdrag fra der pekeren er.
@@ -170,13 +174,13 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
           if (!el.paused) el.pause();
           continue;
         }
-        const pr = Math.min(16, Math.max(0.0625, rate * speed));
+        const pr = Math.min(16, Math.max(0.0625, eff));
         if (Math.abs(el.playbackRate - pr) > 1e-3) el.playbackRate = pr;
         const drift = Math.abs(el.currentTime - target);
         if (el.paused) {
           if (drift > 0.05) el.currentTime = target;
           el.play().catch(() => {});
-        } else if (drift > 0.25 * Math.max(1, rate * speed)) {
+        } else if (drift > 0.25 * Math.max(1, eff)) {
           el.currentTime = target;
         }
       } else {
@@ -262,22 +266,18 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     let T = getTime();
     if (playing.value) {
       const now = performance.now();
+      T = clockBase + ((now - clockStart) / 1000) * rate;
       if (rate > 0) {
-        T = clockBase + ((now - clockStart) / 1000) * rate;
         const end = p.range ? p.range.out : p.duration;
         if (T >= end) {
           T = end;
           pause();
         }
-        setTime(T);
-      } else if (now - lastSeekStep > 1000 / 20) {
-        // Bakoverspilling: hopp bakover i små steg.
-        const dt = (now - lastSeekStep) / 1000;
-        lastSeekStep = now;
-        T = Math.max(0, T + rate * Math.min(dt, 0.1));
-        if (T <= 0) pause();
-        setTime(T);
+      } else if (T <= 0) {
+        T = 0;
+        pause();
       }
+      setTime(T);
       sync(T, true);
       draw(T);
       dirty = false;
@@ -309,7 +309,6 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     rate = r;
     clockBase = T;
     clockStart = performance.now();
-    lastSeekStep = performance.now();
     setTime(T, { force: true });
     playing.value = true;
   }

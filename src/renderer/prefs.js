@@ -11,6 +11,8 @@ const DEFAULTS = {
   audioSkimming: true,
   snapping: true,
   preservePitch: true,
+  syncMuteCamera: false,
+  syncGroup: true,
 };
 
 function load() {

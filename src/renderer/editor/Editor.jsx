@@ -48,7 +48,8 @@ function onKeyDown(e) {
   const code = e.code;
   let handled = true;
 
-  if (code === 'Space') playback.toggle();
+  if (code === 'Space' && e.shiftKey) playback.playReverse();
+  else if (code === 'Space') playback.toggle();
   else if (code === 'KeyJ' && !mod) playback.shuttle(-1);
   else if (code === 'KeyK' && !mod) playback.shuttle(0);
   else if (code === 'KeyL' && !mod) playback.shuttle(1);
@@ -77,6 +78,9 @@ function onKeyDown(e) {
   else if (mod && !alt && code === 'KeyR') commands.openRetime();
   else if (mod && alt && code === 'ArrowUp') commands.liftSelected();
   else if (mod && alt && code === 'ArrowDown') commands.overwriteSelectedToPrimary();
+  // Grupper: Cmd/Ctrl G grupperer, Shift Cmd/Ctrl G løser opp, Option Cmd/Ctrl G synker lyd.
+  else if (mod && alt && code === 'KeyG') commands.autoSyncAudio();
+  else if (mod && code === 'KeyG') e.shiftKey ? commands.ungroupSelected() : commands.groupSelected();
   else if (mod || e.ctrlKey || alt) handled = false;
   else if (code === 'Backspace' || code === 'Delete') commands.deleteSelection(!e.shiftKey);
   else if (code === 'KeyA') tool.value = 'select';
@@ -163,6 +167,10 @@ export function handleMenu(id) {
   else if (id === 'lift') commands.liftSelected();
   else if (id === 'overwriteDown') commands.overwriteSelectedToPrimary();
   else if (id === 'insertGap') commands.insertGapAtPlayhead();
+  else if (id === 'group') commands.groupSelected();
+  else if (id === 'ungroup') commands.ungroupSelected();
+  else if (id === 'syncAudio') commands.autoSyncAudio();
+  else if (id === 'playReverse') playback.playReverse();
   else if (id === 'blade') commands.blade();
   else if (id === 'addTransition') commands.addTransition('dissolve');
   else if (id === 'toggleEnabled') commands.toggleEnabled();
@@ -231,6 +239,7 @@ export function Editor({ active }) {
       {commands.projectsOpen.value && <ProjectsDialog />}
       {commands.newProjectOpen.value && <NewProjectDialog />}
       {commands.prefsOpen.value && <PreferencesDialog />}
+      {commands.syncDialog.value && <SyncDialog />}
     </div>
   );
 }
@@ -349,6 +358,48 @@ function NewProjectDialog() {
 }
 
 // Innstillinger: standardlengder og skumming.
+// Lydklippet passer under flere videoklipp: synk med det første, eller del opp og legg under hvert.
+function SyncDialog() {
+  const { audioId, matches } = commands.syncDialog.value;
+  const p = project.value;
+  const close = () => (commands.syncDialog.value = null);
+  const names = matches.map((m) => p.clips[m.videoId]?.name || 'Clip');
+  return (
+    <Modal
+      title="Auto Sync Audio"
+      width={480}
+      onClose={close}
+      footer={
+        <>
+          <Button onClick={close}>Cancel</Button>
+          <Button onClick={() => commands.finishSync(audioId, matches, 'first')}>Sync to First Clip</Button>
+          <Button variant="primary" onClick={() => commands.finishSync(audioId, matches, 'split')}>
+            Split and Place
+          </Button>
+        </>
+      }
+    >
+      <p class="sync-lead">
+        The audio clip matches {matches.length} video clips on the timeline. Sync it to the first clip, or split it and place a matching piece under each clip.
+      </p>
+      <ul class="sync-list">
+        {names.map((n, i) => (
+          <li key={i}>
+            <span>{n}</span>
+            <span class="muted">{Math.round(matches[i].score * 100)}% match</span>
+          </li>
+        ))}
+      </ul>
+      <Row label="Group audio with the video">
+        <Toggle checked={prefs.value.syncGroup} onChange={(v) => setPrefs({ syncGroup: v })} />
+      </Row>
+      <Row label="Mute the camera audio">
+        <Toggle checked={prefs.value.syncMuteCamera} onChange={(v) => setPrefs({ syncMuteCamera: v })} />
+      </Row>
+    </Modal>
+  );
+}
+
 function PreferencesDialog() {
   const p = prefs.value;
   const close = () => (commands.prefsOpen.value = false);
@@ -396,6 +447,14 @@ function PreferencesDialog() {
         </Row>
         <Row label="Preserve pitch when changing speed">
           <Toggle checked={p.preservePitch} onChange={(v) => setPrefs({ preservePitch: v })} />
+        </Row>
+      </Section>
+      <Section title="Auto Sync Audio" collapsible={false}>
+        <Row label="Group synced audio with the video">
+          <Toggle checked={p.syncGroup} onChange={(v) => setPrefs({ syncGroup: v })} />
+        </Row>
+        <Row label="Mute the camera audio after syncing">
+          <Toggle checked={p.syncMuteCamera} onChange={(v) => setPrefs({ syncMuteCamera: v })} />
         </Row>
       </Section>
     </Modal>

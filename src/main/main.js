@@ -195,6 +195,10 @@ function buildMenu() {
         show('expandAudio', 'Expand Audio', isMac ? 'Ctrl+S' : 'Alt+E'),
         show('detachAudio', 'Detach Audio', isMac ? 'Ctrl+Shift+S' : 'Alt+Shift+E'),
         show('solo', 'Solo', 'Alt+S'),
+        show('syncAudio', 'Auto Sync Audio', 'Alt+CmdOrCtrl+G'),
+        { type: 'separator' },
+        show('group', 'Group Clips', 'CmdOrCtrl+G'),
+        show('ungroup', 'Ungroup', 'Shift+CmdOrCtrl+G'),
         { type: 'separator' },
         {
           label: 'Retime',
@@ -235,6 +239,8 @@ function buildMenu() {
         cmd('roomRecord', 'Record', 'CmdOrCtrl+1'),
         cmd('roomEdit', 'Edit', 'CmdOrCtrl+2'),
         cmd('roomExport', 'Export', 'CmdOrCtrl+3'),
+        { type: 'separator' },
+        show('playReverse', 'Play Reverse', 'Shift+Space'),
         { type: 'separator' },
         cmd('zoomIn', 'Zoom In on Timeline', 'CmdOrCtrl+='),
         cmd('zoomOut', 'Zoom Out on Timeline', 'CmdOrCtrl+-'),
@@ -469,8 +475,10 @@ ipcMain.handle('shell:open', (_e, file) => shell.openPath(file));
 ipcMain.handle('menu:popup', (e, items) => {
   return new Promise((resolve) => {
     let chosen = null;
+    // Doble skillelinjer og skillelinjer i kantene fjernes.
+    const tidy = (list) => list.filter((it, i) => !it.separator || (i > 0 && i < list.length - 1 && !list[i + 1].separator));
     const build = (list) =>
-      list.map((it) =>
+      tidy(list).map((it) =>
         it.separator
           ? { type: 'separator' }
           : it.submenu

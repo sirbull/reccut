@@ -7,6 +7,9 @@ import * as playback from './playback.js';
 import * as commands from './commands.js';
 import { IconButton } from '../ui.jsx';
 
+// Spill bakover: avspillingsikonet speilet.
+const PlayBackward = ({ size }) => <Play size={size} fill="currentColor" style={{ transform: 'scaleX(-1)' }} />;
+
 export function Viewer() {
   const p = project.value;
   const boxRef = useRef(null);
@@ -103,6 +106,7 @@ export function Viewer() {
         <div class="controls">
           <IconButton icon={SkipBack} title="Go to start (Home)" onClick={commands.goHome} />
           <IconButton icon={StepBack} title="Previous edit (Up Arrow)" onClick={() => commands.jumpEdit(-1)} />
+          <IconButton icon={PlayBackward} title="Play reverse (Shift Space)" active={playing.value && playback.getRate() < 0} onClick={playback.playReverse} />
           <button class="play-btn" title="Play or pause (Space)" onClick={playback.toggle}>
             {playing.value ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
           </button>
