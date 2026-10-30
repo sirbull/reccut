@@ -38,7 +38,7 @@ export class Compositor {
     this.layout = 6;
     this.lastCorner = 6;
     this.pipSize = 'medium';
-    this.shape = 'rounded';
+    this.shape = 'rect'; // 'circle', 'square' eller 'rect' (16:9)
     this.mirror = false;
     this.cam = null;
     this.from = null;
@@ -71,8 +71,10 @@ export class Compositor {
     const H = this.canvas.height;
     if (layout === 1) return { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
 
-    const w = W * PIP_SIZES[this.pipSize];
-    const h = this.shape === 'circle' ? w : (w * 9) / 16;
+    // Sirkel og kvadrat gjøres smalere, så de tar omtrent like stor plass som 16:9.
+    const base = W * PIP_SIZES[this.pipSize];
+    const w = this.shape === 'rect' ? base : base * 0.7;
+    const h = this.shape === 'rect' ? (w * 9) / 16 : w;
     const r = this.shape === 'circle' ? w / 2 : w * 0.06;
     const m = Math.min(W, H) * MARGIN;
     const corner = layout === 2 ? this.lastCorner : layout;

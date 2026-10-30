@@ -14,6 +14,7 @@ En enkel skjerm- og kameraopptaker for Mac og Windows. Ta opp skjermen med deg s
   4. Bilde i bilde oppe til høyre
   5. Bilde i bilde nede til venstre
   6. Bilde i bilde nede til høyre
+* Kamerabildet kan være sirkel, kvadrat eller rektangel (16:9), i tre størrelser
 * Globale hurtigtaster som virker selv om en annen app er i fokus
 * Lagrer MP4 (H.264) rett til disk, som standard i `Filmer/OBSlite` (Mac) eller `Videoer\OBSlite` (Windows)
 * OBSlite skjuler sitt eget vindu fra opptaket

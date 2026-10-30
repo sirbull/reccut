@@ -30,7 +30,7 @@ const DEFAULTS = {
   micId: null,
   layout: 6,
   pipSize: 'medium',
-  pipShape: 'rounded',
+  pipShape: 'rect',
   mirror: false,
   fps: 30,
   outputDir: null,
@@ -47,6 +47,7 @@ function loadSettings() {
 }
 
 const settings = loadSettings();
+if (!['circle', 'square', 'rect'].includes(settings.pipShape)) settings.pipShape = 'rect';
 function save() {
   try {
     localStorage.setItem('settings', JSON.stringify(settings));
