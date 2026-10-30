@@ -1,0 +1,71 @@
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
+
+const invoke = (channel) => (...args) => ipcRenderer.invoke(channel, ...args);
+const on = (channel) => (cb) => {
+  const fn = (_e, payload) => cb(payload);
+  ipcRenderer.on(channel, fn);
+  return () => ipcRenderer.removeListener(channel, fn);
+};
+
+contextBridge.exposeInMainWorld('api', {
+  platform: process.platform,
+  // Filstier for filer som dras inn i vinduet.
+  pathForFile: (file) => webUtils.getPathForFile(file),
+
+  listScreens: invoke('screens:list'),
+  selectScreen: invoke('screens:select'),
+  setShortcuts: invoke('shortcuts:set'),
+  setShortcutsActive: invoke('shortcuts:active'),
+  inputStatus: invoke('input:status'),
+  requestInput: invoke('input:request'),
+  setZoomKey: invoke('input:setZoomKey'),
+  setPolling: invoke('input:polling'),
+  hideFromCapture: invoke('window:hideFromCapture'),
+  permissionStatus: invoke('permissions:status'),
+  requestPermissions: invoke('permissions:request'),
+  openPermissionSettings: invoke('permissions:open'),
+  baseDir: invoke('paths:base'),
+
+  recBegin: invoke('rec:begin'),
+  recOpen: invoke('rec:open'),
+  recWrite: invoke('rec:write'),
+  recClose: invoke('rec:close'),
+  recFinish: invoke('rec:finish'),
+
+  importMedia: invoke('media:import'),
+  importRecording: invoke('media:importRecording'),
+  reanalyze: invoke('media:reanalyze'),
+  readWave: invoke('media:wave'),
+  exists: invoke('media:exists'),
+  listRecordings: invoke('media:recordings'),
+  readText: invoke('file:read'),
+  writeText: invoke('file:write'),
+
+  openMediaDialog: invoke('dialog:openMedia'),
+  openFileDialog: invoke('dialog:openFile'),
+  saveFileDialog: invoke('dialog:saveFile'),
+  chooseDir: invoke('dialog:chooseDir'),
+  reveal: invoke('shell:reveal'),
+  openPath: invoke('shell:open'),
+  popupMenu: invoke('menu:popup'),
+
+  listProjects: invoke('projects:list'),
+  loadProject: invoke('projects:load'),
+  saveProject: invoke('projects:save'),
+  removeProject: invoke('projects:remove'),
+
+  listTasks: invoke('tasks:list'),
+  cancelTask: invoke('tasks:cancel'),
+  clearTasks: invoke('tasks:clear'),
+  startExport: invoke('export:start'),
+  startTranscribe: invoke('transcribe:start'),
+
+  onShortcut: on('shortcut'),
+  onInput: on('input'),
+  onMenu: on('menu'),
+  onTasks: on('tasks'),
+  onAnalyzed: on('media:analyzed'),
+  onExportDone: on('export:done'),
+  onTranscribeDone: on('transcribe:done'),
+  onTranscribeError: on('transcribe:error'),
+});

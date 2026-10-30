@@ -1,27 +1,37 @@
 {
   "name": "obslite",
   "productName": "OBSlite",
-  "version": "0.1.0",
-  "description": "Enkel skjerm- og kameraopptaker med bilde i bilde",
-  "main": "src/main.js",
+  "version": "0.2.0",
+  "description": "Ta opp, rediger og eksporter opplæringsvideoer",
+  "main": "src/main/main.js",
   "author": "sirbull",
   "license": "MIT",
   "private": true,
   "scripts": {
-    "start": "electron .",
-    "dist": "electron-builder --publish never",
-    "dist:mac": "electron-builder --mac --publish never",
-    "dist:win": "electron-builder --win --publish never"
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "start": "node scripts/build.mjs && electron .",
+    "dist": "node scripts/build.mjs && electron-builder --publish never",
+    "dist:mac": "node scripts/build.mjs && electron-builder --mac --publish never",
+    "dist:win": "node scripts/build.mjs && electron-builder --win --publish never",
+    "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
+    "@huggingface/transformers": "^4.3.2",
     "electron": "^45.1.0",
-    "electron-builder": "^26.0.0"
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.28.2",
+    "preact": "^10.29.8",
+    "@preact/signals": "^2.11.4",
+    "lucide-preact": "^1.65.0",
+    "mediabunny": "^1.65.0"
   },
   "build": {
     "appId": "no.sirbull.obslite",
     "productName": "OBSlite",
     "files": [
-      "src/**/*",
+      "build/**/*",
+      "src/main/**/*",
       "package.json"
     ],
     "directories": {
@@ -31,11 +41,7 @@
       "category": "public.app-category.video",
       "target": [
         {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
+          "target": "dmg"
         }
       ],
       "hardenedRuntime": true,
@@ -44,7 +50,8 @@
       "extendInfo": {
         "NSCameraUsageDescription": "OBSlite bruker kameraet for å vise deg i opptaket.",
         "NSMicrophoneUsageDescription": "OBSlite bruker mikrofonen for å ta opp lyd.",
-        "NSScreenCaptureUsageDescription": "OBSlite tar opp skjermen din."
+        "NSScreenCaptureUsageDescription": "OBSlite tar opp skjermen din.",
+        "NSAppleEventsUsageDescription": "OBSlite viser tastetrykk i opptaket."
       }
     },
     "win": {
@@ -63,6 +70,15 @@
     },
     "linux": {
       "target": "AppImage"
-    }
+    },
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**",
+      "node_modules/uiohook-napi/**"
+    ],
+    "npmRebuild": false
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.3.0",
+    "uiohook-napi": "^1.5.5"
   }
 }

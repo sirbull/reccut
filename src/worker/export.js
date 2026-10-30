@@ -1,0 +1,483 @@
+// Eksport i et skjult vindu. Hvert bilde tegnes med samme kode som forhåndsvisningen,
+// kodes med WebCodecs (maskinvare) eller FFmpeg, og lyden mikses med nøkkelbilder.
+import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOutputFormat, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, WebMOutputFormat, canEncodeVideo } from 'mediabunny';
+import { CAPTION_LANE, clipHasAudio, computeAudio, computeFrame } from '../shared/model.js';
+import { drawFrame } from '../shared/render.js';
+import { AUDIO_FORMATS, QUALITIES, VIDEO_FORMATS, outputSize, videoBitrate } from '../shared/formats.js';
+import { toSrt } from '../shared/srt.js';
+
+const { ipcRenderer } = require('electron');
+const fs = require('fs');
+const path = require('path');
+const { spawn } = require('child_process');
+
+const RATE = 48000;
+const canceled = new Set();
+
+ipcRenderer.on('worker:job', async (_e, { jobId, payload }) => {
+  try {
+    const result = await runExport(jobId, payload);
+    ipcRenderer.send('worker:done', { jobId, result });
+  } catch (err) {
+    console.error(err);
+    ipcRenderer.send('worker:error', { jobId, error: canceled.has(jobId) ? 'Avbrutt' : String(err?.message || err) });
+  } finally {
+    canceled.delete(jobId);
+  }
+});
+ipcRenderer.on('worker:cancel', (_e, jobId) => canceled.add(jobId));
+
+function checkCancel(jobId) {
+  if (canceled.has(jobId)) throw new Error('Avbrutt');
+}
+
+function progress(jobId, p, stage) {
+  ipcRenderer.send('worker:progress', { jobId, progress: p, stage });
+}
+
+/* FFmpeg */
+
+function ffmpeg(bin, args, { stdin = false, onTime } = {}) {
+  const proc = spawn(bin, ['-hide_banner', '-nostdin', '-y', ...args].filter((a) => a !== '-nostdin' || !stdin), {
+    stdio: [stdin ? 'pipe' : 'ignore', 'ignore', 'pipe'],
+    windowsHide: true,
+  });
+  let err = '';
+  proc.stderr.on('data', (d) => {
+    const s = d.toString();
+    err = (err + s).slice(-8000);
+    const m = /time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(s);
+    if (m && onTime) onTime(Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]));
+  });
+  const done = new Promise((resolve, reject) => {
+    proc.on('error', reject);
+    proc.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`FFmpeg feilet (${code}): ${err.split('\n').slice(-4).join(' ')}`))));
+  });
+  return { proc, done };
+}
+
+function writeAsync(stream, buf) {
+  return new Promise((resolve, reject) => {
+    const ok = stream.write(buf, (e) => e && reject(e));
+    if (ok) resolve();
+    else stream.once('drain', resolve);
+  });
+}
+
+/* Lydmiks */
+
+function streamInfo(project, clip, key) {
+  const m = project.media[clip.mediaId];
+  const s = m?.streams?.[key];
+  return s ? { path: s.proxy || s.path, offset: clip.type === 'recording' ? s.offset || 0 : 0 } : null;
+}
+
+// Dekoder hver lydkilde til en rå fil, og mikser så blokk for blokk med riktig volum.
+async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
+  const { project, ffmpegBin, tmp } = ctx;
+  const PAD = 4;
+  const pairs = new Map();
+  for (const c of Object.values(project.clips)) {
+    if (c.lane === CAPTION_LANE || !c.mediaId) continue;
+    const m = project.media[c.mediaId];
+    if (!clipHasAudio(c, m)) continue;
+    if (c.start > b + PAD || c.start + c.dur < a - PAD) continue;
+    const keys = c.type === 'recording' ? Object.keys(m.streams).filter((k) => m.streams[k].hasAudio) : ['main'];
+    for (const key of keys) {
+      const info = streamInfo(project, c, key);
+      if (!info || !fs.existsSync(info.path)) continue;
+      const from = Math.max(0, c.in - info.offset + Math.max(0, a - c.start) - PAD);
+      const to = c.in - info.offset + Math.min(c.dur, b - c.start) + PAD;
+      if (to <= 0) continue;
+      pairs.set(`${c.id}:${key}`, { path: info.path, from, to, file: path.join(tmp, `a_${pairs.size}.f32`) });
+    }
+  }
+
+  let i = 0;
+  for (const pair of pairs.values()) {
+    checkCancel(jobId);
+    const job = ffmpeg(ffmpegBin, ['-ss', String(pair.from), '-t', String(pair.to - pair.from), '-i', pair.path, '-map', '0:a:0', '-ac', '2', '-ar', String(RATE), '-f', 'f32le', pair.file]);
+    await job.done.catch(() => fs.writeFileSync(pair.file, Buffer.alloc(0)));
+    pair.fd = fs.openSync(pair.file, 'r');
+    pair.frames = fs.statSync(pair.file).size / 8;
+    pair.cache = null;
+    onProgress((++i / Math.max(1, pairs.size)) * 0.5);
+  }
+
+  const total = Math.max(1, Math.round((b - a) * RATE));
+  const BLOCK = 480;
+  const out = fs.openSync(wavPath, 'w');
+  const header = Buffer.alloc(44);
+  const dataBytes = total * 8;
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + dataBytes, 4);
+  header.write('WAVEfmt ', 8);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(3, 20);
+  header.writeUInt16LE(2, 22);
+  header.writeUInt32LE(RATE, 24);
+  header.writeUInt32LE(RATE * 8, 28);
+  header.writeUInt16LE(8, 32);
+  header.writeUInt16LE(32, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(dataBytes, 40);
+  fs.writeSync(out, header);
+
+  const chunkFrames = RATE;
+  const outBuf = new Float32Array(chunkFrames * 2);
+  const readFrames = (pair, startFrame, n) => {
+    // Leser i biter på ett sekund for færre diskoperasjoner.
+    if (!pair.cache || startFrame < pair.cache.start || startFrame + n > pair.cache.start + pair.cache.len) {
+      const len = Math.max(n, RATE * 2);
+      const buf = Buffer.alloc(len * 8);
+      const bytes = startFrame >= 0 && startFrame < pair.frames ? fs.readSync(pair.fd, buf, 0, buf.length, startFrame * 8) : 0;
+      pair.cache = { start: startFrame, len, data: new Float32Array(buf.buffer, buf.byteOffset, len * 2), valid: Math.floor(bytes / 8) };
+    }
+    return pair.cache;
+  };
+
+  let written = 0;
+  while (written < total) {
+    checkCancel(jobId);
+    const n = Math.min(chunkFrames, total - written);
+    outBuf.fill(0);
+    for (let f = 0; f < n; f += BLOCK) {
+      const len = Math.min(BLOCK, n - f);
+      const T0 = a + (written + f) / RATE;
+      const T1 = T0 + len / RATE;
+      const now = computeAudio(project, T0);
+      const next = new Map(computeAudio(project, T1).map((x) => [`${x.clip.id}:${x.stream}`, x.gain]));
+      for (const src of now) {
+        const key = `${src.clip.id}:${src.stream}`;
+        const pair = pairs.get(key);
+        if (!pair) continue;
+        const g0 = src.gain;
+        const g1 = next.has(key) ? next.get(key) : g0;
+        const startFrame = Math.round((src.src - pair.from) * RATE);
+        const cache = readFrames(pair, startFrame, len);
+        const off = startFrame - cache.start;
+        for (let k = 0; k < len; k++) {
+          const idx = off + k;
+          if (idx < 0 || idx >= cache.valid) continue;
+          const g = g0 + ((g1 - g0) * k) / len;
+          outBuf[(f + k) * 2] += cache.data[idx * 2] * g;
+          outBuf[(f + k) * 2 + 1] += cache.data[idx * 2 + 1] * g;
+        }
+      }
+    }
+    for (let k = 0; k < n * 2; k++) outBuf[k] = outBuf[k] > 1 ? 1 : outBuf[k] < -1 ? -1 : outBuf[k];
+    fs.writeSync(out, Buffer.from(outBuf.buffer, 0, n * 8));
+    written += n;
+    onProgress(0.5 + (written / total) * 0.5);
+    if ((written / RATE) % 30 === 0) await new Promise((r) => setTimeout(r, 0));
+  }
+  fs.closeSync(out);
+  for (const pair of pairs.values()) {
+    fs.closeSync(pair.fd);
+    fs.rmSync(pair.file, { force: true });
+  }
+}
+
+/* Dekoding av bilder */
+
+class Reader {
+  constructor(file) {
+    this.file = file;
+    this.fd = fs.openSync(file, 'r');
+    this.size = fs.fstatSync(this.fd).size;
+    this.input = new Input({
+      formats: ALL_FORMATS,
+      source: new CustomSource({
+        getSize: () => this.size,
+        read: (start, end) => {
+          const buf = Buffer.alloc(end - start);
+          fs.readSync(this.fd, buf, 0, buf.length, start);
+          return new Uint8Array(buf.buffer, buf.byteOffset, buf.length);
+        },
+      }),
+    });
+    this.cur = null;
+    this.next = null;
+    this.iter = null;
+    this.ready = this.init();
+  }
+
+  async init() {
+    const track = await this.input.getPrimaryVideoTrack();
+    if (!track) throw new Error(`Ingen video i ${path.basename(this.file)}`);
+    this.first = await track.getFirstTimestamp();
+    this.end = await track.computeDuration();
+    this.sink = new VideoSampleSink(track);
+  }
+
+  restart(t) {
+    this.iter?.return?.();
+    this.cur?.close();
+    if (this.next && this.next !== 'end') this.next.close();
+    this.cur = null;
+    this.next = null;
+    this.iter = this.sink.samples(t);
+  }
+
+  // Bildene leses i rekkefølge. Hopp bakover eller langt fremover starter dekodingen på nytt.
+  async frameAt(t) {
+    await this.ready;
+    const tt = Math.max(this.first, Math.min(t, this.end - 1e-4));
+    if (!this.iter || (this.cur && tt < this.cur.timestamp - 1e-6) || (this.cur && tt > this.cur.timestamp + 2)) this.restart(tt);
+    while (true) {
+      if (!this.next) {
+        const r = await this.iter.next();
+        this.next = r.done ? 'end' : r.value;
+      }
+      if (this.next === 'end') break;
+      if (this.cur && this.next.timestamp > tt + 1e-6) break;
+      this.cur?.close();
+      this.cur = this.next;
+      this.next = null;
+    }
+    return this.cur;
+  }
+
+  close() {
+    this.iter?.return?.();
+    this.cur?.close();
+    if (this.next && this.next !== 'end') this.next.close();
+    try {
+      this.input.dispose?.();
+    } catch {}
+    fs.closeSync(this.fd);
+  }
+}
+
+function neededFrames(project, frame) {
+  const out = [];
+  const add = (clip, T) => {
+    const m = project.media[clip.mediaId];
+    if (!m) return;
+    const s = clip.in + (T - clip.start);
+    for (const [key, st] of Object.entries(m.streams)) {
+      if (!st.hasVideo) continue;
+      out.push({ clip, key, path: m.kind === 'image' ? m.path : st.proxy || st.path, image: m.kind === 'image', t: s - (st.offset || 0) });
+    }
+  };
+  for (const l of frame.layers) {
+    if (l.transition) {
+      if (l.a) add(l.a.clip, l.a.T);
+      if (l.b) add(l.b.clip, l.b.T);
+    } else add(l.clip, l.T);
+  }
+  return out;
+}
+
+async function renderVideo(jobId, ctx, { a, b, w, h, fps, fmt, quality, burnCaptions, useWebCodecs, wavPath, output, hasAudio }) {
+  const { project, ffmpegBin, tmp } = ctx;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const g = canvas.getContext('2d', { alpha: false, willReadFrequently: !useWebCodecs });
+  const scale = w / project.width;
+  const frames = Math.max(1, Math.round((b - a) * fps));
+  const readers = new Map();
+  const images = new Map();
+  const rotated = new Map();
+  const q = QUALITIES.find((x) => x.id === quality) || QUALITIES[2];
+
+  let encoder;
+  if (useWebCodecs) {
+    const videoTmp = path.join(tmp, `video.${fmt.ext === 'mov' ? 'mov' : fmt.container === 'webm' ? 'webm' : fmt.container === 'mkv' ? 'mkv' : 'mp4'}`);
+    const fd = fs.openSync(videoTmp, 'w');
+    const writable = new WritableStream({ write: (chunk) => void fs.writeSync(fd, chunk.data, 0, chunk.data.length, chunk.position) });
+    const format =
+      fmt.container === 'webm' ? new WebMOutputFormat() : fmt.container === 'mkv' ? new MkvOutputFormat() : fmt.container === 'mov' ? new MovOutputFormat({ fastStart: false }) : new Mp4OutputFormat({ fastStart: false });
+    const out = new Output({ format, target: new StreamTarget(writable) });
+    const source = new CanvasSource(canvas, { codec: fmt.codec, bitrate: videoBitrate(fmt, quality, w, h, fps), keyFrameInterval: 2, latencyMode: 'quality' });
+    out.addVideoTrack(source, { frameRate: fps });
+    await out.start();
+    encoder = {
+      add: (i) => source.add(i / fps, 1 / fps),
+      finish: async () => {
+        await out.finalize();
+        fs.closeSync(fd);
+        // Lyden legges til med FFmpeg uten å kode bildet på nytt.
+        const args = ['-i', videoTmp];
+        if (hasAudio) args.push('-i', wavPath);
+        args.push('-map', '0:v:0');
+        if (hasAudio) args.push('-map', '1:a:0', ...audioArgs(fmt.audio, q));
+        args.push('-c:v', 'copy', '-t', String(b - a));
+        if (fmt.container === 'mp4' || fmt.container === 'mov') args.push('-movflags', '+faststart');
+        if (fmt.codec === 'hevc') args.push('-tag:v', 'hvc1');
+        args.push(output);
+        await ffmpeg(ffmpegBin, args).done;
+      },
+      abort: () => out.cancel?.().catch(() => {}),
+    };
+  } else {
+    const args = ['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w}x${h}`, '-r', String(fps), '-i', 'pipe:0'];
+    if (hasAudio) args.push('-i', wavPath);
+    args.push('-map', '0:v:0');
+    if (hasAudio) args.push('-map', '1:a:0', ...audioArgs(fmt.audio, q));
+    args.push(...videoArgs(fmt, q, w, h, fps), '-t', String(b - a));
+    if (fmt.container === 'mp4' || fmt.container === 'mov') args.push('-movflags', '+faststart');
+    args.push(output);
+    const job = ffmpeg(ffmpegBin, args, { stdin: true });
+    job.proc.stdin.on('error', () => {});
+    encoder = {
+      add: () => writeAsync(job.proc.stdin, Buffer.from(g.getImageData(0, 0, w, h).data.buffer)),
+      finish: async () => {
+        job.proc.stdin.end();
+        await job.done;
+      },
+      abort: () => job.proc.kill('SIGKILL'),
+    };
+  }
+
+  try {
+    for (let i = 0; i < frames; i++) {
+      checkCancel(jobId);
+      const T = a + i / fps;
+      const frame = computeFrame(project, T, { captions: burnCaptions });
+      const needed = neededFrames(project, frame);
+      const ready = new Map();
+      await Promise.all(
+        needed.map(async (n) => {
+          const id = `${n.clip.id}:${n.key}`;
+          if (n.image) {
+            if (!images.has(n.path)) images.set(n.path, await createImageBitmap(new Blob([fs.readFileSync(n.path)])));
+            const img = images.get(n.path);
+            ready.set(id, { img, w: img.width, h: img.height });
+            return;
+          }
+          let r = readers.get(id);
+          if (!r) {
+            r = new Reader(n.path);
+            readers.set(id, r);
+          }
+          r.lastUsed = T;
+          const sample = await r.frameAt(n.t);
+          if (sample) ready.set(id, { sample });
+        })
+      );
+      const getSource = (clip, key) => {
+        const e = ready.get(`${clip.id}:${key}`);
+        if (!e) return null;
+        if (e.img) return e;
+        const s = e.sample;
+        if (s.rotation) {
+          // Roterte opptak (for eksempel fra telefon) tegnes riktig vei først.
+          const id = `${clip.id}:${key}`;
+          let c = rotated.get(id);
+          if (!c || c.width !== s.displayWidth || c.height !== s.displayHeight) {
+            c = new OffscreenCanvas(s.displayWidth, s.displayHeight);
+            rotated.set(id, c);
+          }
+          s.draw(c.getContext('2d'), 0, 0, c.width, c.height);
+          return { img: c, w: c.width, h: c.height };
+        }
+        return { img: s.toCanvasImageSource(), w: s.displayWidth, h: s.displayHeight };
+      };
+      drawFrame(g, project, frame, getSource, { scale });
+      await encoder.add(i);
+      for (const [id, r] of readers) {
+        if (T - r.lastUsed > 2) {
+          r.close();
+          readers.delete(id);
+        }
+      }
+      if (i % 5 === 0) progress(jobId, 0.15 + (i / frames) * 0.8, 'Lager video');
+    }
+    progress(jobId, 0.96, 'Ferdigstiller');
+    await encoder.finish();
+  } catch (err) {
+    encoder.abort();
+    throw err;
+  } finally {
+    for (const r of readers.values()) r.close();
+    for (const img of images.values()) img.close?.();
+  }
+}
+
+function audioArgs(kind, q) {
+  if (kind === 'opus') return ['-c:a', 'libopus', '-b:a', `${Math.min(256, q.audioKbps)}k`];
+  if (kind === 'pcm') return ['-c:a', 'pcm_s16le'];
+  return ['-c:a', 'aac', '-b:a', `${q.audioKbps}k`];
+}
+
+function videoArgs(fmt, q, w, h, fps) {
+  switch (fmt.ffCodec) {
+    case 'libx264':
+      return ['-c:v', 'libx264', '-preset', 'medium', '-crf', String(q.crf), '-pix_fmt', 'yuv420p'];
+    case 'libx265':
+      return ['-c:v', 'libx265', '-preset', 'medium', '-crf', String(q.crf + 4), '-pix_fmt', 'yuv420p', '-tag:v', 'hvc1'];
+    case 'libaom-av1':
+      return ['-c:v', 'libaom-av1', '-cpu-used', '6', '-row-mt', '1', '-crf', String(q.crf + 12), '-b:v', '0', '-pix_fmt', 'yuv420p'];
+    case 'libvpx-vp9':
+      return ['-c:v', 'libvpx-vp9', '-deadline', 'good', '-cpu-used', '4', '-row-mt', '1', '-crf', String(q.crf + 10), '-b:v', '0', '-pix_fmt', 'yuv420p'];
+    case 'prores_ks':
+      return ['-c:v', 'prores_ks', '-profile:v', '2', '-pix_fmt', 'yuv422p10le', '-vendor', 'apl0'];
+    case 'gif':
+      return ['-vf', 'split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4', '-loop', '0'];
+    default:
+      return ['-c:v', 'libx264', '-crf', String(q.crf), '-pix_fmt', 'yuv420p'];
+  }
+}
+
+async function runExport(jobId, payload) {
+  const { project, settings, ffmpeg: ffmpegBin } = payload;
+  const tmp = path.join(payload.tmpDir, `job-${Date.now()}-${jobId}`);
+  fs.mkdirSync(tmp, { recursive: true });
+  fs.mkdirSync(path.dirname(settings.output), { recursive: true });
+  const ctx = { project, ffmpegBin, tmp };
+  const a = settings.range ? settings.range.in : 0;
+  const b = settings.range ? settings.range.out : project.duration;
+  if (b - a <= 0) throw new Error('Tidslinjen er tom.');
+  const q = QUALITIES.find((x) => x.id === settings.quality) || QUALITIES[2];
+  const wavPath = path.join(tmp, 'mix.wav');
+
+  try {
+    if (settings.audioOnly) {
+      const fmt = AUDIO_FORMATS.find((x) => x.id === settings.audioFormat) || AUDIO_FORMATS[0];
+      progress(jobId, 0, 'Mikser lyd');
+      await mixAudio(jobId, ctx, a, b, wavPath, (p) => progress(jobId, p * 0.8, 'Mikser lyd'));
+      const args = ['-i', wavPath, '-c:a', fmt.ffCodec];
+      if (['libmp3lame', 'aac', 'libopus'].includes(fmt.ffCodec)) args.push('-b:a', `${fmt.ffCodec === 'libopus' ? Math.min(256, q.audioKbps) : q.audioKbps}k`);
+      if (fmt.id === 'wav') args.push('-ar', '48000');
+      args.push(settings.output);
+      progress(jobId, 0.85, 'Koder lyd');
+      await ffmpeg(ffmpegBin, args).done;
+      writeSidecarSrt(project, settings, a, b);
+      return settings.output;
+    }
+
+    const fmt = VIDEO_FORMATS.find((x) => x.id === settings.format) || VIDEO_FORMATS[0];
+    const { w, h } = outputSize(project, settings.res);
+    const fps = settings.fps || project.fps;
+    const hasAudio = Boolean(fmt.audio);
+    if (hasAudio) {
+      progress(jobId, 0, 'Mikser lyd');
+      await mixAudio(jobId, ctx, a, b, wavPath, (p) => progress(jobId, p * 0.15, 'Mikser lyd'));
+    }
+    let useWebCodecs = false;
+    if (fmt.codec && !settings.forceFfmpeg) {
+      try {
+        useWebCodecs = await canEncodeVideo(fmt.codec, { width: w, height: h, bitrate: videoBitrate(fmt, settings.quality, w, h, fps) });
+      } catch {
+        useWebCodecs = false;
+      }
+    }
+    const burnCaptions = settings.captions === 'burn' || settings.captions === 'both';
+    await renderVideo(jobId, ctx, { a, b, w, h, fps, fmt, quality: settings.quality, burnCaptions, useWebCodecs, wavPath, output: settings.output, hasAudio });
+    writeSidecarSrt(project, settings, a, b);
+    return settings.output;
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+function writeSidecarSrt(project, settings, a, b) {
+  if (settings.captions !== 'srt' && settings.captions !== 'both') return;
+  const caps = Object.values(project.clips)
+    .filter((c) => c.lane === CAPTION_LANE && c.enabled && c.start < b && c.start + c.dur > a)
+    .map((c) => ({ start: Math.max(0, c.start - a), end: Math.min(b, c.start + c.dur) - a, text: c.props.text || '' }));
+  if (!caps.length) return;
+  fs.writeFileSync(settings.output.replace(/\.[^.]+$/, '.srt'), toSrt(caps));
+}

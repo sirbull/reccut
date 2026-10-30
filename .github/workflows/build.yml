@@ -14,8 +14,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            name: mac
+          - os: windows-latest
+            name: windows
     runs-on: ${{ matrix.os }}
+    env:
+      # Ingen kodesignering foreløpig.
+      CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
       - uses: actions/checkout@v4
 
@@ -26,15 +33,32 @@ jobs:
 
       - run: npm ci
 
-      - name: Bygg
-        run: npm run dist
-        env:
-          # Ingen kodesignering foreløpig.
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - run: npm test
+
+      - run: node scripts/build.mjs
+
+      - name: Bygg for Windows
+        if: matrix.name == 'windows'
+        run: npx electron-builder --win --x64 --publish never
+
+      # FFmpeg er en egen binærfil per arkitektur, så Mac bygges i to omganger.
+      - name: Bygg for Mac (Apple Silicon)
+        if: matrix.name == 'mac'
+        run: |
+          rm -f node_modules/ffmpeg-static/ffmpeg
+          npm_config_arch=arm64 npm rebuild ffmpeg-static
+          npx electron-builder --mac --arm64 --publish never
+
+      - name: Bygg for Mac (Intel)
+        if: matrix.name == 'mac'
+        run: |
+          rm -f node_modules/ffmpeg-static/ffmpeg
+          npm_config_arch=x64 npm rebuild ffmpeg-static
+          npx electron-builder --mac --x64 --publish never
 
       - uses: actions/upload-artifact@v4
         with:
-          name: OBSlite-${{ runner.os }}
+          name: OBSlite-${{ matrix.name }}
           path: |
             dist/*.dmg
             dist/*.exe
