@@ -573,24 +573,39 @@ function ProjectInspector() {
           <Row label="Format" stacked>
             <Select
               value={fmt}
-              options={[...FORMATS.slice(1), ...(fmt === 'custom' ? [{ value: 'custom', label: `${p.width} × ${p.height}` }] : [])]}
+              options={[...FORMATS.slice(1), { value: 'custom', label: fmt === 'custom' ? `Egen (${p.width} × ${p.height})` : 'Egen størrelse' }]}
               onChange={(v) => {
-                const [w, h] = v.split('x').map(Number);
+                const [w, h] = v === 'custom' ? [p.width, p.height] : v.split('x').map(Number);
                 commit((q) => {
                   q.width = w;
                   q.height = h;
                   q.autoFormat = false;
+                  if (v === 'custom') q.customFormat = true;
+                  else delete q.customFormat;
                 });
               }}
             />
           </Row>
+          {(fmt === 'custom' || p.customFormat) && (
+            <div class="wh-row">
+              <NumberField value={p.width} min={16} max={8192} step={2} unit="B" width={84} onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.width = Math.max(16, Math.round(v / 2) * 2)))} onCommit={() => endTransient(true)} />
+              <span class="dim">×</span>
+              <NumberField value={p.height} min={16} max={8192} step={2} unit="H" width={84} onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.height = Math.max(16, Math.round(v / 2) * 2)))} onCommit={() => endTransient(true)} />
+            </div>
+          )}
           <Row label="Bilder per sekund">
             <Select
-              value={String(p.fps)}
-              options={[24, 25, 30, 50, 60].map((f) => ({ value: String(f), label: String(f) }))}
-              onChange={(v) => commit((q) => (q.fps = Number(v)))}
+              value={[24, 25, 30, 50, 60].includes(p.fps) ? String(p.fps) : 'custom'}
+              options={[...[24, 25, 30, 50, 60].map((f) => ({ value: String(f), label: String(f) })), { value: 'custom', label: [24, 25, 30, 50, 60].includes(p.fps) ? 'Egen' : `Egen (${p.fps})` }]}
+              onChange={(v) => commit((q) => (q.fps = v === 'custom' ? 15 : Number(v)))}
             />
           </Row>
+          {![24, 25, 30, 50, 60].includes(p.fps) && (
+            <Row label="Egen bildefrekvens">
+              <NumberField value={p.fps} min={1} max={120} onChange={(v) => commit((q) => (q.fps = Math.round(v)))} />
+            </Row>
+          )}
+          <p class="hint">Klippene skaleres automatisk til det nye formatet. Bruk Skala og Posisjon under Video for å justere utsnittet.</p>
           <Row label="Varighet">
             <span class="value">{p.duration.toFixed(1)} s</span>
           </Row>

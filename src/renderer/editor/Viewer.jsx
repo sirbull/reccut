@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'preact/hooks';
-import { Maximize2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-preact';
+import { Maximize2, Settings2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-preact';
 import { formatTimecode } from '../../shared/model.js';
-import { playing, project, timeSig } from './store.js';
+import { playing, project, selectedTransition, selection, timeSig } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
 import { IconButton } from '../ui.jsx';
@@ -36,9 +36,17 @@ export function Viewer() {
     <div class="viewer" ref={wrapRef}>
       <div class="viewer-head">
         <span class="title">{p.name}</span>
-        <span class="dim">
+        <button
+          class="fmt-btn"
+          title="Prosjektinnstillinger"
+          onClick={() => {
+            selection.value = [];
+            selectedTransition.value = null;
+          }}
+        >
           {p.width} × {p.height} · {p.fps} fps
-        </span>
+          <Settings2 size={13} />
+        </button>
       </div>
       <div class="viewer-box" ref={boxRef} onDblClick={() => wrapRef.current.requestFullscreen?.()}>
         <canvas ref={canvasRef} />

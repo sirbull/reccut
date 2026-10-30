@@ -3,7 +3,7 @@ import { useMemo, useState } from 'preact/hooks';
 import { Apple, Feather, FileVideo, Film, FolderOpen, Gem, Globe, Image as ImageIcon, Music } from 'lucide-preact';
 import { CAPTION_LANE, formatDuration } from '../../shared/model.js';
 import { AUDIO_FORMATS, PRESETS, QUALITIES, VIDEO_FORMATS, estimateSize, formatBytes, outputSize } from '../../shared/formats.js';
-import { project } from './store.js';
+import { project, room } from './store.js';
 import { exportOpen } from './commands.js';
 import { Button, Modal, Row, Segmented, Select, toast } from '../ui.jsx';
 
@@ -100,7 +100,7 @@ export function ExportDialog() {
 
   return (
     <Modal
-      title="Eksporter"
+      title="Eksporter prosjekt"
       width={860}
       class="export-modal"
       onClose={() => (exportOpen.value = false)}
@@ -112,6 +112,16 @@ export function ExportDialog() {
               {audioOnly ? afmt.label : `${w} × ${h} · ${fps} fps · ${fmt.label}`} · {formatDuration(duration)} · ca. {formatBytes(size)}
             </span>
           </div>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              exportOpen.value = false;
+              import('../export/state.js').then((m) => (m.selectedId.value = m.PROJECT_SOURCE));
+              room.value = 'export';
+            }}
+          >
+            Flere valg
+          </Button>
           <Button variant="secondary" onClick={() => (exportOpen.value = false)}>
             Avbryt
           </Button>

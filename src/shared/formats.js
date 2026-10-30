@@ -40,7 +40,100 @@ export const QUALITIES = [
 // Komprimeringsgrad per kodek i forhold til H.264.
 const CODEC_EFFICIENCY = { avc: 1, hevc: 0.6, vp9: 0.65, av1: 0.5 };
 
-export function videoBitrate(fmt, quality, w, h, fps) {
+export const SIZE_PRESETS = [
+  { value: 0, label: 'Original' },
+  { value: 2160, label: '4K' },
+  { value: 1440, label: '1440p' },
+  { value: 1080, label: '1080p' },
+  { value: 720, label: '720p' },
+  { value: 480, label: '480p' },
+  { value: 'custom', label: 'Egen' },
+];
+
+export const CROP_ASPECTS = [
+  { value: null, label: 'Ingen' },
+  { value: 16 / 9, label: '16:9' },
+  { value: 9 / 16, label: '9:16' },
+  { value: 1, label: '1:1' },
+  { value: 4 / 5, label: '4:5' },
+  { value: 'free', label: 'Fri' },
+];
+
+export const FIT_MODES = [
+  { value: 'contain', label: 'Tilpass', title: 'Hele bildet vises, med svarte kanter ved behov' },
+  { value: 'cover', label: 'Fyll', title: 'Fyller rammen, kantene beskjæres' },
+  { value: 'stretch', label: 'Strekk', title: 'Strekker bildet til rammen' },
+];
+
+const even = (v) => Math.max(2, Math.round(v / 2) * 2);
+
+// Beskjæringen lagres som andeler (0 til 1) av prosjektbildet.
+export function cropRect(project, crop) {
+  const W = project.width;
+  const H = project.height;
+  if (!crop) return { x: 0, y: 0, w: W, h: H };
+  return { x: crop.x * W, y: crop.y * H, w: Math.max(2, crop.w * W), h: Math.max(2, crop.h * H) };
+}
+
+// Gir et utsnitt med valgt sideforhold, midt i bildet og så stort som mulig.
+export function cropForAspect(project, aspect) {
+  if (!aspect || aspect === 'free') return null;
+  const W = project.width;
+  const H = project.height;
+  let w = W;
+  let h = W / aspect;
+  if (h > H) {
+    h = H;
+    w = H * aspect;
+  }
+  return { x: (W - w) / 2 / W, y: (H - h) / 2 / H, w: w / W, h: h / H };
+}
+
+function sizeOf(settings) {
+  if (settings.size) return settings.size;
+  return { preset: settings.res || 0 };
+}
+
+// Utdatastørrelse og transformasjon fra prosjektbildet til filen.
+export function outputGeometry(project, settings = {}) {
+  const c = cropRect(project, settings.crop);
+  const size = sizeOf(settings);
+  let w;
+  let h;
+  if (size.preset === 'custom' && size.w > 0 && size.h > 0) {
+    w = size.w;
+    h = size.h;
+  } else if (size.preset) {
+    const k = size.preset / Math.min(c.w, c.h);
+    w = c.w * k;
+    h = c.h * k;
+  } else {
+    w = c.w;
+    h = c.h;
+  }
+  w = even(Math.min(8192, w));
+  h = even(Math.min(8192, h));
+  let sx = w / c.w;
+  let sy = h / c.h;
+  const fit = settings.fit || 'contain';
+  if (fit === 'contain' || fit === 'cover') {
+    const s = fit === 'contain' ? Math.min(sx, sy) : Math.max(sx, sy);
+    sx = s;
+    sy = s;
+  }
+  const tx = (w - c.w * sx) / 2 - c.x * sx;
+  const ty = (h - c.h * sy) / 2 - c.y * sy;
+  return { w, h, matrix: [sx, sy, tx, ty], crop: c };
+}
+
+// Bakoverkompatibel: brukes der bare størrelsen trengs.
+export function outputSize(project, res) {
+  const { w, h } = outputGeometry(project, { size: { preset: res || 0 } });
+  return { w, h };
+}
+
+export function videoBitrate(fmt, quality, w, h, fps, customMbps) {
+  if (customMbps > 0) return Math.round(customMbps * 1e6);
   const q = QUALITIES.find((x) => x.id === quality) || QUALITIES[2];
   const eff = CODEC_EFFICIENCY[fmt.codec] ?? 1;
   // Skjermopptak komprimeres godt; bpp er satt med det i tankene.
@@ -48,31 +141,28 @@ export function videoBitrate(fmt, quality, w, h, fps) {
   return Math.round(Math.max(1.5e6, Math.min(120e6, bps)));
 }
 
-export function estimateSize(settings, duration, w, h) {
-  const q = QUALITIES.find((x) => x.id === settings.quality) || QUALITIES[2];
-  let bits = 0;
-  if (settings.audioOnly) {
-    const fmt = AUDIO_FORMATS.find((a) => a.id === settings.audioFormat);
-    const kbps = fmt.id === 'wav' ? 1536 : fmt.id === 'flac' ? 800 : q.audioKbps;
-    bits = kbps * 1000 * duration;
-  } else {
-    const fmt = VIDEO_FORMATS.find((f) => f.id === settings.format);
-    if (fmt.id === 'mov-prores') bits = w * h * settings.fps * 4.4 * duration * 0.5;
-    else if (fmt.id === 'gif') bits = w * h * settings.fps * 0.6 * duration * 0.3;
-    else bits = (videoBitrate(fmt, settings.quality, w, h, settings.fps) * 0.6 + q.audioKbps * 1000) * duration;
-  }
-  return bits / 8;
+export function audioKbps(settings) {
+  if (settings.audioKbps > 0) return settings.audioKbps;
+  return (QUALITIES.find((x) => x.id === settings.quality) || QUALITIES[2]).audioKbps;
 }
 
-export function outputSize(project, res) {
-  let w = project.width;
-  let h = project.height;
-  if (res && Math.min(w, h) > res) {
-    const k = res / Math.min(w, h);
-    w = Math.round(w * k);
-    h = Math.round(h * k);
+export function estimateSize(settings, duration, w, h) {
+  const akbps = audioKbps(settings);
+  let bits = 0;
+  if (settings.audioOnly) {
+    const fmt = AUDIO_FORMATS.find((a) => a.id === settings.audioFormat) || AUDIO_FORMATS[0];
+    const kbps = fmt.id === 'wav' ? 1536 : fmt.id === 'flac' ? 800 : akbps;
+    bits = kbps * 1000 * duration;
+  } else {
+    const fmt = VIDEO_FORMATS.find((f) => f.id === settings.format) || VIDEO_FORMATS[0];
+    if (fmt.id === 'mov-prores') bits = w * h * settings.fps * 4.4 * duration * 0.5;
+    else if (fmt.id === 'gif') bits = w * h * settings.fps * 0.6 * duration * 0.3;
+    else {
+      const v = videoBitrate(fmt, settings.quality, w, h, settings.fps, settings.bitrate);
+      bits = (v * (settings.bitrate > 0 ? 1 : 0.6) + (fmt.audio ? akbps * 1000 : 0)) * duration;
+    }
   }
-  return { w: w - (w % 2), h: h - (h % 2) };
+  return bits / 8;
 }
 
 export function formatBytes(b) {

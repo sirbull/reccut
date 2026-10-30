@@ -173,7 +173,8 @@ function buildMenu() {
       label: 'Vis',
       submenu: [
         cmd('roomRecord', 'Opptak', 'CmdOrCtrl+1'),
-        cmd('roomEdit', 'Redigering', 'CmdOrCtrl+2'),
+        cmd('roomEdit', 'Rediger', 'CmdOrCtrl+2'),
+        cmd('roomExport', 'Eksport', 'CmdOrCtrl+3'),
         { type: 'separator' },
         cmd('zoomIn', 'Zoom inn på tidslinjen', 'CmdOrCtrl+='),
         cmd('zoomOut', 'Zoom ut på tidslinjen', 'CmdOrCtrl+-'),
@@ -426,7 +427,20 @@ ipcMain.handle('tasks:list', () => jobs.snapshot());
 ipcMain.handle('tasks:cancel', (_e, id) => jobs.cancel(id));
 ipcMain.handle('tasks:clear', () => jobs.clearFinished());
 
+// Overskriv aldri en eksisterende fil, eller en som allerede står i køen.
+const reservedOutputs = new Set();
+function uniqueOutput(file) {
+  const ext = path.extname(file);
+  const base = file.slice(0, -ext.length);
+  let out = file;
+  let n = 2;
+  while (fs.existsSync(out) || reservedOutputs.has(out)) out = `${base} ${n++}${ext}`;
+  reservedOutputs.add(out);
+  return out;
+}
+
 ipcMain.handle('export:start', (_e, payload) => {
+  payload = { ...payload, settings: { ...payload.settings, output: uniqueOutput(payload.settings.output) } };
   const { id, done } = jobs.add({
     kind: 'export',
     title: `Eksporterer ${path.basename(payload.settings.output)}`,
@@ -438,6 +452,7 @@ ipcMain.handle('export:start', (_e, payload) => {
         ctx
       ),
   });
+  done.finally(() => reservedOutputs.delete(payload.settings.output)).catch(() => {});
   done.then(
     (file) => {
       send('export:done', { id, file });

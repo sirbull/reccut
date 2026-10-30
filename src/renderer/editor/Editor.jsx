@@ -98,9 +98,11 @@ export function handleMenu(id) {
   }
   if (id === 'roomRecord') room.value = 'record';
   else if (id === 'roomEdit') room.value = 'edit';
+  else if (id === 'roomExport') room.value = 'export';
   else if (room.value !== 'edit') {
     if (textCmd) document.execCommand(textCmd);
-    if (['newProject', 'openProject', 'import', 'export'].includes(id)) {
+    if (id === 'export') room.value = 'export';
+    else if (['newProject', 'openProject', 'import'].includes(id)) {
       room.value = 'edit';
       setTimeout(() => handleMenu(id), 50);
     }

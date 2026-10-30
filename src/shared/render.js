@@ -18,11 +18,20 @@ import {
 /**
  * getSource(clip, streamKey, sourceTimeInStream) returnerer { img, w, h } eller null.
  */
-export function drawFrame(ctx, project, frame, getSource, { scale = 1 } = {}) {
+export function drawFrame(ctx, project, frame, getSource, { scale = 1, matrix = null } = {}) {
   const W = project.width;
   const H = project.height;
   ctx.save();
-  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  if (matrix) {
+    // Beskjæring og ny størrelse ved eksport: tøm hele lerretet først.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.setTransform(matrix[0], 0, 0, matrix[1], matrix[2], matrix[3]);
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    ctx.clip();
+  } else ctx.setTransform(scale, 0, 0, scale, 0, 0);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
   ctx.filter = 'none';

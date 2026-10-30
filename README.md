@@ -1,6 +1,6 @@
 # OBSlite
 
-Ta opp, rediger og eksporter opplæringsvideoer i én app, for Mac og Windows. Opptaksdelen er enkel som før. Redigeringsdelen ligner Final Cut Pro, men har bare det du trenger.
+Ta opp, rediger og eksporter video i én app, for Mac og Windows. Appen er delt i tre faner, **Opptak**, **Rediger** og **Eksport** (Cmd 1, 2 og 3), som kan brukes hver for seg: du kan redigere uten å ha tatt opp, og eksportere eller konvertere filer uten å ha redigert.
 
 ## Opptak
 
@@ -27,17 +27,27 @@ Ta opp, rediger og eksporter opplæringsvideoer i én app, for Mac og Windows. O
 * Lydstyrke i dB, inn og uttoning med håndtak på klippet
 * **Nøkkelbilder** på opasitet, posisjon, skala, rotasjon, farge og volum
 * Lydbølger og miniatyrbilder på tidslinjen, markører og inn og utpunkt
+* Prosjektformat: 4K, 1440p, 1080p, 720p, vertikal, kvadrat eller egen størrelse, og egen bildefrekvens. Klikk på formatet over visningen for å endre det.
 * Prosjekter lagres automatisk
+* **Eksporter prosjekt** gir en enkel eksport med forhåndsinnstillinger rett fra redigeringen
 
 ## Eksport
 
-Velg en forhåndsinnstilling og trykk Eksporter. Eksporten kjører i bakgrunnen mens du jobber videre, og du får beskjed når filen er klar.
+Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konvertere dem uten å gå via redigering. Flere filer kan konverteres med samme innstillinger på én gang.
+
+* Forhåndsinnstillinger (Standard, YouTube og web, Minst fil, Apple-enheter, Master, GIF, Bare lyd), og alle verdier kan overstyres
+* Størrelse: original, 4K, 1440p, 1080p, 720p, 480p eller egen bredde og høyde, med lås for sideforhold
+* Tilpasning når formatet endres: tilpass (svarte kanter), fyll (beskjær) eller strekk
+* Beskjæring: 16:9, 9:16, 1:1, 4:5 eller fritt, med en ramme du drar i forhåndsvisningen eller eksakte verdier i piksler
+* Bildefrekvens: som kilden, vanlige verdier eller egen
+* Kvalitet: lav til maks, eller egen videobitrate i Mbit/s, og valgfri lydbitrate
+* Område: hele eller egendefinert fra og til, med knapp for å bruke spillhodet
+* Undertekster brent inn, som egen SRT eller begge
+* Eksportkø med fremdrift. Eksisterende filer overskrives aldri.
 
 | Video | Lyd |
 | --- | --- |
 | MP4 (H.264, HEVC, AV1), WebM (VP9, AV1), MOV (H.264, ProRes 422), MKV, GIF | MP3, AAC (M4A), WAV, FLAC, Opus |
-
-Oppløsning, bildefrekvens, kvalitet, område (hele eller inn til ut) og undertekster (brent inn, egen SRT eller begge) kan velges. Anslått filstørrelse vises før du starter.
 
 ## Hurtigtaster
 
@@ -74,7 +84,7 @@ Oppløsning, bildefrekvens, kvalitet, område (hele eller inn til ut) og underte
 | Cmd + og Cmd -, Shift Z | Zoom på tidslinjen, tilpass |
 | Cmd Z, Shift Cmd Z | Angre, gjør om |
 | Cmd I, Cmd E | Importer, eksporter |
-| Cmd 1, Cmd 2 | Opptak, redigering |
+| Cmd 1, Cmd 2, Cmd 3 | Opptak, Rediger, Eksport |
 
 På Windows brukes Ctrl i stedet for Cmd og Alt i stedet for Option.
 
@@ -104,7 +114,7 @@ npm run dist:mac # eller dist:win, lager installasjonsfil
 | --- | --- |
 | `src/main` | Electron hovedprosess: vindu, opptak til disk, tastaturlytter, FFmpeg, bakgrunnsoppgaver, prosjekter |
 | `src/shared` | Prosjektmodell, redigeringsoperasjoner og tegnemotor, felles for forhåndsvisning og eksport |
-| `src/renderer` | Grensesnittet i Preact: opptak, bibliotek, visning, inspektør, tidslinje og eksport |
+| `src/renderer` | Grensesnittet i Preact: opptak, redigering (bibliotek, visning, inspektør, tidslinje) og eksportfanen |
 | `src/worker` | Skjulte vinduer for eksport og automatisk teksting |
 
 Åpen kildekode som brukes: Electron, Preact, Lucide (ikoner), Mediabunny (dekoding og koding med WebCodecs), FFmpeg via ffmpeg-static (miksing, omkoding, analyse), uiohook-napi (globale tastetrykk) og Transformers.js med Whisper (teksting). FFmpeg-binærfilene er GPL-lisensiert.

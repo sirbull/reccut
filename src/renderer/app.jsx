@@ -35,6 +35,7 @@ import {
 } from './editor/store.js';
 import * as commands from './editor/commands.js';
 import { startExport } from './editor/ExportDialog.jsx';
+import { ExportRoom } from './export/ExportRoom.jsx';
 import { formatDuration } from '../shared/model.js';
 import { IconButton, Toasts, toast } from './ui.jsx';
 
@@ -145,9 +146,13 @@ function TitleBar() {
           Opptak
           {rec && <span class="live-dot" />}
         </button>
-        <button class={r === 'edit' ? 'active' : ''} onClick={() => (room.value = 'edit')} title={`Redigering (${isMac ? '⌘' : 'Ctrl+'}2)`}>
+        <button class={r === 'edit' ? 'active' : ''} onClick={() => (room.value = 'edit')} title={`Rediger (${isMac ? '⌘' : 'Ctrl+'}2)`}>
           <Clapperboard size={14} />
-          Redigering
+          Rediger
+        </button>
+        <button class={r === 'export' ? 'active' : ''} onClick={() => (room.value = 'export')} title={`Eksport (${isMac ? '⌘' : 'Ctrl+'}3)`}>
+          <Share size={14} />
+          Eksport
         </button>
       </div>
       <div class="spacer" />
@@ -159,11 +164,13 @@ function TitleBar() {
           <span class="sep" />
           <IconButton icon={FolderOpen} title="Prosjekter" onClick={() => (commands.projectsOpen.value = true)} />
           <IconButton icon={Plus} title={`Importer media (${isMac ? '⌘' : 'Ctrl+'}I)`} onClick={() => commands.importDialog()} />
-          <button class="btn primary" onClick={() => (commands.exportOpen.value = true)} title={`Eksporter (${isMac ? '⌘' : 'Ctrl+'}E)`}>
+          <button class="btn primary" onClick={() => (commands.exportOpen.value = true)} title={`Eksporter prosjekt (${isMac ? '⌘' : 'Ctrl+'}E)`}>
             <Share size={15} />
-            Eksporter
+            Eksporter prosjekt
           </button>
         </div>
+      ) : r === 'export' ? (
+        <div class="actions" />
       ) : (
         <div class="actions">
           {rec && <span class="rec-timer">{formatDuration(engine.elapsed.value)}</span>}
@@ -228,6 +235,9 @@ function App() {
         <div class="room" hidden={r !== 'edit'}>
           <Editor active={r === 'edit'} />
         </div>
+        <div class="room" hidden={r !== 'export'}>
+          <ExportRoom active={r === 'export'} />
+        </div>
       </main>
       <Toasts />
     </div>
@@ -237,6 +247,7 @@ function App() {
 // Brukes av de automatiske testene.
 window.__obslite = {
   importPaths: (paths, placement) => import('./editor/store.js').then((m) => m.importPaths(paths, placement)),
+  exportState: () => import('./export/state.js'),
   openRecording: async (dir) => {
     const m = await import('./editor/store.js');
     const r = await m.createProjectFromRecording(dir);

@@ -3,7 +3,7 @@
 import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOutputFormat, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, WebMOutputFormat, canEncodeVideo } from 'mediabunny';
 import { CAPTION_LANE, clipHasAudio, computeAudio, computeFrame } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
-import { AUDIO_FORMATS, QUALITIES, VIDEO_FORMATS, outputSize, videoBitrate } from '../shared/formats.js';
+import { AUDIO_FORMATS, QUALITIES, VIDEO_FORMATS, audioKbps, outputGeometry, videoBitrate } from '../shared/formats.js';
 import { toSrt } from '../shared/srt.js';
 
 const { ipcRenderer } = require('electron');
@@ -269,18 +269,17 @@ function neededFrames(project, frame) {
   return out;
 }
 
-async function renderVideo(jobId, ctx, { a, b, w, h, fps, fmt, quality, burnCaptions, useWebCodecs, wavPath, output, hasAudio }) {
+async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, bitrate, akbps, burnCaptions, useWebCodecs, wavPath, output, hasAudio }) {
   const { project, ffmpegBin, tmp } = ctx;
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
   const g = canvas.getContext('2d', { alpha: false, willReadFrequently: !useWebCodecs });
-  const scale = w / project.width;
   const frames = Math.max(1, Math.round((b - a) * fps));
   const readers = new Map();
   const images = new Map();
   const rotated = new Map();
-  const q = QUALITIES.find((x) => x.id === quality) || QUALITIES[2];
+  const q = { ...(QUALITIES.find((x) => x.id === quality) || QUALITIES[2]), audioKbps: akbps, bitrate };
 
   let encoder;
   if (useWebCodecs) {
@@ -290,7 +289,7 @@ async function renderVideo(jobId, ctx, { a, b, w, h, fps, fmt, quality, burnCapt
     const format =
       fmt.container === 'webm' ? new WebMOutputFormat() : fmt.container === 'mkv' ? new MkvOutputFormat() : fmt.container === 'mov' ? new MovOutputFormat({ fastStart: false }) : new Mp4OutputFormat({ fastStart: false });
     const out = new Output({ format, target: new StreamTarget(writable) });
-    const source = new CanvasSource(canvas, { codec: fmt.codec, bitrate: videoBitrate(fmt, quality, w, h, fps), keyFrameInterval: 2, latencyMode: 'quality' });
+    const source = new CanvasSource(canvas, { codec: fmt.codec, bitrate: videoBitrate(fmt, quality, w, h, fps, bitrate), keyFrameInterval: 2, latencyMode: 'quality' });
     out.addVideoTrack(source, { frameRate: fps });
     await out.start();
     encoder = {
@@ -375,7 +374,7 @@ async function renderVideo(jobId, ctx, { a, b, w, h, fps, fmt, quality, burnCapt
         }
         return { img: s.toCanvasImageSource(), w: s.displayWidth, h: s.displayHeight };
       };
-      drawFrame(g, project, frame, getSource, { scale });
+      drawFrame(g, project, frame, getSource, { matrix });
       await encoder.add(i);
       for (const [id, r] of readers) {
         if (T - r.lastUsed > 2) {
@@ -403,6 +402,23 @@ function audioArgs(kind, q) {
 }
 
 function videoArgs(fmt, q, w, h, fps) {
+  const custom = q.bitrate > 0 && !['prores_ks', 'gif'].includes(fmt.ffCodec);
+  const base = videoArgsCrf(fmt, q);
+  if (!custom) return base;
+  // Egen bitrate: bytt ut kvalitetsstyringen med fast mål og tak.
+  const out = [];
+  for (let i = 0; i < base.length; i++) {
+    if (base[i] === '-crf' || base[i] === '-b:v') {
+      i++;
+      continue;
+    }
+    out.push(base[i]);
+  }
+  const k = Math.round(q.bitrate * 1000);
+  return [...out, '-b:v', `${k}k`, '-maxrate', `${Math.round(k * 1.5)}k`, '-bufsize', `${k * 2}k`];
+}
+
+function videoArgsCrf(fmt, q) {
   switch (fmt.ffCodec) {
     case 'libx264':
       return ['-c:v', 'libx264', '-preset', 'medium', '-crf', String(q.crf), '-pix_fmt', 'yuv420p'];
@@ -439,7 +455,8 @@ async function runExport(jobId, payload) {
       progress(jobId, 0, 'Mikser lyd');
       await mixAudio(jobId, ctx, a, b, wavPath, (p) => progress(jobId, p * 0.8, 'Mikser lyd'));
       const args = ['-i', wavPath, '-c:a', fmt.ffCodec];
-      if (['libmp3lame', 'aac', 'libopus'].includes(fmt.ffCodec)) args.push('-b:a', `${fmt.ffCodec === 'libopus' ? Math.min(256, q.audioKbps) : q.audioKbps}k`);
+      const ak = audioKbps(settings);
+      if (['libmp3lame', 'aac', 'libopus'].includes(fmt.ffCodec)) args.push('-b:a', `${fmt.ffCodec === 'libopus' ? Math.min(256, ak) : ak}k`);
       if (fmt.id === 'wav') args.push('-ar', '48000');
       args.push(settings.output);
       progress(jobId, 0.85, 'Koder lyd');
@@ -449,7 +466,7 @@ async function runExport(jobId, payload) {
     }
 
     const fmt = VIDEO_FORMATS.find((x) => x.id === settings.format) || VIDEO_FORMATS[0];
-    const { w, h } = outputSize(project, settings.res);
+    const { w, h, matrix } = outputGeometry(project, settings);
     const fps = settings.fps || project.fps;
     const hasAudio = Boolean(fmt.audio);
     if (hasAudio) {
@@ -459,13 +476,13 @@ async function runExport(jobId, payload) {
     let useWebCodecs = false;
     if (fmt.codec && !settings.forceFfmpeg) {
       try {
-        useWebCodecs = await canEncodeVideo(fmt.codec, { width: w, height: h, bitrate: videoBitrate(fmt, settings.quality, w, h, fps) });
+        useWebCodecs = await canEncodeVideo(fmt.codec, { width: w, height: h, bitrate: videoBitrate(fmt, settings.quality, w, h, fps, settings.bitrate) });
       } catch {
         useWebCodecs = false;
       }
     }
     const burnCaptions = settings.captions === 'burn' || settings.captions === 'both';
-    await renderVideo(jobId, ctx, { a, b, w, h, fps, fmt, quality: settings.quality, burnCaptions, useWebCodecs, wavPath, output: settings.output, hasAudio });
+    await renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality: settings.quality, bitrate: settings.bitrate, akbps: audioKbps(settings), burnCaptions, useWebCodecs, wavPath, output: settings.output, hasAudio });
     writeSidecarSrt(project, settings, a, b);
     return settings.output;
   } finally {
