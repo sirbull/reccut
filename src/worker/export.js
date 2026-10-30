@@ -4,7 +4,7 @@ import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOut
 import { CAPTION_LANE, clipHasAudio, computeAudio, computeFrame } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 import { AUDIO_FORMATS, QUALITIES, VIDEO_FORMATS, audioKbps, outputGeometry, videoBitrate } from '../shared/formats.js';
-import { toSrt } from '../shared/srt.js';
+import { toSrt, toVtt } from '../shared/srt.js';
 
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
@@ -20,7 +20,7 @@ ipcRenderer.on('worker:job', async (_e, { jobId, payload }) => {
     ipcRenderer.send('worker:done', { jobId, result });
   } catch (err) {
     console.error(err);
-    ipcRenderer.send('worker:error', { jobId, error: canceled.has(jobId) ? 'Avbrutt' : String(err?.message || err) });
+    ipcRenderer.send('worker:error', { jobId, error: canceled.has(jobId) ? 'Canceled' : String(err?.message || err) });
   } finally {
     canceled.delete(jobId);
   }
@@ -28,7 +28,7 @@ ipcRenderer.on('worker:job', async (_e, { jobId, payload }) => {
 ipcRenderer.on('worker:cancel', (_e, jobId) => canceled.add(jobId));
 
 function checkCancel(jobId) {
-  if (canceled.has(jobId)) throw new Error('Avbrutt');
+  if (canceled.has(jobId)) throw new Error('Canceled');
 }
 
 function progress(jobId, p, stage) {
@@ -204,7 +204,7 @@ class Reader {
 
   async init() {
     const track = await this.input.getPrimaryVideoTrack();
-    if (!track) throw new Error(`Ingen video i ${path.basename(this.file)}`);
+    if (!track) throw new Error(`No video in ${path.basename(this.file)}`);
     this.first = await track.getFirstTimestamp();
     this.end = await track.computeDuration();
     this.sink = new VideoSampleSink(track);
@@ -257,7 +257,7 @@ function neededFrames(project, frame) {
     const s = clip.in + (T - clip.start);
     for (const [key, st] of Object.entries(m.streams)) {
       if (!st.hasVideo) continue;
-      out.push({ clip, key, path: m.kind === 'image' ? m.path : st.proxy || st.path, image: m.kind === 'image', t: s - (st.offset || 0) });
+      out.push({ clip, key, path: m.kind === 'image' ? st.proxy || m.path : st.proxy || st.path, image: m.kind === 'image', t: s - (st.offset || 0) });
     }
   };
   for (const l of frame.layers) {
@@ -269,7 +269,7 @@ function neededFrames(project, frame) {
   return out;
 }
 
-async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, bitrate, akbps, burnCaptions, useWebCodecs, wavPath, output, hasAudio }) {
+async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, bitrate, akbps, burnCaptions, embedPath, useWebCodecs, wavPath, output, hasAudio }) {
   const { project, ffmpegBin, tmp } = ctx;
   const canvas = document.createElement('canvas');
   canvas.width = w;
@@ -300,8 +300,10 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
         // Lyden legges til med FFmpeg uten å kode bildet på nytt.
         const args = ['-i', videoTmp];
         if (hasAudio) args.push('-i', wavPath);
+        if (embedPath) args.push('-i', embedPath);
         args.push('-map', '0:v:0');
-        if (hasAudio) args.push('-map', '1:a:0', ...audioArgs(fmt.audio, q));
+        if (hasAudio) args.push('-map', '1:a:0', ...audioArgs(fmt.audio, q), '-disposition:a:0', 'default');
+        if (embedPath) args.push(...subtitleArgs(fmt, hasAudio ? 2 : 1));
         args.push('-c:v', 'copy', '-t', String(b - a));
         if (fmt.container === 'mp4' || fmt.container === 'mov') args.push('-movflags', '+faststart');
         if (fmt.codec === 'hevc') args.push('-tag:v', 'hvc1');
@@ -313,8 +315,10 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
   } else {
     const args = ['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w}x${h}`, '-r', String(fps), '-i', 'pipe:0'];
     if (hasAudio) args.push('-i', wavPath);
+    if (embedPath) args.push('-i', embedPath);
     args.push('-map', '0:v:0');
-    if (hasAudio) args.push('-map', '1:a:0', ...audioArgs(fmt.audio, q));
+    if (hasAudio) args.push('-map', '1:a:0', ...audioArgs(fmt.audio, q), '-disposition:a:0', 'default');
+    if (embedPath) args.push(...subtitleArgs(fmt, hasAudio ? 2 : 1));
     args.push(...videoArgs(fmt, q, w, h, fps), '-t', String(b - a));
     if (fmt.container === 'mp4' || fmt.container === 'mov') args.push('-movflags', '+faststart');
     args.push(output);
@@ -382,9 +386,9 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
           readers.delete(id);
         }
       }
-      if (i % 5 === 0) progress(jobId, 0.15 + (i / frames) * 0.8, 'Lager video');
+      if (i % 5 === 0) progress(jobId, 0.15 + (i / frames) * 0.8, 'Rendering video');
     }
-    progress(jobId, 0.96, 'Ferdigstiller');
+    progress(jobId, 0.96, 'Finishing');
     await encoder.finish();
   } catch (err) {
     encoder.abort();
@@ -445,23 +449,23 @@ async function runExport(jobId, payload) {
   const ctx = { project, ffmpegBin, tmp };
   const a = settings.range ? settings.range.in : 0;
   const b = settings.range ? settings.range.out : project.duration;
-  if (b - a <= 0) throw new Error('Tidslinjen er tom.');
+  if (b - a <= 0) throw new Error('The timeline is empty.');
   const q = QUALITIES.find((x) => x.id === settings.quality) || QUALITIES[2];
   const wavPath = path.join(tmp, 'mix.wav');
 
   try {
     if (settings.audioOnly) {
       const fmt = AUDIO_FORMATS.find((x) => x.id === settings.audioFormat) || AUDIO_FORMATS[0];
-      progress(jobId, 0, 'Mikser lyd');
-      await mixAudio(jobId, ctx, a, b, wavPath, (p) => progress(jobId, p * 0.8, 'Mikser lyd'));
+      progress(jobId, 0, 'Mixing audio');
+      await mixAudio(jobId, ctx, a, b, wavPath, (p) => progress(jobId, p * 0.8, 'Mixing audio'));
       const args = ['-i', wavPath, '-c:a', fmt.ffCodec];
       const ak = audioKbps(settings);
       if (['libmp3lame', 'aac', 'libopus'].includes(fmt.ffCodec)) args.push('-b:a', `${fmt.ffCodec === 'libopus' ? Math.min(256, ak) : ak}k`);
       if (fmt.id === 'wav') args.push('-ar', '48000');
       args.push(settings.output);
-      progress(jobId, 0.85, 'Koder lyd');
+      progress(jobId, 0.85, 'Encoding audio');
       await ffmpeg(ffmpegBin, args).done;
-      writeSidecarSrt(project, settings, a, b);
+      writeSidecar(project, settings, a, b);
       return settings.output;
     }
 
@@ -470,8 +474,8 @@ async function runExport(jobId, payload) {
     const fps = settings.fps || project.fps;
     const hasAudio = Boolean(fmt.audio);
     if (hasAudio) {
-      progress(jobId, 0, 'Mikser lyd');
-      await mixAudio(jobId, ctx, a, b, wavPath, (p) => progress(jobId, p * 0.15, 'Mikser lyd'));
+      progress(jobId, 0, 'Mixing audio');
+      await mixAudio(jobId, ctx, a, b, wavPath, (p) => progress(jobId, p * 0.15, 'Mixing audio'));
     }
     let useWebCodecs = false;
     if (fmt.codec && !settings.forceFfmpeg) {
@@ -481,20 +485,48 @@ async function runExport(jobId, payload) {
         useWebCodecs = false;
       }
     }
-    const burnCaptions = settings.captions === 'burn' || settings.captions === 'both';
-    await renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality: settings.quality, bitrate: settings.bitrate, akbps: audioKbps(settings), burnCaptions, useWebCodecs, wavPath, output: settings.output, hasAudio });
-    writeSidecarSrt(project, settings, a, b);
+    const mode = captionMode(settings.captions);
+    const burnCaptions = mode.burn;
+    let embedPath = null;
+    if (mode.embed && fmt.container !== 'gif') {
+      const items = captionItems(project, a, b);
+      if (items.length) {
+        embedPath = path.join(tmp, 'captions.srt');
+        fs.writeFileSync(embedPath, toSrt(items));
+      }
+    }
+    await renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality: settings.quality, bitrate: settings.bitrate, akbps: audioKbps(settings), burnCaptions, embedPath, useWebCodecs, wavPath, output: settings.output, hasAudio });
+    writeSidecar(project, settings, a, b);
     return settings.output;
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-function writeSidecarSrt(project, settings, a, b) {
-  if (settings.captions !== 'srt' && settings.captions !== 'both') return;
-  const caps = Object.values(project.clips)
-    .filter((c) => c.lane === CAPTION_LANE && c.enabled && c.start < b && c.start + c.dur > a)
+// Undertekstvalg: burn, srt, vtt, embed, eller kombinasjoner som "burn+srt". "both" er eldre lagring.
+function captionMode(v) {
+  const parts = new Set(String(v || 'none').split('+'));
+  if (parts.has('both')) parts.add('burn').add('srt');
+  return { burn: parts.has('burn'), srt: parts.has('srt'), vtt: parts.has('vtt'), embed: parts.has('embed') };
+}
+
+function captionItems(project, a, b) {
+  return Object.values(project.clips)
+    .filter((c) => c.lane === CAPTION_LANE && c.enabled && c.start < b && c.start + c.dur > a && String(c.props.text || '').trim())
     .map((c) => ({ start: Math.max(0, c.start - a), end: Math.min(b, c.start + c.dur) - a, text: c.props.text || '' }));
-  if (!caps.length) return;
-  fs.writeFileSync(settings.output.replace(/\.[^.]+$/, '.srt'), toSrt(caps));
+}
+
+// Myk undertekst: kan slås av og på i avspilleren.
+function subtitleArgs(fmt, index) {
+  const codec = fmt.container === 'mkv' ? 'srt' : fmt.container === 'webm' ? 'webvtt' : 'mov_text';
+  return ['-map', `${index}:s:0`, '-c:s', codec, '-metadata:s:s:0', 'language=und', '-disposition:s:0', 'default'];
+}
+
+function writeSidecar(project, settings, a, b) {
+  const mode = captionMode(settings.captions);
+  const items = captionItems(project, a, b);
+  if (!items.length) return;
+  const base = settings.output.replace(/\.[^.]+$/, '');
+  if (mode.srt) fs.writeFileSync(`${base}.srt`, toSrt(items));
+  if (mode.vtt) fs.writeFileSync(`${base}.vtt`, toVtt(items));
 }

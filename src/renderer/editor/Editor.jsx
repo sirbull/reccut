@@ -1,7 +1,7 @@
 // Redigeringsrommet: bibliotek, visning og inspektør øverst, tidslinje nederst.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { FilePlus2, FolderOpen, Trash2 } from 'lucide-preact';
-import { CAPTION_LANE, formatDuration } from '../../shared/model.js';
+import { CAPTION_LANE, PROJECT_TEMPLATES, formatDuration } from '../../shared/model.js';
 import { Browser } from './Browser.jsx';
 import { Viewer } from './Viewer.jsx';
 import { Inspector } from './Inspector.jsx';
@@ -25,7 +25,7 @@ import {
 } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
-import { Button, Modal, toast } from '../ui.jsx';
+import { Button, Modal, Row, toast } from '../ui.jsx';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -67,6 +67,8 @@ function onKeyDown(e) {
   else if (code === 'Backspace' || code === 'Delete') commands.deleteSelection(!e.shiftKey);
   else if (code === 'KeyA') tool.value = 'select';
   else if (code === 'KeyB') tool.value = 'blade';
+  else if (code === 'KeyP') tool.value = 'position';
+  else if (code === 'KeyH') tool.value = 'hand';
   else if (code === 'KeyV') commands.toggleEnabled();
   else if (code === 'KeyE') commands.addBrowserSelection('append');
   else if (code === 'KeyW') commands.addBrowserSelection('insert');
@@ -113,9 +115,9 @@ export function handleMenu(id) {
   else if (id === 'copy') commands.copySelection();
   else if (id === 'paste') commands.paste();
   else if (id === 'selectAll') commands.selectAll();
-  else if (id === 'newProject') newProjectNamed();
+  else if (id === 'newProject') commands.newProjectOpen.value = true;
   else if (id === 'openProject') commands.projectsOpen.value = true;
-  else if (id === 'save') saveNow().then(() => toast('Prosjektet er lagret.', { timeout: 2000 }));
+  else if (id === 'save') saveNow().then(() => toast('Project saved.', { timeout: 2000 }));
   else if (id === 'import') commands.importDialog();
   else if (id === 'export') commands.exportOpen.value = true;
   else if (id === 'zoomIn') commands.zoom(1.5);
@@ -126,7 +128,7 @@ export function handleMenu(id) {
 api.onTranscribeDone(({ segments, payload }) => {
   if (payload.projectId !== project.value.id) return;
   if (!segments.length) {
-    toast('Fant ingen tale å lage undertekster av.');
+    toast('No speech was found to caption.');
     return;
   }
   commit((p) => {
@@ -136,10 +138,10 @@ api.onTranscribeDone(({ segments, payload }) => {
       p.clips[c.id] = c;
     }
   });
-  toast(`${segments.length} undertekster er lagt til. Les gjennom og rett i Undertekster-fanen.`, { kind: 'success', timeout: 9000 });
+  toast(`Added ${segments.length} captions. Read through them and fix any mistakes in the Captions tab.`, { kind: 'success', timeout: 9000 });
 });
 api.onTranscribeError(({ error }) => {
-  if (error !== 'Avbrutt') toast(`Teksting feilet: ${error}`, { kind: 'error', timeout: 10000 });
+  if (error !== 'Canceled') toast(`Auto captions failed: ${error}`, { kind: 'error', timeout: 10000 });
 });
 
 export function Editor({ active }) {
@@ -182,6 +184,7 @@ export function Editor({ active }) {
       <Timeline />
       {commands.exportOpen.value && <ExportDialog />}
       {commands.projectsOpen.value && <ProjectsDialog />}
+      {commands.newProjectOpen.value && <NewProjectDialog />}
     </div>
   );
 }
@@ -195,25 +198,25 @@ function ProjectsDialog() {
   const close = () => (commands.projectsOpen.value = false);
   return (
     <Modal
-      title="Prosjekter"
+      title="Projects"
       width={560}
       onClose={close}
       footer={
         <Button
           variant="primary"
           icon={FilePlus2}
-          onClick={async () => {
-            await newProjectNamed();
+          onClick={() => {
             close();
+            commands.newProjectOpen.value = true;
           }}
         >
-          Nytt prosjekt
+          New Project
         </Button>
       }
     >
       <div class="project-list">
-        {list === null && <p class="dim">Laster ...</p>}
-        {list?.length === 0 && <p class="dim">Ingen lagrede prosjekter ennå.</p>}
+        {list === null && <p class="dim">Loading</p>}
+        {list?.length === 0 && <p class="dim">No saved projects yet.</p>}
         {list?.map((it) => (
           <div key={it.path} class={`project-item${it.path === projectPath.value ? ' current' : ''}`}>
             <button
@@ -228,16 +231,16 @@ function ProjectsDialog() {
               <div>
                 <b>{it.name}</b>
                 <span>
-                  {new Date(it.modified).toLocaleString('nb-NO', { dateStyle: 'medium', timeStyle: 'short' })} · {formatDuration(it.duration)}
+                  {new Date(it.modified).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · {formatDuration(it.duration)}
                 </span>
               </div>
             </button>
             {it.path !== projectPath.value && (
               <button
                 class="icon-btn"
-                title="Slett prosjekt"
+                title="Delete project"
                 onClick={async () => {
-                  if (!confirm(`Slette prosjektet «${it.name}»? Mediefilene beholdes.`)) return;
+                  if (!confirm(`Delete the project "${it.name}"? Your media files are kept.`)) return;
                   await api.removeProject(it.path);
                   load();
                 }}
@@ -248,6 +251,53 @@ function ProjectsDialog() {
           </div>
         ))}
       </div>
+    </Modal>
+  );
+}
+
+// Nytt prosjekt fra mal: format, bildefrekvens og eventuelt ferdig innhold.
+function NewProjectDialog() {
+  const [tpl, setTpl] = useState('auto');
+  const [name, setName] = useState('');
+  const close = () => (commands.newProjectOpen.value = false);
+  const create = async () => {
+    const t = PROJECT_TEMPLATES.find((x) => x.id === tpl);
+    await newProjectNamed(name.trim() || undefined, t);
+    close();
+  };
+  return (
+    <Modal
+      title="New Project"
+      width={640}
+      onClose={close}
+      footer={
+        <>
+          <Button variant="secondary" onClick={close}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={create}>
+            Create Project
+          </Button>
+        </>
+      }
+    >
+      <Row label="Name" stacked>
+        <input class="text-input" placeholder="Untitled Project" value={name} autoFocus onInput={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && create()} />
+      </Row>
+      <div class="template-grid">
+        {PROJECT_TEMPLATES.map((t) => (
+          <button key={t.id} class={`template${tpl === t.id ? ' active' : ''}`} onClick={() => setTpl(t.id)} onDblClick={create}>
+            <div class="shape-wrap">
+              <div class="shape" style={{ width: Math.round(t.w * Math.min(64 / t.w, 54 / t.h)), height: Math.round(t.h * Math.min(64 / t.w, 54 / t.h)) }}>
+                {t.auto ? 'Auto' : `${t.fps}`}
+              </div>
+            </div>
+            <b>{t.label}</b>
+            <span>{t.desc}</span>
+          </button>
+        ))}
+      </div>
+      <p class="hint">You can change the format, size and frame rate later in the project settings.</p>
     </Modal>
   );
 }

@@ -92,7 +92,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   function getSource(clip, key) {
     const m = getProject().media[clip.mediaId];
     if (m?.kind === 'image') {
-      const img = getImage(m.path);
+      const img = getImage(m.streams?.main?.proxy || m.path);
       return img ? { img, w: img.naturalWidth, h: img.naturalHeight } : null;
     }
     const entry = pool.get(`${clip.id}:${key}`);

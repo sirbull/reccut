@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 function projectsDir(base) {
-  return path.join(base, 'Prosjekter');
+  return path.join(base, 'Projects');
 }
 
 async function list(base) {
@@ -27,7 +27,7 @@ async function load(file) {
 }
 
 function safeName(name) {
-  return (name || 'Uten navn').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Uten navn';
+  return (name || 'Untitled').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Untitled';
 }
 
 // Lagrer atomisk, slik at et krasj midt i lagringen ikke ødelegger prosjektet.

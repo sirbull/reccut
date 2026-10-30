@@ -82,6 +82,7 @@ function serveMedia(request) {
 }
 
 let win = null;
+let saveFlushed = false;
 let selectedScreenId = null;
 let wantSystemAudio = false;
 let shortcutModifier = null;
@@ -123,11 +124,23 @@ function createWindow() {
     if (recordingDir) {
       const choice = dialog.showMessageBoxSync(win, {
         type: 'warning',
-        buttons: ['Fortsett opptaket', 'Avslutt likevel'],
+        buttons: ['Keep Recording', 'Quit Anyway'],
         defaultId: 0,
-        message: 'Et opptak pågår. Vil du avslutte?',
+        message: 'A recording is in progress. Do you want to quit?',
       });
-      if (choice === 0) e.preventDefault();
+      if (choice === 0) {
+        e.preventDefault();
+        return;
+      }
+    }
+    // La vinduet lagre prosjektet før det lukkes, så ingen endringer går tapt.
+    if (!saveFlushed) {
+      e.preventDefault();
+      send('app:flush');
+      setTimeout(() => {
+        saveFlushed = true;
+        win?.close();
+      }, 3000);
     }
   });
   win.on('closed', () => {
@@ -143,47 +156,47 @@ function buildMenu() {
   const cmd = (id, label, accelerator) => ({ label, accelerator, click: () => send('menu', id) });
   const template = [
     ...(isMac
-      ? [{ label: 'OBSlite', submenu: [{ role: 'about', label: 'Om OBSlite' }, { type: 'separator' }, { role: 'hide', label: 'Skjul OBSlite' }, { role: 'hideOthers', label: 'Skjul andre' }, { type: 'separator' }, { role: 'quit', label: 'Avslutt OBSlite' }] }]
+      ? [{ label: 'OBSlite', submenu: [{ role: 'about', label: 'About OBSlite' }, { type: 'separator' }, { role: 'hide', label: 'Hide OBSlite' }, { role: 'hideOthers', label: 'Hide Others' }, { type: 'separator' }, { role: 'quit', label: 'Quit OBSlite' }] }]
       : []),
     {
-      label: 'Arkiv',
+      label: 'File',
       submenu: [
-        cmd('newProject', 'Nytt prosjekt', 'CmdOrCtrl+N'),
-        cmd('openProject', 'Åpne prosjekt', 'CmdOrCtrl+O'),
-        cmd('save', 'Lagre', 'CmdOrCtrl+S'),
+        cmd('newProject', 'New Project', 'CmdOrCtrl+N'),
+        cmd('openProject', 'Open Project', 'CmdOrCtrl+O'),
+        cmd('save', 'Save', 'CmdOrCtrl+S'),
         { type: 'separator' },
-        cmd('import', 'Importer media', 'CmdOrCtrl+I'),
-        cmd('export', 'Eksporter', 'CmdOrCtrl+E'),
-        ...(isMac ? [] : [{ type: 'separator' }, { role: 'quit', label: 'Avslutt' }]),
+        cmd('import', 'Import Media', 'CmdOrCtrl+I'),
+        cmd('export', 'Export', 'CmdOrCtrl+E'),
+        ...(isMac ? [] : [{ type: 'separator' }, { role: 'quit', label: 'Quit' }]),
       ],
     },
     {
-      label: 'Rediger',
+      label: 'Edit',
       submenu: [
-        cmd('undo', 'Angre', 'CmdOrCtrl+Z'),
-        cmd('redo', 'Gjør om', 'Shift+CmdOrCtrl+Z'),
+        cmd('undo', 'Undo', 'CmdOrCtrl+Z'),
+        cmd('redo', 'Redo', 'Shift+CmdOrCtrl+Z'),
         { type: 'separator' },
-        cmd('cut', 'Klipp ut', 'CmdOrCtrl+X'),
-        cmd('copy', 'Kopier', 'CmdOrCtrl+C'),
-        cmd('paste', 'Lim inn', 'CmdOrCtrl+V'),
-        cmd('selectAll', 'Merk alt', 'CmdOrCtrl+A'),
+        cmd('cut', 'Cut', 'CmdOrCtrl+X'),
+        cmd('copy', 'Copy', 'CmdOrCtrl+C'),
+        cmd('paste', 'Paste', 'CmdOrCtrl+V'),
+        cmd('selectAll', 'Select All', 'CmdOrCtrl+A'),
       ],
     },
     {
-      label: 'Vis',
+      label: 'View',
       submenu: [
-        cmd('roomRecord', 'Opptak', 'CmdOrCtrl+1'),
-        cmd('roomEdit', 'Rediger', 'CmdOrCtrl+2'),
-        cmd('roomExport', 'Eksport', 'CmdOrCtrl+3'),
+        cmd('roomRecord', 'Record', 'CmdOrCtrl+1'),
+        cmd('roomEdit', 'Edit', 'CmdOrCtrl+2'),
+        cmd('roomExport', 'Export', 'CmdOrCtrl+3'),
         { type: 'separator' },
-        cmd('zoomIn', 'Zoom inn på tidslinjen', 'CmdOrCtrl+='),
-        cmd('zoomOut', 'Zoom ut på tidslinjen', 'CmdOrCtrl+-'),
+        cmd('zoomIn', 'Zoom In on Timeline', 'CmdOrCtrl+='),
+        cmd('zoomOut', 'Zoom Out on Timeline', 'CmdOrCtrl+-'),
         { type: 'separator' },
-        { role: 'togglefullscreen', label: 'Fullskjerm' },
-        ...(app.isPackaged ? [] : [{ role: 'toggleDevTools', label: 'Utviklerverktøy' }]),
+        { role: 'togglefullscreen', label: 'Enter Full Screen' },
+        ...(app.isPackaged ? [] : [{ role: 'toggleDevTools', label: 'Developer Tools' }]),
       ],
     },
-    { label: 'Vindu', role: 'windowMenu' },
+    { label: 'Window', role: 'windowMenu' },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -198,7 +211,7 @@ async function listScreens() {
     return {
       id: source.id,
       displayId: display.id,
-      name: sources.length > 1 ? `Skjerm ${i + 1}` : 'Hovedskjerm',
+      name: sources.length > 1 ? `Display ${i + 1}` : 'Main Display',
       width: Math.round(display.size.width * display.scaleFactor),
       height: Math.round(display.size.height * display.scaleFactor),
     };
@@ -276,6 +289,10 @@ ipcMain.handle('permissions:open', (_e, which) => {
 });
 
 ipcMain.handle('paths:base', () => baseDir());
+ipcMain.handle('app:flushed', () => {
+  saveFlushed = true;
+  win?.close();
+});
 
 function stamp() {
   const d = new Date();
@@ -284,7 +301,7 @@ function stamp() {
 }
 
 ipcMain.handle('rec:begin', async (_e, { t0, base }) => {
-  const dir = path.join(base || baseDir(), 'Opptak', `Opptak ${stamp()}`);
+  const dir = path.join(base || baseDir(), 'Recordings', `Recording ${stamp()}`);
   await fs.promises.mkdir(dir, { recursive: true });
   recordingDir = dir;
   input.beginSession(t0);
@@ -356,7 +373,7 @@ ipcMain.handle('media:reanalyze', async (_e, items) => {
 ipcMain.handle('media:wave', async (_e, file) => JSON.parse(await fs.promises.readFile(file, 'utf8')));
 ipcMain.handle('media:exists', (_e, file) => fs.existsSync(file));
 ipcMain.handle('media:recordings', async () => {
-  const dir = path.join(baseDir(), 'Opptak');
+  const dir = path.join(baseDir(), 'Recordings');
   if (!fs.existsSync(dir)) return [];
   const out = [];
   for (const name of await fs.promises.readdir(dir)) {
@@ -375,11 +392,11 @@ ipcMain.handle('file:write', async (_e, file, data) => fs.promises.writeFile(fil
 
 ipcMain.handle('dialog:openMedia', async () => {
   const r = await dialog.showOpenDialog(win, {
-    title: 'Importer media',
+    title: 'Import Media',
     properties: ['openFile', 'multiSelections'],
     filters: [
-      { name: 'Media', extensions: ['mp4', 'm4v', 'mov', 'webm', 'mkv', 'avi', 'mts', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'opus', 'aif', 'aiff', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
-      { name: 'Alle filer', extensions: ['*'] },
+      { name: 'Media', extensions: media.extensions() },
+      { name: 'All Files', extensions: ['*'] },
     ],
   });
   return r.canceled ? [] : r.filePaths;
@@ -393,7 +410,7 @@ ipcMain.handle('dialog:saveFile', async (_e, { title, defaultPath, filters }) =>
   return r.canceled ? null : r.filePath;
 });
 ipcMain.handle('dialog:chooseDir', async (_e, current) => {
-  const r = await dialog.showOpenDialog(win, { title: 'Velg mappe', defaultPath: current || baseDir(), properties: ['openDirectory', 'createDirectory'] });
+  const r = await dialog.showOpenDialog(win, { title: 'Choose Folder', defaultPath: current || baseDir(), properties: ['openDirectory', 'createDirectory'] });
   return r.canceled ? null : r.filePaths[0];
 });
 ipcMain.handle('shell:reveal', (_e, file) => shell.showItemInFolder(file));
@@ -443,7 +460,7 @@ ipcMain.handle('export:start', (_e, payload) => {
   payload = { ...payload, settings: { ...payload.settings, output: uniqueOutput(payload.settings.output) } };
   const { id, done } = jobs.add({
     kind: 'export',
-    title: `Eksporterer ${path.basename(payload.settings.output)}`,
+    title: `Exporting ${path.basename(payload.settings.output)}`,
     queue: 'heavy',
     run: (ctx) =>
       jobs.runInWorker(
@@ -457,7 +474,7 @@ ipcMain.handle('export:start', (_e, payload) => {
     (file) => {
       send('export:done', { id, file });
       if (Notification.isSupported() && !win?.isFocused()) {
-        new Notification({ title: 'Eksport ferdig', body: path.basename(file) }).show();
+        new Notification({ title: 'Export finished', body: path.basename(file) }).show();
       }
     },
     () => {}
@@ -468,10 +485,10 @@ ipcMain.handle('export:start', (_e, payload) => {
 ipcMain.handle('transcribe:start', (_e, payload) => {
   const { id, done } = jobs.add({
     kind: 'transcribe',
-    title: 'Lager undertekster',
+    title: 'Generating captions',
     queue: 'heavy',
     run: async (ctx) => {
-      ctx.progress(0, 'Henter lyd');
+      ctx.progress(0, 'Reading audio');
       const audio = await mixForTranscription(payload, ctx);
       return jobs.runInWorker('transcribe', { ...payload, audio }, ctx);
     },
@@ -492,7 +509,7 @@ async function mixForTranscription({ sources, duration }, ctx) {
     const offset = Math.round(s.start * rate);
     const gain = s.gain ?? 1;
     for (let j = 0; j < pcm.length && offset + j < out.length; j++) out[offset + j] += pcm[j] * gain;
-    ctx.progress(((i + 1) / sources.length) * 0.1, 'Henter lyd');
+    ctx.progress(((i + 1) / sources.length) * 0.1, 'Reading audio');
   }
   return out;
 }

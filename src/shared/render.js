@@ -1,6 +1,7 @@
 // Tegner ett bilde av prosjektet. Samme kode brukes i forhåndsvisning og eksport,
 // så det du ser i redigeringen er det som havner i filen.
 import {
+  DEFAULT_CAPTION_STYLE,
   FONTS,
   cameraRectAt,
   clamp,
@@ -53,10 +54,11 @@ function drawTransition(ctx, project, layer, getSource) {
   const B = (alpha = 1) => layer.b && drawClip(ctx, project, layer.b.clip, layer.b.T, getSource, alpha);
   const e = easeInOut(p);
   switch (type) {
-    case 'dip': {
+    case 'dip':
+    case 'dipWhite': {
       if (p < 0.5) A();
       else B();
-      ctx.fillStyle = '#000';
+      ctx.fillStyle = type === 'dipWhite' ? '#fff' : '#000';
       ctx.globalAlpha = p < 0.5 ? p * 2 : (1 - p) * 2;
       ctx.fillRect(0, 0, W, H);
       ctx.globalAlpha = 1;
@@ -72,6 +74,36 @@ function drawTransition(ctx, project, layer, getSource) {
       ctx.save();
       ctx.translate(dir * (e - 1) * W, 0);
       B();
+      ctx.restore();
+      break;
+    }
+    case 'slideUp': {
+      ctx.save();
+      ctx.translate(0, -e * H);
+      A();
+      ctx.restore();
+      ctx.save();
+      ctx.translate(0, (1 - e) * H);
+      B();
+      ctx.restore();
+      break;
+    }
+    case 'circle': {
+      A();
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(W / 2, H / 2, e * Math.hypot(W, H) * 0.5, 0, Math.PI * 2);
+      ctx.clip();
+      B();
+      ctx.restore();
+      break;
+    }
+    case 'blur': {
+      const amount = Math.sin(p * Math.PI) * H * 0.02;
+      ctx.save();
+      ctx.filter = `blur(${amount.toFixed(1)}px)`;
+      A();
+      B(e);
       ctx.restore();
       break;
     }
@@ -108,12 +140,72 @@ function zoomAround(ctx, W, H, s) {
   ctx.translate(-W / 2, -H / 2);
 }
 
-function colorFilter(clip, T) {
+function colorFilter(clip, T, H = 1080) {
   const ex = valueAt(clip, 'exposure', T) || 0;
   const co = valueAt(clip, 'contrast', T) || 0;
   const sa = valueAt(clip, 'saturation', T) || 0;
-  if (!ex && !co && !sa) return 'none';
-  return `brightness(${(1 + ex).toFixed(3)}) contrast(${(1 + co).toFixed(3)}) saturate(${Math.max(0, 1 + sa).toFixed(3)})`;
+  const parts = [];
+  if (ex || co || sa) parts.push(`brightness(${(1 + ex).toFixed(3)}) contrast(${(1 + co).toFixed(3)}) saturate(${Math.max(0, 1 + sa).toFixed(3)})`);
+  const blur = valueAt(clip, 'blur', T) || 0;
+  if (blur > 0) parts.push(`blur(${((blur * H) / 1080).toFixed(2)}px)`);
+  const sepia = valueAt(clip, 'sepia', T) || 0;
+  if (sepia > 0) parts.push(`sepia(${sepia.toFixed(3)})`);
+  const gray = valueAt(clip, 'grayscale', T) || 0;
+  if (gray > 0) parts.push(`grayscale(${gray.toFixed(3)})`);
+  const inv = valueAt(clip, 'invert', T) || 0;
+  if (inv > 0) parts.push(`invert(${inv.toFixed(3)})`);
+  const hue = valueAt(clip, 'hue', T) || 0;
+  if (hue) parts.push(`hue-rotate(${hue.toFixed(1)}deg)`);
+  return parts.length ? parts.join(' ') : 'none';
+}
+
+// Tegner bildet med skygge, avrundede hjørner, vignett og ramme rundt innholdet.
+function drawWithEffects(ctx, clip, T, r, H, draw) {
+  const radiusPct = valueAt(clip, 'radius', T) || 0;
+  const shadow = valueAt(clip, 'shadow', T) || 0;
+  const vignette = valueAt(clip, 'vignette', T) || 0;
+  const border = valueAt(clip, 'border', T) || 0;
+  const rad = (Math.min(r.w, r.h) * radiusPct) / 100;
+  if (shadow > 0) {
+    ctx.save();
+    ctx.filter = 'none';
+    ctx.shadowColor = `rgba(0,0,0,${(0.75 * shadow).toFixed(3)})`;
+    ctx.shadowBlur = H * 0.045 * shadow;
+    ctx.shadowOffsetY = H * 0.012 * shadow;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.roundRect(r.x, r.y, r.w, r.h, rad);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.save();
+  if (rad > 0) {
+    ctx.beginPath();
+    ctx.roundRect(r.x, r.y, r.w, r.h, rad);
+    ctx.clip();
+  }
+  draw();
+  ctx.filter = 'none';
+  applyTemperature(ctx, clip, T, r);
+  if (vignette > 0) {
+    const g = ctx.createRadialGradient(r.x + r.w / 2, r.y + r.h / 2, Math.min(r.w, r.h) * 0.3, r.x + r.w / 2, r.y + r.h / 2, Math.hypot(r.w, r.h) * 0.55);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, `rgba(0,0,0,${Math.min(1, vignette).toFixed(3)})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+  }
+  ctx.restore();
+  if (border > 0) {
+    const bw = (border * H) / 1080;
+    ctx.save();
+    ctx.filter = 'none';
+    ctx.lineWidth = bw;
+    ctx.strokeStyle = clip.props.borderColor || '#fff';
+    ctx.beginPath();
+    ctx.roundRect(r.x + bw / 2, r.y + bw / 2, r.w - bw, r.h - bw, Math.max(0, rad - bw / 2));
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function applyTemperature(ctx, clip, T, rect) {
@@ -160,10 +252,10 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1) {
     const src = getSource(clip, 'main', s);
     if (src) {
       const r = containRect(src.w, src.h, W, H);
-      ctx.filter = colorFilter(clip, T);
-      ctx.drawImage(src.img, r.x, r.y, r.w, r.h);
-      ctx.filter = 'none';
-      applyTemperature(ctx, clip, T, r);
+      drawWithEffects(ctx, clip, T, r, H, () => {
+        ctx.filter = colorFilter(clip, T, H);
+        ctx.drawImage(src.img, r.x, r.y, r.w, r.h);
+      });
     }
   } else if (clip.type === 'recording' && media) {
     drawRecording(ctx, project, clip, media, T, s, getSource);
@@ -176,16 +268,17 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1) {
 function drawRecording(ctx, project, clip, media, T, s, getSource) {
   const W = project.width;
   const H = project.height;
-  const filter = colorFilter(clip, T);
+  const filter = colorFilter(clip, T, H);
   let screenRect = { x: 0, y: 0, w: W, h: H };
   const screen = media.streams.screen;
   if (screen) {
     const src = getSource(clip, 'screen', s - (screen.offset || 0));
     if (src) {
-      screenRect = containRect(src.w, src.h, W, H);
-      ctx.filter = filter;
-      ctx.drawImage(src.img, screenRect.x, screenRect.y, screenRect.w, screenRect.h);
-      ctx.filter = 'none';
+      const r = (screenRect = containRect(src.w, src.h, W, H));
+      drawWithEffects(ctx, clip, T, r, H, () => {
+        ctx.filter = filter;
+        ctx.drawImage(src.img, r.x, r.y, r.w, r.h);
+      });
     } else if (screen.width) {
       screenRect = containRect(screen.width, screen.height, W, H);
     }
@@ -211,7 +304,6 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
       ctx.restore();
     }
   }
-  applyTemperature(ctx, clip, T, { x: 0, y: 0, w: W, h: H });
   if (clip.props.showKeys) drawKeys(ctx, keysAt(media.rec?.keys, s), W, H);
 }
 
@@ -375,7 +467,7 @@ function drawTitle(ctx, clip, T, W, H) {
   }
 
   const size = p.size * k;
-  const font = FONTS[p.font] || FONTS.sans;
+  const font = fontFamily(p.font);
   ctx.globalAlpha *= alpha;
   ctx.textBaseline = 'alphabetic';
 
@@ -453,36 +545,84 @@ function drawTitle(ctx, clip, T, W, H) {
   }
 }
 
-export function drawCaption(ctx, project, clip) {
+// Undertekster: én til tre linjer, med skrift, farge, kontur, bakgrunn og fri plassering.
+export function captionLayout(project, clip, measure) {
   const W = project.width;
   const H = project.height;
-  const st = project.captionStyle || {};
+  const st = { ...DEFAULT_CAPTION_STYLE, ...(project.captionStyle || {}) };
   const k = H / 1080;
-  const size = (st.size || 44) * k;
+  const size = st.size * k;
+  const align = clip.props.align || st.align;
+  const font = `${st.weight} ${size}px ${fontFamily(st.font)}`;
+  const lines = measure(font, clip.props.text || '', W * 0.86).slice(0, st.maxLines || 3);
+  const lineH = size * 1.28;
+  const widths = lines.map((l) => measure(font, l));
+  const blockW = Math.max(0, ...widths) + size * 0.7;
+  const blockH = lines.length * lineH;
+  let ax;
+  let cy;
+  const pos = clip.props.pos || (st.position === 'custom' ? { x: st.x, y: st.y } : null);
+  if (pos) {
+    ax = (pos.x / 100) * W;
+    cy = (pos.y / 100) * H;
+  } else {
+    ax = align === 'left' ? W * 0.07 : align === 'right' ? W * 0.93 : W / 2;
+    cy = st.position === 'top' ? H * 0.07 + blockH / 2 : st.position === 'middle' ? H / 2 : H * 0.93 - blockH / 2;
+  }
+  return { st, k, size, align, font, lines, widths, lineH, blockW, blockH, ax, cy };
+}
+
+export function drawCaption(ctx, project, clip) {
+  const L = captionLayout(project, clip, (font, text, maxW) => {
+    ctx.font = font;
+    return maxW == null ? ctx.measureText(text).width : wrapText(ctx, text, maxW);
+  });
+  if (!L.lines.length) return;
+  const { st, size, align, lines, widths, lineH, blockH, ax, cy, k } = L;
   ctx.save();
   ctx.filter = 'none';
   ctx.globalAlpha = 1;
-  ctx.font = `600 ${size}px ${FONTS[st.font] || FONTS.sans}`;
-  ctx.textAlign = 'center';
+  ctx.font = L.font;
+  ctx.textAlign = align;
   ctx.textBaseline = 'middle';
-  const lines = wrapText(ctx, clip.props.text || '', W * 0.8);
-  const lineH = size * 1.3;
-  const blockH = lines.length * lineH;
-  const cy = st.position === 'top' ? H * 0.08 + blockH / 2 : H * 0.92 - blockH / 2;
-  if (st.bg !== false) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+  const top = cy - blockH / 2;
+  const padX = size * 0.35;
+  if (st.bg) {
+    ctx.fillStyle = hexAlpha(st.bgColor, st.bgOpacity ?? 0.72);
     lines.forEach((l, i) => {
-      const w = ctx.measureText(l).width + size * 0.7;
-      const y = cy - blockH / 2 + i * lineH;
+      const w = widths[i] + padX * 2;
+      const x = align === 'left' ? ax - padX : align === 'right' ? ax - w + padX : ax - w / 2;
       ctx.beginPath();
-      ctx.roundRect(W / 2 - w / 2, y, w, lineH, size * 0.15);
+      ctx.roundRect(x, top + i * lineH, w, lineH, size * 0.15);
       ctx.fill();
     });
-  } else {
-    ctx.shadowColor = 'rgba(0,0,0,0.9)';
-    ctx.shadowBlur = size * 0.2;
   }
-  ctx.fillStyle = st.color || '#fff';
-  lines.forEach((l, i) => ctx.fillText(l, W / 2, cy - blockH / 2 + i * lineH + lineH / 2));
+  if (st.shadow) {
+    ctx.shadowColor = 'rgba(0,0,0,0.85)';
+    ctx.shadowBlur = size * 0.25;
+    ctx.shadowOffsetY = size * 0.05;
+  }
+  if (st.outlineWidth > 0) {
+    ctx.lineWidth = st.outlineWidth * k * 2;
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.strokeStyle = st.outlineColor;
+    lines.forEach((l, i) => ctx.strokeText(l, ax, top + i * lineH + lineH / 2));
+    ctx.shadowColor = 'transparent';
+  }
+  ctx.fillStyle = st.color;
+  lines.forEach((l, i) => ctx.fillText(l, ax, top + i * lineH + lineH / 2));
   ctx.restore();
+}
+
+export function fontFamily(f) {
+  if (FONTS[f]) return FONTS[f];
+  return `"${String(f).replace(/"/g, '')}", ${FONTS.sans}`;
+}
+
+function hexAlpha(hex, a) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return `rgba(0,0,0,${a})`;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }

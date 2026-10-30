@@ -6,9 +6,11 @@ const path = require('path');
 const ff = require('./ffmpeg');
 const jobs = require('./jobs');
 
-const VIDEO_EXT = new Set(['.mp4', '.m4v', '.mov', '.webm', '.mkv', '.avi', '.mts', '.m2ts', '.wmv', '.flv', '.mpg', '.mpeg', '.3gp']);
-const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.opus', '.aif', '.aiff', '.wma', '.caf']);
-const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.avif', '.svg']);
+const VIDEO_EXT = new Set(['.mp4', '.m4v', '.mov', '.qt', '.webm', '.mkv', '.avi', '.divx', '.mts', '.m2ts', '.ts', '.wmv', '.asf', '.flv', '.f4v', '.mpg', '.mpeg', '.m2v', '.vob', '.mod', '.3gp', '.3g2', '.mxf', '.ogv', '.dv', '.y4m', '.rm', '.rmvb']);
+const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a', '.m4b', '.aac', '.flac', '.ogg', '.oga', '.opus', '.weba', '.aif', '.aiff', '.aifc', '.wma', '.caf', '.mka', '.ac3', '.eac3', '.dts', '.amr', '.ape', '.wv', '.au', '.mp2']);
+const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.jfif', '.webp', '.gif', '.bmp', '.avif', '.svg', '.tif', '.tiff', '.heic', '.heif', '.tga', '.psd', '.ico', '.dds', '.exr', '.jp2', '.jxl']);
+// Bildeformater Chromium viser direkte. Andre konverteres til PNG ved import.
+const NATIVE_IMAGE = new Set(['.png', '.jpg', '.jpeg', '.jfif', '.webp', '.gif', '.bmp', '.avif', '.svg', '.ico']);
 
 const PLAYABLE_CONTAINERS = new Set(['.mp4', '.m4v', '.mov', '.webm', '.mkv', '.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.opus']);
 const PLAYABLE_VIDEO = new Set(['h264', 'vp8', 'vp9', 'av1', ...(process.platform === 'linux' ? [] : ['hevc'])]);
@@ -31,6 +33,16 @@ function kindOf(file) {
   if (IMAGE_EXT.has(ext)) return 'image';
   if (AUDIO_EXT.has(ext)) return 'audio';
   if (VIDEO_EXT.has(ext)) return 'video';
+  return 'unknown';
+}
+
+// Ukjente endelser: la FFmpeg avgjøre hva filen inneholder.
+function kindFromProbe(info) {
+  if (info.hasVideo && (info.duration > 0.2 || !info.hasAudio)) {
+    const still = /image2|png_pipe|jpeg_pipe|tiff_pipe|bmp_pipe|webp_pipe|psd_pipe/.test(info.format || '');
+    return still ? 'image' : 'video';
+  }
+  if (info.hasAudio) return 'audio';
   return null;
 }
 
@@ -38,6 +50,8 @@ function needsOptimizing(file, info) {
   const ext = path.extname(file).toLowerCase();
   if (!PLAYABLE_CONTAINERS.has(ext)) return true;
   if (info.hasVideo && !PLAYABLE_VIDEO.has(info.videoCodec)) return true;
+  // 10-bit og 4:2:2 H.264 kan ikke spilles av i Chromium.
+  if (info.hasVideo && info.videoCodec === 'h264' && info.pixFmt && !/^yuvj?420p$/.test(info.pixFmt)) return true;
   if (info.hasAudio && !PLAYABLE_AUDIO.has(info.audioCodec)) return true;
   return false;
 }
@@ -46,8 +60,8 @@ function newId() {
   return crypto.randomBytes(6).toString('hex');
 }
 
-async function streamFromFile(file, kind) {
-  const info = await ff.probe(file);
+async function streamFromFile(file, kind, info) {
+  info = info || (await ff.probe(file));
   const stream = {
     path: file,
     offset: 0,
@@ -63,16 +77,42 @@ async function streamFromFile(file, kind) {
 }
 
 // Leser inn filer og returnerer mediaposter med en gang. Analysen fortsetter i bakgrunnen.
+// Returnerer { items, failed }. Filer som ikke kan leses avvises med en gang.
 async function importFiles(files, notify) {
   const result = [];
+  const failed = [];
   for (const file of files) {
-    const kind = kindOf(file);
-    if (!kind) continue;
+    let kind = kindOf(file);
     try {
-      const stream = await streamFromFile(file, kind);
+      const info = await ff.probe(file);
+      const readable = info.hasVideo || info.hasAudio || (kind === 'image' && info.width > 0);
+      if (!readable) {
+        failed.push(path.basename(file));
+        continue;
+      }
+      if (kind === 'unknown') kind = kindFromProbe(info);
+      if (!kind) {
+        failed.push(path.basename(file));
+        continue;
+      }
+      if ((kind === 'video' || kind === 'audio') && !(info.duration > 0)) {
+        failed.push(path.basename(file));
+        continue;
+      }
+      // Animerte GIF-er og lignende behandles som video.
+      if (kind === 'image' && info.duration > 0.2 && info.fps > 1 && /gif|webp|apng/.test(info.format || path.extname(file))) kind = 'video';
+      const stream = await streamFromFile(file, kind, info);
       if (kind === 'image') {
         stream.duration = 0;
         stream.hasVideo = true;
+        const ext = path.extname(file).toLowerCase();
+        if (!NATIVE_IMAGE.has(ext)) {
+          const png = path.join(await cacheDirFor(file), 'bilde.png');
+          if (!fs.existsSync(png)) await ff.convertImage(file, png);
+          stream.proxy = png;
+        }
+        stream.width = stream.width || info.width;
+        stream.height = stream.height || info.height;
       }
       if (kind === 'video' && !stream.hasVideo && stream.hasAudio) {
         result.push(await makeMedia(file, 'audio', { main: { ...stream, hasVideo: false } }, notify));
@@ -80,10 +120,11 @@ async function importFiles(files, notify) {
       }
       result.push(await makeMedia(file, kind, { main: stream }, notify));
     } catch (err) {
-      console.error('Import feilet', file, err);
+      console.error('Import failed', file, err);
+      failed.push(path.basename(file));
     }
   }
-  return result;
+  return { items: result, failed };
 }
 
 async function makeMedia(file, kind, streams, notify, extra = {}) {
@@ -109,7 +150,7 @@ function scheduleAnalysis(media, notify) {
   for (const [key, stream] of Object.entries(media.streams)) {
     jobs.add({
       kind: 'analyze',
-      title: `Analyserer ${media.name}${Object.keys(media.streams).length > 1 ? ` (${key})` : ''}`,
+      title: `Analyzing ${media.name}${Object.keys(media.streams).length > 1 ? ` (${key})` : ''}`,
       queue: 'light',
       run: async (ctx) => {
         const dir = await cacheDirFor(stream.path);
@@ -119,7 +160,7 @@ function scheduleAnalysis(media, notify) {
         if (stream.needsProxy) {
           const proxy = path.join(dir, 'optimalisert.mp4');
           if (!fs.existsSync(proxy)) {
-            ctx.progress(0, 'Lager optimalisert media');
+            ctx.progress(0, 'Creating optimized media');
             const tmp = proxy + '.tmp.mp4';
             const job = ff.optimize(stream.path, tmp, stream.duration, (p) => ctx.progress(p * 0.7));
             ctx.setCancel(job.kill);
@@ -141,7 +182,7 @@ function scheduleAnalysis(media, notify) {
           }
           patch.thumbs = thumbs;
         }
-        if (media.kind === 'image') patch.thumbs = { interval: 1e9, files: [stream.path] };
+        if (media.kind === 'image') patch.thumbs = { interval: 1e9, files: [stream.proxy || stream.path] };
 
         if (stream.hasAudio) {
           const waveFile = path.join(dir, 'wave.json');
@@ -199,4 +240,9 @@ async function recordingMedia(dir, notify) {
   });
 }
 
-module.exports = { importFiles, recordingMedia, kindOf, cacheRoot, newId };
+// Alle filendelser appen kjenner, for importdialogen.
+function extensions() {
+  return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT].map((e) => e.slice(1));
+}
+
+module.exports = { extensions, importFiles, recordingMedia, kindOf, cacheRoot, newId };

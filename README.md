@@ -1,6 +1,6 @@
 # OBSlite
 
-Ta opp, rediger og eksporter video i én app, for Mac og Windows. Appen er delt i tre faner, **Opptak**, **Rediger** og **Eksport** (Cmd 1, 2 og 3), som kan brukes hver for seg: du kan redigere uten å ha tatt opp, og eksportere eller konvertere filer uten å ha redigert.
+Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet er på engelsk. Appen er delt i tre faner, **Record**, **Edit** og **Export** (Cmd 1, 2 og 3), som kan brukes hver for seg: du kan redigere uten å ha tatt opp, og eksportere eller konvertere filer uten å ha redigert.
 
 ## Opptak
 
@@ -17,19 +17,21 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Appen er delt 
 ## Redigering
 
 * Magnetisk hovedspor som i Final Cut Pro, med tilkoblede spor over (bilder, video, titler) og lydspor under (musikk, lydeffekter)
-* Importer video, lyd og bilder (dra inn eller Cmd I). Formater appen ikke kan spille av direkte får automatisk en optimalisert kopi i bakgrunnen.
-* Trim, kutt (blade), flytt, kopier og lim inn, slå klipp av og på, angre og gjør om
+* Verktøy: **Select (A)**, **Position (P)** som flytter klipp og lager mellomrom (klippene bak følger med), **Blade (B)** med kuttelinje og **Hand (H)**. Musepekeren viser hva som skjer: trimpeker på kantene, barberblad, flyttepeker og grip.
+* Importer nesten alle formater: MP4, MOV, MKV, WebM, AVI, WMV, FLV, MPEG, MXF, ProRes, DNxHR, 10-bit H.264, animert GIF, TIFF, TGA, HEIC, WAV, AIFF, MP3, AAC, FLAC, OGG, WMA, AC3 og flere. Det appen ikke kan spille av direkte konverteres i bakgrunnen. Filer som ikke kan leses avvises med en tydelig melding.
+* Trim, kutt, flytt, kopier og lim inn, slå klipp av og på, angre og gjør om
+* **Nøkkelbilder med myke overganger** (Linear, Ease In, Ease Out, Ease In and Out, Hold) på opasitet, posisjon, skala, rotasjon, farge, effekter og volum. Diamantene på klippet kan dras, og høyreklikk gir valg av overgang.
+* **Animasjonsmaler**: Fade In, Fade Out, Slow Zoom In og Out, Slide In fra tre kanter, Pop In og Spin In
+* Dra klipp, titler og undertekster direkte i visningen for å plassere dem
+* **Effekter**: Blur, Vignette, Sepia, Black & White, Invert, Hue Shift, Rounded Corners, Drop Shadow og Border
+* Farge: ferdige utseender og justering av eksponering, kontrast, metning og temperatur
+* **Titler** fra åtte maler (Title, Lower Third, Headline, Title Card, Boxed, Typewriter, Callout, End Card) med animasjon inn og ut og alle systemskrifter
+* **Overganger**: Cross Dissolve, Fade to Black, Fade to White, Push i tre retninger, Wipe, Circle Reveal, Zoom og Blur
+* Alle titler, overganger og effekter har levende forhåndsvisning i biblioteket (hold musen over), tegnet med samme motor som eksporten
+* **Undertekster**: én til tre linjer, venstre, midtstilt eller høyre, plassert øverst, i midten, nederst, fritt med X og Y, eller dratt i visningen. Skrift, størrelse, vekt, tekstfarge, konturfarge og konturtykkelse, bakgrunn med farge og gjennomsiktighet, og skygge. Import og eksport av SRT og WebVTT, og automatisk teksting med Whisper.
 * Opptak kan justeres i etterkant: kamera av eller på, bytt oppsett ved spillhodet, form og størrelse, tastetrykk, forstørret peker og klikk, og lydnivå for mikrofon og systemlyd hver for seg
-* Titler (tittel, nedre tredjedel, overskrift, tittelkort) med animasjon
-* Undertekster i eget spor: skriv selv, importer og eksporter SRT, eller lag dem **automatisk med Whisper** (kjører lokalt, modellen lastes ned første gang)
-* Overganger: krysstoning, via svart, skyv, tørk og zoom
-* Farge: ferdige utseender og justering av lysstyrke, kontrast, metning og temperatur
-* Lydstyrke i dB, inn og uttoning med håndtak på klippet
-* **Nøkkelbilder** på opasitet, posisjon, skala, rotasjon, farge og volum
-* Lydbølger og miniatyrbilder på tidslinjen, markører og inn og utpunkt
-* Prosjektformat: 4K, 1440p, 1080p, 720p, vertikal, kvadrat eller egen størrelse, og egen bildefrekvens. Klikk på formatet over visningen for å endre det.
-* Prosjekter lagres automatisk
-* **Eksporter prosjekt** gir en enkel eksport med forhåndsinnstillinger rett fra redigeringen
+* **Prosjektmaler**: Automatic, YouTube 1080p og 4K, Shorts/Reels/TikTok, Square, Instagram Feed, Tutorial (med tittelkort og nedre tredjedel) og Cinematic. Format og bildefrekvens kan endres fritt i prosjektinnstillingene, også til egne verdier.
+* Lydbølger, miniatyrbilder, markører, inn og utpunkt, og automatisk lagring (også når appen lukkes rett etter en endring)
 
 ## Eksport
 
@@ -42,7 +44,7 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 * Bildefrekvens: som kilden, vanlige verdier eller egen
 * Kvalitet: lav til maks, eller egen videobitrate i Mbit/s, og valgfri lydbitrate
 * Område: hele eller egendefinert fra og til, med knapp for å bruke spillhodet
-* Undertekster brent inn, som egen SRT eller begge
+* Undertekster brent inn i bildet, som eget spor i filen (kan slås av og på i avspilleren), som egen SRT eller WebVTT fil, eller kombinasjoner
 * Eksportkø med fremdrift. Eksisterende filer overskrives aldri.
 
 | Video | Lyd |
@@ -67,7 +69,7 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | J, K, L | Spill bakover, stopp, spill fremover (trykk flere ganger for raskere) |
 | Venstre og høyre pil | Ett bilde (med Shift: ti bilder) |
 | Opp og ned pil | Forrige eller neste kutt |
-| A, B | Velg, kutt |
+| A, P, B, H | Select, Position, Blade, Hand |
 | Cmd B, Shift Cmd B | Kutt valgte klipp ved spillhodet, kutt alle |
 | Delete, Shift Delete | Slett og lukk, slett og behold mellomrom |
 | V | Slå klipp av eller på |

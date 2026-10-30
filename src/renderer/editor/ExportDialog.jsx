@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'preact/hooks';
 import { Apple, Feather, FileVideo, Film, FolderOpen, Gem, Globe, Image as ImageIcon, Music } from 'lucide-preact';
 import { CAPTION_LANE, formatDuration } from '../../shared/model.js';
-import { AUDIO_FORMATS, PRESETS, QUALITIES, VIDEO_FORMATS, estimateSize, formatBytes, outputSize } from '../../shared/formats.js';
+import { AUDIO_FORMATS, CAPTION_EXPORT, CAPTION_EXPORT_AUDIO, PRESETS, QUALITIES, VIDEO_FORMATS, estimateSize, formatBytes, outputSize } from '../../shared/formats.js';
 import { project, room } from './store.js';
 import { exportOpen } from './commands.js';
 import { Button, Modal, Row, Segmented, Select, toast } from '../ui.jsx';
@@ -24,16 +24,16 @@ export async function startExport(p, settings) {
 }
 
 export async function defaultExportDir() {
-  return `${await api.baseDir()}${api.platform === 'win32' ? '\\' : '/'}Eksport`;
+  return `${await api.baseDir()}${api.platform === 'win32' ? '\\' : '/'}Exports`;
 }
 
 api.onExportDone(({ file }) => {
-  toast(`Eksport ferdig: ${file.split(/[\\/]/).pop()}`, {
+  toast(`Export finished: ${file.split(/[\\/]/).pop()}`, {
     kind: 'success',
     timeout: 12000,
     actions: [
-      { label: api.platform === 'darwin' ? 'Vis i Finder' : 'Vis i mappe', onClick: () => api.reveal(file) },
-      { label: 'Åpne', primary: true, onClick: () => api.openPath(file) },
+      { label: api.platform === 'darwin' ? 'Reveal in Finder' : 'Show in Folder', onClick: () => api.reveal(file) },
+      { label: 'Open', primary: true, onClick: () => api.openPath(file) },
     ],
   });
 });
@@ -80,7 +80,7 @@ export function ExportDialog() {
 
   const doExport = async () => {
     if (duration <= 0) {
-      toast('Tidslinjen er tom. Legg til klipp først.');
+      toast('The timeline is empty. Add some clips first.');
       return;
     }
     const folder = dir || (await defaultExportDir());
@@ -92,15 +92,15 @@ export function ExportDialog() {
       ...settingsObj,
       output,
       range: useRange && p.range ? p.range : null,
-      captions: audioOnly ? (captions === 'srt' || captions === 'both' ? 'srt' : 'none') : captions,
+      captions: audioOnly ? (captions.includes('srt') ? 'srt' : captions === 'vtt' ? 'vtt' : 'none') : captions,
     });
     exportOpen.value = false;
-    toast('Eksporten kjører i bakgrunnen. Du kan fortsette å redigere.', { timeout: 5000 });
+    toast('Exporting in the background. You can keep editing.', { timeout: 5000 });
   };
 
   return (
     <Modal
-      title="Eksporter prosjekt"
+      title="Export Project"
       width={860}
       class="export-modal"
       onClose={() => (exportOpen.value = false)}
@@ -109,7 +109,7 @@ export function ExportDialog() {
           <div class="export-summary">
             <FileVideo size={16} />
             <span>
-              {audioOnly ? afmt.label : `${w} × ${h} · ${fps} fps · ${fmt.label}`} · {formatDuration(duration)} · ca. {formatBytes(size)}
+              {audioOnly ? afmt.label : `${w} × ${h} · ${fps} fps · ${fmt.label}`} · {formatDuration(duration)} · about {formatBytes(size)}
             </span>
           </div>
           <Button
@@ -120,13 +120,13 @@ export function ExportDialog() {
               room.value = 'export';
             }}
           >
-            Flere valg
+            More Options
           </Button>
           <Button variant="secondary" onClick={() => (exportOpen.value = false)}>
-            Avbryt
+            Cancel
           </Button>
           <Button variant="primary" onClick={doExport}>
-            Eksporter
+            Export
           </Button>
         </>
       }
@@ -147,13 +147,13 @@ export function ExportDialog() {
           })}
         </div>
         <div class="export-form">
-          <Row label="Filnavn" stacked>
+          <Row label="File name" stacked>
             <div class="name-row">
               <input class="text-input" value={name} onInput={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.stopPropagation()} />
               <span class="ext">.{ext}</span>
             </div>
           </Row>
-          <Row label="Lagres i" stacked>
+          <Row label="Save to" stacked>
             <button
               class="path-btn"
               onClick={async () => {
@@ -162,11 +162,11 @@ export function ExportDialog() {
               }}
             >
               <FolderOpen size={14} />
-              <span>{dir || 'Filmer/OBSlite/Eksport'}</span>
+              <span>{dir || 'Movies/OBSlite/Exports'}</span>
             </button>
           </Row>
           {audioOnly ? (
-            <Row label="Lydformat">
+            <Row label="Audio format">
               <Select value={audioFormat} options={AUDIO_FORMATS.map((f) => ({ value: f.id, label: `${f.label}, ${f.note.toLowerCase()}` }))} onChange={setAudioFormat} />
             </Row>
           ) : (
@@ -175,53 +175,41 @@ export function ExportDialog() {
                 <Select value={format} options={VIDEO_FORMATS.map((f) => ({ value: f.id, label: f.label }))} onChange={setFormat} />
               </Row>
               <p class="hint right">{fmt.note}</p>
-              <Row label="Oppløsning">
+              <Row label="Resolution">
                 <Select value={String(res)} options={resOptions.map((o) => ({ value: String(o.value), label: o.label }))} onChange={(v) => setRes(Number(v))} />
               </Row>
-              <Row label="Bilder per sekund">
-                <Select value={String(fps)} options={[...new Set([p.fps, 15, 24, 25, 30, 50, 60])].sort((x, y) => x - y).map((f) => ({ value: String(f), label: f === p.fps ? `${f} (prosjekt)` : String(f) }))} onChange={(v) => setFps(Number(v))} />
+              <Row label="Frame rate">
+                <Select value={String(fps)} options={[...new Set([p.fps, 15, 24, 25, 30, 50, 60])].sort((x, y) => x - y).map((f) => ({ value: String(f), label: f === p.fps ? `${f} (project)` : String(f) }))} onChange={(v) => setFps(Number(v))} />
               </Row>
             </>
           )}
           {!(audioOnly && (audioFormat === 'wav' || audioFormat === 'flac')) && format !== 'mov-prores' && (
-            <Row label="Kvalitet">
+            <Row label="Quality">
               <Segmented value={quality} onChange={setQuality} options={QUALITIES.map((q) => ({ value: q.id, label: q.label }))} />
             </Row>
           )}
           {p.range && (
-            <Row label="Område">
+            <Row label="Range">
               <Segmented
                 value={useRange}
                 onChange={setUseRange}
                 options={[
-                  { value: false, label: 'Hele prosjektet' },
-                  { value: true, label: 'Inn til ut' },
+                  { value: false, label: 'Entire project' },
+                  { value: true, label: 'In to out' },
                 ]}
               />
             </Row>
           )}
           {hasCaptions && (
-            <Row label="Undertekster">
+            <Row label="Captions">
               <Select
                 value={captions}
                 onChange={setCaptions}
-                options={
-                  audioOnly
-                    ? [
-                        { value: 'none', label: 'Ingen' },
-                        { value: 'srt', label: 'Egen SRT-fil' },
-                      ]
-                    : [
-                        { value: 'burn', label: 'Brent inn i bildet' },
-                        { value: 'srt', label: 'Egen SRT-fil' },
-                        { value: 'both', label: 'Begge' },
-                        { value: 'none', label: 'Ingen' },
-                      ]
-                }
+                options={audioOnly ? CAPTION_EXPORT_AUDIO : fmt.id === 'gif' ? CAPTION_EXPORT.filter((o) => !o.value.includes('embed')) : CAPTION_EXPORT}
               />
             </Row>
           )}
-          <p class="hint">Eksporten kjører i bakgrunnen med maskinvareakselerasjon når det er mulig. Du får beskjed når filen er klar.</p>
+          <p class="hint">Exports run in the background with hardware acceleration when available. You will be notified when the file is ready.</p>
         </div>
       </div>
     </Modal>

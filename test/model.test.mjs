@@ -163,3 +163,57 @@ test('SRT leses og skrives', () => {
   assert.equal(back[0].start, 1.5);
   assert.equal(back[1].text, 'To\nlinjer');
 });
+
+import { positionMove, positionTrim } from '../src/shared/ops.js';
+
+test('posisjonsverktøy: flytt lager mellomrom og skyver resten', () => {
+  const p = setup();
+  const b = p.primary[1];
+  positionMove(p, b, 3);
+  assert.equal(p.primary.length, 3);
+  assert.equal(p.clips[p.primary[1]].type, 'gap');
+  assert.equal(p.clips[b].start, 13);
+  positionMove(p, b, -10);
+  assert.equal(p.primary.length, 2, 'kan ikke flyttes forbi forrige klipp');
+  assert.equal(p.clips[b].start, 10);
+});
+
+test('posisjonsverktøy: trim etterlater mellomrom', () => {
+  const p = setup();
+  const [a, b] = p.primary;
+  positionTrim(p, a, 'end', -4);
+  assert.equal(p.clips[a].dur, 6);
+  assert.equal(p.clips[b].start, 10, 'neste klipp står stille');
+  positionTrim(p, a, 'end', 10);
+  assert.equal(p.clips[a].dur, 10, 'forlengelse bruker bare opp mellomrommet');
+  assert.equal(p.primary.length, 2);
+  positionTrim(p, b, 'start', 2);
+  assert.equal(p.clips[b].start, 12);
+  assert.equal(p.clips[b].in, 2);
+});
+
+import { applyAnimationPreset, setKeyframe as setKf, valueAt as val } from '../src/shared/model.js';
+
+test('myke overganger mellom nøkkelbilder', () => {
+  const p = setup();
+  const c = p.clips[p.primary[0]];
+  c.kf.x = [[0, 0, 'easeIn'], [2, 100]];
+  assert.ok(val(c, 'x', 1) < 50, 'ease in starter sakte');
+  c.kf.x[0][2] = 'easeOut';
+  assert.ok(val(c, 'x', 1) > 50, 'ease out starter raskt');
+  c.kf.x[0][2] = 'hold';
+  assert.equal(val(c, 'x', 1.9), 0, 'hold venter til neste nøkkelbilde');
+  applyAnimationPreset(c, 'fadeIn', 1920, 1080);
+  assert.equal(val(c, 'opacity', 0), 0);
+  assert.equal(val(c, 'opacity', 5), 1);
+});
+
+import { toVtt } from '../src/shared/srt.js';
+test('WebVTT skrives og leses', () => {
+  const vtt = toVtt([{ start: 61.25, end: 63, text: 'Line one\nLine two' }]);
+  assert.ok(vtt.startsWith('WEBVTT'));
+  const back = parseSrt(vtt);
+  assert.equal(back[0].start, 61.25);
+  assert.equal(back[0].text, 'Line one\nLine two');
+  assert.equal(parseSrt('WEBVTT\n\n00:05.000 --> 00:06.500\nKort')[0].end, 6.5);
+});

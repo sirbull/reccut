@@ -15,9 +15,19 @@ export function toSrt(items) {
 }
 
 function parseTs(s) {
-  const m = /(\d+):(\d+):(\d+)[,.](\d+)/.exec(s);
+  const m = /(?:(\d+):)?(\d+):(\d+)[,.](\d+)/.exec(s);
   if (!m) return null;
-  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(m[4].padEnd(3, '0').slice(0, 3)) / 1000;
+  return Number(m[1] || 0) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(m[4].padEnd(3, '0').slice(0, 3)) / 1000;
+}
+
+// WebVTT: samme innhold som SRT, men med punktum i tidskoden og eget hode.
+export function toVtt(items) {
+  const body = items
+    .slice()
+    .sort((a, b) => a.start - b.start)
+    .map((c) => `${ts(c.start).replace(',', '.')} --> ${ts(c.end).replace(',', '.')}\n${c.text.trim()}\n`)
+    .join('\n');
+  return `WEBVTT\n\n${body}`;
 }
 
 export function parseSrt(text) {

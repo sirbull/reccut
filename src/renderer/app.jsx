@@ -57,20 +57,20 @@ async function finishRecording() {
     await openProjectFile(path);
     room.value = 'edit';
   };
-  toast(s.autoRender ? 'Opptaket er lagret. Ferdig video lages i bakgrunnen.' : 'Opptaket er lagret.', {
+  toast(s.autoRender ? 'Recording saved. A finished video is being rendered in the background.' : 'Recording saved.', {
     kind: 'success',
     timeout: 15000,
     actions: [
-      { label: api.platform === 'darwin' ? 'Vis i Finder' : 'Vis i mappe', onClick: () => api.reveal(dir) },
-      { label: 'Rediger', primary: true, onClick: openEditor },
+      { label: api.platform === 'darwin' ? 'Reveal in Finder' : 'Show in Folder', onClick: () => api.reveal(dir) },
+      { label: 'Edit', primary: true, onClick: openEditor },
     ],
   });
 }
 
 export function toggleRecording() {
   if (engine.finishing.value) return;
-  if (engine.recording.value) finishRecording().catch((err) => toast(`Kunne ikke lagre opptaket: ${err.message}`, { kind: 'error' }));
-  else engine.startRecording().catch((err) => toast(`Kunne ikke starte opptaket: ${err.message}`, { kind: 'error' }));
+  if (engine.recording.value) finishRecording().catch((err) => toast(`Could not save the recording: ${err.message}`, { kind: 'error' }));
+  else engine.startRecording().catch((err) => toast(`Could not start recording: ${err.message}`, { kind: 'error' }));
 }
 
 function TasksIndicator() {
@@ -83,7 +83,7 @@ function TasksIndicator() {
   const pct = main ? Math.round((main.progress || 0) * 100) : 100;
   return (
     <div class="tasks">
-      <button class={`tasks-btn${running.length ? ' busy' : ''}`} onClick={() => setOpen(!open)} title="Bakgrunnsoppgaver">
+      <button class={`tasks-btn${running.length ? ' busy' : ''}`} onClick={() => setOpen(!open)} title="Background tasks">
         {running.length ? (
           <svg width="18" height="18" viewBox="0 0 36 36" class="ring">
             <circle cx="18" cy="18" r="15" />
@@ -92,26 +92,26 @@ function TasksIndicator() {
         ) : (
           <ListChecks size={16} />
         )}
-        {main && <span>{main.kind === 'export' ? `Eksport ${pct} %` : main.kind === 'transcribe' ? `Teksting ${pct} %` : 'Analyserer'}</span>}
+        {main && <span>{main.kind === 'export' ? `Exporting ${pct} %` : main.kind === 'transcribe' ? `Transcribing ${pct} %` : 'Analyzing media'}</span>}
       </button>
       {open && (
         <div class="popover tasks-pop">
           <header>
-            <b>Bakgrunnsoppgaver</b>
+            <b>Background Tasks</b>
             <button class="link" onClick={() => api.clearTasks()}>
-              Fjern ferdige
+              Clear finished
             </button>
           </header>
-          {list.length === 0 && <p class="dim">Ingen oppgaver.</p>}
+          {list.length === 0 && <p class="dim">Nothing running.</p>}
           {list.map((t) => (
             <div key={t.id} class={`task ${t.state}`}>
               <div class="task-head">
                 {t.state === 'done' ? <CheckCircle2 size={14} class="ok" /> : t.state === 'error' ? <CircleAlert size={14} class="err" /> : <Loader2 size={14} class="spin" />}
                 <span class="title">{t.title}</span>
-                {(t.state === 'running' || t.state === 'queued') && <IconButton icon={X} size={13} title="Avbryt" onClick={() => api.cancelTask(t.id)} />}
+                {(t.state === 'running' || t.state === 'queued') && <IconButton icon={X} size={13} title="Cancel" onClick={() => api.cancelTask(t.id)} />}
                 {t.state === 'done' && t.kind === 'export' && t.result && (
                   <button class="link" onClick={() => api.reveal(t.result)}>
-                    Vis
+                    Reveal
                   </button>
                 )}
               </div>
@@ -120,7 +120,7 @@ function TasksIndicator() {
                   <div style={{ width: `${Math.round((t.progress || 0) * 100)}%` }} />
                 </div>
               )}
-              <div class="task-sub">{t.state === 'error' ? t.error : t.state === 'queued' ? 'I kø' : t.state === 'canceled' ? 'Avbrutt' : t.stage || ''}</div>
+              <div class="task-sub">{t.state === 'error' ? t.error : t.state === 'queued' ? 'Waiting' : t.state === 'canceled' ? 'Canceled' : t.stage || ''}</div>
             </div>
           ))}
         </div>
@@ -141,32 +141,32 @@ function TitleBar() {
         OBSlite
       </div>
       <div class="rooms">
-        <button class={r === 'record' ? 'active' : ''} onClick={() => (room.value = 'record')} title={`Opptak (${isMac ? '⌘' : 'Ctrl+'}1)`}>
+        <button class={r === 'record' ? 'active' : ''} onClick={() => (room.value = 'record')} title={`Record (${isMac ? '⌘' : 'Ctrl+'}1)`}>
           <Video size={14} />
-          Opptak
+          Record
           {rec && <span class="live-dot" />}
         </button>
-        <button class={r === 'edit' ? 'active' : ''} onClick={() => (room.value = 'edit')} title={`Rediger (${isMac ? '⌘' : 'Ctrl+'}2)`}>
+        <button class={r === 'edit' ? 'active' : ''} onClick={() => (room.value = 'edit')} title={`Edit (${isMac ? '⌘' : 'Ctrl+'}2)`}>
           <Clapperboard size={14} />
-          Rediger
+          Edit
         </button>
-        <button class={r === 'export' ? 'active' : ''} onClick={() => (room.value = 'export')} title={`Eksport (${isMac ? '⌘' : 'Ctrl+'}3)`}>
+        <button class={r === 'export' ? 'active' : ''} onClick={() => (room.value = 'export')} title={`Export (${isMac ? '⌘' : 'Ctrl+'}3)`}>
           <Share size={14} />
-          Eksport
+          Export
         </button>
       </div>
       <div class="spacer" />
       <TasksIndicator />
       {r === 'edit' ? (
         <div class="actions">
-          <IconButton icon={Undo2} title="Angre" disabled={!canUndo()} onClick={undo} />
-          <IconButton icon={Redo2} title="Gjør om" disabled={!canRedo()} onClick={redo} />
+          <IconButton icon={Undo2} title="Undo" disabled={!canUndo()} onClick={undo} />
+          <IconButton icon={Redo2} title="Redo" disabled={!canRedo()} onClick={redo} />
           <span class="sep" />
-          <IconButton icon={FolderOpen} title="Prosjekter" onClick={() => (commands.projectsOpen.value = true)} />
-          <IconButton icon={Plus} title={`Importer media (${isMac ? '⌘' : 'Ctrl+'}I)`} onClick={() => commands.importDialog()} />
-          <button class="btn primary" onClick={() => (commands.exportOpen.value = true)} title={`Eksporter prosjekt (${isMac ? '⌘' : 'Ctrl+'}E)`}>
+          <IconButton icon={FolderOpen} title="Projects" onClick={() => (commands.projectsOpen.value = true)} />
+          <IconButton icon={Plus} title={`Import media (${isMac ? '⌘' : 'Ctrl+'}I)`} onClick={() => commands.importDialog()} />
+          <button class="btn primary" onClick={() => (commands.exportOpen.value = true)} title={`Export project (${isMac ? '⌘' : 'Ctrl+'}E)`}>
             <Share size={15} />
-            Eksporter prosjekt
+            Export Project
           </button>
         </div>
       ) : r === 'export' ? (
@@ -176,13 +176,13 @@ function TitleBar() {
           {rec && <span class="rec-timer">{formatDuration(engine.elapsed.value)}</span>}
           <button class={`record-btn${rec ? ' active' : ''}`} disabled={engine.finishing.value} onClick={toggleRecording}>
             <span class="rec-icon" />
-            {engine.finishing.value ? 'Lagrer ...' : rec ? 'Stopp' : 'Start opptak'}
+            {engine.finishing.value ? 'Saving' : rec ? 'Stop' : 'Start Recording'}
             <kbd>{mod.short}0</kbd>
           </button>
           {!rec && (
             <button class="btn secondary" onClick={() => (room.value = 'edit')}>
               <Clapperboard size={15} />
-              Rediger
+              Edit
             </button>
           )}
         </div>
@@ -203,7 +203,7 @@ function Notice() {
           {n.action}
         </button>
       )}
-      <IconButton icon={X} title="Lukk" size={14} onClick={() => (engine.notice.value = null)} />
+      <IconButton icon={X} title="Close" size={14} onClick={() => (engine.notice.value = null)} />
     </div>
   );
 }
@@ -248,6 +248,7 @@ function App() {
 window.__obslite = {
   importPaths: (paths, placement) => import('./editor/store.js').then((m) => m.importPaths(paths, placement)),
   exportState: () => import('./export/state.js'),
+  store: () => import('./editor/store.js'),
   openRecording: async (dir) => {
     const m = await import('./editor/store.js');
     const r = await m.createProjectFromRecording(dir);

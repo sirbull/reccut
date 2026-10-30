@@ -55,6 +55,9 @@ textarea {
 button {
   cursor: default;
 }
+input[type='range'] {
+  cursor: pointer;
+}
 
 [hidden] {
   display: none !important;
@@ -1622,7 +1625,6 @@ input[type='color'].color::-webkit-color-swatch {
   top: 0;
   bottom: 0;
   width: 7px;
-  cursor: ew-resize;
   z-index: 4;
 }
 .edge.start {
@@ -1658,15 +1660,15 @@ input[type='color'].color::-webkit-color-swatch {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 2px;
-  height: 8px;
+  bottom: 3px;
+  height: 10px;
   pointer-events: none;
   z-index: 2;
 }
 .kf-row .kf {
   position: absolute;
-  width: 7px;
-  height: 7px;
+  width: 10px;
+  height: 10px;
   background: var(--yellow);
   transform: rotate(45deg);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
@@ -2293,4 +2295,194 @@ input[type='color'].color::-webkit-color-swatch {
 .fmt-btn:hover {
   background: var(--bg-3);
   color: var(--text);
+}
+
+/* Musepekere som viser hva som skjer, som i Final Cut Pro */
+.tl-content { cursor: default; }
+.tl-ruler { cursor: text; }
+.tl-content .edge.start { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M10 3h3v18h-3M17 8l4 4-4 4M21 12h-7' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M10 3h3v18h-3M17 8l4 4-4 4M21 12h-7' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E") 12 12, col-resize; }
+.tl-content .edge.end { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M14 3h-3v18h3M7 8l-4 4 4 4M3 12h7' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M14 3h-3v18h3M7 8l-4 4 4 4M3 12h7' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E") 12 12, col-resize; }
+.tl-content.tool-position .tl-clip.primary { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M4 3v13l3.5-3.5L10 18l2-1-2.4-5H14z' fill='white' stroke='black' stroke-width='1.3' stroke-linejoin='round'/%3E%3Cpath d='M15 19h7M19 16l3 3-3 3M15 19' stroke='black' stroke-width='3' stroke-linecap='round' fill='none'/%3E%3Cpath d='M15 19h7M19 16l3 3-3 3' stroke='white' stroke-width='1.4' stroke-linecap='round' fill='none'/%3E%3C/svg%3E") 4 3, ew-resize; }
+.tl-content.tool-blade, .tl-content.tool-blade .tl-clip, .tl-content.tool-blade .edge { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M3 2l9 9' stroke='black' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M3 2l9 9' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M11 10l9 9-3 3-9-9z' fill='white' stroke='black' stroke-width='1.3' stroke-linejoin='round'/%3E%3Ccircle cx='17.5' cy='19.5' r='1' fill='black'/%3E%3C/svg%3E") 3 2, crosshair; }
+.tl-content.tool-hand, .tl-content.tool-hand * { cursor: grab !important; }
+.tl-content.tool-hand:active, .tl-content.tool-hand:active * { cursor: grabbing !important; }
+.tl-transition { cursor: pointer; }
+.kf-row .kf { cursor: ew-resize; pointer-events: auto; }
+.kf-row .kf:hover { transform: rotate(45deg) scale(1.3); }
+.vol-line, .vol-kf-point { cursor: ns-resize; }
+.fade-handle { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 3v18M7 8l-4 4 4 4M3 12h6M17 8l4 4-4 4M21 12h-6' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M12 3v18M7 8l-4 4 4 4M3 12h6M17 8l4 4-4 4M21 12h-6' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E") 12 12, ew-resize; }
+.tl-blade {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 26px;
+  width: 1px;
+  background: #ff9f0a;
+  box-shadow: 0 0 4px rgba(255, 159, 10, 0.8);
+  pointer-events: none;
+  z-index: 9;
+}
+.tool-group {
+  display: flex;
+  gap: 1px;
+  background: var(--bg-0);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  padding: 1px;
+}
+.tool-group .icon-btn { width: 26px; height: 24px; }
+.layout-btn, .media-card, .gen-card, .preset, .chip, .source, .look, .project-item .open, .rooms button, .panel-tabs button, .segmented button, .btn, .icon-btn, .toggle, .play-btn, .layout-btn, .cap-time, .switch-list button, .record-btn { cursor: pointer; }
+.media-card, .gen-card { cursor: grab; }
+.media-card:active, .gen-card:active { cursor: grabbing; }
+.num-field { cursor: ew-resize; }
+.select { cursor: pointer; }
+.divider { cursor: row-resize; }
+
+.viewer-box canvas.movable { cursor: move; }
+
+/* Nøkkelbilder, animasjon og effekter i inspektøren */
+.ease-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -2px 0 6px 84px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.ease-row .select {
+  width: 160px;
+  height: 24px;
+}
+.anim-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.anim-row .select {
+  flex: 1;
+}
+.small-link {
+  font-size: 11.5px;
+}
+.fx-item {
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 6px 8px 4px;
+  margin-bottom: 8px;
+  background: var(--bg-2);
+}
+.fx-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.fx-head .icon-btn {
+  width: 22px;
+  height: 22px;
+}
+.caption-text {
+  font-size: 13px;
+  line-height: 1.45;
+  resize: none;
+}
+
+/* Forhåndsvisninger i biblioteket */
+.mini-preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 5px;
+  display: block;
+  background: #000;
+}
+.gen-card {
+  padding: 5px 5px 7px;
+}
+.gen-card span {
+  font-size: 11.5px;
+}
+.search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  margin-bottom: 10px;
+  background: var(--bg-0);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  color: var(--text-3);
+}
+.search input {
+  flex: 1;
+  border: 0;
+  background: none;
+  outline: none;
+  user-select: text;
+}
+.media-card .used {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--yellow);
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.5);
+}
+
+/* Nytt prosjekt fra mal */
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+.template {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 6px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-2);
+  border-radius: 9px;
+  color: var(--text-2);
+  text-align: center;
+}
+.template:hover {
+  border-color: #4a4a50;
+}
+.template.active {
+  border-color: var(--accent);
+  background: rgba(10, 132, 255, 0.12);
+  color: var(--text);
+}
+.template b {
+  color: var(--text);
+  font-size: 12px;
+}
+.template span {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.shape-wrap {
+  height: 54px;
+  width: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.shape {
+  border-radius: 4px;
+  border: 1.5px solid var(--text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-3);
+}
+.template.active .shape {
+  border-color: var(--accent);
+  color: var(--accent-2);
 }

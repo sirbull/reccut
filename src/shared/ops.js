@@ -301,3 +301,77 @@ export function autoFormat(project, media) {
   }
   project.autoFormat = false;
 }
+
+/* Posisjonsverktøyet (P): flytt og trim i hovedsporet uten å lukke mellomrom. */
+
+function gapAt(project, idx) {
+  const c = project.clips[project.primary[idx]];
+  return c?.type === 'gap' ? c : null;
+}
+
+function setGapBefore(project, idx, dur) {
+  const gap = gapAt(project, idx - 1);
+  if (gap) {
+    if (dur < 1e-3) {
+      project.primary.splice(idx - 1, 1);
+      delete project.clips[gap.id];
+    } else gap.dur = round(dur);
+  } else if (dur >= 1e-3) {
+    const g = makeClip('gap', { dur: round(dur), name: 'Gap' });
+    project.clips[g.id] = g;
+    project.primary.splice(idx, 0, g.id);
+  }
+}
+
+// Flytter et klipp i hovedsporet. Klippene bak følger med, og det blir et mellomrom foran.
+export function positionMove(project, id, dt) {
+  withSync(project, () => {
+    const idx = project.primary.indexOf(id);
+    if (idx < 0) return;
+    const before = gapAt(project, idx - 1)?.dur || 0;
+    setGapBefore(project, idx, Math.max(0, before + dt));
+    mergeGaps(project);
+  });
+}
+
+// Trimmer uten å flytte resten: det som fjernes blir mellomrom, og forlengelse bruker opp mellomrom.
+export function positionTrim(project, id, edge, delta) {
+  const c = project.clips[id];
+  if (!c || c.lane !== 0) return;
+  withSync(project, () => {
+    const idx = project.primary.indexOf(id);
+    const maxLen = mediaLength(project, c);
+    if (edge === 'end') {
+      const after = gapAt(project, idx + 1);
+      const isLast = idx === project.primary.length - 1;
+      let d = delta;
+      const max = maxLen === Infinity ? Infinity : maxLen - c.in;
+      d = Math.min(d, max - c.dur);
+      d = Math.max(d, MIN_DUR - c.dur);
+      if (d > 0 && !isLast) d = Math.min(d, after ? after.dur : 0);
+      c.dur = round(c.dur + d);
+      if (!isLast) {
+        if (after) {
+          after.dur = round(after.dur - d);
+          if (after.dur < 1e-3) {
+            project.primary.splice(idx + 1, 1);
+            delete project.clips[after.id];
+          }
+        } else if (d < 0) {
+          const g = makeClip('gap', { dur: round(-d), name: 'Gap' });
+          project.clips[g.id] = g;
+          project.primary.splice(idx + 1, 0, g.id);
+        }
+      }
+    } else {
+      const before = gapAt(project, idx - 1)?.dur || 0;
+      const minIn = isElastic(c) ? -Infinity : 0;
+      let d = Math.max(minIn - c.in, Math.min(c.dur - MIN_DUR, delta));
+      d = Math.max(d, -before);
+      c.in = round(c.in + d);
+      c.dur = round(c.dur - d);
+      setGapBefore(project, idx, before + d);
+    }
+    mergeGaps(project);
+  });
+}

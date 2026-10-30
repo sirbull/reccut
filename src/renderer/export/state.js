@@ -24,8 +24,10 @@ export const selectedProject = computed(() => sourceProject(selectedId.value) ||
 
 export async function addFiles(paths) {
   if (!paths.length) return;
-  const items = await api.importMedia(paths);
+  const { items, failed } = await api.importMedia(paths);
+  if (failed.length) (await import('../ui.jsx')).toast(`Could not read ${failed.join(', ')}. The file may be damaged or in an unsupported format.`, { kind: 'error', timeout: 9000 });
   const added = items.map((m) => {
+    // Hver fil blir et eget lite prosjekt.
     const p = newProject(m.name.replace(/\.[^.]+$/, ''));
     p.media[m.id] = m;
     autoFormat(p, m);

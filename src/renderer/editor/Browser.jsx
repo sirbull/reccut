@@ -1,5 +1,6 @@
-// Mediebibliotek, titler, overganger og undertekster, som nettleseren i Final Cut Pro.
-import { useState } from 'preact/hooks';
+// Bibliotek med medier, titler, overganger, effekter og undertekster, som i Final Cut Pro.
+// Forhåndsvisningene tegnes med den ekte tegnemotoren, så de ser ut akkurat som resultatet.
+import { useEffect, useRef, useState } from 'preact/hooks';
 import {
   Blend,
   Captions,
@@ -10,25 +11,31 @@ import {
   Film,
   Image as ImageIcon,
   Plus,
+  Search,
   Sparkles,
   Trash2,
   Type,
   Video,
+  Wand2,
 } from 'lucide-preact';
-import { CAPTION_LANE, TITLE_STYLES, TRANSITIONS, formatDuration, formatTimecode } from '../../shared/model.js';
-import { parseSrt, toSrt } from '../../shared/srt.js';
-import { addMediaRecords, commit, getTime, importPaths, makeCaptionClip, project, selection, tasks, timeSig } from './store.js';
+import { CAPTION_LANE, EFFECTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode } from '../../shared/model.js';
+import { drawFrame } from '../../shared/render.js';
+import { parseSrt, toSrt, toVtt } from '../../shared/srt.js';
+import { addMediaRecords, commit, importPaths, makeCaptionClip, project, selection, tasks, timeSig } from './store.js';
 import { fileUrl, seek } from './playback.js';
 import * as commands from './commands.js';
-import { Button, IconButton, Segmented, Select, toast } from '../ui.jsx';
+import { CaptionStyleEditor } from './Inspector.jsx';
+import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
 
 const api = window.api;
+const isMac = api.platform === 'darwin';
 
 const TABS = [
-  { id: 'media', label: 'Medier', icon: Clapperboard },
-  { id: 'titles', label: 'Titler', icon: Type },
-  { id: 'transitions', label: 'Overganger', icon: Blend },
-  { id: 'captions', label: 'Undertekster', icon: Captions },
+  { id: 'media', label: 'Media', icon: Clapperboard },
+  { id: 'titles', label: 'Titles', icon: Type },
+  { id: 'transitions', label: 'Transitions', icon: Blend },
+  { id: 'effects', label: 'Effects', icon: Wand2 },
+  { id: 'captions', label: 'Captions', icon: Captions },
 ];
 
 export function Browser() {
@@ -47,6 +54,7 @@ export function Browser() {
         {tab === 'media' && <MediaTab />}
         {tab === 'titles' && <TitlesTab />}
         {tab === 'transitions' && <TransitionsTab />}
+        {tab === 'effects' && <EffectsTab />}
         {tab === 'captions' && <CaptionsTab />}
       </div>
     </div>
@@ -58,14 +66,17 @@ function dragData(e, item) {
   e.dataTransfer.effectAllowed = 'copy';
 }
 
+/* Media */
+
 function MediaTab() {
   const p = project.value;
-  const items = Object.values(p.media);
+  const [query, setQuery] = useState('');
+  const items = Object.values(p.media).filter((m) => !query || m.name.toLowerCase().includes(query.toLowerCase()));
   const [over, setOver] = useState(false);
 
   const addRecording = async () => {
     const recs = await api.listRecordings();
-    if (!recs.length) return toast('Ingen opptak funnet ennå.');
+    if (!recs.length) return toast('No recordings yet. Make one in the Record tab.');
     const id = await api.popupMenu(recs.slice(0, 20).map((r) => ({ id: r.path, label: r.name })));
     if (!id) return;
     const media = await api.importRecording(id);
@@ -91,17 +102,23 @@ function MediaTab() {
     >
       <div class="tab-actions">
         <Button variant="secondary" icon={Plus} onClick={() => commands.importDialog()}>
-          Importer
+          Import
         </Button>
         <Button variant="ghost" icon={Video} onClick={addRecording}>
-          Opptak
+          Recordings
         </Button>
       </div>
-      {items.length === 0 ? (
+      {Object.keys(p.media).length > 4 && (
+        <div class="search">
+          <Search size={13} />
+          <input placeholder="Search media" value={query} onInput={(e) => setQuery(e.currentTarget.value)} onKeyDown={(e) => e.stopPropagation()} />
+        </div>
+      )}
+      {Object.keys(p.media).length === 0 ? (
         <div class="empty">
           <Film size={28} />
-          <p>Dra filer hit, eller trykk Importer.</p>
-          <p class="dim">Video, lyd og bilder. Ta opp i Opptak-fanen for å få skjerm og kamera hver for seg.</p>
+          <p>Drop files here or click Import.</p>
+          <p class="dim">Almost any video, audio or image format works. Files the app cannot play directly are converted in the background.</p>
         </div>
       ) : (
         <div class="media-grid">
@@ -110,7 +127,7 @@ function MediaTab() {
           ))}
         </div>
       )}
-      <p class="hint small">Velg et klipp og trykk E for å legge til på slutten, W for å sette inn ved spillhodet eller Q for å koble det på over.</p>
+      <p class="hint small">Select a clip and press E to append it, W to insert it at the playhead, or Q to connect it above the storyline.</p>
     </div>
   );
 }
@@ -118,19 +135,19 @@ function MediaTab() {
 function MediaCard({ m }) {
   const selected = commands.browserSelection.value === m.id;
   const stream = m.streams.screen || m.streams.main || m.streams.camera;
-  const thumb = m.kind === 'image' ? m.path : stream?.thumbs?.files?.[Math.min(stream.thumbs.files.length - 1, 2)];
+  const thumb = m.kind === 'image' ? m.streams.main?.proxy || m.path : stream?.thumbs?.files?.[Math.min(stream.thumbs.files.length - 1, 2)];
   const analyzing = tasks.value.some((t) => t.kind === 'analyze' && t.state === 'running' && t.title.includes(m.name));
+  const used = Object.values(project.value.clips).some((c) => c.mediaId === m.id);
   const Icon = m.kind === 'audio' ? FileAudio : m.kind === 'image' ? ImageIcon : m.kind === 'recording' ? Video : Film;
   const onContext = async (e) => {
     e.preventDefault();
-    const used = Object.values(project.value.clips).some((c) => c.mediaId === m.id);
     const id = await api.popupMenu([
-      { id: 'append', label: 'Legg til på slutten', accelerator: 'E' },
-      { id: 'insert', label: 'Sett inn ved spillhodet', accelerator: 'W' },
-      { id: 'connect', label: 'Koble på over', accelerator: 'Q' },
+      { id: 'append', label: 'Append to Storyline', accelerator: 'E' },
+      { id: 'insert', label: 'Insert at Playhead', accelerator: 'W' },
+      { id: 'connect', label: 'Connect to Storyline', accelerator: 'Q' },
       { separator: true },
-      { id: 'reveal', label: api.platform === 'darwin' ? 'Vis i Finder' : 'Vis i Utforsker' },
-      { id: 'remove', label: 'Fjern fra prosjektet', enabled: !used },
+      { id: 'reveal', label: isMac ? 'Reveal in Finder' : 'Show in Explorer' },
+      { id: 'remove', label: 'Remove from Project', enabled: !used },
     ]);
     if (['append', 'insert', 'connect'].includes(id)) {
       commands.browserSelection.value = m.id;
@@ -155,6 +172,7 @@ function MediaCard({ m }) {
         {thumb ? <img src={fileUrl(thumb)} draggable={false} /> : <Icon size={26} />}
         {m.kind !== 'image' && <span class="dur">{formatDuration(m.duration)}</span>}
         {m.kind === 'recording' && <span class="kind">REC</span>}
+        {used && <span class="used" title="Used in the project" />}
         {analyzing && <span class="busy" />}
       </div>
       <div class="name">{m.name}</div>
@@ -162,27 +180,152 @@ function MediaCard({ m }) {
   );
 }
 
+/* Små forhåndsvisninger tegnet med tegnemotoren */
+
+function sampleCanvas(colors, label) {
+  const c = document.createElement('canvas');
+  c.width = 320;
+  c.height = 180;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 320, 180);
+  grad.addColorStop(0, colors[0]);
+  grad.addColorStop(1, colors[1]);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 320, 180);
+  g.fillStyle = 'rgba(255,255,255,0.18)';
+  g.beginPath();
+  g.arc(250, 60, 70, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = 'rgba(0,0,0,0.25)';
+  g.fillRect(0, 130, 320, 50);
+  g.fillStyle = '#fff';
+  g.font = '700 54px system-ui, sans-serif';
+  g.fillText(label, 24, 104);
+  return c;
+}
+
+// Nøytral bakgrunn for titler og effekter: et lite landskap med himmel, sol og åser.
+function sceneCanvas() {
+  const c = document.createElement('canvas');
+  c.width = 320;
+  c.height = 180;
+  const g = c.getContext('2d');
+  const sky = g.createLinearGradient(0, 0, 0, 180);
+  sky.addColorStop(0, '#3a5f9e');
+  sky.addColorStop(1, '#c98a5a');
+  g.fillStyle = sky;
+  g.fillRect(0, 0, 320, 180);
+  g.fillStyle = 'rgba(255, 230, 170, 0.95)';
+  g.beginPath();
+  g.arc(230, 92, 26, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#2d3b4f';
+  g.beginPath();
+  g.moveTo(0, 130);
+  g.quadraticCurveTo(80, 92, 170, 126);
+  g.quadraticCurveTo(250, 150, 320, 118);
+  g.lineTo(320, 180);
+  g.lineTo(0, 180);
+  g.fill();
+  g.fillStyle = '#1d2533';
+  g.beginPath();
+  g.moveTo(0, 158);
+  g.quadraticCurveTo(140, 128, 320, 160);
+  g.lineTo(320, 180);
+  g.lineTo(0, 180);
+  g.fill();
+  return c;
+}
+
+let samples = null;
+function getSamples() {
+  if (!samples) samples = { a: sampleCanvas(['#2f6fd6', '#18315f'], 'A'), b: sampleCanvas(['#e0892e', '#7a3f10'], 'B'), scene: sceneCanvas() };
+  return samples;
+}
+
+const PREVIEW_PROJECT = { width: 320, height: 180, media: { a: { id: 'a', kind: 'image', streams: {} }, b: { id: 'b', kind: 'image', streams: {} }, scene: { id: 'scene', kind: 'image', streams: {} } }, captionStyle: {} };
+
+function imageClip(id, start, dur, props = {}) {
+  return { id, type: 'image', mediaId: id, lane: 0, start, in: 0, dur, enabled: true, kf: {}, props: { ...defaultProps('image'), ...props } };
+}
+
+function MiniPreview({ frameAt, duration = 1.6, still = 0.5, label }) {
+  const ref = useRef(null);
+  const [hover, setHover] = useState(false);
+  useEffect(() => {
+    const cv = ref.current;
+    const g = cv.getContext('2d');
+    const s = getSamples();
+    const getSource = (clip) => {
+      const img = clip.mediaId === 'b' ? s.b : clip.mediaId === 'scene' ? s.scene : s.a;
+      return { img, w: img.width, h: img.height };
+    };
+    const draw = (t) => {
+      const { project: proj, frame } = frameAt(t);
+      drawFrame(g, proj, frame, getSource, { scale: cv.width / proj.width });
+    };
+    if (!hover) {
+      draw(still * duration);
+      return;
+    }
+    let raf = 0;
+    const t0 = performance.now();
+    const loop = () => {
+      const t = (((performance.now() - t0) / 1000) % (duration + 0.6)) - 0.3;
+      draw(Math.max(0, Math.min(duration - 1e-3, t)));
+      raf = requestAnimationFrame(loop);
+    };
+    loop();
+    return () => cancelAnimationFrame(raf);
+  }, [hover, frameAt]);
+  return <canvas ref={ref} class="mini-preview" width={320} height={180} onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)} aria-label={label} />;
+}
+
+/* Titler */
+
+const titleFrames = new Map();
+function titleFrameAt(tpl) {
+  if (!titleFrames.has(tpl.id)) {
+    titleFrames.set(tpl.id, (t) => {
+      const bg = imageClip('scene', 0, 3);
+      const title = { id: 't', type: 'title', lane: 1, start: 0, in: 0, dur: 3, enabled: true, kf: {}, props: { ...defaultProps('title'), ...tpl.props } };
+      const proj = { ...PREVIEW_PROJECT, width: 1920, height: 1080 };
+      return { project: proj, frame: { layers: [{ clip: bg, T: t }, { clip: title, T: t }], captions: [] } };
+    });
+  }
+  return titleFrames.get(tpl.id);
+}
+
 function TitlesTab() {
   return (
-    <div class="card-grid">
-      {TITLE_STYLES.map((s) => (
-        <button
-          key={s.id}
-          class="gen-card"
-          draggable
-          onDragStart={(e) => dragData(e, { kind: 'title', id: s.id })}
-          onClick={() => commands.addTitle(s.id)}
-          title="Klikk for å legge til ved spillhodet, eller dra til tidslinjen"
-        >
-          <div class={`title-preview s-${s.id}`}>
-            <span class="l1">{s.id === 'lower' ? 'Navn Navnesen' : s.id === 'card' ? 'Kapittel 1' : 'Tittel'}</span>
-            {(s.id === 'lower' || s.id === 'card') && <span class="l2">Undertekst</span>}
-          </div>
-          <span>{s.label}</span>
-        </button>
-      ))}
-    </div>
+    <>
+      <div class="card-grid">
+        {TITLE_TEMPLATES.map((tpl) => (
+          <button key={tpl.id} class="gen-card" draggable onDragStart={(e) => dragData(e, { kind: 'title', id: tpl.id })} onClick={() => commands.addTitle(tpl.id)} title="Click to add at the playhead, or drag to the timeline">
+            <MiniPreview frameAt={titleFrameAt(tpl)} duration={3} still={0.5} label={tpl.label} />
+            <span>{tpl.label}</span>
+          </button>
+        ))}
+      </div>
+      <p class="hint small">Hover to preview the animation. Titles are added to the lane above the storyline.</p>
+    </>
   );
+}
+
+/* Overganger */
+
+const transFrames = new Map();
+function transitionFrameAt(type) {
+  if (!transFrames.has(type)) {
+    transFrames.set(type, (t) => {
+      const a = imageClip('a', 0, 1);
+      const b = imageClip('b', 1, 1);
+      const p = Math.min(1, Math.max(0, t / 1.6));
+      const proj = { ...PREVIEW_PROJECT, width: 320, height: 180 };
+      return { project: proj, frame: { layers: [{ transition: { type, p }, a: { clip: a, T: 0.5 }, b: { clip: b, T: 1.5 } }], captions: [] } };
+    });
+  }
+  return transFrames.get(type);
 }
 
 function TransitionsTab() {
@@ -190,34 +333,63 @@ function TransitionsTab() {
     <>
       <div class="card-grid">
         {TRANSITIONS.map((t) => (
-          <button
-            key={t.id}
-            class="gen-card"
-            draggable
-            onDragStart={(e) => dragData(e, { kind: 'transition', id: t.id })}
-            onClick={() => commands.addTransition(t.id)}
-            title="Klikk for å legge til på valgt klipp, eller dra til et kutt"
-          >
-            <div class={`trans-preview tr-${t.id}`}>
-              <div class="a" />
-              <div class="b" />
-            </div>
+          <button key={t.id} class="gen-card" draggable onDragStart={(e) => dragData(e, { kind: 'transition', id: t.id })} onClick={() => commands.addTransition(t.id)} title="Click to add to the selected clip, or drag onto a cut">
+            <MiniPreview frameAt={transitionFrameAt(t.id)} duration={1.6} still={0.5} label={t.label} />
             <span>{t.label}</span>
           </button>
         ))}
       </div>
-      <p class="hint small">Cmd T legger til krysstoning på valgt klipp. Overganger ligger midt over kuttet.</p>
+      <p class="hint small">Hover to preview. {isMac ? 'Cmd' : 'Ctrl'} T adds a cross dissolve to the selected clip.</p>
     </>
   );
 }
 
+/* Effekter */
+
+const fxFrames = new Map();
+function effectFrameAt(fx) {
+  if (!fxFrames.has(fx.id)) {
+    fxFrames.set(fx.id, (t) => {
+      const k = Math.min(1, t / 1);
+      const props = { [fx.prop]: fx.def * (0.15 + 0.85 * k), fx: [fx.id] };
+      const framed = ['radius', 'shadow', 'border'].includes(fx.id);
+      if (framed) props.scale = 0.72;
+      const clip = imageClip('scene', 0, 2, props);
+      const proj = { ...PREVIEW_PROJECT, width: 320, height: 180 };
+      const layers = framed ? [{ clip: imageClip('scene', 0, 2, { exposure: -0.45, blur: 6 }), T: t }, { clip, T: t }] : [{ clip, T: t }];
+      return { project: proj, frame: { layers, captions: [] } };
+    });
+  }
+  return fxFrames.get(fx.id);
+}
+
+function EffectsTab() {
+  return (
+    <>
+      <div class="card-grid">
+        {EFFECTS.map((fx) => (
+          <button key={fx.id} class="gen-card" draggable onDragStart={(e) => dragData(e, { kind: 'effect', id: fx.id })} onClick={() => commands.addEffect(fx.id)} title="Click to add to the selected clips, or drag onto a clip">
+            <MiniPreview frameAt={effectFrameAt(fx)} duration={1} still={1} label={fx.label} />
+            <span>{fx.label}</span>
+          </button>
+        ))}
+      </div>
+      <p class="hint small">Effect amounts can be keyframed in the Effects tab of the inspector.</p>
+    </>
+  );
+}
+
+/* Undertekster */
+
 const LANGS = [
-  { value: 'norwegian', label: 'Norsk' },
-  { value: 'english', label: 'Engelsk' },
-  { value: 'swedish', label: 'Svensk' },
-  { value: 'danish', label: 'Dansk' },
-  { value: 'german', label: 'Tysk' },
-  { value: 'auto', label: 'Oppdag automatisk' },
+  { value: 'english', label: 'English' },
+  { value: 'norwegian', label: 'Norwegian' },
+  { value: 'swedish', label: 'Swedish' },
+  { value: 'danish', label: 'Danish' },
+  { value: 'german', label: 'German' },
+  { value: 'french', label: 'French' },
+  { value: 'spanish', label: 'Spanish' },
+  { value: 'auto', label: 'Detect automatically' },
 ];
 
 function CaptionsTab() {
@@ -226,12 +398,10 @@ function CaptionsTab() {
   const caps = Object.values(p.clips)
     .filter((c) => c.lane === CAPTION_LANE)
     .sort((a, b) => a.start - b.start);
-  const [lang, setLang] = useState(localStorage.getItem('captionLang') || 'norwegian');
+  const [lang, setLang] = useState(localStorage.getItem('captionLang') || 'english');
   const [model, setModel] = useState(localStorage.getItem('captionModel') || 'base');
-  const st = p.captionStyle;
   const running = tasks.value.find((t) => t.kind === 'transcribe' && (t.state === 'running' || t.state === 'queued'));
-
-  const setStyle = (patch) => commit((q) => (q.captionStyle = { ...q.captionStyle, ...patch }));
+  const maxLines = p.captionStyle?.maxLines || 3;
 
   const generate = async () => {
     const sources = [];
@@ -246,16 +416,16 @@ function CaptionsTab() {
       const inT = Math.max(0, c.in - off);
       sources.push({ path: stream.proxy || stream.path, in: inT, dur: c.dur, start: c.start + Math.max(0, off - c.in) });
     }
-    if (!sources.length) return toast('Fant ingen lyd på tidslinjen.');
-    if (caps.length && !confirm('Erstatte eksisterende undertekster med nye?')) return;
+    if (!sources.length) return toast('There is no audio on the timeline to transcribe.');
+    if (caps.length && !confirm('Replace the existing captions with new ones?')) return;
     localStorage.setItem('captionLang', lang);
     localStorage.setItem('captionModel', model);
     await api.startTranscribe({ sources, duration: p.duration, language: lang, model, projectId: p.id });
-    toast('Lager undertekster i bakgrunnen. Første gang lastes talemodellen ned.');
+    toast('Transcribing in the background. The speech model is downloaded the first time.');
   };
 
-  const importSrt = async () => {
-    const file = await api.openFileDialog({ title: 'Importer undertekster', filters: [{ name: 'SRT', extensions: ['srt', 'vtt'] }] });
+  const importFile = async () => {
+    const file = await api.openFileDialog({ title: 'Import Captions', filters: [{ name: 'Captions', extensions: ['srt', 'vtt'] }] });
     if (!file) return;
     const items = parseSrt(await api.readText(file));
     commit((q) => {
@@ -264,54 +434,52 @@ function CaptionsTab() {
         q.clips[c.id] = c;
       }
     });
-    toast(`${items.length} undertekster importert.`);
+    toast(`Imported ${items.length} captions.`);
   };
 
-  const exportSrt = async () => {
-    const file = await api.saveFileDialog({ title: 'Eksporter undertekster', defaultPath: `${p.name}.srt`, filters: [{ name: 'SRT', extensions: ['srt'] }] });
+  const exportFile = async (kind) => {
+    const ext = kind === 'vtt' ? 'vtt' : 'srt';
+    const file = await api.saveFileDialog({ title: 'Export Captions', defaultPath: `${p.name}.${ext}`, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
     if (!file) return;
-    await api.writeText(file, toSrt(caps.map((c) => ({ start: c.start, end: c.start + c.dur, text: c.props.text }))));
-    toast('Undertekstene er lagret.', { actions: [{ label: 'Vis', onClick: () => api.reveal(file) }] });
+    const items = caps.map((c) => ({ start: c.start, end: c.start + c.dur, text: c.props.text }));
+    await api.writeText(file, kind === 'vtt' ? toVtt(items) : toSrt(items));
+    toast('Captions saved.', { actions: [{ label: isMac ? 'Reveal' : 'Show', onClick: () => api.reveal(file) }] });
   };
 
   return (
     <div class="captions-tab">
-      <div class="cap-tools">
-        <div class="auto-box">
-          <div class="auto-head">
-            <Sparkles size={15} />
-            <b>Automatisk teksting</b>
-          </div>
-          <div class="auto-row">
-            <Select value={lang} options={LANGS} onChange={setLang} />
-            <Select
-              value={model}
-              options={[
-                { value: 'base', label: 'Rask' },
-                { value: 'small', label: 'Nøyaktig' },
-              ]}
-              onChange={setModel}
-            />
-          </div>
-          <Button variant="primary" icon={Sparkles} disabled={Boolean(running)} onClick={generate}>
-            {running ? `Lager undertekster ${Math.round((running.progress || 0) * 100)} %` : 'Lag undertekster'}
-          </Button>
+      <div class="auto-box">
+        <div class="auto-head">
+          <Sparkles size={15} />
+          <b>Auto captions</b>
         </div>
-        <div class="tab-actions">
-          <Button variant="secondary" icon={Plus} onClick={() => commands.addCaption()}>
-            Ny
-          </Button>
-          <IconButton icon={FileUp} title="Importer SRT" onClick={importSrt} />
-          <IconButton icon={FileDown} title="Eksporter SRT" onClick={exportSrt} />
+        <div class="auto-row">
+          <Select value={lang} options={LANGS} onChange={setLang} />
+          <Select
+            value={model}
+            options={[
+              { value: 'base', label: 'Fast' },
+              { value: 'small', label: 'Accurate' },
+            ]}
+            onChange={setModel}
+          />
         </div>
-        <div class="cap-style">
-          <Segmented value={st.size} onChange={(v) => setStyle({ size: v })} options={[{ value: 36, label: 'S' }, { value: 44, label: 'M' }, { value: 56, label: 'L' }]} />
-          <Segmented value={st.position} onChange={(v) => setStyle({ position: v })} options={[{ value: 'bottom', label: 'Nede' }, { value: 'top', label: 'Oppe' }]} />
-          <Segmented value={st.bg !== false} onChange={(v) => setStyle({ bg: v })} options={[{ value: true, label: 'Boks' }, { value: false, label: 'Skygge' }]} />
-        </div>
+        <Button variant="primary" icon={Sparkles} disabled={Boolean(running)} onClick={generate}>
+          {running ? `Transcribing ${Math.round((running.progress || 0) * 100)} %` : 'Generate captions'}
+        </Button>
+      </div>
+      <div class="tab-actions">
+        <Button variant="secondary" icon={Plus} onClick={() => commands.addCaption()}>
+          New
+        </Button>
+        <IconButton icon={FileUp} title="Import SRT or VTT" onClick={importFile} />
+        <IconButton icon={FileDown} title="Export SRT" onClick={() => exportFile('srt')} />
+        <button class="link" onClick={() => exportFile('vtt')}>
+          VTT
+        </button>
       </div>
       <div class="cap-list">
-        {caps.length === 0 && <p class="dim center">Ingen undertekster ennå. Trykk Option C for å legge til ved spillhodet.</p>}
+        {caps.length === 0 && <p class="dim center">No captions yet. Press {isMac ? 'Option' : 'Alt'} C to add one at the playhead.</p>}
         {caps.map((c) => {
           const current = T >= c.start && T < c.start + c.dur;
           return (
@@ -326,30 +494,34 @@ function CaptionsTab() {
                 {formatTimecode(c.start, p.fps).slice(3, 8)}
               </button>
               <textarea
-                rows={Math.min(3, Math.max(1, Math.ceil((c.props.text || '').length / 32)))}
+                rows={Math.min(maxLines, Math.max(1, String(c.props.text || '').split('\n').length))}
                 value={c.props.text}
-                placeholder="Skriv tekst"
+                placeholder="Type caption text"
                 onFocus={() => {
                   selection.value = [c.id];
                   seek(c.start);
                 }}
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  // Return gir ny linje (opptil maks antall linjer), Cmd/Ctrl Return lagrer.
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || String(e.currentTarget.value).split('\n').length >= maxLines)) {
                     e.preventDefault();
                     e.currentTarget.blur();
                   }
                 }}
                 onChange={(e) => {
-                  const text = e.currentTarget.value;
+                  const text = e.currentTarget.value.split('\n').slice(0, maxLines).join('\n');
                   commit((q) => q.clips[c.id] && (q.clips[c.id].props.text = text));
                 }}
               />
-              <IconButton icon={Trash2} title="Slett" size={13} onClick={() => commit((q) => delete q.clips[c.id])} />
+              <IconButton icon={Trash2} title="Delete caption" size={13} onClick={() => commit((q) => delete q.clips[c.id])} />
             </div>
           );
         })}
       </div>
+      <Section title="Caption style" open={false}>
+        <CaptionStyleEditor />
+      </Section>
     </div>
   );
 }

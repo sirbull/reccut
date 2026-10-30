@@ -2,6 +2,7 @@
 import { signal, computed } from '@preact/signals';
 import {
   CAPTION_LANE,
+  TITLE_TEMPLATES,
   makeClip,
   newProject,
   relayoutPrimary,
@@ -173,16 +174,33 @@ export async function openProjectFile(path) {
   if (missing.length) api.reanalyze(missing);
 }
 
-export async function newProjectNamed(name) {
+export async function newProjectNamed(name, template = null) {
   if (saveState.value !== 'saved') await saveNow();
-  setProject(newProject(name || defaultName()));
+  const p = newProject(name || defaultName());
+  if (template && !template.auto) {
+    p.width = template.w;
+    p.height = template.h;
+    p.fps = template.fps;
+    p.autoFormat = false;
+  }
+  if (template?.tutorial) {
+    // Opplæringsmal: tittelkort først og en nedre tredjedel klar til bruk.
+    const intro = makeTitleClip('card', 0);
+    intro.lane = 0;
+    p.clips[intro.id] = intro;
+    p.primary.push(intro.id);
+    const lower = makeTitleClip('lower', 4.5);
+    p.clips[lower.id] = lower;
+    relayoutPrimary(p);
+  }
+  setProject(p);
   await saveNow();
 }
 
 function defaultName() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
-  return `Prosjekt ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}.${p(d.getMinutes())}`;
+  return `Project ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}.${p(d.getMinutes())}`;
 }
 
 export async function loadInitialProject() {
@@ -232,9 +250,17 @@ export function getWave(path) {
   return null;
 }
 
+function reportFailed(failed) {
+  if (!failed?.length) return;
+  import('../ui.jsx').then(({ toast }) =>
+    toast(`Could not read ${failed.join(', ')}. The file may be damaged or in an unsupported format.`, { kind: 'error', timeout: 9000 })
+  );
+}
+
 export async function importPaths(paths, placement) {
   if (!paths.length) return [];
-  const items = await api.importMedia(paths);
+  const { items, failed } = await api.importMedia(paths);
+  reportFailed(failed);
   addMediaRecords(items, placement);
   return items;
 }
@@ -266,27 +292,24 @@ export async function createProjectFromRecording(dir) {
   return { project: p, path };
 }
 
-export function makeTitleClip(style, T) {
-  const clip = makeClip('title', { start: T, dur: 4, lane: 1, name: 'Tittel' });
-  clip.props.style = style;
-  if (style === 'lower') {
-    clip.props.text = 'Navn Navnesen';
-    clip.props.subtext = 'Tittel eller beskrivelse';
-    clip.props.size = 56;
-  } else if (style === 'top') {
-    clip.props.text = 'Overskrift';
-    clip.props.size = 72;
-  } else if (style === 'card') {
-    clip.props.text = 'Kapittel 1';
-    clip.props.subtext = 'Kom i gang';
-    clip.props.bgColor = '#111114';
-  }
+// Titler lages fra maler (se TITLE_TEMPLATES).
+export function makeTitleClip(templateId, T) {
+  const tpl = TITLE_TEMPLATES.find((t) => t.id === templateId) || TITLE_TEMPLATES[0];
+  const clip = makeClip('title', { start: T, dur: 4, lane: 1, name: tpl.label });
+  Object.assign(clip.props, tpl.props);
   return clip;
 }
 
 export function makeCaptionClip(T, text = '', dur = 3) {
-  return makeClip('caption', { start: T, dur, lane: CAPTION_LANE, props: { text }, name: 'Undertekst' });
+  return makeClip('caption', { start: T, dur, lane: CAPTION_LANE, props: { text, align: null, pos: null }, name: 'Caption' });
 }
 
 api.onTasks((list) => (tasks.value = list));
+api.onFlush(async () => {
+  try {
+    if (saveState.value !== 'saved') await saveNow();
+  } finally {
+    api.flushed();
+  }
+});
 api.listTasks().then((list) => (tasks.value = list));

@@ -1,44 +1,60 @@
 // Eksportformater. "wc" betyr maskinvarekoding via WebCodecs, "ff" betyr FFmpeg.
 
 export const VIDEO_FORMATS = [
-  { id: 'mp4-h264', label: 'MP4 (H.264)', ext: 'mp4', container: 'mp4', codec: 'avc', ffCodec: 'libx264', audio: 'aac', note: 'Spilles av overalt' },
-  { id: 'mp4-hevc', label: 'MP4 (HEVC / H.265)', ext: 'mp4', container: 'mp4', codec: 'hevc', ffCodec: 'libx265', audio: 'aac', note: 'Halvparten så stor som H.264' },
-  { id: 'mp4-av1', label: 'MP4 (AV1)', ext: 'mp4', container: 'mp4', codec: 'av1', ffCodec: 'libaom-av1', audio: 'aac', note: 'Minst fil, nyere avspillere' },
-  { id: 'webm-vp9', label: 'WebM (VP9)', ext: 'webm', container: 'webm', codec: 'vp9', ffCodec: 'libvpx-vp9', audio: 'opus', note: 'For nettsider' },
-  { id: 'webm-av1', label: 'WebM (AV1)', ext: 'webm', container: 'webm', codec: 'av1', ffCodec: 'libaom-av1', audio: 'opus', note: 'For nettsider, minst fil' },
+  { id: 'mp4-h264', label: 'MP4 (H.264)', ext: 'mp4', container: 'mp4', codec: 'avc', ffCodec: 'libx264', audio: 'aac', note: 'Plays everywhere' },
+  { id: 'mp4-hevc', label: 'MP4 (HEVC / H.265)', ext: 'mp4', container: 'mp4', codec: 'hevc', ffCodec: 'libx265', audio: 'aac', note: 'Half the size of H.264' },
+  { id: 'mp4-av1', label: 'MP4 (AV1)', ext: 'mp4', container: 'mp4', codec: 'av1', ffCodec: 'libaom-av1', audio: 'aac', note: 'Smallest files, newer players' },
+  { id: 'webm-vp9', label: 'WebM (VP9)', ext: 'webm', container: 'webm', codec: 'vp9', ffCodec: 'libvpx-vp9', audio: 'opus', note: 'For websites' },
+  { id: 'webm-av1', label: 'WebM (AV1)', ext: 'webm', container: 'webm', codec: 'av1', ffCodec: 'libaom-av1', audio: 'opus', note: 'For websites, smallest files' },
   { id: 'mov-h264', label: 'MOV (H.264)', ext: 'mov', container: 'mov', codec: 'avc', ffCodec: 'libx264', audio: 'aac', note: 'QuickTime' },
-  { id: 'mov-prores', label: 'MOV (ProRes 422)', ext: 'mov', container: 'mov', codec: null, ffCodec: 'prores_ks', audio: 'pcm', note: 'For videre redigering, store filer' },
+  { id: 'mov-prores', label: 'MOV (ProRes 422)', ext: 'mov', container: 'mov', codec: null, ffCodec: 'prores_ks', audio: 'pcm', note: 'For further editing, large files' },
   { id: 'mkv-h264', label: 'MKV (H.264)', ext: 'mkv', container: 'mkv', codec: 'avc', ffCodec: 'libx264', audio: 'aac', note: 'Matroska' },
-  { id: 'gif', label: 'GIF (animert)', ext: 'gif', container: 'gif', codec: null, ffCodec: 'gif', audio: null, note: 'Uten lyd, korte klipp' },
+  { id: 'gif', label: 'GIF (animated)', ext: 'gif', container: 'gif', codec: null, ffCodec: 'gif', audio: null, note: 'No audio, short clips' },
 ];
 
 export const AUDIO_FORMATS = [
-  { id: 'mp3', label: 'MP3', ext: 'mp3', ffCodec: 'libmp3lame', note: 'Spilles av overalt' },
-  { id: 'm4a', label: 'AAC (M4A)', ext: 'm4a', ffCodec: 'aac', note: 'God kvalitet, liten fil' },
-  { id: 'wav', label: 'WAV', ext: 'wav', ffCodec: 'pcm_s16le', note: 'Ukomprimert' },
-  { id: 'flac', label: 'FLAC', ext: 'flac', ffCodec: 'flac', note: 'Tapsfri' },
-  { id: 'opus', label: 'Opus (OGG)', ext: 'ogg', ffCodec: 'libopus', note: 'Svært effektiv' },
+  { id: 'mp3', label: 'MP3', ext: 'mp3', ffCodec: 'libmp3lame', note: 'Plays everywhere' },
+  { id: 'm4a', label: 'AAC (M4A)', ext: 'm4a', ffCodec: 'aac', note: 'Good quality, small file' },
+  { id: 'wav', label: 'WAV', ext: 'wav', ffCodec: 'pcm_s16le', note: 'Uncompressed' },
+  { id: 'flac', label: 'FLAC', ext: 'flac', ffCodec: 'flac', note: 'Lossless' },
+  { id: 'opus', label: 'Opus (OGG)', ext: 'ogg', ffCodec: 'libopus', note: 'Very efficient' },
 ];
 
 export const PRESETS = [
-  { id: 'standard', label: 'Standard', desc: 'MP4 H.264 i full kvalitet. Passer til det meste.', format: 'mp4-h264', quality: 'high', icon: 'film' },
-  { id: 'web', label: 'YouTube og web', desc: 'MP4 H.264, 1080p, god balanse mellom kvalitet og størrelse.', format: 'mp4-h264', quality: 'medium', res: 1080, icon: 'globe' },
-  { id: 'small', label: 'Minst fil', desc: 'AV1, liten fil med høy kvalitet.', format: 'mp4-av1', quality: 'medium', icon: 'feather' },
-  { id: 'hevc', label: 'Apple-enheter', desc: 'HEVC, halvparten så stor som H.264.', format: 'mp4-hevc', quality: 'high', icon: 'apple' },
-  { id: 'master', label: 'Master', desc: 'ProRes 422 for videre redigering i Final Cut Pro.', format: 'mov-prores', quality: 'high', icon: 'gem' },
-  { id: 'gif', label: 'GIF', desc: 'Animert GIF uten lyd, 720p.', format: 'gif', quality: 'medium', res: 720, fps: 15, icon: 'image' },
-  { id: 'audio', label: 'Bare lyd', desc: 'MP3, AAC, WAV, FLAC eller Opus.', audioOnly: true, audioFormat: 'mp3', quality: 'high', icon: 'music' },
+  { id: 'standard', label: 'Standard', desc: 'MP4 H.264 at full quality. Works for almost anything.', format: 'mp4-h264', quality: 'high', icon: 'film' },
+  { id: 'web', label: 'YouTube and Web', desc: 'MP4 H.264 at 1080p with a good balance of quality and size.', format: 'mp4-h264', quality: 'medium', res: 1080, icon: 'globe' },
+  { id: 'small', label: 'Smallest File', desc: 'AV1, a small file with high quality.', format: 'mp4-av1', quality: 'medium', icon: 'feather' },
+  { id: 'hevc', label: 'Apple Devices', desc: 'HEVC, half the size of H.264.', format: 'mp4-hevc', quality: 'high', icon: 'apple' },
+  { id: 'master', label: 'Master', desc: 'ProRes 422 for further editing in Final Cut Pro.', format: 'mov-prores', quality: 'high', icon: 'gem' },
+  { id: 'gif', label: 'GIF', desc: 'Animated GIF at 720p, no audio.', format: 'gif', quality: 'medium', res: 720, fps: 15, icon: 'image' },
+  { id: 'audio', label: 'Audio Only', desc: 'MP3, AAC, WAV, FLAC or Opus.', audioOnly: true, audioFormat: 'mp3', quality: 'high', icon: 'music' },
 ];
 
 export const QUALITIES = [
-  { id: 'low', label: 'Lav', bpp: 0.05, crf: 30, audioKbps: 128 },
-  { id: 'medium', label: 'Middels', bpp: 0.09, crf: 24, audioKbps: 160 },
-  { id: 'high', label: 'Høy', bpp: 0.15, crf: 19, audioKbps: 256 },
-  { id: 'max', label: 'Maks', bpp: 0.26, crf: 15, audioKbps: 320 },
+  { id: 'low', label: 'Low', bpp: 0.05, crf: 30, audioKbps: 128 },
+  { id: 'medium', label: 'Medium', bpp: 0.09, crf: 24, audioKbps: 160 },
+  { id: 'high', label: 'High', bpp: 0.15, crf: 19, audioKbps: 256 },
+  { id: 'max', label: 'Best', bpp: 0.26, crf: 15, audioKbps: 320 },
 ];
 
 // Komprimeringsgrad per kodek i forhold til H.264.
 const CODEC_EFFICIENCY = { avc: 1, hevc: 0.6, vp9: 0.65, av1: 0.5 };
+
+export const CAPTION_EXPORT = [
+  { value: 'burn', label: 'Burn into the video' },
+  { value: 'embed', label: 'Embedded track (viewers can turn it on and off)' },
+  { value: 'srt', label: 'Separate SRT file' },
+  { value: 'vtt', label: 'Separate WebVTT file' },
+  { value: 'burn+srt', label: 'Burn in and SRT file' },
+  { value: 'embed+srt', label: 'Embedded track and SRT file' },
+  { value: 'none', label: 'Leave out' },
+];
+
+export const CAPTION_EXPORT_AUDIO = [
+  { value: 'srt', label: 'Separate SRT file' },
+  { value: 'vtt', label: 'Separate WebVTT file' },
+  { value: 'none', label: 'Leave out' },
+];
 
 export const SIZE_PRESETS = [
   { value: 0, label: 'Original' },
@@ -47,22 +63,22 @@ export const SIZE_PRESETS = [
   { value: 1080, label: '1080p' },
   { value: 720, label: '720p' },
   { value: 480, label: '480p' },
-  { value: 'custom', label: 'Egen' },
+  { value: 'custom', label: 'Custom' },
 ];
 
 export const CROP_ASPECTS = [
-  { value: null, label: 'Ingen' },
+  { value: null, label: 'None' },
   { value: 16 / 9, label: '16:9' },
   { value: 9 / 16, label: '9:16' },
   { value: 1, label: '1:1' },
   { value: 4 / 5, label: '4:5' },
-  { value: 'free', label: 'Fri' },
+  { value: 'free', label: 'Free' },
 ];
 
 export const FIT_MODES = [
-  { value: 'contain', label: 'Tilpass', title: 'Hele bildet vises, med svarte kanter ved behov' },
-  { value: 'cover', label: 'Fyll', title: 'Fyller rammen, kantene beskjæres' },
-  { value: 'stretch', label: 'Strekk', title: 'Strekker bildet til rammen' },
+  { value: 'contain', label: 'Fit', title: 'Shows the whole picture, with black bars if needed' },
+  { value: 'cover', label: 'Fill', title: 'Fills the frame and crops the edges' },
+  { value: 'stretch', label: 'Stretch', title: 'Stretches the picture to the frame' },
 ];
 
 const even = (v) => Math.max(2, Math.round(v / 2) * 2);

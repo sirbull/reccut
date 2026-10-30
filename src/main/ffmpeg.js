@@ -33,7 +33,7 @@ function run(args, { onProgress, input } = {}) {
     proc.on('error', reject);
     proc.on('close', (code) => {
       if (code === 0) resolve(Buffer.concat(stdoutChunks));
-      else reject(new Error(`FFmpeg avsluttet med kode ${code}: ${stderr.split('\n').slice(-6).join('\n')}`));
+      else reject(new Error(`FFmpeg exited with code ${code}: ${stderr.split('\n').slice(-6).join('\n')}`));
     });
   });
   return { proc, promise, kill: () => proc.kill('SIGKILL') };
@@ -45,13 +45,14 @@ async function probe(file) {
   let out = '';
   proc.stderr.on('data', (d) => (out += d.toString()));
   await new Promise((r) => proc.on('close', r));
-  const info = { duration: 0, hasVideo: false, hasAudio: false, width: 0, height: 0, fps: 0, videoCodec: null, audioCodec: null };
+  const info = { pixFmt: null, format: /Input #0, ([\w,]+)/.exec(out)?.[1] ?? null, duration: 0, hasVideo: false, hasAudio: false, width: 0, height: 0, fps: 0, videoCodec: null, audioCodec: null };
   const d = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(out);
   if (d) info.duration = Number(d[1]) * 3600 + Number(d[2]) * 60 + Number(d[3]);
   for (const line of out.split('\n')) {
     if (/Stream #.*Video:/.test(line) && !info.hasVideo && !/attached pic/.test(line)) {
       info.hasVideo = true;
       info.videoCodec = /Video: (\w+)/.exec(line)?.[1] ?? null;
+      info.pixFmt = /, (yuv\w+|yuvj\w+|nv\d+|rgb\w*|bgr\w*|argb|abgr|rgba|bgra|gray\w*|pal8|gbr\w*)[,( ]/.exec(line)?.[1] ?? null;
       const s = /, (\d{2,5})x(\d{2,5})/.exec(line);
       if (s) {
         info.width = Number(s[1]);
@@ -132,4 +133,10 @@ function decodePcm(file, { start = 0, duration, streamIndex = 0, rate = 48000, c
   return run(args);
 }
 
-module.exports = { getFfmpegPath, run, probe, remux, thumbnails, waveform, optimize, decodePcm };
+// Konverterer bilder nettleseren ikke viser (TIFF, HEIC, TGA, PSD og lignende) til PNG.
+async function convertImage(file, output) {
+  await run(['-i', file, '-frames:v', '1', '-update', '1', output]).promise;
+}
+
+module.exports = {
+  convertImage, getFfmpegPath, run, probe, remux, thumbnails, waveform, optimize, decodePcm };

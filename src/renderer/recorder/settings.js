@@ -4,13 +4,13 @@ const isMac = window.api.platform === 'darwin';
 
 export const MODIFIERS = isMac
   ? [
-      { value: 'Control+Alt', label: 'Ctrl + Option + 1 til 6', short: '⌃⌥' },
-      { value: 'Command+Alt', label: 'Cmd + Option + 1 til 6', short: '⌘⌥' },
-      { value: 'Command+Shift', label: 'Cmd + Shift + 1 til 6', short: '⌘⇧' },
+      { value: 'Control+Alt', label: 'Ctrl + Option + 1 to 6', short: '⌃⌥' },
+      { value: 'Command+Alt', label: 'Cmd + Option + 1 to 6', short: '⌘⌥' },
+      { value: 'Command+Shift', label: 'Cmd + Shift + 1 to 6', short: '⌘⇧' },
     ]
   : [
-      { value: 'Control+Shift', label: 'Ctrl + Shift + 1 til 6', short: 'Ctrl+Shift+' },
-      { value: 'Control+Alt', label: 'Ctrl + Alt + 1 til 6', short: 'Ctrl+Alt+' },
+      { value: 'Control+Shift', label: 'Ctrl + Shift + 1 to 6', short: 'Ctrl+Shift+' },
+      { value: 'Control+Alt', label: 'Ctrl + Alt + 1 to 6', short: 'Ctrl+Alt+' },
     ];
 
 const DEFAULTS = {

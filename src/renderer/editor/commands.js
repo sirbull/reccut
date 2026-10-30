@@ -1,6 +1,6 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
-import { CAPTION_LANE, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
+import { CAPTION_LANE, EFFECTS, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
 import {
   addMediaClip,
   autoFormat,
@@ -33,6 +33,7 @@ export const browserSelection = signal(null);
 export const exportOpen = signal(false);
 export const projectsOpen = signal(false);
 export const inspectorTab = signal(null);
+export const newProjectOpen = signal(false);
 
 let timelineView = null;
 export function registerTimelineView(v) {
@@ -48,6 +49,31 @@ export function addTitle(style = 'center', T = getTime()) {
   commit((p) => placeFree(p, clip, T, 1));
   selection.value = [clip.id];
   inspectorTab.value = 'text';
+}
+
+// Effekt fra effektbiblioteket: legges på valgte klipp, eller klippet den slippes på.
+export function addEffect(id, clipId = null) {
+  const fx = EFFECTS.find((x) => x.id === id);
+  const p = project.value;
+  const ids = clipId ? [clipId] : selection.value.filter((cid) => ['video', 'image', 'recording', 'title'].includes(p.clips[cid]?.type));
+  if (!ids.length) {
+    toast('Select a video, image or title clip first, or drag the effect onto a clip.');
+    return;
+  }
+  commit((q) => {
+    for (const cid of ids) {
+      const c = q.clips[cid];
+      c.props.fx = [...new Set([...(c.props.fx || []), id])];
+      if (!c.props[fx.prop]) c.props[fx.prop] = fx.def;
+    }
+  });
+  selection.value = ids;
+  inspectorTab.value = 'effects';
+}
+
+function hitClipAt(lane, T) {
+  const c = Object.values(project.value.clips).find((x) => x.lane === lane && T >= x.start && T < x.start + x.dur && ['video', 'image', 'recording', 'title'].includes(x.type));
+  return c?.id || null;
 }
 
 export function addCaption(T = getTime(), text = '') {
@@ -255,7 +281,7 @@ export function addBrowserSelection(mode) {
   const id = browserSelection.value;
   const m = id && project.value.media[id];
   if (!m) {
-    toast('Velg et klipp i mediebiblioteket først.');
+    toast('Select a clip in the browser first.');
     return;
   }
   let clipId = null;
@@ -286,6 +312,8 @@ export async function handleDrop(dt, lane, T) {
       if (clipId) selection.value = [clipId];
     } else if (item.kind === 'title') {
       addTitle(item.id, T);
+    } else if (item.kind === 'effect') {
+      addEffect(item.id, hitClipAt(lane, T));
     } else if (item.kind === 'transition') {
       const p = project.value;
       let best = null;
@@ -316,21 +344,21 @@ export async function clipContextMenu(clipId, T) {
   const c = project.value.clips[clipId];
   if (!c) return;
   const items = [
-    { id: 'blade', label: 'Kutt ved spillhodet', accelerator: 'CmdOrCtrl+B', enabled: T > c.start && T < c.start + c.dur },
-    { id: 'toggle', label: c.enabled ? 'Slå av klipp' : 'Slå på klipp', accelerator: 'V' },
+    { id: 'blade', label: 'Blade at Playhead', accelerator: 'CmdOrCtrl+B', enabled: T > c.start && T < c.start + c.dur },
+    { id: 'toggle', label: c.enabled ? 'Disable Clip' : 'Enable Clip', accelerator: 'V' },
     { separator: true },
-    { id: 'copy', label: 'Kopier', accelerator: 'CmdOrCtrl+C' },
-    { id: 'cut', label: 'Klipp ut', accelerator: 'CmdOrCtrl+X' },
+    { id: 'copy', label: 'Copy', accelerator: 'CmdOrCtrl+C' },
+    { id: 'cut', label: 'Cut', accelerator: 'CmdOrCtrl+X' },
     { separator: true },
   ];
   if (c.lane === 0 && isVisual(c)) {
-    items.push({ id: 'transition', label: 'Legg til krysstoning', accelerator: 'CmdOrCtrl+T' });
-    if (c.transition) items.push({ id: 'removeTransition', label: 'Fjern overgang inn' });
+    items.push({ id: 'transition', label: 'Add Cross Dissolve', accelerator: 'CmdOrCtrl+T' });
+    if (c.transition) items.push({ id: 'removeTransition', label: 'Remove Transition' });
     items.push({ separator: true });
   }
-  if (c.mediaId) items.push({ id: 'reveal', label: k('Vis i Finder', 'Vis i Utforsker') }, { separator: true });
-  items.push({ id: 'delete', label: c.lane === 0 ? 'Slett og lukk mellomrom' : 'Slett', accelerator: 'Backspace' });
-  if (c.lane === 0) items.push({ id: 'deleteGap', label: 'Slett og behold mellomrom', accelerator: 'Shift+Backspace' });
+  if (c.mediaId) items.push({ id: 'reveal', label: k('Reveal in Finder', 'Show in Explorer') }, { separator: true });
+  items.push({ id: 'delete', label: c.lane === 0 ? 'Delete' : 'Delete', accelerator: 'Backspace' });
+  if (c.lane === 0) items.push({ id: 'deleteGap', label: 'Delete and Leave Gap', accelerator: 'Shift+Backspace' });
   const id = await api.popupMenu(items);
   switch (id) {
     case 'blade':
@@ -367,12 +395,12 @@ export async function laneContextMenu(lane, T) {
   const l = project.value.lanes?.[lane] || {};
   const isAudio = lane < 0;
   const items = [
-    { id: 'hide', label: isAudio ? 'Skjul spor' : 'Skjul spor', checked: Boolean(l.hidden), enabled: !isAudio },
-    { id: 'mute', label: 'Demp spor', checked: Boolean(l.muted) },
+    { id: 'hide', label: 'Hide Lane', checked: Boolean(l.hidden), enabled: !isAudio },
+    { id: 'mute', label: 'Mute Lane', checked: Boolean(l.muted) },
     { separator: true },
-    { id: 'paste', label: 'Lim inn ved spillhodet', enabled: Boolean(clipboard) },
-    { id: 'title', label: 'Legg til tittel her', enabled: lane > 0 && lane !== CAPTION_LANE },
-    { id: 'caption', label: 'Legg til undertekst her', enabled: lane === CAPTION_LANE },
+    { id: 'paste', label: 'Paste at Playhead', enabled: Boolean(clipboard) },
+    { id: 'title', label: 'Add Title Here', enabled: lane > 0 && lane !== CAPTION_LANE },
+    { id: 'caption', label: 'Add Caption Here', enabled: lane === CAPTION_LANE },
   ];
   const id = await api.popupMenu(items);
   if (id === 'hide' || id === 'mute') {

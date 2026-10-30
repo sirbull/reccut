@@ -20,12 +20,12 @@ const api = window.api;
 const isMac = api.platform === 'darwin';
 
 const LAYOUTS = [
-  { n: 1, label: 'Kamera', cls: 'full-cam' },
-  { n: 2, label: 'Skjerm', cls: 'screen' },
-  { n: 3, label: 'Oppe venstre', cls: 'screen', cam: 'tl' },
-  { n: 4, label: 'Oppe høyre', cls: 'screen', cam: 'tr' },
-  { n: 5, label: 'Nede venstre', cls: 'screen', cam: 'bl' },
-  { n: 6, label: 'Nede høyre', cls: 'screen', cam: 'br' },
+  { n: 1, label: 'Camera', cls: 'full-cam' },
+  { n: 2, label: 'Screen', cls: 'screen' },
+  { n: 3, label: 'Top left', cls: 'screen', cam: 'tl' },
+  { n: 4, label: 'Top right', cls: 'screen', cam: 'tr' },
+  { n: 5, label: 'Bottom left', cls: 'screen', cam: 'bl' },
+  { n: 6, label: 'Bottom right', cls: 'screen', cam: 'br' },
 ];
 
 export const inputStatus = { value: null };
@@ -93,81 +93,81 @@ export function Recorder({ active }) {
           ))}
         </div>
         <div class="rec-meta">
-          Opptak i {engine.canvasSize.value.w} × {engine.canvasSize.value.h} · {s.fps} fps · skjerm og kamera lagres hver for seg, så alt kan justeres i redigeringen
+          Recording at {engine.canvasSize.value.w} × {engine.canvasSize.value.h}, {s.fps} fps. Screen and camera are saved separately, so everything can be adjusted in the editor.
         </div>
       </div>
 
       <aside class="panel rec-panel">
-        <Section title="Kilder">
-          <Row label={<><Monitor size={14} /> Skjerm</>} stacked>
+        <Section title="Sources">
+          <Row label={<><Monitor size={14} /> Screen</>} stacked>
             <Select
               value={s.screenId}
               disabled={recording}
-              options={[{ value: '', label: 'Ingen skjerm' }, ...engine.screens.value.map((x) => ({ value: x.id, label: `${x.name} (${x.width} × ${x.height})` }))]}
+              options={[{ value: '', label: 'No screen' }, ...engine.screens.value.map((x) => ({ value: x.id, label: `${x.name} (${x.width} × ${x.height})` }))]}
               onChange={(v) => set({ screenId: v }, engine.useScreen)}
             />
           </Row>
-          <Row label={<><Camera size={14} /> Kamera</>} stacked>
+          <Row label={<><Camera size={14} /> Camera</>} stacked>
             <Select
               value={s.cameraId}
               disabled={recording}
-              options={[{ value: '', label: 'Intet kamera' }, ...engine.cameras.value.map((c) => ({ value: c.id, label: c.label }))]}
+              options={[{ value: '', label: 'No camera' }, ...engine.cameras.value.map((c) => ({ value: c.id, label: c.label }))]}
               onChange={(v) => set({ cameraId: v }, engine.useCamera)}
             />
           </Row>
-          <Row label={<><Mic size={14} /> Mikrofon</>} stacked>
+          <Row label={<><Mic size={14} /> Microphone</>} stacked>
             <Select
               value={s.micId}
               disabled={recording}
-              options={[{ value: '', label: 'Ingen mikrofon' }, ...engine.mics.value.map((m) => ({ value: m.id, label: m.label }))]}
+              options={[{ value: '', label: 'No microphone' }, ...engine.mics.value.map((m) => ({ value: m.id, label: m.label }))]}
               onChange={(v) => set({ micId: v }, engine.useMic)}
             />
             <div class="meter">
               <div style={{ width: `${engine.level.value * 100}%` }} />
             </div>
           </Row>
-          <Row label={<><Volume2 size={14} /> Systemlyd</>}>
+          <Row label={<><Volume2 size={14} /> System audio</>}>
             <Toggle checked={s.systemAudio} disabled={recording || !s.screenId} onChange={(v) => set({ systemAudio: v }, engine.useScreen)} />
           </Row>
         </Section>
 
-        <Section title="Kamerabilde">
-          <Row label="Form">
+        <Section title="Camera">
+          <Row label="Shape">
             <Segmented
               value={s.pipShape}
               onChange={(v) => set({ pipShape: v })}
               options={[
-                { value: 'circle', label: 'Sirkel', icon: Circle, showLabel: true },
-                { value: 'square', label: 'Kvadrat', icon: Square, showLabel: true },
+                { value: 'circle', label: 'Circle', icon: Circle, showLabel: true },
+                { value: 'square', label: 'Square', icon: Square, showLabel: true },
                 { value: 'rect', label: '16:9', icon: RectangleHorizontal, showLabel: true },
               ]}
             />
           </Row>
-          <Row label="Størrelse">
+          <Row label="Size">
             <Segmented
               value={s.pipSize}
               onChange={(v) => set({ pipSize: v })}
               options={[
-                { value: 'small', label: 'Liten' },
-                { value: 'medium', label: 'Middels' },
-                { value: 'large', label: 'Stor' },
+                { value: 'small', label: 'Small' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'large', label: 'Large' },
               ]}
             />
           </Row>
-          <Row label="Speilvend">
+          <Row label="Mirror">
             <Toggle checked={s.mirror} onChange={(v) => set({ mirror: v })} />
           </Row>
         </Section>
 
-        <Section title="Overlegg">
-          <Row label={<><Keyboard size={14} /> Vis tastetrykk</>}>
+        <Section title="Overlays">
+          <Row label={<><Keyboard size={14} /> Show keystrokes</>}>
             <Toggle checked={s.showKeys} onChange={(v) => set({ showKeys: v })} />
           </Row>
-          <Row label={<><MousePointer2 size={14} /> Forstørr peker</>}>
+          <Row label={<><MousePointer2 size={14} /> Cursor zoom</>}>
             <Toggle checked={s.cursorZoom} onChange={(v) => set({ cursorZoom: v })} />
           </Row>
           {s.cursorZoom && inputReady && (
-            <Row label="Hold inne" >
+            <Row label="Hold key">
               <Select
                 value={s.zoomKey}
                 options={zoomKeys}
@@ -178,7 +178,7 @@ export function Recorder({ active }) {
               />
             </Row>
           )}
-          <Row label="Fremhev klikk">
+          <Row label="Highlight clicks">
             <Toggle checked={s.showClicks} onChange={(v) => set({ showClicks: v })} />
           </Row>
           {input && !inputReady && (
@@ -187,32 +187,32 @@ export function Recorder({ active }) {
                 <>
                   <p>
                     {isMac
-                      ? 'For å vise tastetrykk og forstørre pekeren mens du holder en tast, trenger OBSlite tilgang under Tilgjengelighet.'
-                      : 'Tastaturlytteren kunne ikke starte.'}
+                      ? 'To show keystrokes and zoom the cursor while you hold a key, OBSlite needs Accessibility access.'
+                      : 'The keyboard listener could not start.'}
                   </p>
                   <button class="btn secondary small" onClick={requestInput}>
-                    Gi tilgang
+                    Grant Access
                   </button>
                 </>
               ) : (
-                <p>Tastaturlytteren er ikke tilgjengelig. Pekeren kan forstørres med {mod.short}9 (av og på).</p>
+                <p>The keyboard listener is not available. You can toggle cursor zoom with {mod.short}9.</p>
               )}
             </div>
           )}
           <p class="hint">
-            {inputReady ? <>Hold inne <b>{zoomLabel}</b> for å forstørre pekeren. </> : null}
-            Bare snarveier med Cmd, Ctrl eller Alt vises, aldri vanlig skriving. OBSlite sine egne snarveier vises ikke.
+            {inputReady ? <>Hold <b>{zoomLabel}</b> to zoom the cursor. </> : null}
+            Only shortcuts with Cmd, Ctrl or Alt are shown, never regular typing. OBSlite's own shortcuts are never shown.
           </p>
         </Section>
 
-        <Section title="Opptak">
-          <Row label="Bilder per sekund">
+        <Section title="Recording">
+          <Row label="Frame rate">
             <Segmented value={s.fps} disabled={recording} onChange={(v) => set({ fps: v }, engine.useScreen)} options={[{ value: 30, label: '30' }, { value: 60, label: '60' }]} />
           </Row>
-          <Row label="Lag ferdig video automatisk">
+          <Row label="Render video automatically">
             <Toggle checked={s.autoRender} onChange={(v) => set({ autoRender: v })} />
           </Row>
-          <Row label={<><AppWindow size={14} /> Skjul OBSlite fra opptaket</>}>
+          <Row label={<><AppWindow size={14} /> Hide OBSlite from recording</>}>
             <Toggle
               checked={s.hideFromCapture}
               onChange={(v) => {
@@ -221,7 +221,7 @@ export function Recorder({ active }) {
               }}
             />
           </Row>
-          <Row label="Lagres i" stacked>
+          <Row label="Save to" stacked>
             <button
               class="path-btn"
               title={s.outputDir || baseDir}
@@ -236,15 +236,15 @@ export function Recorder({ active }) {
           </Row>
         </Section>
 
-        <Section title="Snarveier">
-          <Row label="Taster" stacked>
+        <Section title="Shortcuts">
+          <Row label="Keys" stacked>
             <Select value={s.modifier} options={MODIFIERS} onChange={(v) => set({ modifier: v })} />
           </Row>
           <p class="hint">
-            {mod.short}1 kamera, {mod.short}2 skjerm, {mod.short}3 til {mod.short}6 hjørner. {mod.short}0 starter og stopper opptaket.
-            {failed.length > 0 && <span class="warn"> Opptatt av et annet program: {failed.join(', ')}.</span>}
-            {isMac && s.modifier === 'Command+Shift' && <span class="warn"> Cmd + Shift + 3, 4 og 5 brukes av macOS til skjermbilder.</span>}
-            {!isMac && s.modifier === 'Control+Alt' && <span class="warn"> Ctrl + Alt er det samme som AltGr på norsk tastatur.</span>}
+            {mod.short}1 camera, {mod.short}2 screen, {mod.short}3 to {mod.short}6 corners. {mod.short}0 starts and stops recording.
+            {failed.length > 0 && <span class="warn"> Used by another app: {failed.join(', ')}.</span>}
+            {isMac && s.modifier === 'Command+Shift' && <span class="warn"> Cmd + Shift + 3, 4 and 5 are used by macOS for screenshots.</span>}
+            {!isMac && s.modifier === 'Control+Alt' && <span class="warn"> Ctrl + Alt is the same as AltGr on many European keyboards.</span>}
           </p>
         </Section>
       </aside>

@@ -59,10 +59,10 @@ export async function refreshScreens() {
 
 export async function refreshDevices() {
   const devices = await navigator.mediaDevices.enumerateDevices();
-  cameras.value = devices.filter((d) => d.kind === 'videoinput').map((d, i) => ({ id: d.deviceId, label: d.label || `Kamera ${i + 1}` }));
+  cameras.value = devices.filter((d) => d.kind === 'videoinput').map((d, i) => ({ id: d.deviceId, label: d.label || `Camera ${i + 1}` }));
   mics.value = devices
     .filter((d) => d.kind === 'audioinput' && d.deviceId !== 'communications')
-    .map((d, i) => ({ id: d.deviceId, label: d.label || `Mikrofon ${i + 1}` }));
+    .map((d, i) => ({ id: d.deviceId, label: d.label || `Microphone ${i + 1}` }));
   const s = settings.value;
   const patch = {};
   if (s.cameraId === null || (s.cameraId && !cameras.value.some((c) => c.id === s.cameraId))) patch.cameraId = cameras.value[0]?.id ?? '';
@@ -91,14 +91,14 @@ export async function useScreen() {
     screenVideo.srcObject = new MediaStream(screenStream.getVideoTracks());
     await screenVideo.play().catch(() => {});
     if (s.systemAudio && !screenStream.getAudioTracks().length) {
-      notice.value = { text: 'Systemlyd er ikke tilgjengelig på denne maskinen. Skjermen tas opp uten lyd.' };
+      notice.value = { text: 'System audio is not available on this computer. The screen is recorded without it.' };
     } else if (notice.value?.kind === 'screen') notice.value = null;
   } catch (err) {
     console.error(err);
     notice.value =
       api.platform === 'darwin'
-        ? { kind: 'screen', text: 'OBSlite har ikke tilgang til å ta opp skjermen. Gi tilgang i Systeminnstillinger og start appen på nytt.', action: 'Åpne innstillinger', onAction: () => api.openPermissionSettings('screen') }
-        : { kind: 'screen', text: 'Kunne ikke starte skjermopptak.' };
+        ? { kind: 'screen', text: 'OBSlite is not allowed to record the screen. Allow it in System Settings and restart the app.', action: 'Open Settings', onAction: () => api.openPermissionSettings('screen') }
+        : { kind: 'screen', text: 'Could not start screen capture.' };
   }
   updateSize();
 }
@@ -118,7 +118,7 @@ export async function useCamera() {
     await cameraVideo.play().catch(() => {});
   } catch (err) {
     console.error(err);
-    notice.value = { text: 'Kunne ikke starte kameraet. Sjekk at ingen andre programmer bruker det.' };
+    notice.value = { text: 'Could not start the camera. Check that no other app is using it.' };
   }
   updateSize();
 }
@@ -140,7 +140,7 @@ export async function useMic() {
     audioCtx.resume();
   } catch (err) {
     console.error(err);
-    notice.value = { text: 'Kunne ikke starte mikrofonen.' };
+    notice.value = { text: 'Could not start the microphone.' };
   }
 }
 
@@ -260,7 +260,7 @@ function draw() {
     ctx.font = `${Math.round(W / 45)}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Velg skjerm eller kamera', W / 2, H / 2);
+    ctx.fillText('Choose a screen or camera', W / 2, H / 2);
     ctx.textAlign = 'left';
   }
 }
@@ -339,7 +339,7 @@ export async function startRecording() {
   if (recording.value || finishing.value) return;
   const s = settings.value;
   if (!screenStream && !cameraStream && !micStream) {
-    notice.value = { text: 'Velg minst én kilde før du starter opptaket.' };
+    notice.value = { text: 'Choose at least one source before you start recording.' };
     return;
   }
   t0 = Date.now();

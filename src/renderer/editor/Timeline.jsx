@@ -6,9 +6,10 @@ import { memo } from 'preact/compat';
 import {
   AudioLines,
   Captions,
-  Eye,
   EyeOff,
+  Hand,
   Magnet,
+  MoveHorizontal,
   MousePointer2,
   Scissors,
   Type,
@@ -21,12 +22,15 @@ import {
   CAPTION_LANE,
   TRANSITIONS,
   clipHasAudio,
+  EASINGS,
   dbToGain,
   formatTimecode,
+  moveKeyframes,
+  setKeyframeEase,
   isVisual,
   transitionWindow,
 } from '../../shared/model.js';
-import { moveClip, splitClip, trimClip } from '../../shared/ops.js';
+import { moveClip, positionMove, positionTrim, splitClip, trimClip } from '../../shared/ops.js';
 import {
   beginTransient,
   commit,
@@ -84,6 +88,7 @@ export function Timeline() {
   const dragRef = useRef(null);
   const [ghost, setGhost] = useState(null);
   const [snapLine, setSnapLine] = useState(null);
+  const bladeRef = useRef(null);
   const { rows, height } = useMemo(() => laneRows(p), [p]);
   const z = pps.value;
   const width = Math.max(view.value.width, PAD * 2 + (p.duration + 30) * z);
@@ -203,9 +208,22 @@ export function Timeline() {
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
+    if (tool.value === 'hand') {
+      const sc = scrollRef.current;
+      dragRef.current = { kind: 'pan', x: e.clientX, y: e.clientY, left: sc.scrollLeft, top: sc.scrollTop };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     if (hit === 'transition') {
       selection.value = [];
       selectedTransition.value = el.dataset.id;
+      return;
+    }
+    if (hit === 'kf') {
+      const clip = proj.clips[el.dataset.clip];
+      dragRef.current = { kind: 'kf', x: e.clientX, y: e.clientY, clip: structuredClone(clip), from: Number(el.dataset.t), moved: false };
+      seek(clip.start + (Number(el.dataset.t) - clip.in));
+      e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
     const clipId = el?.dataset.clip;
@@ -220,7 +238,7 @@ export function Timeline() {
     const clip = proj.clips[clipId];
     selectedTransition.value = null;
 
-    if (tool.value === 'blade' && hit === 'clip') {
+    if (tool.value === 'blade' && (hit === 'clip' || hit === 'edge')) {
       const t = snap(T, new Set([clipId])).t;
       commit((p) => splitClip(p, clipId, t));
       return;
@@ -235,7 +253,9 @@ export function Timeline() {
     if (!selection.value.includes(clipId)) selection.value = [clipId];
 
     const base = { x: e.clientX, y: e.clientY, T, clip: structuredClone(clip), moved: false };
-    if (hit === 'edge') dragRef.current = { ...base, kind: 'trim', edge: el.dataset.edge };
+    const positionTool = tool.value === 'position' && clip.lane === 0;
+    if (hit === 'edge') dragRef.current = { ...base, kind: positionTool ? 'ptrim' : 'trim', edge: el.dataset.edge };
+    else if (positionTool && hit === 'clip') dragRef.current = { ...base, kind: 'pmove' };
     else if (hit === 'fade') dragRef.current = { ...base, kind: 'fade', which: el.dataset.which };
     else if (hit === 'vol') {
       if (e.altKey) {
@@ -249,8 +269,25 @@ export function Timeline() {
 
   const onPointerMove = (e) => {
     const d = dragRef.current;
-    if (!d) return;
     const T = timeAt(e.clientX);
+    // Kniven viser hvor kuttet havner.
+    if (bladeRef.current) {
+      const over = tool.value === 'blade' && !d && e.target.closest('[data-clip]');
+      bladeRef.current.style.display = over ? 'block' : 'none';
+      if (over) {
+        const r = e.target.closest('[data-clip]').getBoundingClientRect();
+        const crect = contentRef.current.getBoundingClientRect();
+        bladeRef.current.style.transform = `translate(${tx(snap(T).t)}px, ${r.top - crect.top}px)`;
+        bladeRef.current.style.height = `${r.height}px`;
+      }
+    }
+    if (!d) return;
+    if (d.kind === 'pan') {
+      const sc = scrollRef.current;
+      sc.scrollLeft = d.left - (e.clientX - d.x);
+      sc.scrollTop = d.top - (e.clientY - d.y);
+      return;
+    }
     if (d.kind === 'scrub') {
       seek(snap(T).t);
       return;
@@ -263,6 +300,27 @@ export function Timeline() {
     const dt = (e.clientX - d.x) / pps.value;
     const c = d.clip;
 
+    if (d.kind === 'kf') {
+      const c0 = d.clip;
+      const fps = project.value.fps;
+      const to = Math.round((d.from + dt) * fps) / fps;
+      updateTransient((p) => moveKeyframes(p.clips[c0.id], d.from, to));
+      seek(c0.start + (Math.max(c0.in, Math.min(c0.in + c0.dur, to)) - c0.in));
+      return;
+    }
+    if (d.kind === 'pmove') {
+      const s1 = snap(c.start + dt, new Set([c.id]));
+      setSnapLine(s1.snapped ? s1.t : null);
+      updateTransient((p) => positionMove(p, c.id, s1.t - c.start));
+      return;
+    }
+    if (d.kind === 'ptrim') {
+      const edgeT = d.edge === 'start' ? c.start + dt : c.start + c.dur + dt;
+      const s = snap(edgeT, new Set([c.id]));
+      setSnapLine(s.snapped ? s.t : null);
+      updateTransient((p) => positionTrim(p, c.id, d.edge, s.t - (d.edge === 'start' ? c.start : c.start + c.dur)));
+      return;
+    }
     if (d.kind === 'trim') {
       const edgeT = d.edge === 'start' ? c.start + dt : c.start + c.dur + dt;
       const s = snap(edgeT, new Set([c.id]));
@@ -350,8 +408,31 @@ export function Timeline() {
     const el = e.target.closest('[data-hit]');
     const clipId = el?.dataset.clip;
     if (el?.dataset.hit === 'marker') {
-      const id = await window.api.popupMenu([{ id: 'del', label: 'Slett markør' }]);
+      const id = await window.api.popupMenu([{ id: 'del', label: 'Delete Marker' }]);
       if (id === 'del') commit((p) => (p.markers = p.markers.filter((m) => m.id !== el.dataset.id)));
+      return;
+    }
+    if (el?.dataset.hit === 'kf') {
+      const cid = el.dataset.clip;
+      const t = Number(el.dataset.t);
+      const c = project.value.clips[cid];
+      const current = Object.values(c.kf).flatMap((l) => l.filter((k) => Math.abs(k[0] - t) < 1e-4)).map((k) => k[2] || 'linear');
+      const id = await window.api.popupMenu([
+        ...EASINGS.map((x) => ({ id: x.id, label: x.label, checked: current.includes(x.id) })),
+        { separator: true },
+        { id: 'delete', label: 'Delete Keyframe' },
+      ]);
+      if (!id) return;
+      commit((p) => {
+        const cc = p.clips[cid];
+        for (const [prop, list] of Object.entries(cc.kf)) {
+          if (prop === 'layout') continue;
+          if (id === 'delete') {
+            cc.kf[prop] = list.filter((k) => Math.abs(k[0] - t) > 1e-4);
+            if (!cc.kf[prop].length) delete cc.kf[prop];
+          } else if (list.some((k) => Math.abs(k[0] - t) < 1e-4)) setKeyframeEase(cc, prop, t, id);
+        }
+      });
       return;
     }
     if (clipId) {
@@ -391,6 +472,7 @@ export function Timeline() {
           style={{ width, height: height + RULER_H + 40 }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
+          onPointerLeave={() => bladeRef.current && (bladeRef.current.style.display = 'none')}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           onContextMenu={onContextMenu}
@@ -412,8 +494,8 @@ export function Timeline() {
             {p.primary.map((id, i) => {
               const c = p.clips[id];
               if (!c?.transition) return null;
-              const prev = i > 0;
-              const [a, b] = transitionWindow(c, prev);
+              const prevClip = i > 0 ? p.clips[p.primary[i - 1]] : null;
+              const [a, b] = transitionWindow(c, Boolean(prevClip), prevClip);
               const row = rows.find((r) => r.lane === 0);
               return (
                 <div
@@ -431,6 +513,7 @@ export function Timeline() {
             {ghost && <div class="tl-ghost" style={{ left: tx(ghost.t), top: ghost.row.y, height: ghost.row.h }} />}
           </div>
           {snapLine != null && <div class="tl-snapline" style={{ left: tx(snapLine) }} />}
+          <div class="tl-blade" ref={bladeRef} />
           <div class="tl-playhead" ref={playheadRef}>
             <div class="head" />
           </div>
@@ -444,25 +527,36 @@ function clampDb(v) {
   return Math.round(Math.max(-60, Math.min(12, v)) * 10) / 10;
 }
 
+const isMac = window.api.platform === 'darwin';
+const TOOLS = [
+  { id: 'select', icon: MousePointer2, label: 'Select', key: 'A' },
+  { id: 'position', icon: MoveHorizontal, label: 'Position (move clips and leave gaps)', key: 'P' },
+  { id: 'blade', icon: Scissors, label: 'Blade', key: 'B' },
+  { id: 'hand', icon: Hand, label: 'Hand (scroll the timeline)', key: 'H' },
+];
+
 function TimelineToolbar() {
   const p = project.value;
   return (
     <div class="tl-toolbar">
       <div class="group">
-        <IconButton icon={MousePointer2} title="Velg (A)" active={tool.value === 'select'} onClick={() => (tool.value = 'select')} />
-        <IconButton icon={Scissors} title="Kutt (B)" active={tool.value === 'blade'} onClick={() => (tool.value = 'blade')} />
+        <div class="tool-group">
+          {TOOLS.map((t) => (
+            <IconButton key={t.id} icon={t.icon} title={`${t.label} (${t.key})`} active={tool.value === t.id} onClick={() => (tool.value = t.id)} />
+          ))}
+        </div>
         <span class="sep" />
-        <IconButton icon={Magnet} title="Festing (N)" active={snapping.value} onClick={() => (snapping.value = !snapping.value)} />
+        <IconButton icon={Magnet} title="Snapping (N)" active={snapping.value} onClick={() => (snapping.value = !snapping.value)} />
       </div>
       <div class="tl-time">
         <span class="tc">{formatTimecode(timeSig.value, p.fps)}</span>
         <span class="dim"> / {formatTimecode(p.duration, p.fps)}</span>
       </div>
       <div class="group">
-        <IconButton icon={Type} title="Legg til tittel (Ctrl T)" onClick={() => commands.addTitle('center')} />
-        <IconButton icon={Captions} title="Legg til undertekst (Option C)" onClick={() => commands.addCaption()} />
+        <IconButton icon={Type} title={`Add Title (${isMac ? '⌃T' : 'Alt+T'})`} onClick={() => commands.addTitle('center')} />
+        <IconButton icon={Captions} title={`Add Caption (${isMac ? '⌥C' : 'Alt+C'})`} onClick={() => commands.addCaption()} />
         <span class="sep" />
-        <IconButton icon={ZoomOut} title="Zoom ut (Cmd -)" onClick={() => commands.zoom(1 / 1.5)} />
+        <IconButton icon={ZoomOut} title={`Zoom Out (${isMac ? '⌘-' : 'Ctrl+-'})`} onClick={() => commands.zoom(1 / 1.5)} />
         <input
           type="range"
           class="slider zoom"
@@ -472,7 +566,7 @@ function TimelineToolbar() {
           value={Math.log(pps.value) / Math.log(800) * 100}
           onInput={(e) => (pps.value = Math.max(1, Math.pow(800, Number(e.currentTarget.value) / 100)))}
         />
-        <IconButton icon={ZoomIn} title="Zoom inn (Cmd +)" onClick={() => commands.zoom(1.5)} />
+        <IconButton icon={ZoomIn} title={`Zoom In (${isMac ? '⌘+' : 'Ctrl++'})`} onClick={() => commands.zoom(1.5)} />
       </div>
     </div>
   );
@@ -508,7 +602,7 @@ function Ruler({ width }) {
       {ticks}
       {p.range && <div class="ruler-range" style={{ left: tx(p.range.in), width: (p.range.out - p.range.in) * z }} />}
       {p.markers.map((m) => (
-        <div key={m.id} class="marker" data-hit="marker" data-id={m.id} data-t={m.t} style={{ left: tx(m.t) }} title={m.label || 'Markør'} />
+        <div key={m.id} class="marker" data-hit="marker" data-id={m.id} data-t={m.t} style={{ left: tx(m.t) }} title={m.label || 'Marker'} />
       ))}
     </div>
   );
@@ -516,7 +610,7 @@ function Ruler({ width }) {
 
 function LaneBg({ row, p }) {
   const lane = p.lanes?.[row.lane] || {};
-  const label = row.kind === 'caption' ? 'Undertekster' : row.kind === 'primary' ? 'Hovedspor' : row.kind === 'audio' ? `Lyd ${-row.lane}` : `Spor ${row.lane}`;
+  const label = row.kind === 'caption' ? 'Captions' : row.kind === 'primary' ? 'Storyline' : row.kind === 'audio' ? `Audio ${-row.lane}` : `Lane ${row.lane}`;
   return (
     <div class={`tl-lane ${row.kind}${lane.hidden ? ' hidden' : ''}${lane.muted ? ' muted' : ''}`} style={{ top: row.y, height: row.h }}>
       <span class="lane-label">
@@ -539,7 +633,7 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
   const hasAudio = clipHasAudio(clip, media);
   const visual = isVisual(clip) && clip.type !== 'title';
   const cls = ['tl-clip', `t-${clip.type}`, selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary'].filter(Boolean).join(' ');
-  const label = clip.type === 'title' || clip.type === 'caption' ? clip.props.text || (clip.type === 'caption' ? 'Undertekst' : 'Tittel') : clip.name || media?.name || clip.type;
+  const label = clip.type === 'title' || clip.type === 'caption' ? clip.props.text || (clip.type === 'caption' ? 'Caption' : 'Title') : clip.name || media?.name || clip.type;
   const narrow = w < 24;
   const thumbStream = media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
   const audioStream = clip.type === 'recording' ? (media?.streams?.camera?.hasAudio ? media.streams.camera : media?.streams?.screen) : media?.streams?.main;
@@ -595,9 +689,9 @@ function RecBands({ clip, media }) {
   const cam = media.streams.camera?.hasVideo && clip.props.showCamera !== false;
   return (
     <div class="rec-bands">
-      {cam && <span class="band cam" title="Kamera" />}
-      {clip.props.showKeys && media.rec?.keys?.length > 0 && <span class="band keys" title="Tastetrykk" />}
-      {clip.props.cursorZoom && media.rec?.zooms?.length > 0 && <span class="band zoom" title="Forstørret peker" />}
+      {cam && <span class="band cam" title="Camera" />}
+      {clip.props.showKeys && media.rec?.keys?.length > 0 && <span class="band keys" title="Keystrokes" />}
+      {clip.props.cursorZoom && media.rec?.zooms?.length > 0 && <span class="band zoom" title="Cursor zoom" />}
     </div>
   );
 }
@@ -665,15 +759,16 @@ function volumeY(db, h) {
 }
 
 function Keyframes({ clip, z }) {
-  const times = new Set();
+  // Nøkkelbildene kan dras for å endre tidspunkt, og høyreklikkes for myk overgang.
+  const times = new Map();
   for (const [prop, list] of Object.entries(clip.kf || {})) {
-    if (prop === 'volume') continue;
-    for (const [t] of list) if (t >= clip.in && t <= clip.in + clip.dur) times.add(t);
+    if (prop === 'volume' || prop === 'layout') continue;
+    for (const [t, , e] of list) if (t >= clip.in - 1e-4 && t <= clip.in + clip.dur + 1e-4) times.set(t, [...(times.get(t) || []), prop + (e && e !== 'linear' ? ` (${e})` : '')]);
   }
   return (
     <div class="kf-row">
-      {[...times].map((t) => (
-        <span key={t} class="kf" style={{ left: (t - clip.in) * z - 4 }} />
+      {[...times].map(([t, props]) => (
+        <span key={t} class="kf" data-hit="kf" data-clip={clip.id} data-t={t} title={`Keyframe: ${props.join(', ')}. Drag to move, right click for easing.`} style={{ left: (t - clip.in) * z - 5 }} />
       ))}
     </div>
   );
@@ -684,8 +779,8 @@ function FadeHandles({ clip, z, h }) {
   const fo = (clip.props.aFadeOut || 0) * z;
   return (
     <>
-      <div class="fade-handle in" data-hit="fade" data-which="in" data-clip={clip.id} style={{ left: fi - 4, bottom: h - 8 }} title="Tone inn" />
-      <div class="fade-handle out" data-hit="fade" data-which="out" data-clip={clip.id} style={{ right: fo - 4, bottom: h - 8 }} title="Tone ut" />
+      <div class="fade-handle in" data-hit="fade" data-which="in" data-clip={clip.id} style={{ left: fi - 4, bottom: h - 8 }} title="Fade in" />
+      <div class="fade-handle out" data-hit="fade" data-which="out" data-clip={clip.id} style={{ right: fo - 4, bottom: h - 8 }} title="Fade out" />
       {fi > 0 && <div class="fade-shape in" style={{ width: fi, height: h }} />}
       {fo > 0 && <div class="fade-shape out" style={{ width: fo, height: h }} />}
     </>

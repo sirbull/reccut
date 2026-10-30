@@ -11,7 +11,7 @@ try {
   hook = mod.uIOhook;
   Key = mod.UiohookKey;
 } catch (err) {
-  console.warn('uiohook-napi er ikke tilgjengelig:', err.message);
+  console.warn('uiohook-napi is not available:', err.message);
 }
 
 const codeToName = Object.fromEntries(Object.entries(Key).map(([name, code]) => [code, name]));
@@ -19,14 +19,14 @@ const codeToName = Object.fromEntries(Object.entries(Key).map(([name, code]) => 
 // Tastene som kan holdes inne for å forstørre musepekeren.
 const ZOOM_KEYS = isMac
   ? [
-      { value: 'MetaRight', label: 'Høyre Cmd' },
-      { value: 'AltRight', label: 'Høyre Option' },
-      { value: 'CtrlRight', label: 'Høyre Ctrl' },
+      { value: 'MetaRight', label: 'Right Command' },
+      { value: 'AltRight', label: 'Right Option' },
+      { value: 'CtrlRight', label: 'Right Control' },
       { value: 'F8', label: 'F8' },
     ]
   : [
-      { value: 'CtrlRight', label: 'Høyre Ctrl' },
-      { value: 'ShiftRight', label: 'Høyre Shift' },
+      { value: 'CtrlRight', label: 'Right Ctrl' },
+      { value: 'ShiftRight', label: 'Right Shift' },
       { value: 'F8', label: 'F8' },
     ];
 
@@ -38,7 +38,7 @@ const SYMBOLS = {
   Backspace: isMac ? '⌫' : 'Backspace',
   Delete: isMac ? '⌦' : 'Delete',
   Tab: isMac ? '⇥' : 'Tab',
-  Space: isMac ? 'Mellomrom' : 'Space',
+  Space: 'Space',
   ArrowLeft: '←',
   ArrowRight: '→',
   ArrowUp: '↑',
@@ -117,7 +117,7 @@ class InputTracker {
       hook.start();
       this.started = true;
     } catch (err) {
-      console.warn('Kunne ikke starte tastaturlytter:', err.message);
+      console.warn('Could not start the keyboard listener:', err.message);
     }
     return this.started;
   }

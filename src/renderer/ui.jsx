@@ -199,7 +199,7 @@ export function Modal({ title, onClose, children, footer, width = 720, class: cl
       <div class={`modal ${cls}`} style={{ width }} onKeyDown={(e) => e.stopPropagation()}>
         <header>
           <h2>{title}</h2>
-          {onClose && <IconButton icon={X} title="Lukk" onClick={onClose} />}
+          {onClose && <IconButton icon={X} title="Close" onClick={onClose} />}
         </header>
         <div class="modal-body">{children}</div>
         {footer && <footer>{footer}</footer>}
@@ -242,7 +242,7 @@ export function Toasts() {
               {a.label}
             </button>
           ))}
-          <IconButton icon={X} title="Lukk" size={14} onClick={() => dismissToast(t.id)} />
+          <IconButton icon={X} title="Close" size={14} onClick={() => dismissToast(t.id)} />
         </div>
       ))}
     </div>

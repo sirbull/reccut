@@ -91,12 +91,12 @@ window.worker.onJob(async ({ jobId, payload }) => {
   const { audio, language, model } = payload;
   const report = (p, stage) => window.worker.progress(jobId, p, stage);
   try {
-    report(0.1, 'Laster talemodell');
-    const asr = await getPipe(model, (p) => report(0.1 + p * 0.2, 'Laster ned talemodell'));
+    report(0.1, 'Loading speech model');
+    const asr = await getPipe(model, (p) => report(0.1 + p * 0.2, 'Downloading speech model'));
     const segments = [];
     const windows = Math.ceil(audio.length / (RATE * WINDOW));
     for (let i = 0; i < windows; i++) {
-      if (canceled.has(jobId)) throw new Error('Avbrutt');
+      if (canceled.has(jobId)) throw new Error('Canceled');
       const offset = i * WINDOW;
       const chunk = audio.subarray(i * RATE * WINDOW, Math.min(audio.length, (i + 1) * RATE * WINDOW));
       if (chunk.length < RATE * 0.5 || isSilent(chunk)) continue;
@@ -110,13 +110,13 @@ window.worker.onJob(async ({ jobId, payload }) => {
         const end = offset + (c.timestamp[1] ?? Math.min(WINDOW, (c.timestamp[0] ?? 0) + 3));
         segments.push(...splitSegment({ start, end: Math.max(end, start + 0.6), text: c.text }));
       }
-      report(0.3 + ((i + 1) / windows) * 0.7, 'Gjenkjenner tale');
+      report(0.3 + ((i + 1) / windows) * 0.7, 'Recognizing speech');
     }
     window.worker.done(jobId, segments);
   } catch (err) {
     console.error(err);
     const msg = String(err?.message || err);
-    window.worker.error(jobId, /fetch|network/i.test(msg) ? 'Kunne ikke laste ned talemodellen. Sjekk internettforbindelsen og prøv igjen.' : msg);
+    window.worker.error(jobId, /fetch|network/i.test(msg) ? 'Could not download the speech model. Check your internet connection and try again.' : msg);
   } finally {
     canceled.delete(jobId);
   }

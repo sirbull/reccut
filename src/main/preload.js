@@ -60,6 +60,8 @@ contextBridge.exposeInMainWorld('api', {
   startExport: invoke('export:start'),
   startTranscribe: invoke('transcribe:start'),
 
+  flushed: invoke('app:flushed'),
+  onFlush: on('app:flush'),
   onShortcut: on('shortcut'),
   onInput: on('input'),
   onMenu: on('menu'),
