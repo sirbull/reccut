@@ -20,10 +20,10 @@ import {
   Video,
   Wand2,
 } from 'lucide-preact';
-import { CAPTION_LANE, EFFECTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, mediaClipType, newProject } from '../../shared/model.js';
+import { CAPTION_LANE, EFFECTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, mediaClipType, newProject, workPath } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { parseSrt, toSrt, toVtt } from '../../shared/srt.js';
-import { addMediaRecords, audioSkimming, commit, getWave, importPaths, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
+import { addMediaRecords, projectFolders, audioSkimming, commit, getWave, importPaths, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
 import { fileUrl, scrubAudio, seek } from './playback.js';
 import * as commands from './commands.js';
 import { CaptionStyleEditor } from './Inspector.jsx';
@@ -41,7 +41,8 @@ const TABS = [
 ];
 
 export function Browser() {
-  const [tab, setTab] = useState('media');
+  const tab = commands.browserTab.value;
+  const setTab = (t) => (commands.browserTab.value = t);
   return (
     <div class="browser panel">
       <div class="panel-tabs">
@@ -70,10 +71,30 @@ function dragData(e, item) {
 
 /* Media */
 
+let mediaOrder = [];
+
+// Små merker for HDR, 10-bit, optimalisert media og synket lyd.
+function MediaBadges({ m }) {
+  const streams = Object.values(m.streams);
+  const color = streams.find((x) => x.color)?.color;
+  const synced = streams.filter((x) => x.syncedFrom).length;
+  const optimized = streams.some((x) => x.optimized);
+  return (
+    <>
+      {color?.hdr && <span class="mbadge hdr" title={`HDR (${color.hdr === 'pq' ? 'PQ' : 'HLG'}). Shown tone mapped to SDR.`}>HDR</span>}
+      {!color?.hdr && color?.bits > 8 && <span class="mbadge" title={`${color.bits}-bit color`}>{color.bits}-bit</span>}
+      {m.raw && <span class="mbadge" title="Camera RAW photo">RAW</span>}
+      {optimized && <span class="mbadge opt" title="Optimized media">OPT</span>}
+      {synced > 0 && <span class="mbadge sync" title="Synchronized audio from an external recorder">+{synced} audio</span>}
+    </>
+  );
+}
+
 function MediaTab() {
   const p = project.value;
   const [query, setQuery] = useState('');
   const items = Object.values(p.media).filter((m) => !query || m.name.toLowerCase().includes(query.toLowerCase()));
+  mediaOrder = items.map((m) => m.id);
   const [over, setOver] = useState(false);
   const [mode, setMode] = useState(localStorage.getItem('browserView') || 'filmstrip');
   const setView = (v) => {
@@ -82,7 +103,7 @@ function MediaTab() {
   };
 
   const addRecording = async () => {
-    const recs = await api.listRecordings();
+    const recs = await api.listRecordings(projectFolders.value?.recordings);
     if (!recs.length) return toast('No recordings yet. Make one in the Record tab.');
     const id = await api.popupMenu(recs.slice(0, 20).map((r) => ({ id: r.path, label: r.name })));
     if (!id) return;
@@ -93,6 +114,7 @@ function MediaTab() {
   return (
     <div
       class={`media-tab${over ? ' drop' : ''}`}
+      onPointerDown={() => (commands.browserFocus.value = true)}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
           e.preventDefault();
@@ -153,7 +175,7 @@ function MediaTab() {
 }
 
 function MediaCard({ m }) {
-  const selected = commands.browserSelection.value === m.id;
+  const selected = commands.browserPicked.value.includes(m.id);
   const stream = m.streams.screen || m.streams.main || m.streams.camera;
   const thumb = m.kind === 'image' ? m.streams.main?.proxy || m.path : stream?.thumbs?.files?.[Math.min(stream.thumbs.files.length - 1, 2)];
   const analyzing = tasks.value.some((t) => t.kind === 'analyze' && t.state === 'running' && t.title.includes(m.name));
@@ -164,10 +186,10 @@ function MediaCard({ m }) {
     <div
       class={`media-card${selected ? ' selected' : ''}`}
       draggable
-      onDragStart={(e) => dragData(e, { kind: 'media', id: m.id })}
-      onClick={() => (commands.browserSelection.value = m.id)}
+      onDragStart={(e) => dragData(e, { kind: 'media', id: m.id, ids: commands.browserPicked.value.includes(m.id) ? mediaOrder.filter((x) => commands.browserPicked.value.includes(x)) : [m.id] })}
+      onClick={(e) => commands.pickMedia(e, m.id, mediaOrder)}
       onDblClick={() => {
-        commands.browserSelection.value = m.id;
+        commands.pickMedia(null, m.id, mediaOrder);
         commands.addBrowserSelection('append');
       }}
       onContextMenu={onContext}
@@ -179,6 +201,9 @@ function MediaCard({ m }) {
         {m.kind === 'recording' && <span class="kind">REC</span>}
         {used && <span class="used" title="Used in the project" />}
         {analyzing && <span class="busy" />}
+        <span class="badges">
+          <MediaBadges m={m} />
+        </span>
       </div>
       <div class="name">{m.name}</div>
     </div>
@@ -210,7 +235,7 @@ function FilmstripRow({ m }) {
   const stripRef = useRef(null);
   const lineRef = useRef(null);
   const [width, setWidth] = useState(240);
-  const selected = commands.browserSelection.value === m.id;
+  const selected = commands.browserPicked.value.includes(m.id);
   const range = commands.browserRange.value?.mediaId === m.id ? commands.browserRange.value : null;
   const stream = m.streams.screen || m.streams.main || m.streams.camera;
   const audio = m.kind === 'recording' ? (m.streams.camera?.hasAudio ? m.streams.camera : m.streams.screen) : m.streams.main;
@@ -266,7 +291,11 @@ function FilmstripRow({ m }) {
   };
   const onDown = (e) => {
     if (e.button !== 0) return;
-    commands.browserSelection.value = m.id;
+    if (e.metaKey || e.ctrlKey || e.shiftKey) {
+      commands.pickMedia(e, m.id, mediaOrder);
+      return;
+    }
+    commands.pickMedia(null, m.id, mediaOrder);
     drag.current = { x: e.clientX, t: timeAt(e), moved: false };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -280,9 +309,9 @@ function FilmstripRow({ m }) {
       <div
         class="film-head"
         draggable
-        onDragStart={(e) => dragData(e, { kind: 'media', id: m.id })}
-        onClick={() => {
-          commands.browserSelection.value = m.id;
+        onDragStart={(e) => dragData(e, { kind: 'media', id: m.id, ids: commands.browserPicked.value.includes(m.id) ? mediaOrder.filter((x) => commands.browserPicked.value.includes(x)) : [m.id] })}
+        onClick={(e) => {
+          commands.pickMedia(e, m.id, mediaOrder);
           commands.browserRange.value = null;
         }}
         onDblClick={() => commands.addBrowserSelection('append')}
@@ -291,11 +320,12 @@ function FilmstripRow({ m }) {
         {m.kind === 'recording' ? <span class="kind-dot rec">REC</span> : m.kind === 'audio' ? <FileAudio size={12} /> : m.kind === 'image' ? <ImageIcon size={12} /> : <Film size={12} />}
         <span class="name">{m.name}</span>
         {used && <span class="used-dot" title="Used in the project" />}
+        <MediaBadges m={m} />
         <span class="dur">{range ? `${fmt(range.in)} to ${fmt(range.out)}` : m.kind === 'image' ? 'Still' : formatDuration(m.duration)}</span>
       </div>
       <div class="film-strip" ref={stripRef} onPointerMove={onMove} onPointerLeave={onLeave} onPointerDown={onDown} onPointerUp={onUp}>
         {m.kind !== 'audio' && <div class={`frames${tiles.length ? '' : ' empty'}`}>{tiles}</div>}
-        {hasAudio && <MiniWave stream={audio} offset={m.kind === 'recording' ? audio.offset || 0 : 0} dur={dur} tall={m.kind === 'audio'} />}
+        {hasAudio && <MiniWave stream={audio} offset={audio.offset || 0} dur={dur} tall={m.kind === 'audio'} />}
         {range && <div class="film-range" style={{ left: `${(range.in / dur) * 100}%`, width: `${((range.out - range.in) / dur) * 100}%` }} />}
         <div class="film-skimmer" ref={lineRef} />
       </div>
@@ -340,19 +370,36 @@ function MiniWave({ stream, offset, dur, tall }) {
 
 async function mediaContextMenu(e, m, used) {
   e.preventDefault();
-  commands.browserSelection.value = m.id;
+  if (!commands.browserPicked.value.includes(m.id)) commands.pickMedia(null, m.id, mediaOrder);
+  commands.browserFocus.value = true;
+  const picked = commands.browserPicked.value.map((id) => project.value.media[id]).filter(Boolean);
+  const n = picked.length;
+  const hasVideo = picked.some((x) => x.kind === 'video' || x.kind === 'recording');
+  const hasAudio = picked.some((x) => x.kind === 'audio');
+  const synced = picked.some((x) => Object.values(x.streams).some((st) => st.syncedFrom));
+  const inUse = picked.some((x) => Object.values(project.value.clips).some((c) => c.mediaId === x.id));
   const id = await api.popupMenu([
     { id: 'append', label: 'Append to Storyline', accelerator: 'E' },
     { id: 'insert', label: 'Insert at Playhead', accelerator: 'W' },
     { id: 'connect', label: 'Connect to Storyline', accelerator: 'Q' },
     { id: 'overwrite', label: 'Overwrite at Playhead', accelerator: 'D' },
     { separator: true },
+    { id: 'sync', label: 'Synchronize Audio', accelerator: 'Alt+CmdOrCtrl+G', enabled: hasVideo && hasAudio },
+    { id: 'unsync', label: 'Remove Synchronized Audio', enabled: synced },
+    { id: 'optimize', label: n > 1 ? `Optimize ${n} Clips` : 'Optimize Media', accelerator: 'Shift+CmdOrCtrl+O', enabled: hasVideo },
+    { separator: true },
     { id: 'reveal', label: isMac ? 'Reveal in Finder' : 'Show in Explorer' },
-    { id: 'remove', label: 'Remove from Project', enabled: !used },
+    { id: 'remove', label: n > 1 ? `Remove ${n} Clips from Project` : 'Remove from Project', enabled: !inUse },
   ]);
   if (['append', 'insert', 'connect', 'overwrite'].includes(id)) commands.addBrowserSelection(id);
+  else if (id === 'sync') commands.syncMediaAudio();
+  else if (id === 'unsync') commands.removeSyncedAudio();
+  else if (id === 'optimize') commands.optimizeMedia();
   else if (id === 'reveal') api.reveal(m.path);
-  else if (id === 'remove') commit((p) => delete p.media[m.id]);
+  else if (id === 'remove') {
+    commit((p) => picked.forEach((x) => delete p.media[x.id]));
+    commands.browserPicked.value = [];
+  }
 }
 
 /* Små forhåndsvisninger tegnet med tegnemotoren */
@@ -587,9 +634,9 @@ function CaptionsTab() {
       if (c.type === 'recording') stream = m.streams.camera?.hasAudio ? m.streams.camera : m.streams.screen?.hasAudio ? m.streams.screen : null;
       else if (m.streams.main?.hasAudio) stream = m.streams.main;
       if (!stream) continue;
-      const off = c.type === 'recording' ? stream.offset || 0 : 0;
+      const off = stream.offset || 0;
       const inT = Math.max(0, c.in - off);
-      sources.push({ path: stream.proxy || stream.path, in: inT, dur: c.dur, start: c.start + Math.max(0, off - c.in) });
+      sources.push({ path: workPath(stream), in: inT, dur: c.dur, start: c.start + Math.max(0, off - c.in) });
     }
     if (!sources.length) return toast('There is no audio on the timeline to transcribe.');
     if (caps.length && !confirm('Replace the existing captions with new ones?')) return;

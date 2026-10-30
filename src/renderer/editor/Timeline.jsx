@@ -42,6 +42,8 @@ import {
   setKeyframeEase,
   isVisual,
   transitionWindow,
+  audioComponents,
+  primaryComponent,
 } from '../../shared/model.js';
 import { groupLead, groupMembers, moveClip, positionMove, positionTrim, rollEdit, slideClip, slipClip, splitClip, trimClip } from '../../shared/ops.js';
 import {
@@ -64,6 +66,7 @@ import {
   tool,
   updateTransient,
   waveVersion,
+  selectedComponent,
 } from './store.js';
 import { fileUrl, scrubAudio, seek } from './playback.js';
 import { IconButton } from '../ui.jsx';
@@ -218,6 +221,7 @@ export function Timeline() {
 
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
+    commands.browserFocus.value = false;
     const el = e.target.closest('[data-hit]');
     const hit = el?.dataset.hit;
     const T = timeAt(e.clientX);
@@ -243,6 +247,12 @@ export function Timeline() {
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
+    if (hit === 'comp') {
+      selection.value = [el.dataset.clip];
+      selectedComponent.value = { clipId: el.dataset.clip, key: el.dataset.key };
+      return;
+    }
+    selectedComponent.value = null;
     if (hit === 'axfade') {
       selection.value = [];
       selectedTransition.value = `ax:${el.dataset.id}`;
@@ -836,12 +846,12 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
   const expanded = clip.expanded && hasAudio && clip.type !== 'audio';
   const speed = speedOf(clip);
   const visual = isVisual(clip) && clip.type !== 'title';
-  const cls = ['tl-clip', `t-${clip.type}`, selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped'].filter(Boolean).join(' ');
+  const cls = ['tl-clip', `t-${clip.type}`, selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped', audioComponents(clip, media).length > 0 && audioComponents(clip, media).every((c) => c.off) && 'audio-off'].filter(Boolean).join(' ');
   const label = clip.type === 'title' || clip.type === 'caption' ? clip.props.text || (clip.type === 'caption' ? 'Caption' : 'Title') : clip.name || media?.name || clip.type;
   const narrow = w < 24;
   const thumbStream = media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
   const audioStream = clipAudioStream(clip, media);
-  const bandH = Math.round(row.h * 0.34);
+  const bandH = expanded ? bandHeight(row, clip, media) : Math.round(row.h * 0.34);
   const boxH = expanded ? row.h - bandH - 3 : row.h;
   const waveH = expanded ? 0 : clip.type === 'audio' ? row.h - 16 : hasAudio && row.kind !== 'caption' ? bandH : 0;
   const stripH = boxH - 16 - waveH;
@@ -866,7 +876,7 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
       {showStrip && <Filmstrip clip={clip} stream={thumbStream} x={x} w={w} h={stripH} z={z} media={media} />}
       {clip.type === 'recording' && !narrow && <RecBands clip={clip} media={media} />}
       {waveH > 0 && (
-        <Wave clip={clip} stream={audioStream} x={x} w={w} h={waveH} z={z} offset={media?.kind === 'recording' ? audioStream?.offset || 0 : 0} />
+        <Wave clip={clip} stream={audioStream} x={x} w={w} h={waveH} z={z} offset={audioStream?.offset || 0} />
       )}
       {selected && <Keyframes clip={clip} z={z} />}
       {hasAudio && !expanded && !narrow && row.kind !== 'caption' && <FadeHandles clip={clip} z={z} h={waveH} />}
@@ -881,7 +891,7 @@ function Filmstrip({ clip, stream, x, w, h, z, media }) {
   const tileW = Math.round((h * 16) / 9);
   const files = stream.thumbs.files;
   const interval = stream.thumbs.interval;
-  const offset = clip.type === 'recording' ? stream.offset || 0 : 0;
+  const offset = stream.offset || 0;
   const tiles = [];
   const from = Math.max(0, Math.floor((left - x) / tileW) - 1);
   const to = Math.min(Math.ceil(w / tileW), Math.ceil((left + vw - x) / tileW) + 1);
@@ -1003,24 +1013,52 @@ function FadeHandles({ clip, z, h }) {
   );
 }
 
-// Lydstrømmen et klipp bruker for lydbølgen.
+// Lydstrømmen et klipp viser som lydbølge: den første lydkomponenten som er på.
 function clipAudioStream(clip, media) {
-  if (!media) return null;
-  if (clip.type === 'recording') return media.streams.camera?.hasAudio ? media.streams.camera : media.streams.screen;
-  return media.streams[clip.stream || 'main'];
+  return primaryComponent(clip, media)?.stream || null;
+}
+
+// Høyden på utvidet lyd. Flere lydkomponenter får en stripe hver.
+function bandHeight(row, clip, media) {
+  const n = audioComponents(clip, media).length;
+  return Math.round(row.h * (n > 1 ? 0.5 : 0.34));
 }
 
 // Utvidet lyd: lyddelen vises under bildet og kan dras ut over kantene (J- og L-kutt).
 function AudioBand({ clip, row, media, z, selected }) {
   const lead = clip.props.aLead || 0;
   const tail = clip.props.aTail || 0;
-  const h = Math.round(row.h * 0.34);
+  const h = bandHeight(row, clip, media);
   const x = PAD + (clip.start - lead) * z;
   const w = Math.max(4, (clip.dur + lead + tail) * z);
+  const comps = audioComponents(clip, media);
   const stream = clipAudioStream(clip, media);
+  const sc = selectedComponent.value;
   return (
     <div class={`tl-audioband${selected ? ' selected' : ''}`} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y + row.h - h, height: h }}>
-      <Wave clip={clip} stream={stream} x={x} w={w} h={h} z={z} offset={media?.kind === 'recording' ? stream?.offset || 0 : 0} lead={lead} />
+      {comps.length > 1 ? (
+        // Én stripe per lydkomponent. Klikk velger komponenten, V slår den av og på.
+        comps.map((c, i) => {
+          const ch = Math.floor(h / comps.length);
+          const active = sc?.clipId === clip.id && sc.key === c.key;
+          return (
+            <div
+              key={c.key}
+              class={`tl-comp${c.off ? ' off' : ''}${active ? ' selected' : ''}`}
+              data-hit="comp"
+              data-clip={clip.id}
+              data-key={c.key}
+              title={`${c.label}${c.off ? ' (off)' : ''}. Click to select, press V to switch it on or off.`}
+              style={{ top: i * ch, height: ch }}
+            >
+              <Wave clip={clip} stream={c.stream} x={x} w={w} h={ch} z={z} offset={c.stream.offset || 0} lead={lead} />
+              <span class="comp-label">{c.label}</span>
+            </div>
+          );
+        })
+      ) : (
+        <Wave clip={clip} stream={stream} x={x} w={w} h={h} z={z} offset={stream?.offset || 0} lead={lead} />
+      )}
       <div class="edge start" data-hit="aedge" data-edge="start" data-clip={clip.id} title="Drag to extend or shorten the audio" />
       <div class="edge end" data-hit="aedge" data-edge="end" data-clip={clip.id} title="Drag to extend or shorten the audio" />
     </div>

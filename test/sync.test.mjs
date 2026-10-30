@@ -85,7 +85,7 @@ test('autosynk finner begge videoklippene og legger lyden riktig', () => {
   assert.equal(c1.group, p.clips[v1].group);
   assert.equal(c2.group, p.clips[v2].group);
   assert.notEqual(c1.group, c2.group);
-  assert.equal(p.clips[v1].props.volume, -60);
+  assert.equal(p.clips[v1].props.audioOff.main, true);
 });
 
 test('kort lydklipp legges riktig uten å klippes', () => {
@@ -126,4 +126,26 @@ test('gruppert lyd følger videoen når den flyttes og slettes med den', () => {
   assert.ok(p.clips[v2]);
   ungroupClips(p, ids);
   assert.ok(ids.every((id) => !p.clips[id].group));
+});
+
+import { applyMediaSync, planMediaSync, removeMediaSync } from '../src/shared/sync.js';
+import { audioComponents, computeAudio } from '../src/shared/model.js';
+
+test('synk i biblioteket fletter lyden inn i videoene og slår av kameralyden', () => {
+  const { p, v1, waveFor } = syncProject();
+  const plan = planMediaSync(p, ['v1', 'v2', 'ext'], waveFor);
+  assert.deepEqual(plan.map((x) => x.videoId).sort(), ['v1', 'v2']);
+  const m1 = plan.find((x) => x.videoId === 'v1');
+  // Video 1 startet 20 s inn i lydopptaket: lydfilens tid = mediatid + 20.
+  assert.ok(Math.abs(m1.offset + 20) < 0.02, `offset ${m1.offset}`);
+  applyMediaSync(p, plan);
+  const comps = audioComponents(p.clips[v1], p.media.v1);
+  assert.deepEqual(comps.map((c) => [c.key, c.off]), [['main', true], ['sync_ext', false]]);
+  // Ved 5 s på tidslinjen (kilde 15 s i video 1) skal lydfilen spille fra 35 s.
+  const a = computeAudio(p, 5).filter((x) => x.clip.id === v1);
+  assert.equal(a.length, 1);
+  assert.equal(a[0].stream, 'sync_ext');
+  assert.ok(Math.abs(a[0].src - 35) < 0.02, `src ${a[0].src}`);
+  removeMediaSync(p, 'v1');
+  assert.deepEqual(audioComponents(p.clips[v1], p.media.v1).map((c) => [c.key, c.off]), [['main', false]]);
 });

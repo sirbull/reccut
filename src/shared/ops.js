@@ -7,7 +7,9 @@ import {
   rampOffset,
   srcLen,
   srcOffset,
+  audioComponents,
   clipHasAudio,
+  componentVolumeProp,
   isElastic,
   kfRate,
   kfTime,
@@ -629,10 +631,11 @@ export function detachAudio(project, id) {
     placeFree(project, a, c.start, -1);
     ids.push(a.id);
   };
-  if (c.type === 'recording') {
-    if (m.streams.camera?.hasAudio) make('camera', `${c.name || m.name} (microphone)`, 'micVolume');
-    if (m.streams.screen?.hasAudio) make('screen', `${c.name || m.name} (system audio)`, 'sysVolume');
-  } else make('main', `${c.name || m.name} (audio)`, 'volume');
+  // Hver lydkomponent blir et eget lydklipp. Komponenter som var slått av, blir klipp som er slått av.
+  for (const comp of audioComponents(c, m)) {
+    make(comp.key, `${c.name || m.name} (${comp.label.toLowerCase()})`, componentVolumeProp(c, comp.key));
+    if (comp.off) project.clips[ids[ids.length - 1]].enabled = false;
+  }
   c.props.audioDetached = true;
   c.props.aLead = 0;
   c.props.aTail = 0;

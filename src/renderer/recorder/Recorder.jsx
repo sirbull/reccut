@@ -15,6 +15,8 @@ import {
 import { Row, Section, Segmented, Select, Toggle } from '../ui.jsx';
 import { MODIFIERS, modifierInfo, saveSettings, settings } from './settings.js';
 import * as engine from './engine.js';
+import { project, projectFolders } from '../editor/store.js';
+import * as editorCommands from '../editor/commands.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -34,7 +36,6 @@ export function Recorder({ active }) {
   const canvasRef = useRef(null);
   const [input, setInput] = useState(null);
   const [failed, setFailed] = useState([]);
-  const [baseDir, setBaseDir] = useState('');
   const s = settings.value;
   const mod = modifierInfo();
 
@@ -49,7 +50,6 @@ export function Recorder({ active }) {
   }, [active, engine.recording.value]);
 
   useEffect(() => {
-    api.baseDir().then(setBaseDir);
     api.inputStatus().then(setInput);
     api.hideFromCapture(s.hideFromCapture);
     api.setZoomKey(s.zoomKey);
@@ -221,19 +221,13 @@ export function Recorder({ active }) {
               }}
             />
           </Row>
-          <Row label="Save to" stacked>
-            <button
-              class="path-btn"
-              title={s.outputDir || baseDir}
-              onClick={async () => {
-                const dir = await api.chooseDir(s.outputDir || baseDir);
-                if (dir) set({ outputDir: dir });
-              }}
-            >
+          <Row label="Saved in project" stacked>
+            <button class="path-btn" title={projectFolders.value?.recordings || ''} disabled={recording} onClick={() => (editorCommands.projectsOpen.value = true)}>
               <FolderOpen size={14} />
-              <span>{s.outputDir || baseDir}</span>
+              <span>{project.value.name}</span>
             </button>
           </Row>
+          <p class="hint">Recordings go into the Recordings folder of the open project and appear in its media browser.</p>
         </Section>
 
         <Section title="Shortcuts">

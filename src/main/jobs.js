@@ -38,7 +38,8 @@ function update(id, patch) {
 }
 
 // Køer: analyse kan gå to samtidig, tunge jobber én om gangen.
-const queues = { light: { limit: 2, running: 0, items: [] }, heavy: { limit: 1, running: 0, items: [] } };
+// Optimalisering har sin egen kø, så den ikke stopper eksport og analyse.
+const queues = { light: { limit: 2, running: 0, items: [] }, heavy: { limit: 1, running: 0, items: [] }, optimize: { limit: 1, running: 0, items: [] } };
 
 function add({ kind, title, queue = 'light', run, silent = false }) {
   const id = nextId++;

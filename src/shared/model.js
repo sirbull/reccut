@@ -174,6 +174,11 @@ export const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 export const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 export const dbToGain = (db) => (db <= -60 ? 0 : Math.pow(10, db / 20));
 
+// Filen som brukes til avspilling og eksport: optimalisert media, arbeidskopi eller originalen.
+export function workPath(stream) {
+  return stream ? stream.optimized || stream.proxy || stream.path : null;
+}
+
 export function isVisual(clip) {
   return clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title' || clip.type === 'gap';
 }
@@ -181,9 +186,43 @@ export function isVisual(clip) {
 export function clipHasAudio(clip, media) {
   if (clip.props?.audioDetached || (clip.speed === 0 && !clip.ramp)) return false;
   if (clip.type === 'audio') return true;
-  if (clip.type === 'video') return Boolean(media?.streams?.main?.hasAudio);
-  if (clip.type === 'recording') return Object.values(media?.streams || {}).some((s) => s.hasAudio);
+  if (clip.type === 'video' || clip.type === 'recording') return Object.values(media?.streams || {}).some((s) => s.hasAudio);
   return false;
+}
+
+/* Lydkomponenter: lydsporene i et klipp, som kameralyd og lyd synket fra en ekstern opptaker.
+   En komponent kan slås av (clip.props.audioOff[key]) uten å forsvinne, og kan slås på igjen. */
+
+export function componentLabel(media, key, stream) {
+  if (stream?.label) return stream.label;
+  if (media?.kind === 'recording') return key === 'camera' ? 'Microphone' : key === 'screen' ? 'System audio' : key;
+  return media?.kind === 'audio' ? 'Audio' : 'Camera audio';
+}
+
+export function audioComponents(clip, media) {
+  if (!media || !clip) return [];
+  const off = clip.props?.audioOff || {};
+  if (clip.type === 'audio') {
+    const key = clip.stream || 'main';
+    const st = media.streams[key];
+    return st?.hasAudio ? [{ key, stream: st, label: componentLabel(media, key, st), off: Boolean(off[key]) }] : [];
+  }
+  if (clip.type !== 'video' && clip.type !== 'recording') return [];
+  return Object.entries(media.streams)
+    .filter(([, st]) => st.hasAudio)
+    .map(([key, st]) => ({ key, stream: st, label: componentLabel(media, key, st), off: Boolean(off[key]) }));
+}
+
+// Volumet for en komponent: opptak har eget nivå for mikrofon og systemlyd.
+export function componentVolumeProp(clip, key) {
+  if (clip.type === 'recording') return key === 'camera' ? 'micVolume' : key === 'screen' ? 'sysVolume' : 'volume';
+  return 'volume';
+}
+
+// Komponenten som vises som lydbølge på klippet: den første som er på.
+export function primaryComponent(clip, media) {
+  const list = audioComponents(clip, media);
+  return list.find((c) => !c.off) || list[0] || null;
 }
 
 // Klipp som kan forlenges uten grense (de har ingen kildefil med fast lengde).
@@ -227,6 +266,7 @@ export function defaultProps(type, media) {
         ...visual,
         aFadeIn: 0,
         aFadeOut: 0,
+        volume: 0,
         micVolume: 0,
         sysVolume: 0,
         showCamera: true,
@@ -271,7 +311,7 @@ export function makeClip(type, opts = {}) {
     in: opts.in ?? 0,
     dur: opts.dur ?? (media && media.kind !== 'image' ? media.duration : 4),
     enabled: true,
-    props: { ...defaultProps(type, media), ...(opts.props || {}) },
+    props: { ...defaultProps(type, media), ...(media?.audioOff && type !== 'audio' ? { audioOff: { ...media.audioOff } } : {}), ...(opts.props || {}) },
     kf: {},
     name: opts.name ?? media?.name ?? null,
   };
@@ -720,18 +760,12 @@ export function computeAudio(project, T) {
     const env = (T < aw || T >= bw ? 1 : audioEnvelope(clip, T)) * f;
     if (env <= 0) continue;
     const s = sourceTime(clip, T);
-    if (clip.type === 'recording') {
-      for (const [key, stream] of Object.entries(media.streams)) {
-        if (!stream.hasAudio) continue;
-        const db = valueAt(clip, key === 'camera' ? 'micVolume' : 'sysVolume', T);
-        out.push({ clip, stream: key, src: s - (stream.offset || 0), gain: dbToGain(db) * env, speed: instSpeed(clip, T - clip.start) * (clip.reverse ? -1 : 1) });
-      }
-    } else {
-      // Lydklipp kan peke på lyden i en video eller et opptak (frakoblet lyd).
-      const key = clip.stream || 'main';
-      const stream = media.streams[key];
-      if (!stream?.hasAudio) continue;
-      out.push({ clip, stream: key, src: s - (media.kind === 'recording' ? stream.offset || 0 : 0), gain: dbToGain(valueAt(clip, 'volume', T)) * env, speed: instSpeed(clip, T - clip.start) * (clip.reverse ? -1 : 1) });
+    const speed = instSpeed(clip, T - clip.start) * (clip.reverse ? -1 : 1);
+    // Hver lydkomponent som er på, med sitt eget volum. Lydklipp kan peke på lyden i en video (frakoblet lyd).
+    for (const comp of audioComponents(clip, media)) {
+      if (comp.off) continue;
+      const db = valueAt(clip, componentVolumeProp(clip, comp.key), T) ?? 0;
+      out.push({ clip, stream: comp.key, src: s - (comp.stream.offset || 0), gain: dbToGain(db) * env, speed });
     }
   }
   return out;

@@ -1,181 +1,18 @@
 // Redigeringsrommet: bibliotek, visning og inspektør øverst, tidslinje nederst.
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { FilePlus2, FolderOpen, Trash2 } from 'lucide-preact';
-import { CAPTION_LANE, PROJECT_TEMPLATES, formatDuration } from '../../shared/model.js';
+import { CAPTION_LANE, formatTimecode } from '../../shared/model.js';
 import { Browser } from './Browser.jsx';
 import { Viewer } from './Viewer.jsx';
 import { Inspector } from './Inspector.jsx';
 import { Timeline } from './Timeline.jsx';
 import { ExportDialog } from './ExportDialog.jsx';
-import {
-  commit,
-  makeCaptionClip,
-  newProjectNamed,
-  openProjectFile,
-  project,
-  projectPath,
-  redo,
-  room,
-  saveNow,
-  selectedTransition,
-  selection,
-  snapping,
-  skim,
-  skimming,
-  audioSkimming,
-  tool,
-  undo,
-} from './store.js';
+import { audioSkimming, commit, makeCaptionClip, project, skimming, snapping } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
-import { Button, Modal, NumberField, Row, Section, Toggle, toast } from '../ui.jsx';
+import { Button, Modal, NumberField, Row, Section, Segmented, Toggle, toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
 
 const api = window.api;
-const isMac = api.platform === 'darwin';
-
-function isTyping() {
-  const el = document.activeElement;
-  return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
-}
-
-// Snarveier som i Final Cut Pro. På Windows brukes Ctrl for Cmd og Alt for Option.
-function onKeyDown(e) {
-  if (room.value !== 'edit' || isTyping() || document.querySelector('.modal-backdrop')) return;
-  const mod = isMac ? e.metaKey : e.ctrlKey;
-  const ctrlMac = isMac && e.ctrlKey && !e.metaKey;
-  const alt = e.altKey;
-  const code = e.code;
-  let handled = true;
-
-  if (code === 'Space' && e.shiftKey) playback.playReverse();
-  else if (code === 'Space') playback.toggle();
-  else if (code === 'KeyJ' && !mod) playback.shuttle(-1);
-  else if (code === 'KeyK' && !mod) playback.shuttle(0);
-  else if (code === 'KeyL' && !mod) playback.shuttle(1);
-  else if (code === 'ArrowLeft') commands.stepFrames(e.shiftKey ? -10 : -1);
-  else if (code === 'ArrowRight') commands.stepFrames(e.shiftKey ? 10 : 1);
-  else if (code === 'ArrowUp') commands.jumpEdit(-1);
-  else if (code === 'ArrowDown') commands.jumpEdit(1);
-  else if (code === 'Home') commands.goHome();
-  else if (code === 'End') commands.goEnd();
-  else if (code === 'KeyB' && mod) e.shiftKey ? commands.bladeAll() : commands.blade();
-  else if (code === 'KeyT' && (isMac ? ctrlMac : alt) && !mod) commands.addTitle('center');
-  else if (code === 'KeyT' && mod) commands.addTransition('dissolve');
-  else if (code === 'KeyC' && alt && !mod) commands.addCaption();
-  else if (code === 'KeyX' && alt && !mod) commands.clearRange();
-  else if (code === 'BracketLeft' && alt) commands.trimToPlayhead('start');
-  else if (code === 'BracketRight' && alt) commands.trimToPlayhead('end');
-  else if ((code === 'Equal' || code === 'NumpadAdd') && (isMac ? ctrlMac : alt)) commands.adjustVolume(1);
-  else if ((code === 'Minus' || code === 'NumpadSubtract') && (isMac ? ctrlMac : alt)) commands.adjustVolume(-1);
-  // Lyd: utvid og koble fra (Control S og Control Shift S på Mac, Alt E og Alt Shift E på Windows).
-  else if (isMac && ctrlMac && code === 'KeyS') e.shiftKey ? commands.detachSelectedAudio() : commands.toggleExpandAudio();
-  else if (!isMac && alt && !e.ctrlKey && code === 'KeyE') e.shiftKey ? commands.detachSelectedAudio() : commands.toggleExpandAudio();
-  else if (alt && !mod && !e.ctrlKey && code === 'KeyS') commands.toggleSolo();
-  else if (alt && !mod && code === 'KeyF') commands.addFreezeFrame();
-  else if (alt && !mod && code === 'KeyW') commands.insertGapAtPlayhead();
-  else if (mod && alt && code === 'KeyR') commands.setSpeedSelected(1);
-  else if (mod && !alt && code === 'KeyR') commands.openRetime();
-  else if (mod && alt && code === 'ArrowUp') commands.liftSelected();
-  else if (mod && alt && code === 'ArrowDown') commands.overwriteSelectedToPrimary();
-  // Grupper: Cmd/Ctrl G grupperer, Shift Cmd/Ctrl G løser opp, Option Cmd/Ctrl G synker lyd.
-  else if (mod && alt && code === 'KeyG') commands.autoSyncAudio();
-  else if (mod && code === 'KeyG') e.shiftKey ? commands.ungroupSelected() : commands.groupSelected();
-  else if (mod || e.ctrlKey || alt) handled = false;
-  else if (code === 'Backspace' || code === 'Delete') commands.deleteSelection(!e.shiftKey);
-  else if (code === 'KeyA') tool.value = 'select';
-  else if (code === 'KeyB') tool.value = 'blade';
-  else if (code === 'KeyP') tool.value = 'position';
-  else if (code === 'KeyH') tool.value = 'hand';
-  else if (code === 'KeyT') tool.value = 'trim';
-  else if (code === 'KeyR') tool.value = 'range';
-  else if (code === 'KeyZ' && !e.shiftKey) tool.value = 'zoom';
-  else if (code === 'KeyD') commands.addBrowserSelection('overwrite');
-  else if (code === 'KeyC') commands.selectClipAtPlayhead();
-  // Som i Final Cut Pro: S skumming, Shift S lyd ved skumming, N festing.
-  else if (code === 'KeyS' && e.shiftKey) {
-    audioSkimming.value = !audioSkimming.value;
-    toast(audioSkimming.value ? 'Audio skimming on' : 'Audio skimming off', { timeout: 1200 });
-  } else if (code === 'KeyS') {
-    skimming.value = !skimming.value;
-    if (!skimming.value) skim.value = null;
-    toast(skimming.value ? 'Skimming on' : 'Skimming off', { timeout: 1200 });
-  } else if (code === 'KeyN') {
-    snapping.value = !snapping.value;
-    toast(snapping.value ? 'Snapping on' : 'Snapping off', { timeout: 1200 });
-  }
-  else if (code === 'KeyM') commands.addMarker();
-  else if (code === 'KeyI') commands.setRange('in');
-  else if (code === 'KeyO') commands.setRange('out');
-  else if (code === 'KeyZ' && e.shiftKey) commands.zoomFit();
-  else if (code === 'Comma') commands.nudge(-1);
-  else if (code === 'Period') commands.nudge(1);
-  else if (code === 'Escape') {
-    selection.value = [];
-    selectedTransition.value = null;
-  } else handled = false;
-
-  if (handled) {
-    e.preventDefault();
-    e.stopPropagation();
-  }
-}
-
-export function handleMenu(id) {
-  const typing = isTyping();
-  const textCmd = { undo: 'undo', redo: 'redo', cut: 'cut', copy: 'copy', paste: 'paste', selectAll: 'selectAll' }[id];
-  if (typing && textCmd) {
-    document.execCommand(textCmd);
-    return;
-  }
-  if (id === 'prefs') {
-    commands.prefsOpen.value = true;
-    return;
-  }
-  if (id === 'roomRecord') room.value = 'record';
-  else if (id === 'roomEdit') room.value = 'edit';
-  else if (id === 'roomExport') room.value = 'export';
-  else if (room.value !== 'edit') {
-    if (textCmd) document.execCommand(textCmd);
-    if (id === 'export') room.value = 'export';
-    else if (['newProject', 'openProject', 'import'].includes(id)) {
-      room.value = 'edit';
-      setTimeout(() => handleMenu(id), 50);
-    }
-    return;
-  } else if (id === 'undo') undo();
-  else if (id === 'redo') redo();
-  else if (id === 'cut') commands.cutSelection();
-  else if (id === 'copy') commands.copySelection();
-  else if (id === 'paste') commands.paste();
-  else if (id === 'selectAll') commands.selectAll();
-  else if (id === 'newProject') commands.newProjectOpen.value = true;
-  else if (id === 'openProject') commands.projectsOpen.value = true;
-  else if (id === 'save') saveNow().then(() => toast('Project saved.', { timeout: 2000 }));
-  else if (id === 'import') commands.importDialog();
-  else if (id === 'export') commands.exportOpen.value = true;
-  else if (id === 'zoomIn') commands.zoom(1.5);
-  else if (id === 'prefs') commands.prefsOpen.value = true;
-  else if (id.startsWith('speed:')) commands.setSpeedSelected(Number(id.slice(6)));
-  else if (id === 'retime') commands.openRetime();
-  else if (id === 'reverse') commands.toggleReverse();
-  else if (id.startsWith('ramp:')) commands.applyRamp(id === 'ramp:none' ? null : id.slice(5));
-  else if (id === 'freeze') commands.addFreezeFrame();
-  else if (id === 'expandAudio') commands.toggleExpandAudio();
-  else if (id === 'detachAudio') commands.detachSelectedAudio();
-  else if (id === 'solo') commands.toggleSolo();
-  else if (id === 'lift') commands.liftSelected();
-  else if (id === 'overwriteDown') commands.overwriteSelectedToPrimary();
-  else if (id === 'insertGap') commands.insertGapAtPlayhead();
-  else if (id === 'group') commands.groupSelected();
-  else if (id === 'ungroup') commands.ungroupSelected();
-  else if (id === 'syncAudio') commands.autoSyncAudio();
-  else if (id === 'playReverse') playback.playReverse();
-  else if (id === 'blade') commands.blade();
-  else if (id === 'addTransition') commands.addTransition('dissolve');
-  else if (id === 'toggleEnabled') commands.toggleEnabled();
-  else if (id === 'zoomOut') commands.zoom(1 / 1.5);
-}
 
 // Ferdige undertekster fra Whisper legges inn i undertekstsporet.
 api.onTranscribeDone(({ segments, payload }) => {
@@ -200,11 +37,6 @@ api.onTranscribeError(({ error }) => {
 export function Editor({ active }) {
   const [split, setSplit] = useState(() => Number(localStorage.getItem('editorSplit')) || 0.56);
   const ref = useRef(null);
-
-  useEffect(() => {
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
 
   useEffect(() => {
     if (!active) playback.pause();
@@ -236,170 +68,114 @@ export function Editor({ active }) {
       <div class="divider" onPointerDown={onDividerDown} />
       <Timeline />
       {commands.exportOpen.value && <ExportDialog />}
-      {commands.projectsOpen.value && <ProjectsDialog />}
-      {commands.newProjectOpen.value && <NewProjectDialog />}
       {commands.prefsOpen.value && <PreferencesDialog />}
       {commands.syncDialog.value && <SyncDialog />}
+      {commands.importOptions.value && <ImportOptionsDialog />}
     </div>
   );
 }
 
-function ProjectsDialog() {
-  const [list, setList] = useState(null);
-  const load = () => api.listProjects().then(setList);
-  useEffect(() => {
-    load();
-  }, []);
-  const close = () => (commands.projectsOpen.value = false);
+// Importvalg: kopier til prosjektmappen eller la filene ligge, optimaliser og synk lyd.
+function ImportOptionsDialog() {
+  const { paths } = commands.importOptions.value;
+  const p = prefs.value;
+  const [sync, setSync] = useState(false);
+  const close = () => (commands.importOptions.value = null);
+  const go = () => commands.confirmImport({ copy: p.importCopy, optimize: p.importOptimize, sync });
+  const names = paths.map((x) => x.split(/[\\/]/).pop());
   return (
     <Modal
-      title="Projects"
-      width={560}
-      onClose={close}
-      footer={
-        <Button
-          variant="primary"
-          icon={FilePlus2}
-          onClick={() => {
-            close();
-            commands.newProjectOpen.value = true;
-          }}
-        >
-          New Project
-        </Button>
-      }
-    >
-      <div class="project-list">
-        {list === null && <p class="dim">Loading</p>}
-        {list?.length === 0 && <p class="dim">No saved projects yet.</p>}
-        {list?.map((it) => (
-          <div key={it.path} class={`project-item${it.path === projectPath.value ? ' current' : ''}`}>
-            <button
-              class="open"
-              onClick={async () => {
-                await saveNow();
-                await openProjectFile(it.path);
-                close();
-              }}
-            >
-              <FolderOpen size={16} />
-              <div>
-                <b>{it.name}</b>
-                <span>
-                  {new Date(it.modified).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · {formatDuration(it.duration)}
-                </span>
-              </div>
-            </button>
-            {it.path !== projectPath.value && (
-              <button
-                class="icon-btn"
-                title="Delete project"
-                onClick={async () => {
-                  if (!confirm(`Delete the project "${it.name}"? Your media files are kept.`)) return;
-                  await api.removeProject(it.path);
-                  load();
-                }}
-              >
-                <Trash2 size={15} />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-    </Modal>
-  );
-}
-
-// Nytt prosjekt fra mal: format, bildefrekvens og eventuelt ferdig innhold.
-function NewProjectDialog() {
-  const [tpl, setTpl] = useState('auto');
-  const [name, setName] = useState('');
-  const close = () => (commands.newProjectOpen.value = false);
-  const create = async () => {
-    const t = PROJECT_TEMPLATES.find((x) => x.id === tpl);
-    await newProjectNamed(name.trim() || undefined, t);
-    close();
-  };
-  return (
-    <Modal
-      title="New Project"
-      width={640}
-      onClose={close}
-      footer={
-        <>
-          <Button variant="secondary" onClick={close}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={create}>
-            Create Project
-          </Button>
-        </>
-      }
-    >
-      <Row label="Name" stacked>
-        <input class="text-input" placeholder="Untitled Project" value={name} autoFocus onInput={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && create()} />
-      </Row>
-      <div class="template-grid">
-        {PROJECT_TEMPLATES.map((t) => (
-          <button key={t.id} class={`template${tpl === t.id ? ' active' : ''}`} onClick={() => setTpl(t.id)} onDblClick={create}>
-            <div class="shape-wrap">
-              <div class="shape" style={{ width: Math.round(t.w * Math.min(64 / t.w, 54 / t.h)), height: Math.round(t.h * Math.min(64 / t.w, 54 / t.h)) }}>
-                {t.auto ? 'Auto' : `${t.fps}`}
-              </div>
-            </div>
-            <b>{t.label}</b>
-            <span>{t.desc}</span>
-          </button>
-        ))}
-      </div>
-      <p class="hint">You can change the format, size and frame rate later in the project settings.</p>
-    </Modal>
-  );
-}
-
-// Innstillinger: standardlengder og skumming.
-// Lydklippet passer under flere videoklipp: synk med det første, eller del opp og legg under hvert.
-function SyncDialog() {
-  const { audioId, matches } = commands.syncDialog.value;
-  const p = project.value;
-  const close = () => (commands.syncDialog.value = null);
-  const names = matches.map((m) => p.clips[m.videoId]?.name || 'Clip');
-  return (
-    <Modal
-      title="Auto Sync Audio"
-      width={480}
+      title={`Import ${paths.length === 1 ? names[0] : `${paths.length} Files`}`}
+      width={500}
       onClose={close}
       footer={
         <>
           <Button onClick={close}>Cancel</Button>
-          <Button onClick={() => commands.finishSync(audioId, matches, 'first')}>Sync to First Clip</Button>
-          <Button variant="primary" onClick={() => commands.finishSync(audioId, matches, 'split')}>
+          <Button variant="primary" onClick={go}>
+            Import
+          </Button>
+        </>
+      }
+    >
+      <Section title="Files" collapsible={false}>
+        <Segmented
+          value={p.importCopy ? 'copy' : 'keep'}
+          onChange={(v) => setPrefs({ importCopy: v === 'copy' })}
+          options={[
+            { value: 'copy', label: 'Copy to project folder' },
+            { value: 'keep', label: 'Leave files in place' },
+          ]}
+        />
+        <p class="hint">
+          {p.importCopy
+            ? 'The files are copied into the Media folder of the project, so the project keeps working if the originals are moved or the drive is disconnected.'
+            : 'The project refers to the files where they are now. This saves disk space, but the project needs the files to stay in the same place.'}
+        </p>
+      </Section>
+      <Section title="Transcoding" collapsible={false}>
+        <Row label="Create optimized media">
+          <Toggle checked={p.importOptimize} onChange={(v) => setPrefs({ importOptimize: v })} />
+        </Row>
+        <p class="hint">Converts the clips to a high quality format that is smooth to edit. 10-bit and HDR clips keep their 10 bits. Runs in the background.</p>
+      </Section>
+      {paths.length > 1 && (
+        <Section title="Audio" collapsible={false}>
+          <Row label="Synchronize audio files with video">
+            <Toggle checked={sync} onChange={setSync} />
+          </Row>
+          <p class="hint">Finds audio files that match the sound of the video clips, and adds them to the clips as an extra audio track. The camera audio is switched off but kept.</p>
+        </Section>
+      )}
+    </Modal>
+  );
+}
+
+// Lydklippet passer under flere videoklipp: synk med det første, eller del opp og legg en bit under hvert.
+function SyncDialog() {
+  const { jobs } = commands.syncDialog.value;
+  const p = project.value;
+  const close = () => (commands.syncDialog.value = null);
+  const rows = jobs.flatMap((j) => j.matches.map((m) => ({ ...m, audio: p.clips[j.audioId]?.name || 'Audio' })));
+  const count = rows.length;
+  return (
+    <Modal
+      title="Auto Sync Audio"
+      width={500}
+      onClose={close}
+      footer={
+        <>
+          <Button onClick={close}>Cancel</Button>
+          <Button onClick={() => commands.finishSync(jobs, 'first')}>Sync to First Clip</Button>
+          <Button variant="primary" onClick={() => commands.finishSync(jobs, 'split')}>
             Split and Place
           </Button>
         </>
       }
     >
       <p class="sync-lead">
-        The audio clip matches {matches.length} video clips on the timeline. Sync it to the first clip, or split it and place a matching piece under each clip.
+        The audio matches {count} video clips on the timeline. Each clip was compared with the whole recording, so every piece is placed where its sound matches, even if the clips are in a different order. Sync it to the first clip, or split it and place a matching piece under each clip.
       </p>
       <ul class="sync-list">
-        {names.map((n, i) => (
+        {rows.map((r, i) => (
           <li key={i}>
-            <span>{n}</span>
-            <span class="muted">{Math.round(matches[i].score * 100)}% match</span>
+            <span>
+              {p.clips[r.videoId]?.name || 'Clip'} <span class="muted">from {r.audio} at {formatTimecode(Math.max(0, r.at), p.fps)}</span>
+            </span>
+            <span class="muted">{Math.round(r.score * 100)}% match</span>
           </li>
         ))}
       </ul>
       <Row label="Group audio with the video">
         <Toggle checked={prefs.value.syncGroup} onChange={(v) => setPrefs({ syncGroup: v })} />
       </Row>
-      <Row label="Mute the camera audio">
+      <Row label="Switch off the camera audio (kept in the clip)">
         <Toggle checked={prefs.value.syncMuteCamera} onChange={(v) => setPrefs({ syncMuteCamera: v })} />
       </Row>
     </Modal>
   );
 }
 
+// Innstillinger: standardlengder, skumming, synk og import.
 function PreferencesDialog() {
   const p = prefs.value;
   const close = () => (commands.prefsOpen.value = false);
@@ -453,7 +229,7 @@ function PreferencesDialog() {
         <Row label="Group synced audio with the video">
           <Toggle checked={p.syncGroup} onChange={(v) => setPrefs({ syncGroup: v })} />
         </Row>
-        <Row label="Mute the camera audio after syncing">
+        <Row label="Switch off the camera audio after syncing">
           <Toggle checked={p.syncMuteCamera} onChange={(v) => setPrefs({ syncMuteCamera: v })} />
         </Row>
       </Section>

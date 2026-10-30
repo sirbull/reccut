@@ -3,7 +3,7 @@ import { useMemo, useState } from 'preact/hooks';
 import { Apple, Feather, FileVideo, Film, FolderOpen, Gem, Globe, Image as ImageIcon, Music } from 'lucide-preact';
 import { CAPTION_LANE, formatDuration } from '../../shared/model.js';
 import { AUDIO_FORMATS, CAPTION_EXPORT, CAPTION_EXPORT_AUDIO, PRESETS, QUALITIES, VIDEO_FORMATS, estimateSize, formatBytes, outputSize } from '../../shared/formats.js';
-import { project, room } from './store.js';
+import { project, projectFolders, room } from './store.js';
 import { exportOpen } from './commands.js';
 import { Button, Modal, Row, Segmented, Select, toast } from '../ui.jsx';
 
@@ -23,8 +23,9 @@ export async function startExport(p, settings) {
   return id;
 }
 
+// Eksporter legges i prosjektets Exports-mappe.
 export async function defaultExportDir() {
-  return `${await api.baseDir()}${api.platform === 'win32' ? '\\' : '/'}Exports`;
+  return projectFolders.value?.exports || `${await api.baseDir()}${api.platform === 'win32' ? '\\' : '/'}Exports`;
 }
 
 api.onExportDone(({ file }) => {

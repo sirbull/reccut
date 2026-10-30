@@ -162,7 +162,7 @@ export function clipAudioSource(project, clip) {
   if (clip.type === 'recording') key = media.streams.camera?.hasAudio ? 'camera' : 'screen';
   const stream = media.streams[key];
   if (!stream?.hasAudio || !stream.wave) return null;
-  return { key, stream, offset: media.kind === 'recording' ? stream.offset || 0 : 0 };
+  return { key, stream, offset: stream.offset || 0 };
 }
 
 export function syncCandidates(project, audioId) {
@@ -240,12 +240,81 @@ export function applySync(project, audioId, matches, { mode = 'first', muteCamer
       v.group = g;
       c.group = g;
     }
+    // Kameralyden slås av, men blir liggende i klippet og kan slås på igjen (V eller Audio Components).
     if (muteCamera) {
-      const prop = v.type === 'recording' ? 'micVolume' : 'volume';
-      v.props[prop] = -60;
-      if (v.kf) delete v.kf[prop];
+      const key = clipAudioSource(project, v)?.key;
+      if (key) v.props.audioOff = { ...(v.props.audioOff || {}), [key]: true };
     }
     placed.push(c.id);
   }
   return placed;
+}
+
+/* Synk i biblioteket: lydfiler flettes inn i videoene de hører til, som en ekstra lydkomponent.
+   Kameralyden slås av som standard, men blir liggende og kan slås på igjen. */
+
+// Referanselyden i et medium: kameralyden i en video, mikrofonen (eller systemlyden) i et opptak.
+export function mediaReference(media) {
+  if (!media || (media.kind !== 'video' && media.kind !== 'recording')) return null;
+  const key = media.kind === 'recording' ? (media.streams.camera?.hasAudio ? 'camera' : 'screen') : 'main';
+  const stream = media.streams[key];
+  return stream?.hasAudio && stream.wave ? { key, stream } : null;
+}
+
+/**
+ * Finner hvilke lydfiler som hører til hvilke videoer. Én lydfil kan passe til flere videoer
+ * (en lang opptaker under flere kameraklipp), og én video kan få flere lydfiler (flere mikrofoner).
+ * Svar: [{ videoId, audioId, offset, score }], der offset gjør at lydfilens tid = mediatid minus offset.
+ */
+export function planMediaSync(project, ids, waveFor) {
+  const media = ids.map((id) => project.media[id]).filter(Boolean);
+  const videos = media.filter((m) => mediaReference(m));
+  const audios = media.filter((m) => m.kind === 'audio' && m.streams.main?.wave);
+  const out = [];
+  for (const a of audios) {
+    const wa = waveFor(a.streams.main.wave);
+    if (!wa) continue;
+    const y = prepareEnvelope(wa.peaks);
+    for (const v of videos) {
+      const ref = mediaReference(v);
+      const wv = waveFor(ref.stream.wave);
+      if (!wv) continue;
+      const r = findOffset(prepareEnvelope(wv.peaks), y);
+      if (!isConfident(r)) continue;
+      out.push({ videoId: v.id, audioId: a.id, offset: Math.round(((ref.stream.offset || 0) - r.lag / ENV_RATE) * 1e4) / 1e4, score: r.score });
+    }
+  }
+  return out;
+}
+
+export function applyMediaSync(project, matches, { muteCamera = true } = {}) {
+  for (const m of matches) {
+    const v = project.media[m.videoId];
+    const a = project.media[m.audioId];
+    if (!v || !a) continue;
+    const ref = mediaReference(v);
+    const key = `sync_${a.id}`;
+    const src = a.streams.main;
+    v.streams = { ...v.streams, [key]: { ...src, offset: m.offset, hasVideo: false, hasAudio: true, label: a.name.replace(/\.[^.]+$/, ''), syncedFrom: a.id, thumbs: undefined, reversed: undefined } };
+    if (muteCamera && ref) {
+      v.audioOff = { ...(v.audioOff || {}), [ref.key]: true };
+      for (const c of Object.values(project.clips)) {
+        if (c.mediaId === v.id && c.type !== 'audio') c.props.audioOff = { ...(c.props.audioOff || {}), [ref.key]: true };
+      }
+    }
+  }
+}
+
+// Fjerner synket lyd fra et medium og slår kameralyden på igjen.
+export function removeMediaSync(project, videoId) {
+  const v = project.media[videoId];
+  if (!v) return;
+  v.streams = Object.fromEntries(Object.entries(v.streams).filter(([, st]) => !st.syncedFrom));
+  delete v.audioOff;
+  for (const c of Object.values(project.clips)) {
+    if (c.mediaId !== videoId || !c.props.audioOff) continue;
+    c.props.audioOff = Object.fromEntries(Object.entries(c.props.audioOff).filter(([k]) => v.streams[k]));
+    const ref = mediaReference(v);
+    if (ref) delete c.props.audioOff[ref.key];
+  }
 }

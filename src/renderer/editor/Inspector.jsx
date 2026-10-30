@@ -3,6 +3,7 @@ import { useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { ChevronLeft, ChevronRight, Diamond, Plus, RotateCcw, Sparkles, Trash2 } from 'lucide-preact';
 import {
+  audioComponents,
   ANIMATION_PRESETS,
   RAMP_PRESETS,
   CAPTION_LANE,
@@ -27,7 +28,7 @@ import {
 import { setClipDuration, setSpeed, setTransition } from '../../shared/ops.js';
 import { beginTransient, commit, endTransient, project, selectedClips, selectedTransition, timeSig, updateTransient } from './store.js';
 import { seek } from './playback.js';
-import { inspectorTab, newProjectOpen } from './commands.js';
+import { inspectorTab, newProjectOpen, toggleComponent } from './commands.js';
 import { Button, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
 
 export function Inspector() {
@@ -307,10 +308,28 @@ function EffectsTab({ clip }) {
   );
 }
 
+// Lydkomponenter: velg hvilke lydspor klippet bruker. Det som slås av, blir liggende og kan slås på igjen.
+function AudioComponentsSection({ clip }) {
+  const media = project.value.media[clip.mediaId];
+  const comps = audioComponents(clip, media);
+  if (clip.type === 'audio' || comps.length < 2) return null;
+  return (
+    <Section title="Audio Components">
+      {comps.map((c) => (
+        <Row key={c.key} label={c.label}>
+          <Toggle checked={!c.off} onChange={(v) => toggleComponent(clip.id, c.key, v)} />
+        </Row>
+      ))}
+      <p class="hint">Switch off the audio you do not want to use. It stays with the clip, so you can switch it back on at any time. Expand the audio ({window.api.platform === 'darwin' ? 'Control S' : 'Alt E'}) to see each component on the timeline, click one and press V.</p>
+    </Section>
+  );
+}
+
 function AudioTab({ clip }) {
   const isMac = window.api.platform === 'darwin';
   return (
     <>
+      <AudioComponentsSection clip={clip} />
       <Section title="Volume">
         <Param clip={clip} prop="volume" label="Volume" min={-60} max={12} step={0.5} precision={1} unit="dB" center={0} />
         <p class="hint">{isMac ? 'Option' : 'Alt'} click the volume line on the clip to add keyframes. {isMac ? 'Control' : 'Alt'} + and {isMac ? 'Control' : 'Alt'} - change the level by 1 dB.</p>
@@ -613,6 +632,7 @@ function RecordingTab({ clip, media }) {
         </Row>
         <p class="hint">Blade the clip (B or {window.api.platform === 'darwin' ? 'Cmd' : 'Ctrl'} B) to turn overlays on or off for part of the recording.</p>
       </Section>
+      <AudioComponentsSection clip={clip} />
       <Section title="Audio">
         {media?.streams?.camera?.hasAudio && <Param clip={clip} prop="micVolume" label="Microphone" min={-60} max={12} step={0.5} precision={1} unit="dB" center={0} />}
         {media?.streams?.screen?.hasAudio && <Param clip={clip} prop="sysVolume" label="System audio" min={-60} max={12} step={0.5} precision={1} unit="dB" center={0} />}

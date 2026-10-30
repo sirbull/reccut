@@ -24,7 +24,6 @@ const DEFAULTS = {
   pipShape: 'rect',
   mirror: false,
   fps: 30,
-  outputDir: null,
   hideFromCapture: true,
   modifier: MODIFIERS[0].value,
   showKeys: true,

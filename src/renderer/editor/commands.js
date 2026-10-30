@@ -1,7 +1,7 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
-import { CAPTION_LANE, EFFECTS, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
-import { applySync, clipAudioSource, planSync } from '../../shared/sync.js';
+import { CAPTION_LANE, EFFECTS, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
+import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
 import {
   adjacentAudioPairs,
   groupClips,
@@ -35,6 +35,8 @@ import {
   makeCaptionClip,
   makeTitleClip,
   project,
+  projectFolders,
+  selectedComponent,
   selectedTransition,
   selection,
 } from './store.js';
@@ -44,7 +46,12 @@ import { prefs } from '../prefs.js';
 
 const api = window.api;
 
+// Fanen i biblioteket: media, titles, transitions, effects eller captions.
+export const browserTab = signal('media');
 export const browserSelection = signal(null);
+// Alle medier som er valgt i biblioteket, og om biblioteket sist ble brukt (for Cmd A og synk).
+export const browserPicked = signal([]);
+export const browserFocus = signal(false);
 export const exportOpen = signal(false);
 export const projectsOpen = signal(false);
 export const inspectorTab = signal(null);
@@ -150,12 +157,26 @@ export function deleteSelection(ripple = true) {
   selection.value = [];
 }
 
+// V: slår valgt klipp av og på. Klippet blir liggende, men grått. Er en lydkomponent valgt, gjelder det bare den.
 export function toggleEnabled() {
+  const sc = selectedComponent.value;
+  if (sc && selection.value.includes(sc.clipId)) return toggleComponent(sc.clipId, sc.key);
   const ids = selection.value.length ? selection.value : targetClipsAtPlayhead();
   if (!ids.length) return;
   commit((p) => {
     const on = !ids.every((id) => p.clips[id]?.enabled);
     for (const id of ids) if (p.clips[id]) p.clips[id].enabled = on;
+  });
+}
+
+export function toggleComponent(clipId, key, on = null) {
+  const c = project.value.clips[clipId];
+  if (!c) return;
+  const value = on ?? Boolean(c.props.audioOff?.[key]);
+  commit((p) => {
+    const q = p.clips[clipId];
+    q.props.audioOff = { ...(q.props.audioOff || {}), [key]: !value };
+    if (!q.props.audioOff[key]) delete q.props.audioOff[key];
   });
 }
 
@@ -230,6 +251,10 @@ export function trimToPlayhead(edge) {
 }
 
 export function selectAll() {
+  if (browserFocus.value) {
+    browserPicked.value = Object.keys(project.value.media);
+    return;
+  }
   selection.value = Object.keys(project.value.clips);
 }
 
@@ -254,6 +279,10 @@ export function paste() {
 export function addMarker() {
   const T = getTime();
   commit((p) => p.markers.push({ id: Math.random().toString(36).slice(2), t: T, label: '' }));
+}
+
+export function deleteMarkerAt(id) {
+  commit((p) => (p.markers = (p.markers || []).filter((m) => m.id !== id)));
 }
 
 export function setRange(which) {
@@ -320,9 +349,19 @@ export function addVolumeKeyframe(clipId, T) {
 
 /* Media inn på tidslinjen */
 
+// Import (Cmd I): velg filer, deretter importvalg som i Final Cut Pro.
+export const importOptions = signal(null); // { paths, placement }
 export async function importDialog(placement) {
   const paths = await api.openMediaDialog();
-  if (paths.length) await importPaths(paths, placement);
+  if (paths.length) importOptions.value = { paths, placement };
+}
+
+export async function confirmImport(opts) {
+  const req = importOptions.value;
+  importOptions.value = null;
+  if (!req) return;
+  const items = await importPaths(req.paths, req.placement, opts);
+  if (opts.sync && items.length > 1) syncMediaAudio(items.map((m) => m.id));
 }
 
 // Utvalg i biblioteket: et helt klipp eller et område valgt i filmstripen.
@@ -335,18 +374,32 @@ export function browserClipOpts(m) {
 }
 
 export function addBrowserSelection(mode) {
-  const id = browserSelection.value;
-  const m = id && project.value.media[id];
-  if (!m) {
+  const picked = browserPicked.value.filter((id) => project.value.media[id]);
+  const ids = picked.length > 1 ? mediaOrderOf(picked) : [browserSelection.value].filter((id) => project.value.media[id]);
+  if (!ids.length) {
     toast('Select a clip in the browser first.');
     return;
   }
-  let clipId = null;
+  const added = [];
   commit((p) => {
-    autoFormat(p, m);
-    clipId = addMediaClip(p, m, mode, getTime(), undefined, browserClipOpts(m));
+    let T = getTime();
+    for (const id of ids) {
+      const m = p.media[id];
+      autoFormat(p, m);
+      const clipId = addMediaClip(p, m, mode, T, undefined, ids.length === 1 ? browserClipOpts(m) : m.kind === 'image' ? { dur: prefs.value.stillDur } : {});
+      if (!clipId) continue;
+      added.push(clipId);
+      // Neste klipp legges etter dette (append legger alltid til på slutten).
+      if (mode !== 'append') T = p.clips[clipId].start + p.clips[clipId].dur;
+    }
   });
-  if (clipId) selection.value = [clipId];
+  if (added.length) selection.value = added;
+}
+
+// Medier i samme rekkefølge som i biblioteket.
+function mediaOrderOf(ids) {
+  const keys = Object.keys(project.value.media);
+  return [...ids].sort((a, b) => keys.indexOf(a) - keys.indexOf(b));
 }
 
 /* Fart, frosset bilde og lyd */
@@ -473,49 +526,120 @@ export function openRetime() {
 /* Automatisk synk av lyd: legg lydklippet under videoen det hører til. */
 
 const waveCache = new Map();
-async function loadWaves(project, ids) {
-  const paths = new Set();
-  for (const id of ids) {
-    const src = clipAudioSource(project, project.clips[id]);
-    if (src && !waveCache.has(src.stream.wave)) paths.add(src.stream.wave);
-  }
-  await Promise.all([...paths].map(async (path) => waveCache.set(path, await api.readWave(path).catch(() => null))));
+async function loadWavePaths(paths) {
+  const need = [...new Set(paths.filter((x) => x && !waveCache.has(x)))];
+  await Promise.all(need.map(async (path) => waveCache.set(path, await api.readWave(path).catch(() => null))));
   return (path) => waveCache.get(path) || null;
 }
+function loadWaves(project, ids) {
+  return loadWavePaths(ids.map((id) => clipAudioSource(project, project.clips[id])?.stream.wave));
+}
 
+/**
+ * Automatisk synk på tidslinjen. Ett eller flere lydklipp kan være valgt. Hvert videoklipp
+ * sammenlignes med hele lydklippet, så hver bit finner sitt eget sted i lyden, også om
+ * klippene er tatt opp i en annen rekkefølge enn de ligger på tidslinjen. Passer et
+ * videoklipp i flere lydklipp, brukes det beste treffet.
+ */
 export async function autoSyncAudio(audioId = null) {
+  if (!audioId && browserFocus.value && browserPicked.value.length) return syncMediaAudio();
   const p = project.value;
   const sel = selection.value.map((id) => p.clips[id]).filter(Boolean);
-  const audio = audioId ? p.clips[audioId] : sel.find((c) => c.type === 'audio');
-  if (!audio || audio.type !== 'audio') return toast('Select an audio clip to synchronize it with the video.');
-  if ((audio.speed ?? 1) !== 1 || audio.ramp || audio.reverse) return toast('Set the audio clip back to normal speed before synchronizing it.');
-  const media = p.media[audio.mediaId];
-  if (!clipAudioSource(p, audio)) {
-    return toast(media?.streams && Object.values(media.streams).some((s) => s.hasAudio) ? 'The audio is still being analyzed. Try again in a moment.' : 'This clip has no audio to synchronize.');
-  }
+  const audios = audioId ? [p.clips[audioId]] : sel.filter((c) => c.type === 'audio');
+  if (!audios.length || audios.some((c) => c?.type !== 'audio')) return toast('Select one or more audio clips to synchronize them with the video.');
+  if (audios.some((a) => (a.speed ?? 1) !== 1 || a.ramp || a.reverse)) return toast('Set the audio clips back to normal speed before synchronizing them.');
+  if (audios.some((a) => !clipAudioSource(p, a))) return toast('The audio is still being analyzed. Try again in a moment.');
   // Er det også valgt videoklipp, synkes det bare mot dem.
   const videos = sel.filter((c) => c.type === 'video' || c.type === 'recording').map((c) => c.id);
   const candidates = Object.values(p.clips).filter((c) => (c.type === 'video' || c.type === 'recording') && (!videos.length || videos.includes(c.id)));
-  const waveFor = await loadWaves(p, [audio.id, ...candidates.map((c) => c.id)]);
-  const matches = planSync(project.value, audio.id, waveFor, { only: videos.length ? videos : null });
-  if (!matches.length) return toast('Could not find matching audio in the video clips on the timeline.', { kind: 'error', timeout: 6000 });
-  if (matches.length > 1) {
-    syncDialog.value = { audioId: audio.id, matches };
+  const waveFor = await loadWaves(p, [...audios.map((a) => a.id), ...candidates.map((c) => c.id)]);
+  const best = new Map();
+  for (const a of audios) {
+    for (const m of planSync(project.value, a.id, waveFor, { only: videos.length ? videos : null })) {
+      const prev = best.get(m.videoId);
+      if (!prev || m.score > prev.score) best.set(m.videoId, { ...m, audioId: a.id });
+    }
+  }
+  const jobs = audios
+    .map((a) => ({ audioId: a.id, matches: [...best.values()].filter((m) => m.audioId === a.id).sort((x, y) => p.clips[x.videoId].start - p.clips[y.videoId].start) }))
+    .filter((j) => j.matches.length);
+  if (!jobs.length) return toast('Could not find matching audio in the video clips on the timeline.', { kind: 'error', timeout: 6000 });
+  if (jobs.some((j) => j.matches.length > 1)) {
+    syncDialog.value = { jobs };
     return;
   }
-  finishSync(audio.id, matches, 'first');
+  finishSync(jobs, 'first');
 }
 
-export function finishSync(audioId, matches, mode) {
+export function finishSync(jobs, mode) {
   const opts = { mode, muteCamera: prefs.value.syncMuteCamera, group: prefs.value.syncGroup };
   let placed = [];
-  commit((q) => (placed = applySync(q, audioId, matches, opts)));
+  commit((q) => {
+    for (const j of jobs) placed = placed.concat(applySync(q, j.audioId, j.matches, opts));
+  });
   syncDialog.value = null;
   if (!placed.length) return toast('The audio did not overlap the matching video.');
   // Velg den første gruppen (video og lyd), så den kan flyttes med en gang.
   selection.value = groupMembers(project.value, placed[0]);
   const n = placed.length;
   toast(n > 1 ? `Audio synchronized and placed under ${n} clips.` : 'Audio synchronized with the video.', { timeout: 3500 });
+}
+
+/* Synk i biblioteket: lyden flettes inn i videoen som en ekstra lydkomponent. */
+export async function syncMediaAudio(ids = null) {
+  const p = project.value;
+  ids = ids || browserTargets();
+  const media = ids.map((id) => p.media[id]).filter(Boolean);
+  const videos = media.filter((m) => m.kind === 'video' || m.kind === 'recording');
+  const audios = media.filter((m) => m.kind === 'audio');
+  if (!videos.length || !audios.length) return toast('Select video clips and the audio files that belong to them in the browser, then choose Synchronize Audio.');
+  if ([...videos.map(mediaReference), ...audios.map((a) => a.streams.main?.wave)].some((x) => !x)) {
+    if (videos.some((v) => !Object.values(v.streams).some((s) => s.hasAudio))) return toast('Some of the video clips have no audio to compare with.');
+    return toast('The media is still being analyzed. Try again in a moment.');
+  }
+  const waveFor = await loadWavePaths([...videos.map((v) => mediaReference(v).stream.wave), ...audios.map((a) => a.streams.main.wave)]);
+  const plan = planMediaSync(project.value, ids, waveFor);
+  if (!plan.length) return toast('Could not find audio that matches the selected video clips.', { kind: 'error', timeout: 6000 });
+  commit((q) => applyMediaSync(q, plan, { muteCamera: true }));
+  const synced = new Set(plan.map((x) => x.videoId)).size;
+  const missing = videos.length - synced;
+  toast(`Synchronized ${synced} of ${videos.length} video clip${videos.length > 1 ? 's' : ''}. The camera audio is switched off but kept.${missing ? ` ${missing} clip${missing > 1 ? 's' : ''} had no matching audio.` : ''}`, { kind: 'success', timeout: 7000 });
+}
+
+export function removeSyncedAudio(ids = null) {
+  const list = (ids || browserTargets()).filter((id) => Object.values(project.value.media[id]?.streams || {}).some((s) => s.syncedFrom));
+  if (!list.length) return toast('The selected clips have no synchronized audio.');
+  commit((q) => list.forEach((id) => removeMediaSync(q, id)));
+}
+
+/* Optimalisert media: omkoding i bakgrunnen til prosjektets mappe for optimalisert media. */
+export async function optimizeMedia(ids = null) {
+  const p = project.value;
+  const list = (ids || browserTargets()).map((id) => p.media[id]).filter((m) => m && m.kind !== 'image' && Object.values(m.streams).some((s) => s.hasVideo && !s.optimized));
+  if (!list.length) return toast(ids ? 'These clips are already optimized.' : 'Select video clips in the browser to optimize them.');
+  const folders = projectFolders.value || (await api.projectFolders(null));
+  await api.optimizeMedia(list, folders.optimized);
+  toast(`Optimizing ${list.length === 1 ? list[0].name : `${list.length} clips`} in the background. Progress is shown at the top.`, { timeout: 4000 });
+}
+
+// Medier valgt i biblioteket, eller medier til klippene som er valgt på tidslinjen.
+export function browserTargets() {
+  if (browserFocus.value && browserPicked.value.length) return browserPicked.value;
+  const p = project.value;
+  const fromTimeline = [...new Set(selection.value.map((id) => p.clips[id]?.mediaId).filter(Boolean))];
+  return fromTimeline.length ? fromTimeline : browserPicked.value;
+}
+
+// Flervalg i biblioteket: Cmd/Ctrl klikk legger til, Shift klikk velger et område.
+export function pickMedia(e, id, order) {
+  const cur = browserPicked.value;
+  if (e?.metaKey || e?.ctrlKey) browserPicked.value = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+  else if (e?.shiftKey && browserSelection.value && order.includes(browserSelection.value)) {
+    const [a, b] = [order.indexOf(browserSelection.value), order.indexOf(id)].sort((x, y) => x - y);
+    browserPicked.value = order.slice(a, b + 1);
+  } else browserPicked.value = [id];
+  if (!e?.shiftKey) browserSelection.value = id;
+  browserFocus.value = true;
 }
 
 /* Grupper (Cmd/Ctrl G): lyden følger videoen når den flyttes. */
@@ -547,19 +671,27 @@ export async function handleDrop(dt, lane, T) {
   if (raw) {
     const item = JSON.parse(raw);
     if (item.kind === 'media') {
-      const m = project.value.media[item.id];
-      if (!m) return;
-      let clipId = null;
+      // Flere valgte medier legges etter hverandre.
+      const list = (item.ids || [item.id]).map((id) => project.value.media[id]).filter(Boolean);
+      if (!list.length) return;
+      const added = [];
       commit((p) => {
-        autoFormat(p, m);
-        const audio = m.kind === 'audio';
-        const mode = lane === 0 && !audio ? 'insert' : 'connect';
-        let l = lane;
-        if (audio && l >= 0) l = -1;
-        if (!audio && (l < 0 || l === CAPTION_LANE)) l = 1;
-        clipId = addMediaClip(p, m, mode, T, l, browserClipOpts(m));
+        let t = T;
+        for (const m of list) {
+          autoFormat(p, m);
+          const audio = m.kind === 'audio';
+          const mode = lane === 0 && !audio ? 'insert' : 'connect';
+          let l = lane;
+          if (audio && l >= 0) l = -1;
+          if (!audio && (l < 0 || l === CAPTION_LANE)) l = 1;
+          const id = addMediaClip(p, m, mode, t, l, list.length === 1 ? browserClipOpts(m) : m.kind === 'image' ? { dur: prefs.value.stillDur } : {});
+          if (id) {
+            added.push(id);
+            t = p.clips[id].start + p.clips[id].dur;
+          }
+        }
       });
-      if (clipId) selection.value = [clipId];
+      if (added.length) selection.value = added;
     } else if (item.kind === 'title') {
       addTitle(item.id, T);
     } else if (item.kind === 'effect') {
@@ -627,6 +759,8 @@ export async function clipContextMenu(clipId, T) {
     items.push({ id: 'expand', label: c.expanded ? 'Collapse Audio' : 'Expand Audio', accelerator: isMac ? 'Ctrl+S' : 'Alt+E' });
     items.push({ id: 'detach', label: 'Detach Audio', accelerator: isMac ? 'Ctrl+Shift+S' : 'Alt+Shift+E' });
   }
+  const comps = audioComponents(c, media);
+  if (c.type !== 'audio' && comps.length > 1) items.push({ label: 'Audio Components', submenu: comps.map((x) => ({ id: `comp:${x.key}`, label: x.label, checked: !x.off })) });
   if (hasAudio || c.type === 'audio') items.push({ id: 'solo', label: c.solo ? 'Unsolo' : 'Solo', accelerator: 'Alt+S' });
   if (c.type === 'audio') items.push({ id: 'sync', label: 'Auto Sync Audio', accelerator: isMac ? 'Alt+Cmd+G' : 'Ctrl+Alt+G' });
   items.push({ separator: true });
@@ -642,6 +776,7 @@ export async function clipContextMenu(clipId, T) {
   if (id?.startsWith('speed:')) return setSpeedSelected(Number(id.slice(6)));
   if (id?.startsWith('ramp:')) return applyRamp(id === 'ramp:none' ? null : id.slice(5));
   if (id === 'reverse') return toggleReverse();
+  if (id?.startsWith('comp:')) return toggleComponent(clipId, id.slice(5));
   switch (id) {
     case 'freeze':
       seek(Math.min(Math.max(T, c.start), c.start + c.dur - 1e-3));

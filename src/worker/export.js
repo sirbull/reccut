@@ -1,7 +1,7 @@
 // Eksport i et skjult vindu. Hvert bilde tegnes med samme kode som forhåndsvisningen,
 // kodes med WebCodecs (maskinvare) eller FFmpeg, og lyden mikses med nøkkelbilder.
 import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOutputFormat, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, WebMOutputFormat, canEncodeVideo } from 'mediabunny';
-import { CAPTION_LANE, clipHasAudio, computeAudio, computeFrame, sourceTime } from '../shared/model.js';
+import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sourceTime, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 import { AUDIO_FORMATS, QUALITIES, VIDEO_FORMATS, audioKbps, outputGeometry, videoBitrate } from '../shared/formats.js';
 import { toSrt, toVtt } from '../shared/srt.js';
@@ -69,7 +69,7 @@ function writeAsync(stream, buf) {
 function streamInfo(project, clip, key) {
   const m = project.media[clip.mediaId];
   const s = m?.streams?.[key];
-  return s ? { path: s.proxy || s.path, offset: m.kind === 'recording' ? s.offset || 0 : 0 } : null;
+  return s ? { path: workPath(s), offset: s.offset || 0 } : null;
 }
 
 // Tempo-filter for endret fart. atempo støtter 0.5 til 100, så små verdier lenkes.
@@ -96,7 +96,8 @@ async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
     const m = project.media[c.mediaId];
     if (!clipHasAudio(c, m)) continue;
     if (c.start > b + PAD || c.start + c.dur < a - PAD) continue;
-    const keys = c.type === 'recording' ? Object.keys(m.streams).filter((k) => m.streams[k].hasAudio) : [c.stream || 'main'];
+    // Lydkomponentene som er på (kameralyd, synket lyd, mikrofon og systemlyd).
+    const keys = audioComponents(c, m).filter((x) => !x.off).map((x) => x.key);
     const speed = c.speed ?? 1;
     // Fartsramper og baklengs: lyden leses fra kildeposisjonen for hver prøve (generell vei).
     const generic = Boolean(c.ramp || c.reverse);
@@ -306,7 +307,7 @@ function neededFrames(project, frame) {
         out.push({ clip, key, path: st.reversed, image: false, t: st.duration - t, rev: true });
         continue;
       }
-      out.push({ clip, key, path: m.kind === 'image' ? st.proxy || m.path : st.proxy || st.path, image: m.kind === 'image', t });
+      out.push({ clip, key, path: m.kind === 'image' ? st.proxy || m.path : workPath(st), image: m.kind === 'image', t });
     }
   };
   for (const l of frame.layers) {

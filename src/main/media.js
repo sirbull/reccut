@@ -48,6 +48,8 @@ function kindFromProbe(info) {
 
 function needsOptimizing(file, info) {
   const ext = path.extname(file).toLowerCase();
+  // HDR tonemappes til en arbeidskopi, så bildet ser likt ut i visningen og eksporten.
+  if (info.hasVideo && info.color?.hdr) return true;
   if (!PLAYABLE_CONTAINERS.has(ext)) return true;
   if (info.hasVideo && !PLAYABLE_VIDEO.has(info.videoCodec)) return true;
   // 10-bit og 4:2:2 H.264 kan ikke spilles av i Chromium.
@@ -72,6 +74,7 @@ async function streamFromFile(file, kind, info) {
     height: info.height,
     fps: info.fps,
     needsProxy: kind !== 'image' && needsOptimizing(file, info),
+    color: info.hasVideo ? info.color : undefined,
   };
   return stream;
 }
@@ -157,19 +160,20 @@ function scheduleAnalysis(media, notify) {
         const patch = {};
         let source = stream.path;
 
-        if (stream.needsProxy) {
-          const proxy = path.join(dir, 'optimalisert.mp4');
+        if (stream.needsProxy && !stream.optimized) {
+          const old = path.join(dir, 'optimalisert.mp4');
+          const proxy = !stream.color?.hdr && fs.existsSync(old) ? old : path.join(dir, `arbeidskopi${ff.transcodeExt(stream.color)}`);
           if (!fs.existsSync(proxy)) {
-            ctx.progress(0, 'Creating optimized media');
-            const tmp = proxy + '.tmp.mp4';
-            const job = ff.optimize(stream.path, tmp, stream.duration, (p) => ctx.progress(p * 0.7));
+            ctx.progress(0, stream.color?.hdr ? 'Tone mapping HDR' : 'Creating a playable copy');
+            const tmp = proxy + `.tmp${path.extname(proxy)}`;
+            const job = ff.transcode(stream.path, tmp, { color: stream.color, duration: stream.duration, quality: 'proxy' }, (p) => ctx.progress(p * 0.7));
             ctx.setCancel(job.kill);
             await job.promise;
             await fs.promises.rename(tmp, proxy);
           }
           patch.proxy = proxy;
           source = proxy;
-        }
+        } else if (stream.optimized && fs.existsSync(stream.optimized)) source = stream.optimized;
 
         if (stream.hasVideo && media.kind !== 'image') {
           const thumbDir = path.join(dir, 'thumbs');
@@ -217,6 +221,7 @@ async function recordingMedia(dir, notify) {
       width: info.width,
       height: info.height,
       fps: info.fps,
+      color: info.hasVideo ? info.color : undefined,
       needsProxy: false,
     };
   }
@@ -244,7 +249,7 @@ async function recordingMedia(dir, notify) {
 // Tid r i kopien tilsvarer tid (varighet minus r) i originalen.
 const reversing = new Map();
 function reverseStream(stream, ctx, share = [0, 1]) {
-  const source = stream.proxy || stream.path;
+  const source = stream.optimized || stream.proxy || stream.path;
   const key = source;
   if (reversing.has(key)) return reversing.get(key);
   const job = (async () => {
@@ -298,9 +303,46 @@ function scheduleReverse(media, notify) {
   });
 }
 
+/**
+ * Optimalisert media: omkoder strømmene til et format som er godt å redigere med
+ * (se ff.transcode) og legger filene i prosjektets mappe for optimalisert media.
+ */
+function scheduleOptimize(media, outDir, notify) {
+  const keys = Object.keys(media.streams).filter((k) => media.streams[k].hasVideo && !media.streams[k].optimized);
+  if (media.kind === 'image' || !keys.length) return null;
+  return jobs.add({
+    kind: 'optimize',
+    title: `Optimizing ${media.name}`,
+    queue: 'optimize',
+    run: async (ctx) => {
+      await fs.promises.mkdir(outDir, { recursive: true });
+      for (const [i, key] of keys.entries()) {
+        const st = media.streams[key];
+        const stem = path.basename(media.kind === 'recording' ? `${media.name} ${key}` : media.name, path.extname(media.name));
+        const ext = ff.transcodeExt(st.color);
+        let out = path.join(outDir, `${stem}${ext}`);
+        let n = 2;
+        while (fs.existsSync(out)) out = path.join(outDir, `${stem} ${n++}${ext}`);
+        const tmp = out + `.part${ext}`;
+        const job = ff.transcode(st.path, tmp, { color: st.color, duration: st.duration, quality: 'optimized' }, (p) => ctx.progress((i + Math.min(1, p)) / keys.length, st.color?.hdr ? 'Tone mapping HDR' : 'Transcoding'));
+        ctx.setCancel(job.kill);
+        try {
+          await job.promise;
+        } catch (err) {
+          await fs.promises.unlink(tmp).catch(() => {});
+          throw err;
+        }
+        await fs.promises.rename(tmp, out);
+        notify({ mediaId: media.id, stream: key, patch: { optimized: out } });
+      }
+      return outDir;
+    },
+  });
+}
+
 // Alle filendelser appen kjenner, for importdialogen.
 function extensions() {
   return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT].map((e) => e.slice(1));
 }
 
-module.exports = { reverseStream, scheduleReverse, extensions, importFiles, recordingMedia, kindOf, cacheRoot, newId };
+module.exports = { scheduleOptimize, reverseStream, scheduleReverse, extensions, importFiles, recordingMedia, kindOf, cacheRoot, newId };

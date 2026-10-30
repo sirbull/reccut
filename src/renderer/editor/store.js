@@ -18,6 +18,8 @@ export const project = signal(newProject());
 export const projectPath = signal(null);
 export const selection = signal([]);
 export const selectedTransition = signal(null);
+// Valgt lydkomponent i utvidet lyd: { clipId, key }. V slår den av og på.
+export const selectedComponent = signal(null);
 export const tool = signal('select');
 export const snapping = signal(prefs.value.snapping);
 // Skumming som i Final Cut Pro: S slår av og på, N slår lyden av og på.
@@ -31,6 +33,10 @@ export const timeSig = signal(0);
 export const tasks = signal([]);
 export const waveVersion = signal(0);
 export const saveState = signal('saved');
+// Mappene til det åpne prosjektet: { root, media, recordings, optimized, exports, own }.
+export const projectFolders = signal(null);
+// Første oppstart uten prosjekt: brukeren må lage eller åpne et prosjekt først.
+export const needsProject = signal(false);
 
 export const selectedClips = computed(() => selection.value.map((id) => project.value.clips[id]).filter(Boolean));
 
@@ -140,6 +146,10 @@ export function scheduleSave() {
 
 export async function saveNow() {
   clearTimeout(saveTimer);
+  if (!projectPath.value) {
+    saveState.value = 'saved';
+    return;
+  }
   saveState.value = 'saving';
   try {
     const p = { ...project.value, modified: Date.now() };
@@ -162,7 +172,11 @@ export function setProject(p, path = null) {
   selection.value = [];
   selectedTransition.value = null;
   setTime(0, { force: true });
-  if (path) localStorage.setItem('lastProject', path);
+  if (path) {
+    localStorage.setItem('lastProject', path);
+    needsProject.value = false;
+    api.projectFolders(path).then((f) => projectPath.value === path && (projectFolders.value = f));
+  } else projectFolders.value = null;
 }
 
 export async function openProjectFile(path) {
@@ -179,9 +193,11 @@ export async function openProjectFile(path) {
   if (missing.length) api.reanalyze(missing);
 }
 
-export async function newProjectNamed(name, template = null) {
+// Nytt prosjekt: lager en egen mappe med navnet på valgt plassering.
+export async function newProjectNamed(name, template = null, location = null) {
   if (saveState.value !== 'saved') await saveNow();
-  const p = newProject(name || defaultName());
+  const created = await api.createProject({ location, name: name || defaultName() });
+  const p = newProject(created.name);
   if (template && !template.auto) {
     p.width = template.w;
     p.height = template.h;
@@ -198,7 +214,7 @@ export async function newProjectNamed(name, template = null) {
     p.clips[lower.id] = lower;
     relayoutPrimary(p);
   }
-  setProject(p);
+  setProject(p, created.file);
   await saveNow();
 }
 
@@ -218,7 +234,13 @@ export async function loadInitialProject() {
       console.error(err);
     }
   }
+  // Ingen prosjekt ennå: be om navn og plassering.
   setProject(newProject(defaultName()));
+  needsProject.value = true;
+}
+
+export function defaultProjectName() {
+  return defaultName();
 }
 
 /* Media */
@@ -274,11 +296,23 @@ function reportFailed(failed) {
   );
 }
 
-export async function importPaths(paths, placement) {
+// Import: filene kopieres til prosjektmappen eller blir liggende der de er (valg i Import Options).
+export async function importPaths(paths, placement, opts = {}) {
   if (!paths.length) return [];
+  const copy = opts.copy ?? prefs.value.importCopy;
+  const folders = projectFolders.value;
+  if (copy && folders?.own) {
+    try {
+      paths = await api.copyIntoProject(paths, folders.media);
+    } catch (err) {
+      reportFailed([`the files (${err.message})`]);
+      return [];
+    }
+  }
   const { items, failed } = await api.importMedia(paths);
   reportFailed(failed);
   addMediaRecords(items, placement);
+  if (opts.optimize ?? prefs.value.importOptimize) import('./commands.js').then((m) => m.optimizeMedia(items.map((x) => x.id)));
   return items;
 }
 
@@ -299,15 +333,17 @@ export function addMediaRecords(items, placement) {
   });
 }
 
-// Lager og lagrer et prosjekt for et nytt opptak. Det åpnes først når brukeren vil redigere.
-export async function createProjectFromRecording(dir) {
+// Et nytt opptak legges i det åpne prosjektet. Er tidslinjen tom, legges det også på tidslinjen.
+export async function addRecordingToProject(dir) {
   const media = withAnalysis(await api.importRecording(dir));
-  const p = newProject(media.name);
-  p.media[media.id] = media;
-  autoFormat(p, media);
-  addMediaClip(p, media, 'append');
-  const path = await api.saveProject(p, null);
-  return { project: p, path };
+  const empty = project.value.primary.length === 0;
+  commit((p) => {
+    p.media[media.id] = media;
+    autoFormat(p, media);
+    if (empty) addMediaClip(p, media, 'append');
+  });
+  await saveNow();
+  return media;
 }
 
 // Titler lages fra maler (se TITLE_TEMPLATES).

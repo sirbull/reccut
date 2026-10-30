@@ -37,6 +37,11 @@ function copyStatic() {
     const src = fs.existsSync(path.join(root, 'src/renderer', f)) ? path.join(root, 'src/renderer', f) : path.join(root, 'src/worker', f);
     fs.copyFileSync(src, path.join(out, f));
   }
+  // Bilder til hjelpen.
+  const help = path.join(root, 'assets/help');
+  const helpOut = path.join(out, 'help');
+  fs.mkdirSync(helpOut, { recursive: true });
+  if (fs.existsSync(help)) for (const f of fs.readdirSync(help)) fs.copyFileSync(path.join(help, f), path.join(helpOut, f));
   // Whisper kjører med onnxruntime-web, som trenger wasm-filene lokalt.
   const ort = path.join(root, 'node_modules/onnxruntime-web/dist');
   const ortOut = path.join(out, 'ort');

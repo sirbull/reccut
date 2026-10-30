@@ -152,107 +152,39 @@ function createWindow() {
 }
 
 /* Meny med snarveier som i Final Cut Pro. Kommandoene håndteres i vinduet. */
+// Menylinjen bygges fra kommandoregisteret i vinduet (src/renderer/registry.js) og sendes hit.
+// Til det kommer, brukes en enkel meny så Cmd Q og tekstredigering virker.
 function buildMenu() {
-  const cmd = (id, label, accelerator) => ({ label, accelerator, click: () => send('menu', id) });
-  // Viser snarveien, men vinduet håndterer tasten selv (så den virker i tekstfelt som vanlig).
-  const show = (id, label, accelerator) => ({ label, accelerator, registerAccelerator: false, click: () => send('menu', id) });
   const template = [
-    ...(isMac
-      ? [{ label: 'OBSlite', submenu: [{ role: 'about', label: 'About OBSlite' }, { type: 'separator' }, cmd('prefs', 'Preferences', 'Cmd+,'), { type: 'separator' }, { role: 'hide', label: 'Hide OBSlite' }, { role: 'hideOthers', label: 'Hide Others' }, { type: 'separator' }, { role: 'quit', label: 'Quit OBSlite' }] }]
-      : []),
-    {
-      label: 'File',
-      submenu: [
-        cmd('newProject', 'New Project', 'CmdOrCtrl+N'),
-        cmd('openProject', 'Open Project', 'CmdOrCtrl+O'),
-        cmd('save', 'Save', 'CmdOrCtrl+S'),
-        { type: 'separator' },
-        cmd('import', 'Import Media', 'CmdOrCtrl+I'),
-        ...(isMac ? [] : [cmd('prefs', 'Preferences', 'Ctrl+,')]),
-        cmd('export', 'Export', 'CmdOrCtrl+E'),
-        ...(isMac ? [] : [{ type: 'separator' }, { role: 'quit', label: 'Quit' }]),
-      ],
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        cmd('undo', 'Undo', 'CmdOrCtrl+Z'),
-        cmd('redo', 'Redo', 'Shift+CmdOrCtrl+Z'),
-        { type: 'separator' },
-        cmd('cut', 'Cut', 'CmdOrCtrl+X'),
-        cmd('copy', 'Copy', 'CmdOrCtrl+C'),
-        cmd('paste', 'Paste', 'CmdOrCtrl+V'),
-        cmd('selectAll', 'Select All', 'CmdOrCtrl+A'),
-      ],
-    },
-    {
-      label: 'Clip',
-      submenu: [
-        show('blade', 'Blade', 'CmdOrCtrl+B'),
-        show('toggleEnabled', 'Enable or Disable', 'V'),
-        show('addTransition', 'Add Cross Dissolve', 'CmdOrCtrl+T'),
-        { type: 'separator' },
-        show('expandAudio', 'Expand Audio', isMac ? 'Ctrl+S' : 'Alt+E'),
-        show('detachAudio', 'Detach Audio', isMac ? 'Ctrl+Shift+S' : 'Alt+Shift+E'),
-        show('solo', 'Solo', 'Alt+S'),
-        show('syncAudio', 'Auto Sync Audio', 'Alt+CmdOrCtrl+G'),
-        { type: 'separator' },
-        show('group', 'Group Clips', 'CmdOrCtrl+G'),
-        show('ungroup', 'Ungroup', 'Shift+CmdOrCtrl+G'),
-        { type: 'separator' },
-        {
-          label: 'Retime',
-          submenu: [
-            show('retime', 'Show Speed Controls', 'CmdOrCtrl+R'),
-            { type: 'separator' },
-            ...[0.1, 0.25, 0.5].map((v) => show(`speed:${v}`, `Slow ${v * 100}%`)),
-            show('speed:1', 'Normal (100%)', 'Alt+CmdOrCtrl+R'),
-            ...[2, 4, 8, 20].map((v) => show(`speed:${v}`, `Fast ${v}x`)),
-            { type: 'separator' },
-            show('reverse', 'Reverse Clip'),
-            {
-              label: 'Speed Ramp',
-              submenu: [
-                show('ramp:to0', 'to 0%'),
-                show('ramp:from0', 'from 0%'),
-                show('ramp:slowIn', 'Slow Down in the Middle'),
-                show('ramp:speedUp', 'Speed Up'),
-                show('ramp:slowDown', 'Slow Down'),
-                show('ramp:burst', 'Speed Burst'),
-                { type: 'separator' },
-                show('ramp:none', 'Remove Ramp'),
-              ],
-            },
-            { type: 'separator' },
-            show('freeze', 'Add Freeze Frame', 'Alt+F'),
-          ],
-        },
-        { type: 'separator' },
-        show('lift', 'Lift from Storyline', 'Alt+CmdOrCtrl+Up'),
-        show('overwriteDown', 'Overwrite to Storyline', 'Alt+CmdOrCtrl+Down'),
-        show('insertGap', 'Insert Gap', 'Alt+W'),
-      ],
-    },
-    {
-      label: 'View',
-      submenu: [
-        cmd('roomRecord', 'Record', 'CmdOrCtrl+1'),
-        cmd('roomEdit', 'Edit', 'CmdOrCtrl+2'),
-        cmd('roomExport', 'Export', 'CmdOrCtrl+3'),
-        { type: 'separator' },
-        show('playReverse', 'Play Reverse', 'Shift+Space'),
-        { type: 'separator' },
-        cmd('zoomIn', 'Zoom In on Timeline', 'CmdOrCtrl+='),
-        cmd('zoomOut', 'Zoom Out on Timeline', 'CmdOrCtrl+-'),
-        { type: 'separator' },
-        { role: 'togglefullscreen', label: 'Enter Full Screen' },
-        ...(app.isPackaged ? [] : [{ role: 'toggleDevTools', label: 'Developer Tools' }]),
-      ],
-    },
-    { label: 'Window', role: 'windowMenu' },
+    ...(isMac ? [{ role: 'appMenu' }] : []),
+    { role: 'editMenu' },
+    { role: 'windowMenu' },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
+
+// Hurtigtaster med Cmd eller Ctrl som også skal virke i tekstfelt registreres i menyen.
+// De andre vises bare i menyen, og håndteres av vinduet, så de ikke stjeler vanlige tastetrykk.
+function menuFromTemplate(items) {
+  return items.map((it) => {
+    if (it.separator) return { type: 'separator' };
+    if (it.role && !it.submenu) return { role: it.role, label: it.label };
+    if (it.submenu) return { label: it.label, role: it.role, submenu: menuFromTemplate(it.submenu) };
+    return {
+      label: it.label,
+      accelerator: it.accelerator,
+      registerAccelerator: Boolean(it.register),
+      type: it.checked !== undefined ? 'checkbox' : 'normal',
+      checked: it.checked,
+      enabled: it.enabled !== false,
+      click: () => send('menu', it.id),
+    };
+  });
+}
+
+ipcMain.handle('menu:set', (_e, items) => {
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuFromTemplate(items)));
+});
 
 /* Skjermvalg og opptak */
 
@@ -353,8 +285,9 @@ function stamp() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}.${p(d.getMinutes())}.${p(d.getSeconds())}`;
 }
 
+// base er opptaksmappen i det åpne prosjektet.
 ipcMain.handle('rec:begin', async (_e, { t0, base }) => {
-  const dir = path.join(base || baseDir(), 'Recordings', `Recording ${stamp()}`);
+  const dir = path.join(base || path.join(baseDir(), 'Recordings'), `Recording ${stamp()}`);
   await fs.promises.mkdir(dir, { recursive: true });
   recordingDir = dir;
   input.beginSession(t0);
@@ -426,17 +359,22 @@ ipcMain.handle('media:reanalyze', async (_e, items) => {
 ipcMain.handle('media:reverse', (_e, m) => {
   media.scheduleReverse(m, notifyAnalyzed);
 });
+ipcMain.handle('media:optimize', (_e, items, outDir) => {
+  for (const m of items) media.scheduleOptimize(m, outDir, notifyAnalyzed);
+});
 ipcMain.handle('media:wave', async (_e, file) => JSON.parse(await fs.promises.readFile(file, 'utf8')));
 ipcMain.handle('media:exists', (_e, file) => fs.existsSync(file));
-ipcMain.handle('media:recordings', async () => {
-  const dir = path.join(baseDir(), 'Recordings');
-  if (!fs.existsSync(dir)) return [];
+// Opptak i prosjektets opptaksmappe, og i den felles mappen fra eldre versjoner.
+ipcMain.handle('media:recordings', async (_e, projectDir) => {
   const out = [];
-  for (const name of await fs.promises.readdir(dir)) {
-    const full = path.join(dir, name);
-    if (fs.existsSync(path.join(full, 'recording.json'))) {
-      const st = await fs.promises.stat(full);
-      out.push({ name, path: full, modified: st.mtimeMs });
+  for (const dir of [projectDir, path.join(baseDir(), 'Recordings')]) {
+    if (!dir || !fs.existsSync(dir)) continue;
+    for (const name of await fs.promises.readdir(dir)) {
+      const full = path.join(dir, name);
+      if (fs.existsSync(path.join(full, 'recording.json'))) {
+        const st = await fs.promises.stat(full);
+        out.push({ name: dir === projectDir ? name : `${name} (older)`, path: full, modified: st.mtimeMs });
+      }
     }
   }
   return out.sort((a, b) => b.modified - a.modified);
@@ -494,8 +432,64 @@ ipcMain.handle('menu:popup', (e, items) => {
 
 ipcMain.handle('projects:list', () => projects.list(baseDir()));
 ipcMain.handle('projects:load', (_e, file) => projects.load(file));
-ipcMain.handle('projects:save', (_e, project, previousPath) => projects.save(baseDir(), project, previousPath));
-ipcMain.handle('projects:remove', (_e, file) => projects.remove(file));
+ipcMain.handle('projects:save', (_e, project, file) => projects.save(baseDir(), project, file));
+ipcMain.handle('projects:create', (_e, { location, name }) => projects.create(location || baseDir(), name));
+ipcMain.handle('projects:folders', (_e, file) => projects.folders(baseDir(), file));
+ipcMain.handle('projects:forget', (_e, file) => projects.forget(file));
+ipcMain.handle('projects:trash', (_e, file) => projects.trash(baseDir(), file));
+ipcMain.handle('dialog:openProject', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Open Project', defaultPath: baseDir(), properties: ['openFile'], filters: [{ name: 'OBSlite Project', extensions: ['obslite'] }] });
+  return r.canceled ? null : r.filePaths[0];
+});
+
+// Kopierer filer inn i prosjektmappen. Filer som allerede ligger der, brukes som de er.
+ipcMain.handle('media:copyIn', (_e, files, dir) => {
+  const { done } = jobs.add({
+    kind: 'copy',
+    title: files.length > 1 ? `Copying ${files.length} files to the project` : `Copying ${path.basename(files[0])} to the project`,
+    queue: 'light',
+    run: async (ctx) => {
+      await fs.promises.mkdir(dir, { recursive: true });
+      const sizes = await Promise.all(files.map((f) => fs.promises.stat(f).then((st) => st.size, () => 0)));
+      const total = sizes.reduce((a, b) => a + b, 0) || 1;
+      let copied = 0;
+      const out = [];
+      for (const [i, file] of files.entries()) {
+        if (path.dirname(file) === dir || fs.statSync(file).isDirectory()) {
+          out.push(file);
+          continue;
+        }
+        const ext = path.extname(file);
+        const stem = path.basename(file, ext);
+        let target = path.join(dir, path.basename(file));
+        let n = 2;
+        while (fs.existsSync(target) && fs.statSync(target).size !== sizes[i]) target = path.join(dir, `${stem} ${n++}${ext}`);
+        if (!fs.existsSync(target)) {
+          const tmp = target + '.part';
+          await new Promise((resolve, reject) => {
+            const rs = fs.createReadStream(file);
+            const ws = fs.createWriteStream(tmp);
+            ctx.setCancel(() => rs.destroy(new Error('Canceled')));
+            rs.on('data', (b) => {
+              copied += b.length;
+              ctx.progress(copied / total, 'Copying');
+            });
+            rs.on('error', reject);
+            ws.on('error', reject);
+            ws.on('finish', resolve);
+            rs.pipe(ws);
+          });
+          await fs.promises.rename(tmp, target);
+          const st = await fs.promises.stat(file);
+          await fs.promises.utimes(target, st.atime, st.mtime).catch(() => {});
+        } else copied += sizes[i];
+        out.push(target);
+      }
+      return out;
+    },
+  });
+  return done;
+});
 
 /* Bakgrunnsoppgaver */
 

@@ -1,7 +1,7 @@
 // Avspillingsmotor. Hvert aktivt klipp får sitt eget video- eller lydelement,
 // som holdes i takt med spillhodet. Bildet tegnes med samme kode som eksporten.
 // Redigeringen og eksportfanen har hver sin spiller.
-import { computeAudio, computeFrame, instSpeed, sourceTime } from '../shared/model.js';
+import { computeAudio, computeFrame, instSpeed, sourceTime, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 
 const PRELOAD = 1.5;
@@ -35,7 +35,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     // Baklengs klipp spiller den baklengs kopien framover når den er klar.
     // Spilles tidslinjen bakover, brukes kopien for vanlige klipp, så bilde og lyd går jevnt.
     const backward = playing.value && rate < 0;
-    const plain = s.proxy || s.path;
+    const plain = workPath(s);
     if (Boolean(clip.reverse) !== backward && s.reversed) return { path: s.reversed, alt: plain, rev: true, D: s.duration, hasVideo: s.hasVideo && m.kind !== 'image', hasAudio: s.hasAudio };
     return { path: plain, alt: s.reversed, rev: false, hasVideo: s.hasVideo && m.kind !== 'image', hasAudio: s.hasAudio };
   }

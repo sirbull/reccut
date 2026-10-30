@@ -3,6 +3,7 @@ import { signal } from '@preact/signals';
 import { drawCamera, drawClicks, drawCursor, drawKeys } from '../../shared/render.js';
 import { KEY_LIFE, easeOutCubic, lerpRect, pipRect, ZOOM_RAMP, clamp } from '../../shared/model.js';
 import { settings, saveSettings } from './settings.js';
+import { projectFolders } from '../editor/store.js';
 
 const api = window.api;
 
@@ -344,7 +345,8 @@ export async function startRecording() {
   }
   t0 = Date.now();
   layouts = [[0, effectiveLayout()]];
-  await api.recBegin({ t0, base: s.outputDir });
+  // Opptaket lagres i opptaksmappen til det åpne prosjektet.
+  await api.recBegin({ t0, base: projectFolders.value?.recordings || null });
   recorders = [];
   const { w, h } = canvasSize.value;
   if (screenStream) {

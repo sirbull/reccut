@@ -53,6 +53,7 @@ async function probe(file) {
       info.hasVideo = true;
       info.videoCodec = /Video: (\w+)/.exec(line)?.[1] ?? null;
       info.pixFmt = /, (yuv\w+|yuvj\w+|nv\d+|rgb\w*|bgr\w*|argb|abgr|rgba|bgra|gray\w*|pal8|gbr\w*)[,( ]/.exec(line)?.[1] ?? null;
+      info.color = parseColor(line, info.pixFmt);
       const s = /, (\d{2,5})x(\d{2,5})/.exec(line);
       if (s) {
         info.width = Number(s[1]);
@@ -71,6 +72,68 @@ async function probe(file) {
     }
   }
   return info;
+}
+
+// Fargeinformasjon: bitdybde og overføringsfunksjon (PQ og HLG er HDR).
+// Eksempel: yuv420p10le(tv, bt2020nc/bt2020/smpte2084)
+function parseColor(line, pixFmt) {
+  const bits = /p(9|10|12|14|16)(le|be)?$/.exec(pixFmt || '') ? Number(/p(9|10|12|14|16)/.exec(pixFmt)[1]) : /48|64|f32|f16/.test(pixFmt || '') ? 16 : 8;
+  const m = new RegExp(`${(pixFmt || 'x').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\(([^)]*)\\)`).exec(line);
+  const parts = m ? m[1].split(',').map((x) => x.trim()) : [];
+  const range = parts.find((x) => x === 'tv' || x === 'pc') || null;
+  const desc = parts.find((x) => x.includes('/')) || parts.find((x) => /^bt|smpte|arib|iec/.test(x)) || '';
+  let [space, primaries, transfer] = desc.split('/');
+  if (desc && !desc.includes('/')) primaries = transfer = space = desc;
+  const hdr = transfer === 'smpte2084' ? 'pq' : transfer === 'arib-std-b67' ? 'hlg' : null;
+  return { bits, range, space: space || null, primaries: primaries || null, transfer: transfer || null, hdr };
+}
+
+let filterList = null;
+function hasFilter(name) {
+  if (!filterList) {
+    try {
+      filterList = require('child_process').execFileSync(ffmpegPath, ['-hide_banner', '-filters'], { encoding: 'utf8', windowsHide: true });
+    } catch {
+      filterList = '';
+    }
+  }
+  return new RegExp(`\\s${name}\\s`).test(filterList);
+}
+
+/**
+ * Omkoding til et format som er godt å redigere med.
+ * 8-bit SDR: H.264 med korte GOP-er. 10-bit og HDR: VP9 profil 2 i 10-bit.
+ * HDR tonemappes til Rec. 709, så bildet ser riktig ut i redigeringen og eksporten.
+ * quality 'optimized' gir høy kvalitet, 'proxy' går raskere.
+ */
+function transcode(file, output, { color, duration, quality = 'optimized', audio = true }, onProgress) {
+  const tenBit = (color?.bits || 8) > 8 || Boolean(color?.hdr);
+  const args = ['-i', file, '-map', '0:v:0?', ...(audio ? ['-map', '0:a?'] : [])];
+  const vf = [];
+  if (color?.hdr && hasFilter('zscale') && hasFilter('tonemap')) {
+    const tin = color.hdr === 'pq' ? 'smpte2084' : 'arib-std-b67';
+    vf.push(`zscale=tin=${tin}:min=bt2020nc:pin=bt2020:t=linear:npl=203`, 'format=gbrpf32le', 'zscale=p=bt709', 'tonemap=tonemap=hable:desat=0', 'zscale=t=bt709:m=bt709:r=tv');
+  }
+  vf.push(tenBit ? 'format=yuv420p10le' : 'format=yuv420p');
+  args.push('-vf', vf.join(','));
+  if (tenBit) {
+    const fast = quality === 'proxy';
+    args.push('-c:v', 'libvpx-vp9', '-profile:v', '2', '-crf', fast ? '24' : '15', '-b:v', '0', '-g', '15', '-row-mt', '1', '-tile-columns', '2', '-deadline', fast ? 'realtime' : 'good', '-cpu-used', fast ? '8' : '4');
+    args.push('-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709');
+    if (color?.hdr) args.push('-metadata:s:v:0', `obslite_tonemapped=${color.hdr}`);
+    if (audio) args.push('-c:a', 'libopus', '-b:a', '256k');
+  } else {
+    args.push('-c:v', 'libx264', '-preset', quality === 'proxy' ? 'veryfast' : 'medium', '-crf', quality === 'proxy' ? '18' : '12', '-g', '15', '-bf', '0', '-profile:v', 'high');
+    if (audio) args.push('-c:a', 'aac', '-b:a', '320k', '-ar', '48000');
+    args.push('-movflags', '+faststart');
+  }
+  args.push(output);
+  return run(args, { onProgress: (s) => onProgress?.(s / Math.max(duration || 0, 0.1)) });
+}
+
+// Filendelsen omkodingen får.
+function transcodeExt(color) {
+  return (color?.bits || 8) > 8 || color?.hdr ? '.webm' : '.mp4';
 }
 
 // Gjør MediaRecorder-filer søkbare og gir dem riktig varighet, uten omkoding.
@@ -139,4 +202,5 @@ async function convertImage(file, output) {
 }
 
 module.exports = {
+  transcode, transcodeExt, hasFilter,
   convertImage, getFfmpegPath, run, probe, remux, thumbnails, waveform, optimize, decodePcm };

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'preact/hooks';
 import {
   CheckCircle2,
   CircleAlert,
+  CircleHelp,
   Clapperboard,
   FolderOpen,
   ListChecks,
@@ -19,18 +20,20 @@ import './styles/app.css';
 import { Recorder } from './recorder/Recorder.jsx';
 import * as engine from './recorder/engine.js';
 import { modifierInfo, settings } from './recorder/settings.js';
-import { Editor, handleMenu } from './editor/Editor.jsx';
+import { Editor } from './editor/Editor.jsx';
+import { byId, commandForEvent, menuTemplate, runCommand } from './registry.js';
+import { effect } from '@preact/signals';
 import {
   canRedo,
   canUndo,
-  createProjectFromRecording,
+  addRecordingToProject,
+  project,
+  projectFolders,
+  needsProject,
   historyVersion,
   loadInitialProject,
-  openProjectFile,
   redo,
   room,
-  saveNow,
-  saveState,
   tasks,
   undo,
 } from './editor/store.js';
@@ -39,6 +42,9 @@ import { startExport } from './editor/ExportDialog.jsx';
 import { ExportRoom } from './export/ExportRoom.jsx';
 import { formatDuration } from '../shared/model.js';
 import { IconButton, Toasts, toast } from './ui.jsx';
+import { NewProjectDialog, ProjectsDialog } from './ProjectDialogs.jsx';
+import { CommandPalette, HelpCenter } from './help/Help.jsx';
+import { helpOpen, paletteOpen } from './registry.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -46,24 +52,20 @@ const isMac = api.platform === 'darwin';
 async function finishRecording() {
   const dir = await engine.stopRecording();
   if (!dir) return;
-  const { project: p, path } = await createProjectFromRecording(dir);
+  const media = await addRecordingToProject(dir);
   const s = settings.value;
   if (s.autoRender) {
-    const base = s.outputDir || (await api.baseDir());
+    const p = project.value;
     const sep = api.platform === 'win32' ? '\\' : '/';
-    await startExport(p, { preset: 'standard', format: 'mp4-h264', quality: 'high', res: 0, fps: p.fps, audioOnly: false, captions: 'none', output: `${base}${sep}${p.name}.mp4` });
+    const out = projectFolders.value?.exports || (await api.baseDir());
+    await startExport(p, { preset: 'standard', format: 'mp4-h264', quality: 'high', res: 0, fps: p.fps, audioOnly: false, captions: 'none', output: `${out}${sep}${media.name}.mp4` });
   }
-  const openEditor = async () => {
-    if (saveState.value !== 'saved') await saveNow();
-    await openProjectFile(path);
-    room.value = 'edit';
-  };
-  toast(s.autoRender ? 'Recording saved. A finished video is being rendered in the background.' : 'Recording saved.', {
+  toast(s.autoRender ? `Recording saved in ${project.value.name}. A finished video is being rendered in the background.` : `Recording saved in ${project.value.name}.`, {
     kind: 'success',
     timeout: 15000,
     actions: [
       { label: api.platform === 'darwin' ? 'Reveal in Finder' : 'Show in Folder', onClick: () => api.reveal(dir) },
-      { label: 'Edit', primary: true, onClick: openEditor },
+      { label: 'Edit', primary: true, onClick: () => (room.value = 'edit') },
     ],
   });
 }
@@ -156,14 +158,18 @@ function TitleBar() {
           Export
         </button>
       </div>
+      <button class="project-btn" title={`${project.value.name}. Click to open or create projects.`} onClick={() => (commands.projectsOpen.value = true)}>
+        <FolderOpen size={14} />
+        <span>{project.value.name}</span>
+      </button>
       <div class="spacer" />
       <TasksIndicator />
+      <IconButton icon={CircleHelp} class="help-btn" title={`Help and command search (${isMac ? '⌘K' : 'Ctrl+K'})`} onClick={() => (paletteOpen.value = true)} />
       {r === 'edit' ? (
         <div class="actions">
           <IconButton icon={Undo2} title="Undo" disabled={!canUndo()} onClick={undo} />
           <IconButton icon={Redo2} title="Redo" disabled={!canRedo()} onClick={redo} />
           <span class="sep" />
-          <IconButton icon={FolderOpen} title="Projects" onClick={() => (commands.projectsOpen.value = true)} />
           <IconButton icon={Settings} title={`Preferences (${isMac ? '⌘' : 'Ctrl+'},)`} onClick={() => (commands.prefsOpen.value = true)} />
           <IconButton icon={Plus} title={`Import media (${isMac ? '⌘' : 'Ctrl+'}I)`} onClick={() => commands.importDialog()} />
           <button class="btn primary" onClick={() => (commands.exportOpen.value = true)} title={`Export project (${isMac ? '⌘' : 'Ctrl+'}E)`}>
@@ -210,6 +216,41 @@ function Notice() {
   );
 }
 
+function isTyping() {
+  const el = document.activeElement;
+  return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+}
+
+// Tastetrykk går gjennom kommandoregisteret. Taster i tekstfelt og åpne dialoger røres ikke.
+function onKeyDown(e) {
+  if (isTyping() || document.querySelector('.modal-backdrop')) return;
+  const cmd = commandForEvent(e, room.value);
+  if (!cmd) return;
+  e.preventDefault();
+  e.stopPropagation();
+  runCommand(cmd);
+}
+
+// Menyvalg. Klipp ut, kopier, lim inn og angre virker på teksten når du skriver i et felt.
+function handleMenu(id) {
+  const cmd = byId.get(id);
+  if (cmd?.text && isTyping()) {
+    document.execCommand(cmd.text);
+    return;
+  }
+  if (cmd?.register && document.querySelector('.modal-backdrop') && !['roomRecord', 'roomEdit', 'roomExport'].includes(id)) return;
+  runCommand(id);
+}
+
+// Menylinjen bygges på nytt når noe som vises med hake endres (verktøy, rom, skumming).
+let menuTimer = null;
+effect(() => {
+  menuTemplate();
+  historyVersion.value;
+  clearTimeout(menuTimer);
+  menuTimer = setTimeout(() => api.setMenu(menuTemplate()), 60);
+});
+
 function App() {
   const r = room.value;
   useEffect(() => {
@@ -220,9 +261,11 @@ function App() {
       if (a.toggleRecord) toggleRecording();
     });
     const offMenu = api.onMenu(handleMenu);
+    window.addEventListener('keydown', onKeyDown);
     return () => {
       offShortcut();
       offMenu();
+      window.removeEventListener('keydown', onKeyDown);
     };
   }, []);
 
@@ -241,6 +284,10 @@ function App() {
           <ExportRoom active={r === 'export'} />
         </div>
       </main>
+      {(commands.newProjectOpen.value || needsProject.value) && <NewProjectDialog />}
+      {commands.projectsOpen.value && !needsProject.value && <ProjectsDialog />}
+      {helpOpen.value && <HelpCenter />}
+      {paletteOpen.value && <CommandPalette />}
       <Toasts />
     </div>
   );
@@ -251,10 +298,11 @@ window.__obslite = {
   importPaths: (paths, placement) => import('./editor/store.js').then((m) => m.importPaths(paths, placement)),
   exportState: () => import('./export/state.js'),
   store: () => import('./editor/store.js'),
+  commands: () => import('./editor/commands.js'),
+  registry: () => import('./registry.js'),
   openRecording: async (dir) => {
     const m = await import('./editor/store.js');
-    const r = await m.createProjectFromRecording(dir);
-    await m.openProjectFile(r.path);
+    await m.addRecordingToProject(dir);
   },
 };
 

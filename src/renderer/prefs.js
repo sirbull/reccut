@@ -11,7 +11,9 @@ const DEFAULTS = {
   audioSkimming: true,
   snapping: true,
   preservePitch: true,
-  syncMuteCamera: false,
+  syncMuteCamera: true,
+  importCopy: true,
+  importOptimize: false,
   syncGroup: true,
 };
 
