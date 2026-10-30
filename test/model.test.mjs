@@ -320,3 +320,53 @@ test('overskriv, løft og sett inn mellomrom', () => {
   assert.equal(p.clips[p.primary[0]].type, 'gap');
   assert.equal(p.clips[img.id].start, 10, 'tilkoblet klipp følger med');
 });
+
+import { setRamp, setReverse } from '../src/shared/ops.js';
+import { srcLen, instSpeed, RAMP_PRESETS } from '../src/shared/model.js';
+
+test('baklengs spiller samme del av kilden fra slutt til start', () => {
+  const p = setup();
+  const [a] = p.primary;
+  trimClip(p, a, 'start', 2);
+  trimClip(p, a, 'end', -2);
+  setReverse(p, a, true);
+  const c = p.clips[a];
+  assert.equal(srcT(c, c.start), 8, 'starter på slutten');
+  assert.ok(Math.abs(srcT(c, c.start + c.dur) - 2) < 1e-9, 'slutter på starten');
+  const right = splitClip(p, a, 2);
+  assert.equal(srcT(p.clips[a], 0), 8);
+  assert.ok(Math.abs(srcT(p.clips[a], 1.999) - 6.001) < 1e-6);
+  assert.ok(Math.abs(srcT(p.clips[right], 2) - 6) < 1e-9, 'høyre del fortsetter der venstre slapp');
+  const au = audioAt(p, 1).find((x) => x.clip.id === a);
+  assert.ok(au.speed < 0, 'lyden spilles baklengs');
+});
+
+test('baklengs trimming bruker riktig ende av kilden', () => {
+  const p = setup();
+  const [a] = p.primary;
+  trimClip(p, a, 'end', -4);
+  setReverse(p, a, true);
+  trimClip(p, a, 'start', 1);
+  assert.equal(srcT(p.clips[a], 0), 5, 'starten på tidslinjen er slutten i kilden');
+  trimClip(p, a, 'start', -10);
+  assert.equal(srcT(p.clips[a], 0), 10, 'kan forlenges til filens slutt');
+});
+
+test('fartsrampe beholder kildeområdet og endrer farten jevnt', () => {
+  const p = setup();
+  const [a, b] = p.primary;
+  setRamp(p, a, RAMP_PRESETS.find((r) => r.id === 'to0').ramp);
+  const c = p.clips[a];
+  assert.ok(Math.abs(srcLen(c) - 10) < 1e-6, 'samme kildelengde');
+  assert.ok(c.dur > 18, 'ned mot null fart gir lengre klipp');
+  assert.ok(instSpeed(c, 0) > instSpeed(c, c.dur - 0.01));
+  assert.ok(Math.abs(srcT(c, c.start + c.dur) - 10) < 1e-6);
+  assert.equal(p.clips[b].start, c.dur, 'resten flyttes');
+  const mid = c.dur / 2;
+  const before = srcT(c, mid);
+  const right = splitClip(p, a, mid);
+  assert.ok(Math.abs(srcT(p.clips[a], mid - 1e-9) - before) < 1e-6, 'venstre del slutter på samme sted');
+  assert.ok(Math.abs(srcT(p.clips[right], mid) - before) < 1e-6, 'kuttet er sømløst');
+  setRamp(p, right, null);
+  assert.ok(p.clips[right].speed > 0);
+});

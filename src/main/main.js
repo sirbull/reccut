@@ -205,6 +205,21 @@ function buildMenu() {
             show('speed:1', 'Normal (100%)', 'Alt+CmdOrCtrl+R'),
             ...[2, 4, 8, 20].map((v) => show(`speed:${v}`, `Fast ${v}x`)),
             { type: 'separator' },
+            show('reverse', 'Reverse Clip'),
+            {
+              label: 'Speed Ramp',
+              submenu: [
+                show('ramp:to0', 'to 0%'),
+                show('ramp:from0', 'from 0%'),
+                show('ramp:slowIn', 'Slow Down in the Middle'),
+                show('ramp:speedUp', 'Speed Up'),
+                show('ramp:slowDown', 'Slow Down'),
+                show('ramp:burst', 'Speed Burst'),
+                { type: 'separator' },
+                show('ramp:none', 'Remove Ramp'),
+              ],
+            },
+            { type: 'separator' },
             show('freeze', 'Add Freeze Frame', 'Alt+F'),
           ],
         },
@@ -402,6 +417,9 @@ ipcMain.handle('media:reanalyze', async (_e, items) => {
     else await media.importFiles([m.path], (p) => notifyAnalyzed({ ...p, mediaId: m.id })).catch(() => {});
   }
 });
+ipcMain.handle('media:reverse', (_e, m) => {
+  media.scheduleReverse(m, notifyAnalyzed);
+});
 ipcMain.handle('media:wave', async (_e, file) => JSON.parse(await fs.promises.readFile(file, 'utf8')));
 ipcMain.handle('media:exists', (_e, file) => fs.existsSync(file));
 ipcMain.handle('media:recordings', async () => {
@@ -496,12 +514,21 @@ ipcMain.handle('export:start', (_e, payload) => {
     kind: 'export',
     title: `Exporting ${path.basename(payload.settings.output)}`,
     queue: 'heavy',
-    run: (ctx) =>
-      jobs.runInWorker(
-        'export',
-        { ...payload, ffmpeg: ff.getFfmpegPath(), tmpDir: path.join(os.tmpdir(), 'obslite-export') },
-        ctx
-      ),
+    run: async (ctx) => {
+      // Baklengs klipp trenger en baklengs kopi av kilden for å eksporteres raskt.
+      const p = payload.project;
+      for (const c of Object.values(p.clips)) {
+        const m = c.reverse && p.media[c.mediaId];
+        if (!m) continue;
+        for (const [key, st] of Object.entries(m.streams)) {
+          if (st.reversed && fs.existsSync(st.reversed)) continue;
+          ctx.progress(0, 'Creating reversed media');
+          st.reversed = await media.reverseStream(st, ctx);
+          notifyAnalyzed({ mediaId: m.id, stream: key, patch: { reversed: st.reversed } });
+        }
+      }
+      return jobs.runInWorker('export', { ...payload, ffmpeg: ff.getFfmpegPath(), tmpDir: path.join(os.tmpdir(), 'obslite-export') }, ctx);
+    },
   });
   done.finally(() => reservedOutputs.delete(payload.settings.output)).catch(() => {});
   done.then(

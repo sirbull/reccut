@@ -179,7 +179,7 @@ export function isVisual(clip) {
 }
 
 export function clipHasAudio(clip, media) {
-  if (clip.props?.audioDetached || clip.speed === 0) return false;
+  if (clip.props?.audioDetached || (clip.speed === 0 && !clip.ramp)) return false;
   if (clip.type === 'audio') return true;
   if (clip.type === 'video') return Boolean(media?.streams?.main?.hasAudio);
   if (clip.type === 'recording') return Object.values(media?.streams || {}).some((s) => s.hasAudio);
@@ -188,7 +188,7 @@ export function clipHasAudio(clip, media) {
 
 // Klipp som kan forlenges uten grense (de har ingen kildefil med fast lengde).
 export function isElastic(clip) {
-  return clip.speed === 0 || clip.type === 'image' || clip.type === 'title' || clip.type === 'gap' || clip.type === 'caption';
+  return (clip.speed === 0 && !clip.ramp) || clip.type === 'image' || clip.type === 'title' || clip.type === 'gap' || clip.type === 'caption';
 }
 
 export function newProject(name = 'Untitled Project') {
@@ -287,13 +287,61 @@ export function mediaClipType(media) {
 
 // Hastighet: 1 er normal, 0.5 er halv fart, 0 er frosset bilde.
 export const speedOf = (clip) => (clip.speed ?? 1);
-// Nøkkelbilder bruker samme tidsakse som kilden, men et frosset bilde animeres i vanlig tempo.
-export const kfRate = (clip) => speedOf(clip) || 1;
+
+/* Fartsramper: clip.ramp = [[u, fart], ...] der u går fra 0 til 1 over klippets lengde.
+   Farten endres jevnt mellom punktene. Baklengs: clip.reverse = true. */
+
+// Hvor langt i kilden (i andeler av lengden) klippet har kommet ved u.
+export function rampOffset(ramp, u) {
+  let sum = 0;
+  for (let i = 0; i < ramp.length - 1; i++) {
+    const [u0, s0] = ramp[i];
+    const [u1, s1] = ramp[i + 1];
+    if (u <= u0) break;
+    const e = Math.min(u, u1);
+    const se = s0 + ((s1 - s0) * (e - u0)) / (u1 - u0 || 1);
+    sum += ((s0 + se) / 2) * (e - u0);
+    if (u <= u1) break;
+  }
+  return sum;
+}
+
+export function instSpeed(clip, local) {
+  if (!clip.ramp) return speedOf(clip);
+  const u = clamp(local / (clip.dur || 1), 0, 1);
+  const r = clip.ramp;
+  for (let i = 0; i < r.length - 1; i++) {
+    if (u <= r[i + 1][0]) return r[i][1] + ((r[i + 1][1] - r[i][1]) * (u - r[i][0])) / (r[i + 1][0] - r[i][0] || 1);
+  }
+  return r[r.length - 1][1];
+}
+
+// Kildeavstand etter "local" sekunder på tidslinjen. Utenfor klippet fortsetter farten i endene.
+export function srcOffset(clip, local) {
+  if (!clip.ramp) return local * speedOf(clip);
+  const d = clip.dur || 1;
+  if (local <= 0) return local * clip.ramp[0][1];
+  if (local >= d) return d * rampOffset(clip.ramp, 1) + (local - d) * clip.ramp[clip.ramp.length - 1][1];
+  return d * rampOffset(clip.ramp, local / d);
+}
+
+export function srcLen(clip) {
+  return srcOffset(clip, clip.dur);
+}
+
+export function avgSpeed(clip) {
+  if (!clip.ramp) return speedOf(clip);
+  return rampOffset(clip.ramp, 1);
+}
+
+// Nøkkelbilder bruker samme tidsakse som kilden. Frosne, baklengs og rampede klipp animeres i vanlig tempo.
+export const kfRate = (clip) => (clip.ramp || clip.reverse ? 1 : speedOf(clip) || 1);
 
 export function sourceTime(clip, T) {
   const sp = speedOf(clip);
-  if (sp === 0) return clip.freezeAt ?? clip.in;
-  return clip.in + (T - clip.start) * sp;
+  if (sp === 0 && !clip.ramp) return clip.freezeAt ?? clip.in;
+  const off = srcOffset(clip, T - clip.start);
+  return clip.reverse ? clip.in + srcLen(clip) - off : clip.in + off;
 }
 
 export function kfTime(clip, T) {
@@ -310,8 +358,18 @@ export function kfEnd(clip) {
 
 // Hvor i kildefilen klippet slutter.
 export function srcEnd(clip) {
-  return clip.in + clip.dur * speedOf(clip);
+  return clip.in + srcLen(clip);
 }
+
+// Ferdige fartsramper som i Final Cut Pro.
+export const RAMP_PRESETS = [
+  { id: 'to0', label: 'Ramp to 0%', ramp: [[0, 1], [1, 0.05]] },
+  { id: 'from0', label: 'Ramp from 0%', ramp: [[0, 0.05], [1, 1]] },
+  { id: 'slowIn', label: 'Slow down in the middle', ramp: [[0, 1], [0.35, 0.25], [0.65, 0.25], [1, 1]] },
+  { id: 'speedUp', label: 'Speed up', ramp: [[0, 1], [1, 4]] },
+  { id: 'slowDown', label: 'Slow down', ramp: [[0, 4], [1, 1]] },
+  { id: 'burst', label: 'Speed burst', ramp: [[0, 1], [0.4, 6], [0.6, 6], [1, 1]] },
+];
 
 export function valueAt(clip, prop, T) {
   const list = clip.kf?.[prop];
@@ -666,14 +724,14 @@ export function computeAudio(project, T) {
       for (const [key, stream] of Object.entries(media.streams)) {
         if (!stream.hasAudio) continue;
         const db = valueAt(clip, key === 'camera' ? 'micVolume' : 'sysVolume', T);
-        out.push({ clip, stream: key, src: s - (stream.offset || 0), gain: dbToGain(db) * env, speed: speedOf(clip) });
+        out.push({ clip, stream: key, src: s - (stream.offset || 0), gain: dbToGain(db) * env, speed: instSpeed(clip, T - clip.start) * (clip.reverse ? -1 : 1) });
       }
     } else {
       // Lydklipp kan peke på lyden i en video eller et opptak (frakoblet lyd).
       const key = clip.stream || 'main';
       const stream = media.streams[key];
       if (!stream?.hasAudio) continue;
-      out.push({ clip, stream: key, src: s - (media.kind === 'recording' ? stream.offset || 0 : 0), gain: dbToGain(valueAt(clip, 'volume', T)) * env, speed: speedOf(clip) });
+      out.push({ clip, stream: key, src: s - (media.kind === 'recording' ? stream.offset || 0 : 0), gain: dbToGain(valueAt(clip, 'volume', T)) * env, speed: instSpeed(clip, T - clip.start) * (clip.reverse ? -1 : 1) });
     }
   }
   return out;

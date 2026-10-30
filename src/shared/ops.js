@@ -2,6 +2,11 @@
 // redigeringsvisningen kloner før og lagrer historikk for angre.
 import {
   CAPTION_LANE,
+  avgSpeed,
+  instSpeed,
+  rampOffset,
+  srcLen,
+  srcOffset,
   clipHasAudio,
   isElastic,
   kfRate,
@@ -25,13 +30,57 @@ function mediaLength(project, clip) {
   return m ? m.duration : Infinity;
 }
 
+/* Trimming som tar hensyn til fart, ramper og baklengs. */
+
+function shiftKeyframes(c, delta) {
+  if (Math.abs(delta) < 1e-9) return;
+  for (const [prop, list] of Object.entries(c.kf || {})) {
+    if (prop === 'layout') continue;
+    for (const k of list) k[0] = round(k[0] + delta);
+  }
+}
+
+// Hvor mye kanten kan flyttes uten å gå utenfor kildefilen.
+function trimLimits(project, c, edge) {
+  const len = mediaLength(project, c);
+  const av = avgSpeed(c) || 0;
+  const min = -(c.dur - MIN_DUR);
+  if (isElastic(c) || len === Infinity || av === 0) return edge === 'start' ? [-Infinity, c.dur - MIN_DUR] : [min, Infinity];
+  const before = c.in / av; // kilde før klippet
+  const after = (len - c.in - srcLen(c)) / av; // kilde etter klippet
+  // Baklengs: starten på tidslinjen er slutten i kilden.
+  if (edge === 'start') return [-(c.reverse ? after : before), c.dur - MIN_DUR];
+  return [min, c.reverse ? before : after];
+}
+
+// Flytter en kant d sekunder (positiv d flytter mot høyre). Returnerer faktisk flytting.
+function applyTrim(project, c, edge, d) {
+  const [lo, hi] = trimLimits(project, c, edge);
+  d = Math.max(lo, Math.min(hi, d));
+  const av = avgSpeed(c);
+  const r = kfRate(c);
+  const oldIn = c.in;
+  if (edge === 'start') {
+    if (!c.reverse && !(c.speed === 0 && !c.ramp)) c.in = round(c.in + d * av);
+    else if (c.speed === 0 && !c.ramp) c.in = round(c.in + d);
+    c.dur = round(c.dur - d);
+    // Nøkkelbildene skal bli liggende på samme sted i bildet.
+    shiftKeyframes(c, c.in - oldIn - d * r);
+  } else {
+    if (c.reverse) c.in = round(c.in - d * av);
+    c.dur = round(c.dur + d);
+    shiftKeyframes(c, c.in - oldIn);
+  }
+  return d;
+}
+
 // Frie klipp følger klippet i hovedsporet de ligger over, som tilkoblede klipp i Final Cut Pro.
 export function withSync(project, fn) {
   const before = new Map(project.primary.map((id) => [id, { start: project.clips[id].start, in: project.clips[id].in }]));
   const order = [...project.primary];
   const anchors = [];
   for (const c of Object.values(project.clips)) {
-    if (c.lane === 0) continue;
+    if (c.lane === 0 || project.lanes?.[c.lane]?.locked) continue;
     const parentId = order.find((id) => {
       const p = project.clips[id];
       return c.start >= p.start - 1e-6 && c.start < p.start + p.dur - 1e-6;
@@ -79,17 +128,41 @@ export function splitClip(project, id, T) {
   const c = project.clips[id];
   if (!c || T <= c.start + MIN_DUR || T >= c.start + c.dur - MIN_DUR) return null;
   const local = T - c.start;
+  const r = kfRate(c);
+  const off = srcOffset(c, local);
+  const total = srcLen(c);
   const right = structuredClone(c);
   right.id = uid();
   right.start = round(T);
-  right.in = round(c.in + local * kfRate(c));
   right.dur = round(c.dur - local);
+  // Fartsrampen deles i to, hver del skalert til sin egen lengde.
+  if (c.ramp) {
+    const u = local / c.dur;
+    const at = [u, instSpeed(c, local)];
+    const leftPts = [...c.ramp.filter(([x]) => x < u), at].map(([x, v]) => [round(x / u), v]);
+    const rightPts = [at, ...c.ramp.filter(([x]) => x > u)].map(([x, v]) => [round((x - u) / (1 - u)), v]);
+    c.ramp = leftPts;
+    right.ramp = rightPts;
+  }
+  const oldIn = c.in;
+  if (c.speed === 0 && !c.ramp) right.in = round(c.in + local);
+  else if (c.reverse) {
+    // Baklengs: venstre del spiller slutten av kilden, høyre del starten.
+    right.in = c.in;
+    c.in = round(c.in + total - off);
+  } else right.in = round(c.in + off);
+  // Nøkkelbildene beholder plassen sin i bildet: kfTime = in + lokal tid * kfRate.
+  shiftKeyframes(right, right.in - oldIn - local * r);
+  shiftKeyframes(c, c.in - oldIn);
   right.transition = undefined;
+  right.axfade = undefined;
   right.props.vFadeIn = 0;
   right.props.aFadeIn = 0;
+  right.props.aLead = 0;
   c.dur = round(local);
   c.props.vFadeOut = 0;
   c.props.aFadeOut = 0;
+  c.props.aTail = 0;
   project.clips[right.id] = right;
   if (c.lane === 0) project.primary.splice(project.primary.indexOf(id) + 1, 0, right.id);
   return right.id;
@@ -98,7 +171,7 @@ export function splitClip(project, id, T) {
 // Kutt alle (eller de valgte) klippene som ligger under tidspunktet.
 export function bladeAt(project, T, ids = null) {
   const targets = Object.values(project.clips).filter(
-    (c) => (!ids || ids.includes(c.id)) && T > c.start && T < c.start + c.dur
+    (c) => (!ids || ids.includes(c.id)) && !project.lanes?.[c.lane]?.locked && T > c.start && T < c.start + c.dur
   );
   return targets.map((c) => splitClip(project, c.id, T)).filter(Boolean);
 }
@@ -151,19 +224,10 @@ export function trimClip(project, id, edge, delta) {
   const c = project.clips[id];
   if (!c) return;
   const apply = () => {
-    const maxLen = mediaLength(project, c);
-    const r = kfRate(c);
-    if (edge === 'end') {
-      const max = maxLen === Infinity ? Infinity : (maxLen - c.in) / r;
-      c.dur = round(Math.max(MIN_DUR, Math.min(max, c.dur + delta)));
-    } else {
-      const minIn = isElastic(c) ? -Infinity : 0;
-      let d = Math.max((minIn - c.in) / r, Math.min(c.dur - MIN_DUR, delta));
-      if (c.lane !== 0) d = Math.max(d, -c.start);
-      c.in = round(c.in + d * r);
-      c.dur = round(c.dur - d);
-      if (c.lane !== 0) c.start = round(c.start + d);
-    }
+    let d = delta;
+    if (edge === 'start' && c.lane !== 0) d = Math.max(d, -c.start);
+    d = applyTrim(project, c, edge, d);
+    if (edge === 'start' && c.lane !== 0) c.start = round(c.start + d);
   };
   if (c.lane === 0) withSync(project, apply);
   else {
@@ -349,16 +413,12 @@ export function positionTrim(project, id, edge, delta) {
   if (!c || c.lane !== 0) return;
   withSync(project, () => {
     const idx = project.primary.indexOf(id);
-    const maxLen = mediaLength(project, c);
     if (edge === 'end') {
       const after = gapAt(project, idx + 1);
       const isLast = idx === project.primary.length - 1;
       let d = delta;
-      const max = maxLen === Infinity ? Infinity : (maxLen - c.in) / kfRate(c);
-      d = Math.min(d, max - c.dur);
-      d = Math.max(d, MIN_DUR - c.dur);
       if (d > 0 && !isLast) d = Math.min(d, after ? after.dur : 0);
-      c.dur = round(c.dur + d);
+      d = applyTrim(project, c, 'end', d);
       if (!isLast) {
         if (after) {
           after.dur = round(after.dur - d);
@@ -374,11 +434,7 @@ export function positionTrim(project, id, edge, delta) {
       }
     } else {
       const before = gapAt(project, idx - 1)?.dur || 0;
-      const minIn = isElastic(c) ? -Infinity : 0;
-      let d = Math.max((minIn - c.in) / kfRate(c), Math.min(c.dur - MIN_DUR, delta));
-      d = Math.max(d, -before);
-      c.in = round(c.in + d * kfRate(c));
-      c.dur = round(c.dur - d);
+      const d = applyTrim(project, c, 'start', Math.max(delta, -before));
       setGapBefore(project, idx, before + d);
     }
     mergeGaps(project);
@@ -393,13 +449,14 @@ export const SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2, 4, 8, 20];
 // Endrer farten. Kildeområdet beholdes, så klippet blir lengre eller kortere på tidslinjen.
 export function setSpeed(project, id, speed) {
   const c = project.clips[id];
-  if (!c || c.speed === 0 || !['video', 'recording', 'audio'].includes(c.type)) return;
+  if (!c || (c.speed === 0 && !c.ramp) || !['video', 'recording', 'audio'].includes(c.type)) return;
   const sp = Math.max(0.02, Math.min(50, speed));
-  const srcLen = c.dur * speedOf(c);
+  const length = srcLen(c);
   const apply = () => {
+    delete c.ramp;
     c.speed = sp === 1 ? undefined : sp;
     if (c.speed === undefined) delete c.speed;
-    c.dur = round(Math.max(MIN_DUR, srcLen / sp));
+    c.dur = round(Math.max(MIN_DUR, length / sp));
     if (c.transition) c.transition.dur = Math.min(c.transition.dur, c.dur);
   };
   if (c.lane === 0) withSync(project, apply);
@@ -408,6 +465,40 @@ export function setSpeed(project, id, speed) {
     resolveLane(project, c);
     updateDuration(project);
   }
+}
+
+// Fartsrampe: samme kildeområde, men farten endres gjennom klippet.
+export function setRamp(project, id, ramp) {
+  const c = project.clips[id];
+  if (!c || (c.speed === 0 && !c.ramp) || !['video', 'recording', 'audio'].includes(c.type)) return;
+  const length = srcLen(c);
+  const apply = () => {
+    if (!ramp) {
+      const av = avgSpeed(c);
+      delete c.ramp;
+      c.speed = av;
+      if (Math.abs(av - 1) < 1e-6) delete c.speed;
+      return;
+    }
+    delete c.speed;
+    c.ramp = ramp.map(([u, v]) => [u, Math.max(0.02, v)]);
+    c.dur = round(Math.max(MIN_DUR, length / rampOffset(c.ramp, 1)));
+    if (c.transition) c.transition.dur = Math.min(c.transition.dur, c.dur);
+  };
+  if (c.lane === 0) withSync(project, apply);
+  else {
+    apply();
+    resolveLane(project, c);
+    updateDuration(project);
+  }
+}
+
+// Baklengs: samme del av kilden, spilt fra slutt til start.
+export function setReverse(project, id, on) {
+  const c = project.clips[id];
+  if (!c || !['video', 'recording', 'audio'].includes(c.type) || (c.speed === 0 && !c.ramp)) return;
+  if (on) c.reverse = true;
+  else delete c.reverse;
 }
 
 // Frosset bilde ved spillhodet: klippet deles og et stillbilde settes inn.
@@ -505,13 +596,13 @@ export function rollEdit(project, aId, bId, delta) {
   const a = project.clips[aId];
   const b = project.clips[bId];
   if (!a || !b) return;
-  const maxA = mediaLength(project, a) === Infinity ? Infinity : (mediaLength(project, a) - a.in) / kfRate(a) - a.dur;
-  const maxB = isElastic(b) ? Infinity : b.in / kfRate(b);
-  const d = Math.max(-Math.min(a.dur - MIN_DUR, maxB), Math.min(Math.min(maxA, b.dur - MIN_DUR), delta));
+  const [, aHi] = trimLimits(project, a, 'end');
+  const [aLo] = trimLimits(project, a, 'end');
+  const [bLo, bHi] = trimLimits(project, b, 'start');
+  const d = Math.max(Math.max(aLo, bLo), Math.min(Math.min(aHi, bHi), delta));
   withSync(project, () => {
-    a.dur = round(a.dur + d);
-    b.in = round(b.in + d * kfRate(b));
-    b.dur = round(b.dur - d);
+    applyTrim(project, a, 'end', d);
+    applyTrim(project, b, 'start', d);
   });
 }
 
@@ -520,9 +611,11 @@ export function slipClip(project, id, delta) {
   const c = project.clips[id];
   if (!c || isElastic(c)) return;
   const len = mediaLength(project, c);
-  const r = kfRate(c);
-  const maxIn = len - c.dur * r;
-  c.in = round(Math.max(0, Math.min(maxIn, c.in + delta * r)));
+  const maxIn = len - srcLen(c);
+  const move = delta * avgSpeed(c) * (c.reverse ? -1 : 1);
+  const next = Math.max(0, Math.min(maxIn, c.in + move));
+  shiftKeyframes(c, next - c.in);
+  c.in = round(next);
 }
 
 // Flytter et klipp mellom naboene. Naboene forlenges og forkortes, så resten står stille.
@@ -531,13 +624,12 @@ export function slideClip(project, id, delta) {
   if (idx <= 0 || idx >= project.primary.length - 1) return;
   const prev = project.clips[project.primary[idx - 1]];
   const next = project.clips[project.primary[idx + 1]];
-  const maxPrev = mediaLength(project, prev) === Infinity ? Infinity : (mediaLength(project, prev) - prev.in) / kfRate(prev) - prev.dur;
-  const maxNext = isElastic(next) ? Infinity : next.in / kfRate(next);
-  const d = Math.max(-Math.min(prev.dur - MIN_DUR, maxNext), Math.min(Math.min(maxPrev, next.dur - MIN_DUR), delta));
+  const [pLo, pHi] = trimLimits(project, prev, 'end');
+  const [nLo, nHi] = trimLimits(project, next, 'start');
+  const d = Math.max(Math.max(pLo, nLo), Math.min(Math.min(pHi, nHi), delta));
   withSync(project, () => {
-    prev.dur = round(prev.dur + d);
-    next.in = round(next.in + d * kfRate(next));
-    next.dur = round(next.dur - d);
+    applyTrim(project, prev, 'end', d);
+    applyTrim(project, next, 'start', d);
   });
 }
 

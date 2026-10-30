@@ -18,9 +18,12 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 
 * Magnetisk hovedspor som i Final Cut Pro, med tilkoblede spor over (bilder, video, titler) og lydspor under (musikk, lydeffekter)
 * Verktøy som i Final Cut Pro: **Select (A)**, **Trim (T)** med roll på kutt, slip i klippet og slide med Option, **Position (P)** som flytter klipp og lager mellomrom, **Range (R)**, **Blade (B)**, **Zoom (Z)** og **Hand (H)**. Musepekeren viser hva som skjer.
-* **Skumming**: hold musen over tidslinjen eller et klipp i biblioteket, så viser visningen bildet der pekeren er, og lyden spilles i korte utdrag. **S** slår skumming av og på, **N** slår lyden ved skumming av og på.
+* **Skumming**: hold musen over tidslinjen eller et klipp i biblioteket, så viser visningen bildet der pekeren er, og lyden spilles i korte utdrag. **S** slår skumming av og på, **Shift S** slår lyden ved skumming av og på, og **N** slår festing (snapping) av og på, som i Final Cut Pro.
 * **Biblioteket som filmstriper**: hvert klipp vises som en liten tidslinje med bilder og lydbølge, under hverandre. Dra over et klipp for å velge et område, og legg det til med E, W, Q eller D (eller dra navnet til tidslinjen).
 * **Fart**: 10 %, 25 %, 50 %, 2x, 4x, 8x, 20x eller egen verdi, med valg om å beholde tonehøyden. **Frosset bilde** med Option F.
+* **Baklengs** (Reverse Clip): en baklengs kopi lages i bakgrunnen, så avspillingen blir jevn. Eksporten blir baklengs med lyd.
+* **Fartsramper** som i Final Cut Pro: Ramp to 0%, Ramp from 0%, Slow Down in the Middle, Speed Up, Slow Down og Speed Burst, eller egen start- og sluttfart. Kurven vises i inspektøren.
+* **Flere spor**: videospor over hovedsporet (V2, V3 og så videre) og lydspor under (A1, A2 og så videre), med sporhoder for skjul, demp og lås, og knapper for å legge til spor. Slipp et klipp på det tomme sporet øverst eller nederst for å lage et nytt.
 * **Utvid lyd** (Control S, Alt E på Windows) viser lyden for seg under bildet, så kantene kan dras for J- og L-kutt. **Koble fra lyd** (Control Shift S, Alt Shift E) gir egne lydklipp.
 * **Kryssfade i lyd**: marker to lydklipp som ligger inntil hverandre og trykk Cmd T. Standardlengden (1 sekund) settes i Preferences (Cmd ,).
 * Overwrite (D), Lift from Storyline (Option Cmd Opp), Overwrite to Storyline (Option Cmd Ned), Insert Gap (Option W), Solo (Option S) og Select Clip (C)
@@ -76,7 +79,7 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | Venstre og høyre pil | Ett bilde (med Shift: ti bilder) |
 | Opp og ned pil | Forrige eller neste kutt |
 | A, T, P, R, B, Z, H | Select, Trim, Position, Range, Blade, Zoom, Hand |
-| S, N, Shift N | Skumming, lyd ved skumming, festing (snapping) |
+| S, Shift S, N | Skumming, lyd ved skumming, festing (snapping) |
 | D, C | Skriv over ved spillhodet, velg klippet under spillhodet |
 | Cmd R, Option Cmd R | Fart, normal fart |
 | Option F, Option W, Option S | Frosset bilde, sett inn mellomrom, solo |

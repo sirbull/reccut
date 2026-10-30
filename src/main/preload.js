@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('api', {
   importRecording: invoke('media:importRecording'),
   reanalyze: invoke('media:reanalyze'),
   readWave: invoke('media:wave'),
+  reverseMedia: invoke('media:reverse'),
   exists: invoke('media:exists'),
   listRecordings: invoke('media:recordings'),
   readText: invoke('file:read'),

@@ -7,8 +7,11 @@ import {
   AudioLines,
   Captions,
   Brackets,
+  Eye,
   EyeOff,
   Hand,
+  Lock,
+  LockOpen,
   Headphones,
   Search,
   SquareDashed,
@@ -31,6 +34,7 @@ import {
   audioXfadeWindow,
   dbToGain,
   kfRate,
+  sourceTime,
   speedOf,
   formatTimecode,
   moveKeyframes,
@@ -69,18 +73,20 @@ const RULER_H = 26;
 const HEIGHTS = { caption: 26, video: 46, primary: 78, audio: 54 };
 const view = signal({ left: 0, width: 1000 });
 
+// Spor: videospor over hovedsporet (V2, V3 ...) og lydspor under (A1, A2 ...).
+// Antallet følger klippene, pluss spor du har lagt til, pluss ett tomt spor å slippe på.
 export function laneRows(p) {
-  let maxLane = 0;
-  let minLane = 0;
+  let maxLane = Math.max(1, p.tracks?.video || 1);
+  let minLane = -Math.max(1, p.tracks?.audio || 1);
   for (const c of Object.values(p.clips)) {
     if (c.lane === CAPTION_LANE) continue;
     maxLane = Math.max(maxLane, c.lane);
     minLane = Math.min(minLane, c.lane);
   }
   const rows = [{ lane: CAPTION_LANE, h: HEIGHTS.caption, kind: 'caption' }];
-  for (let l = Math.max(1, maxLane + 1); l >= 1; l--) rows.push({ lane: l, h: HEIGHTS.video, kind: 'video' });
+  for (let l = maxLane + 1; l >= 1; l--) rows.push({ lane: l, h: HEIGHTS.video, kind: 'video', spare: l === maxLane + 1 });
   rows.push({ lane: 0, h: HEIGHTS.primary, kind: 'primary' });
-  for (let l = -1; l >= Math.min(-1, minLane - 1); l--) rows.push({ lane: l, h: HEIGHTS.audio, kind: 'audio' });
+  for (let l = -1; l >= minLane - 1; l--) rows.push({ lane: l, h: HEIGHTS.audio, kind: 'audio', spare: l === minLane - 1 });
   let y = 0;
   for (const r of rows) {
     r.y = y;
@@ -270,6 +276,11 @@ export function Timeline() {
     }
     const clip = proj.clips[clipId];
     selectedTransition.value = null;
+    if (proj.lanes?.[clip.lane]?.locked) {
+      selection.value = [];
+      seek(T);
+      return;
+    }
 
     if (tool.value === 'blade' && (hit === 'clip' || hit === 'edge')) {
       const t = snap(T, new Set([clipId])).t;
@@ -557,6 +568,8 @@ export function Timeline() {
   return (
     <div class="timeline">
       <TimelineToolbar />
+      <div class="tl-body">
+      <TrackHeaders rows={rows} p={p} scrollRef={scrollRef} />
       <div class="tl-scroll" ref={scrollRef}>
         <div
           class={`tl-content tool-${tool.value}`}
@@ -636,6 +649,71 @@ export function Timeline() {
           </div>
         </div>
       </div>
+      </div>
+    </div>
+  );
+}
+
+// Sporhoder til venstre: navn, skjul, demp og lås. Følger den vertikale rullingen.
+function TrackHeaders({ rows, p, scrollRef }) {
+  const innerRef = useRef(null);
+  useEffect(() => {
+    const sc = scrollRef.current;
+    const sync = () => innerRef.current && (innerRef.current.style.transform = `translateY(${-sc.scrollTop}px)`);
+    sc.addEventListener('scroll', sync);
+    sync();
+    return () => sc.removeEventListener('scroll', sync);
+  }, []);
+  const toggle = (lane, key) =>
+    commit((q) => {
+      q.lanes = q.lanes || {};
+      q.lanes[lane] = { ...(q.lanes[lane] || {}), [key]: !q.lanes[lane]?.[key] };
+    });
+  const addTrack = (kind) =>
+    commit((q) => {
+      const rr = laneRows(q).rows;
+      q.tracks = { video: q.tracks?.video || 1, audio: q.tracks?.audio || 1 };
+      if (kind === 'video') q.tracks.video = Math.max(...rr.filter((r) => r.kind === 'video').map((r) => r.lane));
+      else q.tracks.audio = -Math.min(...rr.filter((r) => r.kind === 'audio').map((r) => r.lane));
+    });
+  return (
+    <div class="tl-headers">
+      <div class="tl-headers-inner" ref={innerRef} style={{ paddingTop: RULER_H + 8 }}>
+        {rows.map((r) => {
+          const l = p.lanes?.[r.lane] || {};
+          const name = r.kind === 'caption' ? 'Captions' : r.kind === 'primary' ? 'V1 Storyline' : r.kind === 'video' ? `V${r.lane + 1}` : `A${-r.lane}`;
+          return (
+            <div key={r.lane} class={`track-head ${r.kind}${r.spare ? ' spare' : ''}`} style={{ height: r.h, marginBottom: 2 }}>
+              {r.spare ? (
+                <button class="add-track" onClick={() => addTrack(r.kind)} title={r.kind === 'video' ? 'Add a video track. You can also drop clips here.' : 'Add an audio track. You can also drop clips here.'}>
+                  + {r.kind === 'video' ? 'Video' : 'Audio'}
+                </button>
+              ) : (
+                <>
+                  <span class="track-name" title={name}>
+                    {name}
+                  </span>
+                  <div class="track-btns">
+                    {r.kind !== 'audio' && (
+                      <button class={l.hidden ? 'off' : ''} title={l.hidden ? 'Show track' : 'Hide track'} onClick={() => toggle(r.lane, 'hidden')}>
+                        {l.hidden ? <EyeOff size={12} /> : <Eye size={12} />}
+                      </button>
+                    )}
+                    {r.kind !== 'caption' && (
+                      <button class={l.muted ? 'off' : ''} title={l.muted ? 'Unmute track' : 'Mute track'} onClick={() => toggle(r.lane, 'muted')}>
+                        {l.muted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                      </button>
+                    )}
+                    <button class={l.locked ? 'on' : ''} title={l.locked ? 'Unlock track' : 'Lock track'} onClick={() => toggle(r.lane, 'locked')}>
+                      {l.locked ? <Lock size={12} /> : <LockOpen size={12} />}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -666,9 +744,9 @@ function TimelineToolbar() {
           ))}
         </div>
         <span class="sep" />
-        <IconButton icon={Magnet} title="Snapping (Shift N)" active={snapping.value} onClick={() => (snapping.value = !snapping.value)} />
+        <IconButton icon={Magnet} title="Snapping (N)" active={snapping.value} onClick={() => (snapping.value = !snapping.value)} />
         <IconButton icon={StretchHorizontal} title="Skimming (S)" active={skimming.value} onClick={() => (skimming.value = !skimming.value)} />
-        <IconButton icon={Headphones} title="Audio skimming (N)" active={skimming.value && audioSkimming.value} disabled={!skimming.value} onClick={() => (audioSkimming.value = !audioSkimming.value)} />
+        <IconButton icon={Headphones} title="Audio skimming (Shift S)" active={skimming.value && audioSkimming.value} disabled={!skimming.value} onClick={() => (audioSkimming.value = !audioSkimming.value)} />
       </div>
       <div class="tl-time">
         <span class="tc">{formatTimecode(timeSig.value, p.fps)}</span>
@@ -732,15 +810,10 @@ function Ruler({ width }) {
 
 function LaneBg({ row, p }) {
   const lane = p.lanes?.[row.lane] || {};
-  const label = row.kind === 'caption' ? 'Captions' : row.kind === 'primary' ? 'Storyline' : row.kind === 'audio' ? `Audio ${-row.lane}` : `Lane ${row.lane}`;
   return (
-    <div class={`tl-lane ${row.kind}${lane.hidden ? ' hidden' : ''}${lane.muted ? ' muted' : ''}`} style={{ top: row.y, height: row.h }}>
-      <span class="lane-label">
-        {row.kind === 'audio' ? <AudioLines size={11} /> : null}
-        {label}
-        {lane.hidden && <EyeOff size={11} />}
-        {lane.muted && <VolumeX size={11} />}
-      </span>
+    <div class={`tl-lane ${row.kind}${lane.hidden ? ' hidden' : ''}${lane.muted ? ' muted' : ''}${lane.locked ? ' locked' : ''}${row.spare ? ' spare' : ''}`} style={{ top: row.y, height: row.h }}>
+      {row.spare && <span class="lane-label">Drop here for a new {row.kind === 'video' ? 'video' : 'audio'} track</span>}
+      {lane.locked && <span class="lane-lock" />}
     </div>
   );
 }
@@ -772,7 +845,8 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
       {!narrow && (
         <div class="clip-label" data-hit="clip" data-clip={clip.id}>
           {clip.type === 'recording' && <span class="badge">REC</span>}
-          {speed !== 1 && <span class="badge speed">{speed === 0 ? 'Freeze' : `${Math.round(speed * 100)}%`}</span>}
+          {clip.reverse && <span class="badge speed" title="Reversed">Reverse</span>}
+          {clip.ramp ? <span class="badge speed" title="Speed ramp">Ramp</span> : speed !== 1 && <span class="badge speed">{speed === 0 ? 'Freeze' : `${Math.round(speed * 100)}%`}</span>}
           {clip.solo && <span class="badge solo">S</span>}
           <span class="name">{label}</span>
         </div>
@@ -800,7 +874,7 @@ function Filmstrip({ clip, stream, x, w, h, z, media }) {
   const from = Math.max(0, Math.floor((left - x) / tileW) - 1);
   const to = Math.min(Math.ceil(w / tileW), Math.ceil((left + vw - x) / tileW) + 1);
   for (let i = from; i < to; i++) {
-    const tSrc = (clip.speed === 0 ? clip.freezeAt ?? clip.in : clip.in + (((i + 0.5) * tileW) / z) * speedOf(clip)) - offset;
+    const tSrc = sourceTime(clip, clip.start + ((i + 0.5) * tileW) / z) - offset;
     const idx = media?.kind === 'image' ? 0 : Math.max(0, Math.min(files.length - 1, Math.floor(tSrc / interval)));
     tiles.push(<img key={i} src={fileUrl(files[idx])} style={{ left: i * tileW, width: tileW, height: h }} draggable={false} />);
   }
@@ -842,9 +916,11 @@ function Wave({ clip, stream, x, w, h, z, offset, lead = 0 }) {
     g.fillStyle = 'rgba(255,255,255,0.55)';
     const mid = cv.height / 2;
     for (let px = 0; px < cv.width; px++) {
-      const sp = speedOf(clip);
-      const t0 = clip.in + ((visX + px / dpr) / z - lead) * sp - offset;
-      const t1 = clip.in + ((visX + (px + 1) / dpr) / z - lead) * sp - offset;
+      // Kildetid for hver piksel (følger fart, ramper og baklengs).
+      const a0 = sourceTime(clip, clip.start + (visX + px / dpr) / z - lead) - offset;
+      const a1 = sourceTime(clip, clip.start + (visX + (px + 1) / dpr) / z - lead) - offset;
+      const t0 = Math.min(a0, a1);
+      const t1 = Math.max(a0, a1);
       let i0 = Math.floor(t0 * wave.rate);
       const i1 = Math.max(i0 + 1, Math.ceil(t1 * wave.rate));
       let m = 0;
@@ -853,7 +929,7 @@ function Wave({ clip, stream, x, w, h, z, offset, lead = 0 }) {
       const hh = Math.max(0.5, v * mid * 0.95);
       g.fillRect(px, mid - hh, 1, hh * 2);
     }
-  }, [wave, visX, visW, h, z, clip.in, clip.speed, lead, clip.props.volume, clip.props.micVolume]);
+  }, [wave, visX, visW, h, z, clip.in, clip.speed, clip.ramp, clip.reverse, lead, clip.props.volume, clip.props.micVolume]);
   const dbLine = volumeY(clip.props.volume ?? clip.props.micVolume ?? 0, h);
   const kfs = clip.kf?.volume || clip.kf?.micVolume;
   return (

@@ -2668,3 +2668,133 @@ input[type='color'].color::-webkit-color-swatch {
   background: #ff5fa2;
   pointer-events: none;
 }
+.ramp-curve {
+  width: 100%;
+  height: 42px;
+  background: var(--bg-0);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  margin: 2px 0 8px;
+}
+.ramp-curve polyline {
+  fill: none;
+  stroke: #ff9f0a;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.ramp-curve .ref {
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Sporhoder */
+.tl-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.tl-body .tl-scroll {
+  flex: 1;
+}
+.tl-headers {
+  width: 104px;
+  flex-shrink: 0;
+  /* clip, ikke hidden: ellers kan nettleseren rulle kolonnen når en knapp får fokus */
+  overflow: clip;
+  background: var(--bg-1);
+  border-right: 1px solid var(--line);
+  position: relative;
+}
+.tl-headers-inner {
+  will-change: transform;
+}
+.track-head {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 8px;
+  border-bottom: 1px solid #1a1a1c;
+  box-sizing: border-box;
+}
+.track-head.primary {
+  background: rgba(255, 255, 255, 0.03);
+}
+.track-head.caption {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.track-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.track-head.audio .track-name {
+  color: #7fd6a2;
+}
+.track-head.video .track-name,
+.track-head.primary .track-name {
+  color: #8db8ff;
+}
+.track-btns {
+  display: flex;
+  gap: 2px;
+}
+.track-btns button {
+  width: 22px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.track-btns button:hover {
+  background: var(--bg-3);
+  color: var(--text);
+}
+.track-btns button.off {
+  color: var(--red);
+}
+.track-btns button.on {
+  color: var(--yellow);
+}
+.track-head.spare {
+  justify-content: center;
+  align-items: flex-start;
+}
+.add-track {
+  border: 1px dashed var(--line-2);
+  background: none;
+  color: var(--text-3);
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.add-track:hover {
+  color: var(--text);
+  border-color: var(--text-3);
+}
+.tl-lane.spare {
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.015) 0 8px, transparent 8px 16px);
+}
+.tl-lane.spare .lane-label {
+  color: #3c3c42;
+  text-transform: none;
+  letter-spacing: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  position: sticky;
+}
+.tl-lane.locked {
+  background: repeating-linear-gradient(45deg, rgba(247, 201, 72, 0.04) 0 6px, transparent 6px 12px);
+}

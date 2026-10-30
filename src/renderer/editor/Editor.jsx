@@ -88,19 +88,17 @@ function onKeyDown(e) {
   else if (code === 'KeyZ' && !e.shiftKey) tool.value = 'zoom';
   else if (code === 'KeyD') commands.addBrowserSelection('overwrite');
   else if (code === 'KeyC') commands.selectClipAtPlayhead();
-  else if (code === 'KeyS') {
-    skimming.value = !skimming.value;
-    if (!skimming.value) skim.value = null;
-  }
-  else if (code === 'KeyV') commands.toggleEnabled();
-  else if (code === 'KeyE') commands.addBrowserSelection('append');
-  else if (code === 'KeyW') commands.addBrowserSelection('insert');
-  else if (code === 'KeyQ') commands.addBrowserSelection('connect');
-  // N slår lyd ved skumming av og på, Shift N slår festing av og på.
-  else if (code === 'KeyN' && e.shiftKey) snapping.value = !snapping.value;
-  else if (code === 'KeyN') {
+  // Som i Final Cut Pro: S skumming, Shift S lyd ved skumming, N festing.
+  else if (code === 'KeyS' && e.shiftKey) {
     audioSkimming.value = !audioSkimming.value;
     toast(audioSkimming.value ? 'Audio skimming on' : 'Audio skimming off', { timeout: 1200 });
+  } else if (code === 'KeyS') {
+    skimming.value = !skimming.value;
+    if (!skimming.value) skim.value = null;
+    toast(skimming.value ? 'Skimming on' : 'Skimming off', { timeout: 1200 });
+  } else if (code === 'KeyN') {
+    snapping.value = !snapping.value;
+    toast(snapping.value ? 'Snapping on' : 'Snapping off', { timeout: 1200 });
   }
   else if (code === 'KeyM') commands.addMarker();
   else if (code === 'KeyI') commands.setRange('in');
@@ -156,6 +154,8 @@ export function handleMenu(id) {
   else if (id === 'prefs') commands.prefsOpen.value = true;
   else if (id.startsWith('speed:')) commands.setSpeedSelected(Number(id.slice(6)));
   else if (id === 'retime') commands.openRetime();
+  else if (id === 'reverse') commands.toggleReverse();
+  else if (id.startsWith('ramp:')) commands.applyRamp(id === 'ramp:none' ? null : id.slice(5));
   else if (id === 'freeze') commands.addFreezeFrame();
   else if (id === 'expandAudio') commands.toggleExpandAudio();
   else if (id === 'detachAudio') commands.detachSelectedAudio();
@@ -376,7 +376,7 @@ function PreferencesDialog() {
             }}
           />
         </Row>
-        <Row label="Audio skimming (N)">
+        <Row label="Audio skimming (Shift S)">
           <Toggle
             checked={audioSkimming.value}
             onChange={(v) => {
@@ -385,7 +385,7 @@ function PreferencesDialog() {
             }}
           />
         </Row>
-        <Row label="Snapping (Shift N)">
+        <Row label="Snapping (N)">
           <Toggle
             checked={snapping.value}
             onChange={(v) => {

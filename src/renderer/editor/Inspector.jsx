@@ -4,6 +4,7 @@ import { signal } from '@preact/signals';
 import { ChevronLeft, ChevronRight, Diamond, Plus, RotateCcw, Sparkles, Trash2 } from 'lucide-preact';
 import {
   ANIMATION_PRESETS,
+  RAMP_PRESETS,
   CAPTION_LANE,
   COLOR_LOOKS,
   DEFAULT_CAPTION_STYLE,
@@ -366,7 +367,7 @@ const SPEEDS = [
 ];
 
 function SpeedTab({ clip }) {
-  if (clip.speed === 0) {
+  if (clip.speed === 0 && !clip.ramp) {
     return (
       <Section title="Freeze frame">
         <Row label="Duration">
@@ -376,21 +377,29 @@ function SpeedTab({ clip }) {
       </Section>
     );
   }
-  const sp = clip.speed ?? 1;
+  const sp = clip.ramp ? null : clip.speed ?? 1;
   const set = (v) => commit((q) => setSpeed(q, clip.id, v));
+  const media = project.value.media[clip.mediaId];
+  const preparing = clip.reverse && media && Object.values(media.streams).some((st) => !st.reversed);
   return (
     <>
       <Section title="Speed" collapsible={false}>
         <div class="speed-grid">
           {SPEEDS.map((x) => (
-            <button key={x.value} class={`chip${Math.abs(sp - x.value) < 1e-6 ? ' active' : ''}`} onClick={() => set(x.value)}>
+            <button key={x.value} class={`chip${sp != null && Math.abs(sp - x.value) < 1e-6 ? ' active' : ''}`} onClick={() => set(x.value)}>
               {x.label}
             </button>
           ))}
         </div>
-        <Row label="Custom">
-          <NumberField value={Math.round(sp * 1000) / 10} min={2} max={5000} step={1} precision={1} unit="%" width={90} onChange={(v) => set(v / 100)} />
+        {!clip.ramp && (
+          <Row label="Custom">
+            <NumberField value={Math.round(sp * 1000) / 10} min={2} max={5000} step={1} precision={1} unit="%" width={90} onChange={(v) => set(v / 100)} />
+          </Row>
+        )}
+        <Row label="Reverse">
+          <Toggle checked={Boolean(clip.reverse)} onChange={(v) => import('./commands.js').then((m) => m.toggleReverse(v))} />
         </Row>
+        {preparing && <p class="hint">Preparing the reversed clip in the background. Until it is ready, the preview steps through frames without sound.</p>}
         <Row label="Preserve pitch">
           <Toggle checked={clip.props.preservePitch !== false} onChange={(v) => setProp(clip, { preservePitch: v })} />
         </Row>
@@ -399,6 +408,7 @@ function SpeedTab({ clip }) {
         </Row>
         <p class="hint">Changing the speed keeps the same part of the source, so the clip gets longer or shorter and the rest of the storyline moves with it.</p>
       </Section>
+      <RampSection clip={clip} />
       {(clip.type === 'video' || clip.type === 'recording') && (
         <Section title="Hold">
           <Button variant="secondary" onClick={() => import('./commands.js').then((m) => m.addFreezeFrame())}>
@@ -407,6 +417,49 @@ function SpeedTab({ clip }) {
         </Section>
       )}
     </>
+  );
+}
+
+// Fartsrampe: farten endres jevnt gjennom klippet, som Speed Ramp i Final Cut Pro.
+function RampSection({ clip }) {
+  const [preset, setPreset] = useState('to0');
+  const ramp = clip.ramp;
+  const from = ramp ? ramp[0][1] : clip.speed ?? 1;
+  const to = ramp ? ramp[ramp.length - 1][1] : clip.speed ?? 1;
+  const apply = (r) => import('./commands.js').then((m) => m.applyRamp(r));
+  return (
+    <Section title="Speed ramp">
+      <div class="anim-row">
+        <Select value={preset} options={RAMP_PRESETS.map((r) => ({ value: r.id, label: r.label }))} onChange={setPreset} />
+        <Button variant="secondary" onClick={() => apply(preset)}>
+          Apply
+        </Button>
+      </div>
+      {ramp && <RampCurve ramp={ramp} />}
+      <Row label="Start speed">
+        <NumberField value={Math.round(from * 100)} min={5} max={2000} step={5} unit="%" width={90} onChange={(v) => apply([[0, v / 100], ...(ramp ? ramp.slice(1, -1) : []), [1, to]])} />
+      </Row>
+      <Row label="End speed">
+        <NumberField value={Math.round(to * 100)} min={5} max={2000} step={5} unit="%" width={90} onChange={(v) => apply([[0, from], ...(ramp ? ramp.slice(1, -1) : []), [1, v / 100]])} />
+      </Row>
+      {ramp && (
+        <button class="link small-link" onClick={() => apply(null)}>
+          Remove ramp (keeps the average speed)
+        </button>
+      )}
+      <p class="hint">The speed changes smoothly through the clip. The same part of the source is used, so the clip gets longer when it slows down.</p>
+    </Section>
+  );
+}
+
+function RampCurve({ ramp }) {
+  const max = Math.max(1, ...ramp.map(([, v]) => v));
+  const pts = ramp.map(([u, v]) => `${u * 200},${40 - (v / max) * 36}`).join(' ');
+  return (
+    <svg class="ramp-curve" viewBox="0 0 200 42" preserveAspectRatio="none">
+      <line x1="0" x2="200" y1={40 - 36 / max} y2={40 - 36 / max} class="ref" />
+      <polyline points={pts} />
+    </svg>
   );
 }
 

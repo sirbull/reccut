@@ -1,7 +1,7 @@
 // Avspillingsmotor. Hvert aktivt klipp får sitt eget video- eller lydelement,
 // som holdes i takt med spillhodet. Bildet tegnes med samme kode som eksporten.
 // Redigeringen og eksportfanen har hver sin spiller.
-import { computeAudio, computeFrame, sourceTime, speedOf } from '../shared/model.js';
+import { computeAudio, computeFrame, instSpeed, sourceTime } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 
 const PRELOAD = 1.5;
@@ -33,7 +33,9 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     const m = getProject().media[clip.mediaId];
     const s = m?.streams?.[key];
     if (!s) return null;
-    return { path: s.proxy || s.path, hasVideo: s.hasVideo && m.kind !== 'image', hasAudio: s.hasAudio };
+    // Baklengs klipp spiller den baklengs kopien framover når den er klar.
+    if (clip.reverse && s.reversed) return { path: s.reversed, rev: true, D: s.duration, hasVideo: s.hasVideo && m.kind !== 'image', hasAudio: s.hasAudio };
+    return { path: s.proxy || s.path, rev: false, hasVideo: s.hasVideo && m.kind !== 'image', hasAudio: s.hasAudio };
   }
 
   function getEl(clip, key) {
@@ -60,7 +62,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
         gain.gain.value = 0;
         src.connect(gain).connect(master);
       } else el.muted = true;
-      entry = { el, gain, path: stream.path, lastUsed: performance.now(), target: 0 };
+      entry = { el, gain, path: stream.path, rev: stream.rev, D: stream.D, lastUsed: performance.now(), target: 0 };
       pool.set(id, entry);
     }
     entry.lastUsed = performance.now();
@@ -109,8 +111,9 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       const m = p.media[clip.mediaId];
       if (!m || m.kind === 'image') return;
       const s = sourceTime(clip, t);
+      const sp = instSpeed(clip, t - clip.start) * (clip.reverse ? -1 : 1);
       for (const [key, st] of Object.entries(m.streams)) {
-        if (st.hasVideo) out.set(`${clip.id}:${key}`, { clip, key, src: s - (st.offset || 0), gain: 0, speed: speedOf(clip) });
+        if (st.hasVideo) out.set(`${clip.id}:${key}`, { clip, key, src: s - (st.offset || 0), gain: 0, speed: clip.speed === 0 && !clip.ramp ? 0 : sp });
       }
     };
     for (const l of frame.layers) {
@@ -140,10 +143,14 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       if (!entry) continue;
       const el = entry.el;
       const dur = el.duration || Infinity;
-      const target = Math.max(0, n.src);
+      // I en baklengs kopi er tiden speilet.
+      const src = entry.rev ? (entry.D ?? dur) - n.src : n.src;
+      const target = Math.max(0, src);
       // Utenfor filen (for eksempel et J-kutt forbi starten) er det stille.
-      const outside = n.src < -0.01 || target >= dur - 0.01;
-      const speed = n.speed ?? 1;
+      const outside = src < -0.01 || target >= dur - 0.01;
+      let speed = n.speed ?? 1;
+      if (entry.rev) speed = -speed;
+      // Baklengs uten ferdig kopi: vis riktig bilde, men stille, til kopien er klar.
       const moving = isPlaying && rate > 0 && speed > 0;
       el.preservesPitch = n.clip.props?.preservePitch !== false;
       if (scrubbing && entry.gain && !outside) {
@@ -189,7 +196,8 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       if (!entry) continue;
       if (entry.gain) entry.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.015);
       if (!entry.el.paused) entry.el.pause();
-      const start = Math.max(0, n.src - PRELOAD);
+      const base = entry.rev ? (entry.D ?? 0) - n.src : n.src;
+      const start = Math.max(0, base - PRELOAD);
       if (Math.abs(entry.el.currentTime - start) > 0.3 && !entry.el.seeking) entry.el.currentTime = start;
     }
     const now = performance.now();

@@ -240,9 +240,67 @@ async function recordingMedia(dir, notify) {
   });
 }
 
+// Baklengs kopi av en strøm, laget i biter på ti sekunder så lange filer ikke fyller minnet.
+// Tid r i kopien tilsvarer tid (varighet minus r) i originalen.
+const reversing = new Map();
+function reverseStream(stream, ctx, share = [0, 1]) {
+  const source = stream.proxy || stream.path;
+  const key = source;
+  if (reversing.has(key)) return reversing.get(key);
+  const job = (async () => {
+    const dir = await cacheDirFor(source);
+    const out = path.join(dir, 'baklengs.mp4');
+    if (fs.existsSync(out)) return out;
+    const D = stream.duration;
+    const SEG = 10;
+    const n = Math.max(1, Math.ceil(D / SEG));
+    const parts = [];
+    for (let i = 0; i < n; i++) {
+      const end = D - i * SEG;
+      const start = Math.max(0, end - SEG);
+      const part = path.join(dir, `rev_${i}.mp4`);
+      const args = ['-ss', String(start), '-t', String(end - start), '-i', source];
+      if (stream.hasVideo) args.push('-map', '0:v:0', '-vf', 'reverse', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-g', '15');
+      if (stream.hasAudio) args.push('-map', '0:a:0', '-af', 'areverse', '-c:a', 'aac', '-b:a', '256k', '-ar', '48000');
+      args.push(part);
+      const r = ff.run(args);
+      ctx?.setCancel(r.kill);
+      await r.promise;
+      parts.push(part);
+      ctx?.progress(share[0] + ((i + 1) / n) * (share[1] - share[0]), 'Creating reversed media');
+    }
+    const list = path.join(dir, 'rev_list.txt');
+    await fs.promises.writeFile(list, parts.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join('\n'));
+    const tmp = out + '.tmp.mp4';
+    await ff.run(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', '-movflags', '+faststart', tmp]).promise;
+    await fs.promises.rename(tmp, out);
+    for (const f of [...parts, list]) await fs.promises.unlink(f).catch(() => {});
+    return out;
+  })();
+  reversing.set(key, job);
+  job.finally(() => reversing.delete(key)).catch(() => {});
+  return job;
+}
+
+// Lager baklengs kopier av alle strømmene i et medium. Resultatet meldes som en vanlig analyse.
+function scheduleReverse(media, notify) {
+  return jobs.add({
+    kind: 'analyze',
+    title: `Reversing ${media.name}`,
+    queue: 'light',
+    run: async (ctx) => {
+      const keys = Object.keys(media.streams).filter((k) => !media.streams[k].reversed);
+      for (const [i, key] of keys.entries()) {
+        const file = await reverseStream(media.streams[key], ctx, [i / keys.length, (i + 1) / keys.length]);
+        notify({ mediaId: media.id, stream: key, patch: { reversed: file } });
+      }
+    },
+  });
+}
+
 // Alle filendelser appen kjenner, for importdialogen.
 function extensions() {
   return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT].map((e) => e.slice(1));
 }
 
-module.exports = { extensions, importFiles, recordingMedia, kindOf, cacheRoot, newId };
+module.exports = { reverseStream, scheduleReverse, extensions, importFiles, recordingMedia, kindOf, cacheRoot, newId };

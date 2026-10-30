@@ -1,6 +1,6 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
-import { CAPTION_LANE, EFFECTS, clipHasAudio, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
+import { CAPTION_LANE, EFFECTS, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
 import {
   adjacentAudioPairs,
   detachAudio,
@@ -10,6 +10,8 @@ import {
   overwritePrimary,
   setAudioCrossfade,
   setSpeed,
+  setRamp,
+  setReverse,
   addMediaClip,
   autoFormat,
   bladeAt,
@@ -346,7 +348,7 @@ export function addBrowserSelection(mode) {
 function speedTargets() {
   const p = project.value;
   const ids = selection.value.length ? selection.value : targetClipsAtPlayhead();
-  return ids.filter((id) => ['video', 'recording', 'audio'].includes(p.clips[id]?.type) && p.clips[id].speed !== 0);
+  return ids.filter((id) => ['video', 'recording', 'audio'].includes(p.clips[id]?.type) && !(p.clips[id].speed === 0 && !p.clips[id].ramp));
 }
 
 export function setSpeedSelected(speed) {
@@ -429,6 +431,32 @@ export function selectClipAtPlayhead() {
   if (c) selection.value = [c.id];
 }
 
+// Baklengs: lag en baklengs kopi i bakgrunnen første gang, så forhåndsvisningen blir jevn.
+export function toggleReverse(on) {
+  const ids = speedTargets();
+  if (!ids.length) return toast('Select a video, recording or audio clip to reverse it.');
+  const p = project.value;
+  const value = on ?? !ids.every((id) => p.clips[id].reverse);
+  commit((q) => ids.forEach((id) => setReverse(q, id, value)));
+  if (value) {
+    const done = new Set();
+    for (const id of ids) {
+      const m = p.media[p.clips[id].mediaId];
+      if (!m || done.has(m.id) || Object.values(m.streams).every((st) => st.reversed)) continue;
+      done.add(m.id);
+      api.reverseMedia(m);
+    }
+    if (done.size) toast('Preparing the reversed clip in the background. Playback is smooth when it is done.', { timeout: 4000 });
+  }
+}
+
+export function applyRamp(rampOrPreset) {
+  const ids = speedTargets();
+  if (!ids.length) return toast('Select a video, recording or audio clip to add a speed ramp.');
+  const ramp = typeof rampOrPreset === 'string' ? RAMP_PRESETS.find((r) => r.id === rampOrPreset)?.ramp : rampOrPreset;
+  commit((q) => ids.forEach((id) => setRamp(q, id, ramp || null)));
+}
+
 export function openRetime() {
   const ids = speedTargets();
   if (!ids.length) return toast('Select a clip to change its speed.');
@@ -506,14 +534,17 @@ export async function clipContextMenu(clipId, T) {
   }
   const media = project.value.media[c.mediaId];
   const hasAudio = clipHasAudio(c, media);
-  if (['video', 'recording', 'audio'].includes(c.type) && c.speed !== 0) {
-    const sp = c.speed ?? 1;
+  if (['video', 'recording', 'audio'].includes(c.type) && !(c.speed === 0 && !c.ramp)) {
+    const sp = c.ramp ? null : c.speed ?? 1;
     items.push({
       label: 'Speed',
       submenu: [
         ...[0.1, 0.25, 0.5].map((v) => ({ id: `speed:${v}`, label: `Slow ${v * 100}%`, checked: sp === v })),
         { id: 'speed:1', label: 'Normal (100%)', checked: sp === 1, accelerator: isMac ? 'Alt+Cmd+R' : 'Ctrl+Alt+R' },
         ...[2, 4, 8, 20].map((v) => ({ id: `speed:${v}`, label: `Fast ${v}x`, checked: sp === v })),
+        { separator: true },
+        { id: 'reverse', label: 'Reverse Clip', checked: Boolean(c.reverse) },
+        { label: 'Speed Ramp', submenu: [...RAMP_PRESETS.map((r) => ({ id: `ramp:${r.id}`, label: r.label })), { separator: true }, { id: 'ramp:none', label: 'Remove Ramp', enabled: Boolean(c.ramp) }] },
       ],
     });
   }
@@ -531,6 +562,8 @@ export async function clipContextMenu(clipId, T) {
   if (c.lane === 0) items.push({ id: 'deleteGap', label: 'Delete and Leave Gap', accelerator: 'Shift+Backspace' });
   const id = await api.popupMenu(items);
   if (id?.startsWith('speed:')) return setSpeedSelected(Number(id.slice(6)));
+  if (id?.startsWith('ramp:')) return applyRamp(id === 'ramp:none' ? null : id.slice(5));
+  if (id === 'reverse') return toggleReverse();
   switch (id) {
     case 'freeze':
       seek(Math.min(Math.max(T, c.start), c.start + c.dur - 1e-3));

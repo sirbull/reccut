@@ -98,16 +98,20 @@ async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
     if (c.start > b + PAD || c.start + c.dur < a - PAD) continue;
     const keys = c.type === 'recording' ? Object.keys(m.streams).filter((k) => m.streams[k].hasAudio) : [c.stream || 'main'];
     const speed = c.speed ?? 1;
+    // Fartsramper og baklengs: lyden leses fra kildeposisjonen for hver prøve (generell vei).
+    const generic = Boolean(c.ramp || c.reverse);
     // Lydvinduet kan være forlenget (utvidet lyd), og overganger bruker litt ekstra på hver side.
     const t0 = Math.max(a, c.start - Math.max(0, c.props.aLead || 0)) - PAD;
     const t1 = Math.min(b, c.start + c.dur + Math.max(0, c.props.aTail || 0)) + PAD;
+    const s0 = sourceTime(c, t0);
+    const s1 = sourceTime(c, t1);
     for (const key of keys) {
       const info = streamInfo(project, c, key);
       if (!info || !fs.existsSync(info.path)) continue;
-      const from = Math.max(0, c.in + (t0 - c.start) * speed - info.offset);
-      const to = c.in + (t1 - c.start) * speed - info.offset;
+      const from = Math.max(0, Math.min(s0, s1) - info.offset);
+      const to = Math.max(s0, s1) - info.offset;
       if (to <= from) continue;
-      pairs.set(`${c.id}:${key}`, { path: info.path, from, to, speed, tempo: tempoFilter(speed, c.props.preservePitch), file: path.join(tmp, `a_${pairs.size}.f32`) });
+      pairs.set(`${c.id}:${key}`, { path: info.path, from, to, speed: generic ? 1 : speed, generic, tempo: generic ? null : tempoFilter(speed, c.props.preservePitch), file: path.join(tmp, `a_${pairs.size}.f32`) });
     }
   }
 
@@ -167,13 +171,31 @@ async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
       const T0 = a + (written + f) / RATE;
       const T1 = T0 + len / RATE;
       const now = computeAudio(project, T0);
-      const next = new Map(computeAudio(project, T1).map((x) => [`${x.clip.id}:${x.stream}`, x.gain]));
+      const next = new Map(computeAudio(project, T1).map((x) => [`${x.clip.id}:${x.stream}`, x]));
       for (const src of now) {
         const key = `${src.clip.id}:${src.stream}`;
         const pair = pairs.get(key);
         if (!pair) continue;
         const g0 = src.gain;
-        const g1 = next.has(key) ? next.get(key) : g0;
+        const g1 = next.has(key) ? next.get(key).gain : g0;
+        if (pair.generic) {
+          // Kildeposisjonen går jevnt gjennom blokken, også baklengs og med varierende fart.
+          const p0 = src.src;
+          const p1 = next.has(key) ? next.get(key).src : p0 + (src.speed * len) / RATE;
+          const lo = Math.floor((Math.min(p0, p1) - pair.from) * RATE) - 2;
+          const hi = Math.ceil((Math.max(p0, p1) - pair.from) * RATE) + 2;
+          const cache = readFrames(pair, lo, hi - lo + 1);
+          for (let k = 0; k < len; k++) {
+            const pos = ((p0 + ((p1 - p0) * k) / len) - pair.from) * RATE - cache.start;
+            const i0 = Math.floor(pos);
+            const fr = pos - i0;
+            if (i0 < 0 || i0 + 1 >= cache.valid) continue;
+            const g = g0 + ((g1 - g0) * k) / len;
+            outBuf[(f + k) * 2] += (cache.data[i0 * 2] * (1 - fr) + cache.data[(i0 + 1) * 2] * fr) * g;
+            outBuf[(f + k) * 2 + 1] += (cache.data[i0 * 2 + 1] * (1 - fr) + cache.data[(i0 + 1) * 2 + 1] * fr) * g;
+          }
+          continue;
+        }
         const startFrame = Math.round(((src.src - pair.from) / (pair.speed || 1)) * RATE);
         const cache = readFrames(pair, startFrame, len);
         const off = startFrame - cache.start;
@@ -278,7 +300,13 @@ function neededFrames(project, frame) {
     const s = sourceTime(clip, T);
     for (const [key, st] of Object.entries(m.streams)) {
       if (!st.hasVideo) continue;
-      out.push({ clip, key, path: m.kind === 'image' ? st.proxy || m.path : st.proxy || st.path, image: m.kind === 'image', t: s - (st.offset || 0) });
+      const t = s - (st.offset || 0);
+      // Baklengs: les den baklengs kopien framover, så dekodingen går raskt.
+      if (clip.reverse && st.reversed) {
+        out.push({ clip, key, path: st.reversed, image: false, t: st.duration - t, rev: true });
+        continue;
+      }
+      out.push({ clip, key, path: m.kind === 'image' ? st.proxy || m.path : st.proxy || st.path, image: m.kind === 'image', t });
     }
   };
   for (const l of frame.layers) {
@@ -371,10 +399,12 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
             ready.set(id, { img, w: img.width, h: img.height });
             return;
           }
-          let r = readers.get(id);
+          // Egen leser per klipp og fil (baklengs klipp bruker en annen fil).
+          const rid = `${id}|${n.path}`;
+          let r = readers.get(rid);
           if (!r) {
             r = new Reader(n.path);
-            readers.set(id, r);
+            readers.set(rid, r);
           }
           r.lastUsed = T;
           const sample = await r.frameAt(n.t);
