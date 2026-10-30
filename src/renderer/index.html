@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; worker-src blob:; img-src 'self' data:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'" />
+  <title>OBSlite</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="titlebar">
+    <div class="brand"><span class="logo"></span>OBSlite</div>
+    <div class="spacer"></div>
+    <span class="timer" id="timer" hidden>00:00</span>
+    <button id="recordBtn" class="record">
+      <span class="rec-icon"></span>
+      <span id="recordLabel">Start opptak</span>
+      <kbd id="recordKey"></kbd>
+    </button>
+  </header>
+
+  <main>
+    <section class="stage">
+      <div class="preview">
+        <canvas id="canvas" width="1920" height="1080"></canvas>
+      </div>
+      <div class="layouts" id="layouts"></div>
+      <div class="meta" id="meta"></div>
+    </section>
+
+    <aside class="panel">
+      <div class="group">
+        <h2>Kilder</h2>
+        <label class="field">
+          <span>Skjerm</span>
+          <select id="screenSelect"></select>
+        </label>
+        <label class="field">
+          <span>Kamera</span>
+          <select id="cameraSelect"></select>
+        </label>
+        <label class="field">
+          <span>Mikrofon</span>
+          <select id="micSelect"></select>
+        </label>
+        <div class="meter" title="Lydnivå"><div id="meterFill"></div></div>
+      </div>
+
+      <div class="group">
+        <h2>Kamerabilde</h2>
+        <div class="row">
+          <span>Størrelse</span>
+          <div class="segmented" data-setting="pipSize">
+            <button data-value="small">Liten</button>
+            <button data-value="medium">Middels</button>
+            <button data-value="large">Stor</button>
+          </div>
+        </div>
+        <div class="row">
+          <span>Form</span>
+          <div class="segmented" data-setting="pipShape">
+            <button data-value="rounded">Avrundet</button>
+            <button data-value="circle">Sirkel</button>
+          </div>
+        </div>
+        <label class="row toggle">
+          <span>Speilvend kamera</span>
+          <input type="checkbox" id="mirrorToggle" />
+        </label>
+      </div>
+
+      <div class="group">
+        <h2>Opptak</h2>
+        <div class="row">
+          <span>Bilder per sekund</span>
+          <div class="segmented" data-setting="fps">
+            <button data-value="30">30</button>
+            <button data-value="60">60</button>
+          </div>
+        </div>
+        <div class="row folder">
+          <span>Lagres i</span>
+          <button class="link" id="folderBtn" title="Velg mappe"></button>
+        </div>
+        <label class="row toggle">
+          <span>Skjul OBSlite fra opptaket</span>
+          <input type="checkbox" id="hideToggle" />
+        </label>
+      </div>
+
+      <div class="group">
+        <h2>Snarveier</h2>
+        <label class="field">
+          <span>Tastekombinasjon</span>
+          <select id="modifierSelect"></select>
+        </label>
+        <p class="hint" id="shortcutHint"></p>
+      </div>
+    </aside>
+  </main>
+
+  <div class="notice" id="notice" hidden>
+    <span id="noticeText"></span>
+    <button id="noticeAction" hidden></button>
+    <button class="close" id="noticeClose" aria-label="Lukk">&times;</button>
+  </div>
+
+  <div class="toast" id="toast" hidden>
+    <span id="toastText"></span>
+    <button id="toastReveal">Vis i mappe</button>
+  </div>
+
+  <div class="sources" id="sources"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

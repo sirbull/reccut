@@ -1,0 +1,68 @@
+{
+  "name": "obslite",
+  "productName": "OBSlite",
+  "version": "0.1.0",
+  "description": "Enkel skjerm- og kameraopptaker med bilde i bilde",
+  "main": "src/main.js",
+  "author": "sirbull",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:win": "electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "^45.1.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "no.sirbull.obslite",
+    "productName": "OBSlite",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.video",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSCameraUsageDescription": "OBSlite bruker kameraet for å vise deg i opptaket.",
+        "NSMicrophoneUsageDescription": "OBSlite bruker mikrofonen for å ta opp lyd.",
+        "NSScreenCaptureUsageDescription": "OBSlite tar opp skjermen din."
+      }
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
