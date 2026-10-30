@@ -1,7 +1,15 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
-import { CAPTION_LANE, EFFECTS, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
+import { CAPTION_LANE, EFFECTS, clipHasAudio, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
 import {
+  adjacentAudioPairs,
+  detachAudio,
+  freezeFrame,
+  insertGap,
+  liftFromStoryline,
+  overwritePrimary,
+  setAudioCrossfade,
+  setSpeed,
   addMediaClip,
   autoFormat,
   bladeAt,
@@ -26,6 +34,7 @@ import {
 } from './store.js';
 import { seek } from './playback.js';
 import { toast } from '../ui.jsx';
+import { prefs } from '../prefs.js';
 
 const api = window.api;
 
@@ -34,6 +43,7 @@ export const exportOpen = signal(false);
 export const projectsOpen = signal(false);
 export const inspectorTab = signal(null);
 export const newProjectOpen = signal(false);
+export const prefsOpen = signal(false);
 
 let timelineView = null;
 export function registerTimelineView(v) {
@@ -114,6 +124,12 @@ export function bladeAll() {
 }
 
 export function deleteSelection(ripple = true) {
+  if (selectedTransition.value?.startsWith('ax:')) {
+    const id = selectedTransition.value.slice(3);
+    commit((p) => p.clips[id] && delete p.clips[id].axfade);
+    selectedTransition.value = null;
+    return;
+  }
   if (selectedTransition.value) {
     const id = selectedTransition.value;
     commit((p) => removeTransition(p, id));
@@ -137,6 +153,30 @@ export function toggleEnabled() {
 
 export function addTransition(type = 'dissolve') {
   const p = project.value;
+  const dur = prefs.value.transitionDur;
+  // To lydklipp inntil hverandre gir kryssfade (Cmd T i Final Cut Pro).
+  const pairs = adjacentAudioPairs(p, selection.value);
+  if (pairs.length) {
+    commit((q) => pairs.forEach(([a, b]) => setAudioCrossfade(q, a, b, prefs.value.audioCrossfadeDur)));
+    toast(`Added ${pairs.length === 1 ? 'an audio crossfade' : `${pairs.length} audio crossfades`} of ${prefs.value.audioCrossfadeDur} s.`, { timeout: 2500 });
+    return;
+  }
+  const audioOnly = selection.value.length && selection.value.every((id) => p.clips[id]?.lane < 0);
+  if (audioOnly) {
+    // Ett lydklipp: kryssfade mot naboene på samme spor, eller toning inn og ut.
+    commit((q) => {
+      for (const id of selection.value) {
+        const c = q.clips[id];
+        const prev = Object.values(q.clips).find((o) => o.lane === c.lane && Math.abs(o.start + o.dur - c.start) < 1 / 60);
+        const next = Object.values(q.clips).find((o) => o.lane === c.lane && Math.abs(c.start + c.dur - o.start) < 1 / 60);
+        if (prev) setAudioCrossfade(q, prev.id, c.id, prefs.value.audioCrossfadeDur);
+        else c.props.aFadeIn = prefs.value.audioCrossfadeDur;
+        if (next) setAudioCrossfade(q, c.id, next.id, prefs.value.audioCrossfadeDur);
+        else c.props.aFadeOut = prefs.value.audioCrossfadeDur;
+      }
+    });
+    return;
+  }
   let ids = selection.value.filter((id) => p.clips[id]?.lane === 0);
   if (!ids.length) {
     // Uten utvalg: bruk kuttet nærmest spillhodet.
@@ -150,15 +190,15 @@ export function addTransition(type = 'dissolve') {
       if (p.primary[0]) best = p.primary[0];
       else return;
     }
-    commit((q) => setTransition(q, best, type));
+    commit((q) => setTransition(q, best, type, dur));
     selectedTransition.value = best;
     return;
   }
   commit((q) => {
     for (const id of ids) {
-      setTransition(q, id, type);
+      setTransition(q, id, type, dur);
       const next = q.primary[q.primary.indexOf(id) + 1];
-      if (next) setTransition(q, next, type);
+      if (next) setTransition(q, next, type, dur);
     }
   });
 }
@@ -277,6 +317,15 @@ export async function importDialog(placement) {
   if (paths.length) await importPaths(paths, placement);
 }
 
+// Utvalg i biblioteket: et helt klipp eller et område valgt i filmstripen.
+export const browserRange = signal(null); // { mediaId, in, out }
+
+export function browserClipOpts(m) {
+  const r = browserRange.value;
+  if (r && r.mediaId === m.id && r.out - r.in > 0.05) return { in: r.in, dur: r.out - r.in };
+  return m.kind === 'image' ? { dur: prefs.value.stillDur } : {};
+}
+
 export function addBrowserSelection(mode) {
   const id = browserSelection.value;
   const m = id && project.value.media[id];
@@ -287,9 +336,108 @@ export function addBrowserSelection(mode) {
   let clipId = null;
   commit((p) => {
     autoFormat(p, m);
-    clipId = addMediaClip(p, m, mode, getTime());
+    clipId = addMediaClip(p, m, mode, getTime(), undefined, browserClipOpts(m));
   });
   if (clipId) selection.value = [clipId];
+}
+
+/* Fart, frosset bilde og lyd */
+
+function speedTargets() {
+  const p = project.value;
+  const ids = selection.value.length ? selection.value : targetClipsAtPlayhead();
+  return ids.filter((id) => ['video', 'recording', 'audio'].includes(p.clips[id]?.type) && p.clips[id].speed !== 0);
+}
+
+export function setSpeedSelected(speed) {
+  const ids = speedTargets();
+  if (!ids.length) return toast('Select a video, recording or audio clip to change its speed.');
+  commit((q) => ids.forEach((id) => setSpeed(q, id, speed)));
+}
+
+export function addFreezeFrame() {
+  let id = null;
+  commit((q) => (id = freezeFrame(q, getTime(), prefs.value.freezeDur)));
+  if (id) selection.value = [id];
+  else toast('Move the playhead over a video clip to add a freeze frame.');
+}
+
+export function toggleExpandAudio() {
+  const p = project.value;
+  const ids = (selection.value.length ? selection.value : targetClipsAtPlayhead()).filter((id) => {
+    const c = p.clips[id];
+    return c && c.type !== 'audio' && clipHasAudio(c, p.media[c.mediaId]);
+  });
+  if (!ids.length) return;
+  commit((q) => {
+    const on = !ids.every((id) => q.clips[id].expanded);
+    ids.forEach((id) => (q.clips[id].expanded = on));
+  });
+}
+
+export function detachSelectedAudio() {
+  const ids = selection.value.length ? selection.value : targetClipsAtPlayhead();
+  let added = [];
+  commit((q) => ids.forEach((id) => (added = added.concat(detachAudio(q, id)))));
+  if (added.length) selection.value = added;
+  else toast('Select a clip with audio to detach it.');
+}
+
+export function toggleSolo() {
+  const ids = selection.value;
+  if (!ids.length) return;
+  commit((q) => {
+    const on = !ids.every((id) => q.clips[id]?.solo);
+    for (const id of ids) if (q.clips[id]) q.clips[id].solo = on || undefined;
+  });
+}
+
+export function clearSolo() {
+  commit((q) => Object.values(q.clips).forEach((c) => delete c.solo));
+}
+
+export function liftSelected() {
+  const ids = selection.value.filter((id) => project.value.clips[id]?.lane === 0);
+  if (ids.length) commit((q) => liftFromStoryline(q, ids));
+}
+
+export function overwriteSelectedToPrimary() {
+  const ids = selection.value.filter((id) => {
+    const c = project.value.clips[id];
+    return c && c.lane > 0 && c.lane !== CAPTION_LANE && isVisual(c);
+  });
+  if (!ids.length) return;
+  commit((q) => {
+    for (const id of ids) {
+      const c = q.clips[id];
+      delete q.clips[id];
+      overwritePrimary(q, c, c.start);
+    }
+  });
+}
+
+export function insertGapAtPlayhead() {
+  commit((q) => insertGap(q, getTime(), 3));
+}
+
+export function selectClipAtPlayhead() {
+  const T = getTime();
+  const p = project.value;
+  const c = Object.values(p.clips)
+    .filter((x) => x.lane !== CAPTION_LANE && T >= x.start && T < x.start + x.dur)
+    .sort((a, b) => b.lane - a.lane)[0];
+  if (c) selection.value = [c.id];
+}
+
+export function openRetime() {
+  const ids = speedTargets();
+  if (!ids.length) return toast('Select a clip to change its speed.');
+  selection.value = ids;
+  inspectorTab.value = 'speed';
+}
+
+export function zoomAt(factor, T, offsetPx) {
+  timelineView?.zoomAt?.(factor, T, offsetPx);
 }
 
 export async function handleDrop(dt, lane, T) {
@@ -307,7 +455,7 @@ export async function handleDrop(dt, lane, T) {
         let l = lane;
         if (audio && l >= 0) l = -1;
         if (!audio && (l < 0 || l === CAPTION_LANE)) l = 1;
-        clipId = addMediaClip(p, m, mode, T, l);
+        clipId = addMediaClip(p, m, mode, T, l, browserClipOpts(m));
       });
       if (clipId) selection.value = [clipId];
     } else if (item.kind === 'title') {
@@ -356,11 +504,53 @@ export async function clipContextMenu(clipId, T) {
     if (c.transition) items.push({ id: 'removeTransition', label: 'Remove Transition' });
     items.push({ separator: true });
   }
+  const media = project.value.media[c.mediaId];
+  const hasAudio = clipHasAudio(c, media);
+  if (['video', 'recording', 'audio'].includes(c.type) && c.speed !== 0) {
+    const sp = c.speed ?? 1;
+    items.push({
+      label: 'Speed',
+      submenu: [
+        ...[0.1, 0.25, 0.5].map((v) => ({ id: `speed:${v}`, label: `Slow ${v * 100}%`, checked: sp === v })),
+        { id: 'speed:1', label: 'Normal (100%)', checked: sp === 1, accelerator: isMac ? 'Alt+Cmd+R' : 'Ctrl+Alt+R' },
+        ...[2, 4, 8, 20].map((v) => ({ id: `speed:${v}`, label: `Fast ${v}x`, checked: sp === v })),
+      ],
+    });
+  }
+  if (c.type === 'video' || c.type === 'recording') items.push({ id: 'freeze', label: 'Add Freeze Frame', accelerator: 'Alt+F' });
+  if (hasAudio && c.type !== 'audio') {
+    items.push({ id: 'expand', label: c.expanded ? 'Collapse Audio' : 'Expand Audio', accelerator: isMac ? 'Ctrl+S' : 'Alt+E' });
+    items.push({ id: 'detach', label: 'Detach Audio', accelerator: isMac ? 'Ctrl+Shift+S' : 'Alt+Shift+E' });
+  }
+  if (hasAudio || c.type === 'audio') items.push({ id: 'solo', label: c.solo ? 'Unsolo' : 'Solo', accelerator: 'Alt+S' });
+  if (c.lane === 0 && c.type !== 'gap') items.push({ id: 'lift', label: 'Lift from Storyline', accelerator: isMac ? 'Alt+Cmd+Up' : 'Ctrl+Alt+Up' });
+  if (c.lane > 0 && c.lane !== CAPTION_LANE && isVisual(c)) items.push({ id: 'overwriteDown', label: 'Overwrite to Storyline', accelerator: isMac ? 'Alt+Cmd+Down' : 'Ctrl+Alt+Down' });
+  items.push({ separator: true });
   if (c.mediaId) items.push({ id: 'reveal', label: k('Reveal in Finder', 'Show in Explorer') }, { separator: true });
   items.push({ id: 'delete', label: c.lane === 0 ? 'Delete' : 'Delete', accelerator: 'Backspace' });
   if (c.lane === 0) items.push({ id: 'deleteGap', label: 'Delete and Leave Gap', accelerator: 'Shift+Backspace' });
   const id = await api.popupMenu(items);
+  if (id?.startsWith('speed:')) return setSpeedSelected(Number(id.slice(6)));
   switch (id) {
+    case 'freeze':
+      seek(Math.min(Math.max(T, c.start), c.start + c.dur - 1e-3));
+      addFreezeFrame();
+      break;
+    case 'expand':
+      toggleExpandAudio();
+      break;
+    case 'detach':
+      detachSelectedAudio();
+      break;
+    case 'solo':
+      toggleSolo();
+      break;
+    case 'lift':
+      liftSelected();
+      break;
+    case 'overwriteDown':
+      overwriteSelectedToPrimary();
+      break;
     case 'blade':
       commit((p) => splitClip(p, clipId, T));
       break;

@@ -1,7 +1,7 @@
 // Eksport i et skjult vindu. Hvert bilde tegnes med samme kode som forhåndsvisningen,
 // kodes med WebCodecs (maskinvare) eller FFmpeg, og lyden mikses med nøkkelbilder.
 import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOutputFormat, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, WebMOutputFormat, canEncodeVideo } from 'mediabunny';
-import { CAPTION_LANE, clipHasAudio, computeAudio, computeFrame } from '../shared/model.js';
+import { CAPTION_LANE, clipHasAudio, computeAudio, computeFrame, sourceTime } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 import { AUDIO_FORMATS, QUALITIES, VIDEO_FORMATS, audioKbps, outputGeometry, videoBitrate } from '../shared/formats.js';
 import { toSrt, toVtt } from '../shared/srt.js';
@@ -69,7 +69,21 @@ function writeAsync(stream, buf) {
 function streamInfo(project, clip, key) {
   const m = project.media[clip.mediaId];
   const s = m?.streams?.[key];
-  return s ? { path: s.proxy || s.path, offset: clip.type === 'recording' ? s.offset || 0 : 0 } : null;
+  return s ? { path: s.proxy || s.path, offset: m.kind === 'recording' ? s.offset || 0 : 0 } : null;
+}
+
+// Tempo-filter for endret fart. atempo støtter 0.5 til 100, så små verdier lenkes.
+function tempoFilter(speed, preservePitch) {
+  if (Math.abs(speed - 1) < 1e-6) return null;
+  if (preservePitch === false) return `asetrate=${Math.round(RATE * speed)},aresample=${RATE}`;
+  const parts = [];
+  let s = speed;
+  while (s < 0.5) {
+    parts.push('atempo=0.5');
+    s /= 0.5;
+  }
+  parts.push(`atempo=${s.toFixed(6)}`);
+  return parts.join(',');
 }
 
 // Dekoder hver lydkilde til en rå fil, og mikser så blokk for blokk med riktig volum.
@@ -82,21 +96,28 @@ async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
     const m = project.media[c.mediaId];
     if (!clipHasAudio(c, m)) continue;
     if (c.start > b + PAD || c.start + c.dur < a - PAD) continue;
-    const keys = c.type === 'recording' ? Object.keys(m.streams).filter((k) => m.streams[k].hasAudio) : ['main'];
+    const keys = c.type === 'recording' ? Object.keys(m.streams).filter((k) => m.streams[k].hasAudio) : [c.stream || 'main'];
+    const speed = c.speed ?? 1;
+    // Lydvinduet kan være forlenget (utvidet lyd), og overganger bruker litt ekstra på hver side.
+    const t0 = Math.max(a, c.start - Math.max(0, c.props.aLead || 0)) - PAD;
+    const t1 = Math.min(b, c.start + c.dur + Math.max(0, c.props.aTail || 0)) + PAD;
     for (const key of keys) {
       const info = streamInfo(project, c, key);
       if (!info || !fs.existsSync(info.path)) continue;
-      const from = Math.max(0, c.in - info.offset + Math.max(0, a - c.start) - PAD);
-      const to = c.in - info.offset + Math.min(c.dur, b - c.start) + PAD;
-      if (to <= 0) continue;
-      pairs.set(`${c.id}:${key}`, { path: info.path, from, to, file: path.join(tmp, `a_${pairs.size}.f32`) });
+      const from = Math.max(0, c.in + (t0 - c.start) * speed - info.offset);
+      const to = c.in + (t1 - c.start) * speed - info.offset;
+      if (to <= from) continue;
+      pairs.set(`${c.id}:${key}`, { path: info.path, from, to, speed, tempo: tempoFilter(speed, c.props.preservePitch), file: path.join(tmp, `a_${pairs.size}.f32`) });
     }
   }
 
   let i = 0;
   for (const pair of pairs.values()) {
     checkCancel(jobId);
-    const job = ffmpeg(ffmpegBin, ['-ss', String(pair.from), '-t', String(pair.to - pair.from), '-i', pair.path, '-map', '0:a:0', '-ac', '2', '-ar', String(RATE), '-f', 'f32le', pair.file]);
+    const args = ['-ss', String(pair.from), '-t', String(pair.to - pair.from), '-i', pair.path, '-map', '0:a:0', '-ac', '2', '-ar', String(RATE)];
+    if (pair.tempo) args.push('-af', `aresample=${RATE},${pair.tempo}`);
+    args.push('-f', 'f32le', pair.file);
+    const job = ffmpeg(ffmpegBin, args);
     await job.done.catch(() => fs.writeFileSync(pair.file, Buffer.alloc(0)));
     pair.fd = fs.openSync(pair.file, 'r');
     pair.frames = fs.statSync(pair.file).size / 8;
@@ -153,7 +174,7 @@ async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
         if (!pair) continue;
         const g0 = src.gain;
         const g1 = next.has(key) ? next.get(key) : g0;
-        const startFrame = Math.round((src.src - pair.from) * RATE);
+        const startFrame = Math.round(((src.src - pair.from) / (pair.speed || 1)) * RATE);
         const cache = readFrames(pair, startFrame, len);
         const off = startFrame - cache.start;
         for (let k = 0; k < len; k++) {
@@ -254,7 +275,7 @@ function neededFrames(project, frame) {
   const add = (clip, T) => {
     const m = project.media[clip.mediaId];
     if (!m) return;
-    const s = clip.in + (T - clip.start);
+    const s = sourceTime(clip, T);
     for (const [key, st] of Object.entries(m.streams)) {
       if (!st.hasVideo) continue;
       out.push({ clip, key, path: m.kind === 'image' ? st.proxy || m.path : st.proxy || st.path, image: m.kind === 'image', t: s - (st.offset || 0) });

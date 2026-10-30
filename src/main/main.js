@@ -154,9 +154,11 @@ function createWindow() {
 /* Meny med snarveier som i Final Cut Pro. Kommandoene håndteres i vinduet. */
 function buildMenu() {
   const cmd = (id, label, accelerator) => ({ label, accelerator, click: () => send('menu', id) });
+  // Viser snarveien, men vinduet håndterer tasten selv (så den virker i tekstfelt som vanlig).
+  const show = (id, label, accelerator) => ({ label, accelerator, registerAccelerator: false, click: () => send('menu', id) });
   const template = [
     ...(isMac
-      ? [{ label: 'OBSlite', submenu: [{ role: 'about', label: 'About OBSlite' }, { type: 'separator' }, { role: 'hide', label: 'Hide OBSlite' }, { role: 'hideOthers', label: 'Hide Others' }, { type: 'separator' }, { role: 'quit', label: 'Quit OBSlite' }] }]
+      ? [{ label: 'OBSlite', submenu: [{ role: 'about', label: 'About OBSlite' }, { type: 'separator' }, cmd('prefs', 'Preferences', 'Cmd+,'), { type: 'separator' }, { role: 'hide', label: 'Hide OBSlite' }, { role: 'hideOthers', label: 'Hide Others' }, { type: 'separator' }, { role: 'quit', label: 'Quit OBSlite' }] }]
       : []),
     {
       label: 'File',
@@ -166,6 +168,7 @@ function buildMenu() {
         cmd('save', 'Save', 'CmdOrCtrl+S'),
         { type: 'separator' },
         cmd('import', 'Import Media', 'CmdOrCtrl+I'),
+        ...(isMac ? [] : [cmd('prefs', 'Preferences', 'Ctrl+,')]),
         cmd('export', 'Export', 'CmdOrCtrl+E'),
         ...(isMac ? [] : [{ type: 'separator' }, { role: 'quit', label: 'Quit' }]),
       ],
@@ -180,6 +183,35 @@ function buildMenu() {
         cmd('copy', 'Copy', 'CmdOrCtrl+C'),
         cmd('paste', 'Paste', 'CmdOrCtrl+V'),
         cmd('selectAll', 'Select All', 'CmdOrCtrl+A'),
+      ],
+    },
+    {
+      label: 'Clip',
+      submenu: [
+        show('blade', 'Blade', 'CmdOrCtrl+B'),
+        show('toggleEnabled', 'Enable or Disable', 'V'),
+        show('addTransition', 'Add Cross Dissolve', 'CmdOrCtrl+T'),
+        { type: 'separator' },
+        show('expandAudio', 'Expand Audio', isMac ? 'Ctrl+S' : 'Alt+E'),
+        show('detachAudio', 'Detach Audio', isMac ? 'Ctrl+Shift+S' : 'Alt+Shift+E'),
+        show('solo', 'Solo', 'Alt+S'),
+        { type: 'separator' },
+        {
+          label: 'Retime',
+          submenu: [
+            show('retime', 'Show Speed Controls', 'CmdOrCtrl+R'),
+            { type: 'separator' },
+            ...[0.1, 0.25, 0.5].map((v) => show(`speed:${v}`, `Slow ${v * 100}%`)),
+            show('speed:1', 'Normal (100%)', 'Alt+CmdOrCtrl+R'),
+            ...[2, 4, 8, 20].map((v) => show(`speed:${v}`, `Fast ${v}x`)),
+            { type: 'separator' },
+            show('freeze', 'Add Freeze Frame', 'Alt+F'),
+          ],
+        },
+        { type: 'separator' },
+        show('lift', 'Lift from Storyline', 'Alt+CmdOrCtrl+Up'),
+        show('overwriteDown', 'Overwrite to Storyline', 'Alt+CmdOrCtrl+Down'),
+        show('insertGap', 'Insert Gap', 'Alt+W'),
       ],
     },
     {
@@ -423,6 +455,8 @@ ipcMain.handle('menu:popup', (e, items) => {
       list.map((it) =>
         it.separator
           ? { type: 'separator' }
+          : it.submenu
+          ? { label: it.label, submenu: build(it.submenu) }
           : { label: it.label, accelerator: it.accelerator, enabled: it.enabled !== false, type: it.checked !== undefined ? 'checkbox' : 'normal', checked: it.checked, registerAccelerator: false, click: () => (chosen = it.id) }
       );
     const menu = Menu.buildFromTemplate(build(items));

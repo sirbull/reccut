@@ -23,7 +23,7 @@ import {
   sourceTime,
   valueAt,
 } from '../../shared/model.js';
-import { setClipDuration, setTransition } from '../../shared/ops.js';
+import { setClipDuration, setSpeed, setTransition } from '../../shared/ops.js';
 import { beginTransient, commit, endTransient, project, selectedClips, selectedTransition, timeSig, updateTransient } from './store.js';
 import { seek } from './playback.js';
 import { inspectorTab, newProjectOpen } from './commands.js';
@@ -34,6 +34,7 @@ export function Inspector() {
   const transId = selectedTransition.value;
   const p = project.value;
 
+  if (transId?.startsWith('ax:') && p.clips[transId.slice(3)]?.axfade) return <CrossfadeInspector clip={p.clips[transId.slice(3)]} />;
   if (transId && p.clips[transId]?.transition) return <TransitionInspector clip={p.clips[transId]} />;
   if (clips.length === 1) return <ClipInspector clip={clips[0]} />;
   if (clips.length > 1)
@@ -63,6 +64,7 @@ function tabsFor(clip, media) {
   if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title') tabs.push({ id: 'effects', label: 'Effects' });
   if (clipHasAudio(clip, media) && clip.type !== 'recording') tabs.push({ id: 'audio', label: 'Audio' });
   if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording') tabs.push({ id: 'color', label: 'Color' });
+  if (['video', 'recording', 'audio'].includes(clip.type)) tabs.push({ id: 'speed', label: clip.speed === 0 ? 'Freeze' : 'Speed' });
   tabs.push({ id: 'info', label: 'Info' });
   return tabs;
 }
@@ -96,6 +98,7 @@ function ClipInspector({ clip }) {
         {tab === 'effects' && <EffectsTab clip={clip} />}
         {tab === 'audio' && <AudioTab clip={clip} />}
         {tab === 'color' && <ColorTab clip={clip} />}
+        {tab === 'speed' && <SpeedTab clip={clip} />}
         {tab === 'info' && <InfoTab clip={clip} media={media} />}
       </div>
     </div>
@@ -315,7 +318,114 @@ function AudioTab({ clip }) {
         <PlainNumber clip={clip} prop="aFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
         <PlainNumber clip={clip} prop="aFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
       </Section>
+      <AudioEditSection clip={clip} />
     </>
+  );
+}
+
+// Utvidet og frakoblet lyd, J- og L-kutt.
+function AudioEditSection({ clip }) {
+  const isMac = window.api.platform === 'darwin';
+  const isAv = clip.type !== 'audio';
+  return (
+    <Section title="Audio edits">
+      {isAv && (
+        <Row label="Expand audio">
+          <Toggle checked={Boolean(clip.expanded)} onChange={(v) => commit((q) => (q.clips[clip.id].expanded = v))} />
+        </Row>
+      )}
+      <Row label="Start earlier (J cut)">
+        <NumberField value={clip.props.aLead || 0} min={-clip.dur + 0.1} max={10} step={0.05} precision={2} unit="s" onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.clips[clip.id].props.aLead = v))} onCommit={() => endTransient(true)} />
+      </Row>
+      <Row label="End later (L cut)">
+        <NumberField value={clip.props.aTail || 0} min={-clip.dur + 0.1} max={10} step={0.05} precision={2} unit="s" onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.clips[clip.id].props.aTail = v))} onCommit={() => endTransient(true)} />
+      </Row>
+      {isAv && (
+        <Button variant="secondary" onClick={() => commandsDetach()}>
+          Detach Audio ({isMac ? 'Control Shift S' : 'Alt Shift E'})
+        </Button>
+      )}
+      <p class="hint">Negative values shorten the audio. With expanded audio you can drag the audio edges on the timeline ({isMac ? 'Control S' : 'Alt E'}).</p>
+    </Section>
+  );
+}
+
+function commandsDetach() {
+  import('./commands.js').then((m) => m.detachSelectedAudio());
+}
+
+const SPEEDS = [
+  { value: 0.1, label: '10%' },
+  { value: 0.25, label: '25%' },
+  { value: 0.5, label: '50%' },
+  { value: 1, label: '100%' },
+  { value: 2, label: '2x' },
+  { value: 4, label: '4x' },
+  { value: 8, label: '8x' },
+  { value: 20, label: '20x' },
+];
+
+function SpeedTab({ clip }) {
+  if (clip.speed === 0) {
+    return (
+      <Section title="Freeze frame">
+        <Row label="Duration">
+          <NumberField value={clip.dur} min={0.1} max={600} step={0.1} precision={2} unit="s" onStart={beginTransient} onChange={(v) => updateTransient((q) => setClipDuration(q, clip.id, v))} onCommit={() => endTransient(true)} />
+        </Row>
+        <p class="hint">A freeze frame holds one frame of the source. You can still animate it with keyframes, for example a slow zoom.</p>
+      </Section>
+    );
+  }
+  const sp = clip.speed ?? 1;
+  const set = (v) => commit((q) => setSpeed(q, clip.id, v));
+  return (
+    <>
+      <Section title="Speed" collapsible={false}>
+        <div class="speed-grid">
+          {SPEEDS.map((x) => (
+            <button key={x.value} class={`chip${Math.abs(sp - x.value) < 1e-6 ? ' active' : ''}`} onClick={() => set(x.value)}>
+              {x.label}
+            </button>
+          ))}
+        </div>
+        <Row label="Custom">
+          <NumberField value={Math.round(sp * 1000) / 10} min={2} max={5000} step={1} precision={1} unit="%" width={90} onChange={(v) => set(v / 100)} />
+        </Row>
+        <Row label="Preserve pitch">
+          <Toggle checked={clip.props.preservePitch !== false} onChange={(v) => setProp(clip, { preservePitch: v })} />
+        </Row>
+        <Row label="Duration">
+          <span class="value">{clip.dur.toFixed(2)} s</span>
+        </Row>
+        <p class="hint">Changing the speed keeps the same part of the source, so the clip gets longer or shorter and the rest of the storyline moves with it.</p>
+      </Section>
+      {(clip.type === 'video' || clip.type === 'recording') && (
+        <Section title="Hold">
+          <Button variant="secondary" onClick={() => import('./commands.js').then((m) => m.addFreezeFrame())}>
+            Add Freeze Frame at Playhead (Option F)
+          </Button>
+        </Section>
+      )}
+    </>
+  );
+}
+
+function CrossfadeInspector({ clip }) {
+  return (
+    <div class="inspector panel">
+      <div class="insp-head">
+        <span class="type-dot t-audio" />
+        <b>Audio Crossfade</b>
+      </div>
+      <div class="insp-body">
+        <Section title="Crossfade">
+          <Row label="Duration">
+            <NumberField value={clip.axfade} min={0.05} max={10} step={0.05} precision={2} unit="s" onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.clips[clip.id].axfade = Math.round(v * 100) / 100))} onCommit={() => endTransient(true)} />
+          </Row>
+          <p class="hint">An equal power crossfade between the two clips. Press Delete to remove it. The default length is set in Preferences.</p>
+        </Section>
+      </div>
+    </div>
   );
 }
 
@@ -451,6 +561,7 @@ function RecordingTab({ clip, media }) {
         <PlainNumber clip={clip} prop="aFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
         <PlainNumber clip={clip} prop="aFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
       </Section>
+      {!clip.props.audioDetached && (media?.streams?.camera?.hasAudio || media?.streams?.screen?.hasAudio) && <AudioEditSection clip={clip} />}
     </>
   );
 }

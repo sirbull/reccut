@@ -6,8 +6,13 @@ import { memo } from 'preact/compat';
 import {
   AudioLines,
   Captions,
+  Brackets,
   EyeOff,
   Hand,
+  Headphones,
+  Search,
+  SquareDashed,
+  StretchHorizontal,
   Magnet,
   MoveHorizontal,
   MousePointer2,
@@ -23,20 +28,26 @@ import {
   TRANSITIONS,
   clipHasAudio,
   EASINGS,
+  audioXfadeWindow,
   dbToGain,
+  kfRate,
+  speedOf,
   formatTimecode,
   moveKeyframes,
   setKeyframeEase,
   isVisual,
   transitionWindow,
 } from '../../shared/model.js';
-import { moveClip, positionMove, positionTrim, splitClip, trimClip } from '../../shared/ops.js';
+import { moveClip, positionMove, positionTrim, rollEdit, slideClip, slipClip, splitClip, trimClip } from '../../shared/ops.js';
 import {
   beginTransient,
   commit,
   endTransient,
   getTime,
   getWave,
+  audioSkimming,
+  skim,
+  skimming,
   onTime,
   playing,
   pps,
@@ -49,7 +60,7 @@ import {
   updateTransient,
   waveVersion,
 } from './store.js';
-import { fileUrl, seek } from './playback.js';
+import { fileUrl, scrubAudio, seek } from './playback.js';
 import { IconButton } from '../ui.jsx';
 import * as commands from './commands.js';
 
@@ -89,6 +100,8 @@ export function Timeline() {
   const [ghost, setGhost] = useState(null);
   const [snapLine, setSnapLine] = useState(null);
   const bladeRef = useRef(null);
+  const skimRef = useRef(null);
+  const lastScrub = useRef(0);
   const { rows, height } = useMemo(() => laneRows(p), [p]);
   const z = pps.value;
   const width = Math.max(view.value.width, PAD * 2 + (p.duration + 30) * z);
@@ -144,6 +157,11 @@ export function Timeline() {
 
   useEffect(() => {
     commands.registerTimelineView({
+      zoomAt: (factor, t, offset) => {
+        const sc = scrollRef.current;
+        pps.value = Math.min(800, Math.max(1, pps.value * factor));
+        requestAnimationFrame(() => (sc.scrollLeft = Math.max(0, PAD + t * pps.value - offset)));
+      },
       zoom: (factor) => {
         const sc = scrollRef.current;
         const t = getTime();
@@ -208,6 +226,21 @@ export function Timeline() {
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
+    skim.value = null;
+    if (tool.value === 'zoom') {
+      commands.zoomAt(e.altKey ? 1 / 2 : 2, T, e.clientX - scrollRef.current.getBoundingClientRect().left);
+      return;
+    }
+    if (tool.value === 'range' && hit !== 'ruler') {
+      dragRef.current = { kind: 'range', T0: snap(T).t, moved: false, x: e.clientX, y: e.clientY };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (hit === 'axfade') {
+      selection.value = [];
+      selectedTransition.value = `ax:${el.dataset.id}`;
+      return;
+    }
     if (tool.value === 'hand') {
       const sc = scrollRef.current;
       dragRef.current = { kind: 'pan', x: e.clientX, y: e.clientY, left: sc.scrollLeft, top: sc.scrollTop };
@@ -222,7 +255,7 @@ export function Timeline() {
     if (hit === 'kf') {
       const clip = proj.clips[el.dataset.clip];
       dragRef.current = { kind: 'kf', x: e.clientX, y: e.clientY, clip: structuredClone(clip), from: Number(el.dataset.t), moved: false };
-      seek(clip.start + (Number(el.dataset.t) - clip.in));
+      seek(clip.start + (Number(el.dataset.t) - clip.in) / kfRate(clip));
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
@@ -254,6 +287,23 @@ export function Timeline() {
 
     const base = { x: e.clientX, y: e.clientY, T, clip: structuredClone(clip), moved: false };
     const positionTool = tool.value === 'position' && clip.lane === 0;
+    if (hit === 'aedge') {
+      dragRef.current = { ...base, kind: 'aedge', edge: el.dataset.edge };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (tool.value === 'trim') {
+      // Trimverktøyet: kant mellom to klipp ruller kuttet, klippet selv slippes, Option glir.
+      const idx = proj.primary.indexOf(clip.id);
+      if (hit === 'edge' && clip.lane === 0) {
+        const pair = el.dataset.edge === 'end' ? [clip.id, proj.primary[idx + 1]] : [proj.primary[idx - 1], clip.id];
+        if (pair[0] && pair[1]) dragRef.current = { ...base, kind: 'roll', a: pair[0], b: pair[1], cut: proj.clips[pair[1]].start };
+        else dragRef.current = { ...base, kind: 'trim', edge: el.dataset.edge };
+      } else if (hit === 'edge') dragRef.current = { ...base, kind: 'trim', edge: el.dataset.edge };
+      else dragRef.current = { ...base, kind: e.altKey && clip.lane === 0 ? 'slide' : 'slip' };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     if (hit === 'edge') dragRef.current = { ...base, kind: positionTool ? 'ptrim' : 'trim', edge: el.dataset.edge };
     else if (positionTool && hit === 'clip') dragRef.current = { ...base, kind: 'pmove' };
     else if (hit === 'fade') dragRef.current = { ...base, kind: 'fade', which: el.dataset.which };
@@ -281,6 +331,20 @@ export function Timeline() {
         bladeRef.current.style.height = `${r.height}px`;
       }
     }
+    // Skumming: visningen følger pekeren, og lyden spilles i korte utdrag.
+    if (!d && skimming.value && !playing.value && tool.value !== 'hand' && !e.target.closest('.tl-ruler')) {
+      const st = snap(T).t;
+      skim.value = { T: st };
+      if (skimRef.current) {
+        skimRef.current.style.display = 'block';
+        skimRef.current.style.transform = `translateX(${tx(st)}px)`;
+      }
+      const now = performance.now();
+      if (audioSkimming.value && now - lastScrub.current > 70) {
+        lastScrub.current = now;
+        scrubAudio();
+      }
+    } else if (skimRef.current) skimRef.current.style.display = 'none';
     if (!d) return;
     if (d.kind === 'pan') {
       const sc = scrollRef.current;
@@ -300,12 +364,40 @@ export function Timeline() {
     const dt = (e.clientX - d.x) / pps.value;
     const c = d.clip;
 
+    if (d.kind === 'range') {
+      const t1 = snap(T).t;
+      updateTransient((p) => (p.range = { in: Math.min(d.T0, t1), out: Math.max(d.T0, t1) }));
+      return;
+    }
+    if (d.kind === 'roll') {
+      const s1 = snap(d.cut + dt, new Set([d.a, d.b]));
+      setSnapLine(s1.snapped ? s1.t : null);
+      updateTransient((p) => rollEdit(p, d.a, d.b, s1.t - d.cut));
+      return;
+    }
+    if (d.kind === 'slip') {
+      updateTransient((p) => slipClip(p, c.id, -dt));
+      return;
+    }
+    if (d.kind === 'slide') {
+      updateTransient((p) => slideClip(p, c.id, dt));
+      return;
+    }
+    if (d.kind === 'aedge') {
+      const key = d.edge === 'start' ? 'aLead' : 'aTail';
+      const sign = d.edge === 'start' ? -1 : 1;
+      const v = (c.props[key] || 0) + sign * dt;
+      updateTransient((p) => (p.clips[c.id].props[key] = Math.round(Math.max(-c.dur + 0.1, Math.min(10, v)) * 100) / 100));
+      return;
+    }
     if (d.kind === 'kf') {
       const c0 = d.clip;
       const fps = project.value.fps;
-      const to = Math.round((d.from + dt) * fps) / fps;
+      const r = kfRate(c0);
+      // Flytt i hele bilder, regnet om til klippets tidsakse.
+      const to = d.from + Math.round(dt * fps) / fps * r;
       updateTransient((p) => moveKeyframes(p.clips[c0.id], d.from, to));
-      seek(c0.start + (Math.max(c0.in, Math.min(c0.in + c0.dur, to)) - c0.in));
+      seek(c0.start + (Math.max(c0.in, Math.min(c0.in + c0.dur * r, to)) - c0.in) / r);
       return;
     }
     if (d.kind === 'pmove') {
@@ -472,7 +564,11 @@ export function Timeline() {
           style={{ width, height: height + RULER_H + 40 }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
-          onPointerLeave={() => bladeRef.current && (bladeRef.current.style.display = 'none')}
+          onPointerLeave={() => {
+            if (bladeRef.current) bladeRef.current.style.display = 'none';
+            if (skimRef.current) skimRef.current.style.display = 'none';
+            if (!dragRef.current) skim.value = null;
+          }}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           onContextMenu={onContextMenu}
@@ -510,10 +606,31 @@ export function Timeline() {
                 </div>
               );
             })}
+ {Object.values(p.clips).map((c) => {
+              if (!c.expanded) return null;
+              const row = rows.find((r) => r.lane === c.lane);
+              if (!row || !clipHasAudio(c, p.media[c.mediaId])) return null;
+              return <AudioBand key={`ab${c.id}`} clip={c} row={row} media={p.media[c.mediaId]} z={z} selected={selection.value.includes(c.id)} />;
+            })}
+            {Object.values(p.clips).map((c) => {
+              if (!c.axfade || c.lane === 0) return null;
+              const xf = audioXfadeWindow(p, c);
+              const row = rows.find((r) => r.lane === c.lane);
+              if (!xf || !row) return null;
+              return (
+                <div key={`ax${c.id}`} data-hit="axfade" data-id={c.id} class={`tl-axfade${selectedTransition.value === `ax:${c.id}` ? ' selected' : ''}`} title={`Audio crossfade, ${c.axfade.toFixed(2)} s`} style={{ left: tx(xf.a), width: Math.max(8, (xf.b - xf.a) * z), top: row.y + 2, height: row.h - 4 }}>
+                  <svg viewBox="0 0 100 40" preserveAspectRatio="none">
+                    <path d="M0 4 C 50 4, 50 36, 100 36" />
+                    <path d="M0 36 C 50 36, 50 4, 100 4" />
+                  </svg>
+                </div>
+              );
+            })}
             {ghost && <div class="tl-ghost" style={{ left: tx(ghost.t), top: ghost.row.y, height: ghost.row.h }} />}
           </div>
           {snapLine != null && <div class="tl-snapline" style={{ left: tx(snapLine) }} />}
           <div class="tl-blade" ref={bladeRef} />
+          <div class="tl-skimmer" ref={skimRef} />
           <div class="tl-playhead" ref={playheadRef}>
             <div class="head" />
           </div>
@@ -531,7 +648,10 @@ const isMac = window.api.platform === 'darwin';
 const TOOLS = [
   { id: 'select', icon: MousePointer2, label: 'Select', key: 'A' },
   { id: 'position', icon: MoveHorizontal, label: 'Position (move clips and leave gaps)', key: 'P' },
+  { id: 'trim', icon: Brackets, label: 'Trim (roll at a cut, slip in a clip, Option drag to slide)', key: 'T' },
+  { id: 'range', icon: SquareDashed, label: 'Range Selection', key: 'R' },
   { id: 'blade', icon: Scissors, label: 'Blade', key: 'B' },
+  { id: 'zoom', icon: Search, label: 'Zoom (Option click to zoom out)', key: 'Z' },
   { id: 'hand', icon: Hand, label: 'Hand (scroll the timeline)', key: 'H' },
 ];
 
@@ -546,7 +666,9 @@ function TimelineToolbar() {
           ))}
         </div>
         <span class="sep" />
-        <IconButton icon={Magnet} title="Snapping (N)" active={snapping.value} onClick={() => (snapping.value = !snapping.value)} />
+        <IconButton icon={Magnet} title="Snapping (Shift N)" active={snapping.value} onClick={() => (snapping.value = !snapping.value)} />
+        <IconButton icon={StretchHorizontal} title="Skimming (S)" active={skimming.value} onClick={() => (skimming.value = !skimming.value)} />
+        <IconButton icon={Headphones} title="Audio skimming (N)" active={skimming.value && audioSkimming.value} disabled={!skimming.value} onClick={() => (audioSkimming.value = !audioSkimming.value)} />
       </div>
       <div class="tl-time">
         <span class="tc">{formatTimecode(timeSig.value, p.fps)}</span>
@@ -631,32 +753,37 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
   if (x > left + vw + 200 || x + w < left - 200) return null;
 
   const hasAudio = clipHasAudio(clip, media);
+  const expanded = clip.expanded && hasAudio && clip.type !== 'audio';
+  const speed = speedOf(clip);
   const visual = isVisual(clip) && clip.type !== 'title';
   const cls = ['tl-clip', `t-${clip.type}`, selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary'].filter(Boolean).join(' ');
   const label = clip.type === 'title' || clip.type === 'caption' ? clip.props.text || (clip.type === 'caption' ? 'Caption' : 'Title') : clip.name || media?.name || clip.type;
   const narrow = w < 24;
   const thumbStream = media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
-  const audioStream = clip.type === 'recording' ? (media?.streams?.camera?.hasAudio ? media.streams.camera : media?.streams?.screen) : media?.streams?.main;
-  const waveH = clip.type === 'audio' ? row.h - 16 : hasAudio && row.kind !== 'caption' ? Math.round(row.h * 0.34) : 0;
-  const stripH = row.h - 16 - waveH;
+  const audioStream = clipAudioStream(clip, media);
+  const bandH = Math.round(row.h * 0.34);
+  const boxH = expanded ? row.h - bandH - 3 : row.h;
+  const waveH = expanded ? 0 : clip.type === 'audio' ? row.h - 16 : hasAudio && row.kind !== 'caption' ? bandH : 0;
+  const stripH = boxH - 16 - waveH;
   const showStrip = visual && stripH > 12 && thumbStream?.thumbs;
 
   return (
-    <div class={cls} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y, height: row.h }}>
+    <div class={cls} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y, height: boxH }}>
       {!narrow && (
         <div class="clip-label" data-hit="clip" data-clip={clip.id}>
           {clip.type === 'recording' && <span class="badge">REC</span>}
+          {speed !== 1 && <span class="badge speed">{speed === 0 ? 'Freeze' : `${Math.round(speed * 100)}%`}</span>}
+          {clip.solo && <span class="badge solo">S</span>}
           <span class="name">{label}</span>
-          {clip.transition && null}
         </div>
       )}
       {showStrip && <Filmstrip clip={clip} stream={thumbStream} x={x} w={w} h={stripH} z={z} media={media} />}
       {clip.type === 'recording' && !narrow && <RecBands clip={clip} media={media} />}
       {waveH > 0 && (
-        <Wave clip={clip} stream={audioStream} x={x} w={w} h={waveH} z={z} offset={clip.type === 'recording' ? audioStream?.offset || 0 : 0} />
+        <Wave clip={clip} stream={audioStream} x={x} w={w} h={waveH} z={z} offset={media?.kind === 'recording' ? audioStream?.offset || 0 : 0} />
       )}
       {selected && <Keyframes clip={clip} z={z} />}
-      {hasAudio && !narrow && row.kind !== 'caption' && <FadeHandles clip={clip} z={z} h={waveH} />}
+      {hasAudio && !expanded && !narrow && row.kind !== 'caption' && <FadeHandles clip={clip} z={z} h={waveH} />}
       <div class="edge start" data-hit="edge" data-edge="start" data-clip={clip.id} />
       <div class="edge end" data-hit="edge" data-edge="end" data-clip={clip.id} />
     </div>
@@ -673,7 +800,7 @@ function Filmstrip({ clip, stream, x, w, h, z, media }) {
   const from = Math.max(0, Math.floor((left - x) / tileW) - 1);
   const to = Math.min(Math.ceil(w / tileW), Math.ceil((left + vw - x) / tileW) + 1);
   for (let i = from; i < to; i++) {
-    const tSrc = clip.in + ((i + 0.5) * tileW) / z - offset;
+    const tSrc = (clip.speed === 0 ? clip.freezeAt ?? clip.in : clip.in + (((i + 0.5) * tileW) / z) * speedOf(clip)) - offset;
     const idx = media?.kind === 'image' ? 0 : Math.max(0, Math.min(files.length - 1, Math.floor(tSrc / interval)));
     tiles.push(<img key={i} src={fileUrl(files[idx])} style={{ left: i * tileW, width: tileW, height: h }} draggable={false} />);
   }
@@ -696,7 +823,7 @@ function RecBands({ clip, media }) {
   );
 }
 
-function Wave({ clip, stream, x, w, h, z, offset }) {
+function Wave({ clip, stream, x, w, h, z, offset, lead = 0 }) {
   const ref = useRef(null);
   const { left, width: vw } = view.value;
   const wave = getWave(stream?.wave);
@@ -715,8 +842,9 @@ function Wave({ clip, stream, x, w, h, z, offset }) {
     g.fillStyle = 'rgba(255,255,255,0.55)';
     const mid = cv.height / 2;
     for (let px = 0; px < cv.width; px++) {
-      const t0 = clip.in + (visX + px / dpr) / z - offset;
-      const t1 = clip.in + (visX + (px + 1) / dpr) / z - offset;
+      const sp = speedOf(clip);
+      const t0 = clip.in + ((visX + px / dpr) / z - lead) * sp - offset;
+      const t1 = clip.in + ((visX + (px + 1) / dpr) / z - lead) * sp - offset;
       let i0 = Math.floor(t0 * wave.rate);
       const i1 = Math.max(i0 + 1, Math.ceil(t1 * wave.rate));
       let m = 0;
@@ -725,7 +853,7 @@ function Wave({ clip, stream, x, w, h, z, offset }) {
       const hh = Math.max(0.5, v * mid * 0.95);
       g.fillRect(px, mid - hh, 1, hh * 2);
     }
-  }, [wave, visX, visW, h, z, clip.in, clip.props.volume, clip.props.micVolume]);
+  }, [wave, visX, visW, h, z, clip.in, clip.speed, lead, clip.props.volume, clip.props.micVolume]);
   const dbLine = volumeY(clip.props.volume ?? clip.props.micVolume ?? 0, h);
   const kfs = clip.kf?.volume || clip.kf?.micVolume;
   return (
@@ -737,7 +865,7 @@ function Wave({ clip, stream, x, w, h, z, offset }) {
           {kfs && (
             <svg class="vol-kf" width={w} height={h}>
               <polyline
-                points={kfs.map(([t, v]) => `${(t - clip.in) * z},${volumeY(v, h)}`).join(' ')}
+                points={kfs.map(([t, v]) => `${((t - clip.in) / kfRate(clip) + lead) * z},${volumeY(v, h)}`).join(' ')}
                 fill="none"
                 stroke="#ffd60a"
                 stroke-width="1.5"
@@ -745,7 +873,7 @@ function Wave({ clip, stream, x, w, h, z, offset }) {
             </svg>
           )}
           {kfs?.map(([t, v], i) => (
-            <div key={i} class="vol-kf-point" data-hit="vol" data-kf={i} data-clip={clip.id} style={{ left: (t - clip.in) * z - 4, top: volumeY(v, h) - 4 }} />
+            <div key={i} class="vol-kf-point" data-hit="vol" data-kf={i} data-clip={clip.id} style={{ left: ((t - clip.in) / kfRate(clip) + lead) * z - 4, top: volumeY(v, h) - 4 }} />
           ))}
         </>
       )}
@@ -763,12 +891,12 @@ function Keyframes({ clip, z }) {
   const times = new Map();
   for (const [prop, list] of Object.entries(clip.kf || {})) {
     if (prop === 'volume' || prop === 'layout') continue;
-    for (const [t, , e] of list) if (t >= clip.in - 1e-4 && t <= clip.in + clip.dur + 1e-4) times.set(t, [...(times.get(t) || []), prop + (e && e !== 'linear' ? ` (${e})` : '')]);
+    for (const [t, , e] of list) if (t >= clip.in - 1e-4 && t <= clip.in + clip.dur * kfRate(clip) + 1e-4) times.set(t, [...(times.get(t) || []), prop + (e && e !== 'linear' ? ` (${e})` : '')]);
   }
   return (
     <div class="kf-row">
       {[...times].map(([t, props]) => (
-        <span key={t} class="kf" data-hit="kf" data-clip={clip.id} data-t={t} title={`Keyframe: ${props.join(', ')}. Drag to move, right click for easing.`} style={{ left: (t - clip.in) * z - 5 }} />
+        <span key={t} class="kf" data-hit="kf" data-clip={clip.id} data-t={t} title={`Keyframe: ${props.join(', ')}. Drag to move, right click for easing.`} style={{ left: ((t - clip.in) / kfRate(clip)) * z - 5 }} />
       ))}
     </div>
   );
@@ -784,5 +912,29 @@ function FadeHandles({ clip, z, h }) {
       {fi > 0 && <div class="fade-shape in" style={{ width: fi, height: h }} />}
       {fo > 0 && <div class="fade-shape out" style={{ width: fo, height: h }} />}
     </>
+  );
+}
+
+// Lydstrømmen et klipp bruker for lydbølgen.
+function clipAudioStream(clip, media) {
+  if (!media) return null;
+  if (clip.type === 'recording') return media.streams.camera?.hasAudio ? media.streams.camera : media.streams.screen;
+  return media.streams[clip.stream || 'main'];
+}
+
+// Utvidet lyd: lyddelen vises under bildet og kan dras ut over kantene (J- og L-kutt).
+function AudioBand({ clip, row, media, z, selected }) {
+  const lead = clip.props.aLead || 0;
+  const tail = clip.props.aTail || 0;
+  const h = Math.round(row.h * 0.34);
+  const x = PAD + (clip.start - lead) * z;
+  const w = Math.max(4, (clip.dur + lead + tail) * z);
+  const stream = clipAudioStream(clip, media);
+  return (
+    <div class={`tl-audioband${selected ? ' selected' : ''}`} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y + row.h - h, height: h }}>
+      <Wave clip={clip} stream={stream} x={x} w={w} h={h} z={z} offset={media?.kind === 'recording' ? stream?.offset || 0 : 0} lead={lead} />
+      <div class="edge start" data-hit="aedge" data-edge="start" data-clip={clip.id} title="Drag to extend or shorten the audio" />
+      <div class="edge end" data-hit="aedge" data-edge="end" data-clip={clip.id} title="Drag to extend or shorten the audio" />
+    </div>
   );
 }

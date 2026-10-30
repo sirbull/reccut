@@ -17,7 +17,13 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 ## Redigering
 
 * Magnetisk hovedspor som i Final Cut Pro, med tilkoblede spor over (bilder, video, titler) og lydspor under (musikk, lydeffekter)
-* Verktøy: **Select (A)**, **Position (P)** som flytter klipp og lager mellomrom (klippene bak følger med), **Blade (B)** med kuttelinje og **Hand (H)**. Musepekeren viser hva som skjer: trimpeker på kantene, barberblad, flyttepeker og grip.
+* Verktøy som i Final Cut Pro: **Select (A)**, **Trim (T)** med roll på kutt, slip i klippet og slide med Option, **Position (P)** som flytter klipp og lager mellomrom, **Range (R)**, **Blade (B)**, **Zoom (Z)** og **Hand (H)**. Musepekeren viser hva som skjer.
+* **Skumming**: hold musen over tidslinjen eller et klipp i biblioteket, så viser visningen bildet der pekeren er, og lyden spilles i korte utdrag. **S** slår skumming av og på, **N** slår lyden ved skumming av og på.
+* **Biblioteket som filmstriper**: hvert klipp vises som en liten tidslinje med bilder og lydbølge, under hverandre. Dra over et klipp for å velge et område, og legg det til med E, W, Q eller D (eller dra navnet til tidslinjen).
+* **Fart**: 10 %, 25 %, 50 %, 2x, 4x, 8x, 20x eller egen verdi, med valg om å beholde tonehøyden. **Frosset bilde** med Option F.
+* **Utvid lyd** (Control S, Alt E på Windows) viser lyden for seg under bildet, så kantene kan dras for J- og L-kutt. **Koble fra lyd** (Control Shift S, Alt Shift E) gir egne lydklipp.
+* **Kryssfade i lyd**: marker to lydklipp som ligger inntil hverandre og trykk Cmd T. Standardlengden (1 sekund) settes i Preferences (Cmd ,).
+* Overwrite (D), Lift from Storyline (Option Cmd Opp), Overwrite to Storyline (Option Cmd Ned), Insert Gap (Option W), Solo (Option S) og Select Clip (C)
 * Importer nesten alle formater: MP4, MOV, MKV, WebM, AVI, WMV, FLV, MPEG, MXF, ProRes, DNxHR, 10-bit H.264, animert GIF, TIFF, TGA, HEIC, WAV, AIFF, MP3, AAC, FLAC, OGG, WMA, AC3 og flere. Det appen ikke kan spille av direkte konverteres i bakgrunnen. Filer som ikke kan leses avvises med en tydelig melding.
 * Trim, kutt, flytt, kopier og lim inn, slå klipp av og på, angre og gjør om
 * **Nøkkelbilder med myke overganger** (Linear, Ease In, Ease Out, Ease In and Out, Hold) på opasitet, posisjon, skala, rotasjon, farge, effekter og volum. Diamantene på klippet kan dras, og høyreklikk gir valg av overgang.
@@ -69,7 +75,14 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | J, K, L | Spill bakover, stopp, spill fremover (trykk flere ganger for raskere) |
 | Venstre og høyre pil | Ett bilde (med Shift: ti bilder) |
 | Opp og ned pil | Forrige eller neste kutt |
-| A, P, B, H | Select, Position, Blade, Hand |
+| A, T, P, R, B, Z, H | Select, Trim, Position, Range, Blade, Zoom, Hand |
+| S, N, Shift N | Skumming, lyd ved skumming, festing (snapping) |
+| D, C | Skriv over ved spillhodet, velg klippet under spillhodet |
+| Cmd R, Option Cmd R | Fart, normal fart |
+| Option F, Option W, Option S | Frosset bilde, sett inn mellomrom, solo |
+| Control S, Control Shift S | Utvid lyd, koble fra lyd (Alt E og Alt Shift E på Windows) |
+| Option Cmd Opp og Ned | Løft ut av hovedsporet, skriv over til hovedsporet |
+| Cmd , | Preferences |
 | Cmd B, Shift Cmd B | Kutt valgte klipp ved spillhodet, kutt alle |
 | Delete, Shift Delete | Slett og lukk, slett og behold mellomrom |
 | V | Slå klipp av eller på |
@@ -79,7 +92,6 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | Option [ og Option ] | Trim start eller slutt til spillhodet |
 | E, W, Q | Legg til på slutten, sett inn, koble på over |
 | Ctrl + og Ctrl - | Volum opp eller ned 1 dB (Alt på Windows) |
-| N | Festing av og på |
 | M | Markør |
 | I, O, Option X | Inn og utpunkt, fjern område |
 | Komma og punktum | Flytt valgt klipp ett bilde |

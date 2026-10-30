@@ -10,7 +10,9 @@ import {
   FileUp,
   Film,
   Image as ImageIcon,
+  LayoutGrid,
   Plus,
+  Rows3,
   Search,
   Sparkles,
   Trash2,
@@ -18,11 +20,11 @@ import {
   Video,
   Wand2,
 } from 'lucide-preact';
-import { CAPTION_LANE, EFFECTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode } from '../../shared/model.js';
+import { CAPTION_LANE, EFFECTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, mediaClipType, newProject } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { parseSrt, toSrt, toVtt } from '../../shared/srt.js';
-import { addMediaRecords, commit, importPaths, makeCaptionClip, project, selection, tasks, timeSig } from './store.js';
-import { fileUrl, seek } from './playback.js';
+import { addMediaRecords, audioSkimming, commit, getWave, importPaths, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
+import { fileUrl, scrubAudio, seek } from './playback.js';
 import * as commands from './commands.js';
 import { CaptionStyleEditor } from './Inspector.jsx';
 import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
@@ -73,6 +75,11 @@ function MediaTab() {
   const [query, setQuery] = useState('');
   const items = Object.values(p.media).filter((m) => !query || m.name.toLowerCase().includes(query.toLowerCase()));
   const [over, setOver] = useState(false);
+  const [mode, setMode] = useState(localStorage.getItem('browserView') || 'filmstrip');
+  const setView = (v) => {
+    setMode(v);
+    localStorage.setItem('browserView', v);
+  };
 
   const addRecording = async () => {
     const recs = await api.listRecordings();
@@ -107,6 +114,9 @@ function MediaTab() {
         <Button variant="ghost" icon={Video} onClick={addRecording}>
           Recordings
         </Button>
+        <span class="spacer" />
+        <IconButton icon={Rows3} title="Filmstrip view" active={mode === 'filmstrip'} onClick={() => setView('filmstrip')} />
+        <IconButton icon={LayoutGrid} title="Grid view" active={mode === 'grid'} onClick={() => setView('grid')} />
       </div>
       {Object.keys(p.media).length > 4 && (
         <div class="search">
@@ -121,13 +131,23 @@ function MediaTab() {
           <p class="dim">Almost any video, audio or image format works. Files the app cannot play directly are converted in the background.</p>
         </div>
       ) : (
-        <div class="media-grid">
-          {items.map((m) => (
-            <MediaCard key={m.id} m={m} />
-          ))}
-        </div>
+        mode === 'filmstrip' ? (
+          <div class="media-list">
+            {items.map((m) => (
+              <FilmstripRow key={m.id} m={m} />
+            ))}
+          </div>
+        ) : (
+          <div class="media-grid">
+            {items.map((m) => (
+              <MediaCard key={m.id} m={m} />
+            ))}
+          </div>
+        )
       )}
-      <p class="hint small">Select a clip and press E to append it, W to insert it at the playhead, or Q to connect it above the storyline.</p>
+      <p class="hint small">
+        Skim a clip to preview it, drag across it to select a range. Then press E to append, W to insert, Q to connect or D to overwrite at the playhead. Drag the clip name to the timeline.
+      </p>
     </div>
   );
 }
@@ -139,22 +159,7 @@ function MediaCard({ m }) {
   const analyzing = tasks.value.some((t) => t.kind === 'analyze' && t.state === 'running' && t.title.includes(m.name));
   const used = Object.values(project.value.clips).some((c) => c.mediaId === m.id);
   const Icon = m.kind === 'audio' ? FileAudio : m.kind === 'image' ? ImageIcon : m.kind === 'recording' ? Video : Film;
-  const onContext = async (e) => {
-    e.preventDefault();
-    const id = await api.popupMenu([
-      { id: 'append', label: 'Append to Storyline', accelerator: 'E' },
-      { id: 'insert', label: 'Insert at Playhead', accelerator: 'W' },
-      { id: 'connect', label: 'Connect to Storyline', accelerator: 'Q' },
-      { separator: true },
-      { id: 'reveal', label: isMac ? 'Reveal in Finder' : 'Show in Explorer' },
-      { id: 'remove', label: 'Remove from Project', enabled: !used },
-    ]);
-    if (['append', 'insert', 'connect'].includes(id)) {
-      commands.browserSelection.value = m.id;
-      commands.addBrowserSelection(id);
-    } else if (id === 'reveal') api.reveal(m.path);
-    else if (id === 'remove') commit((p) => delete p.media[m.id]);
-  };
+  const onContext = (e) => mediaContextMenu(e, m, used);
   return (
     <div
       class={`media-card${selected ? ' selected' : ''}`}
@@ -178,6 +183,176 @@ function MediaCard({ m }) {
       <div class="name">{m.name}</div>
     </div>
   );
+}
+
+/* Filmstrip: klippet vises som en liten tidslinje du kan skumme og velge et område i */
+
+const skimProjects = new WeakMap();
+function skimProjectFor(m) {
+  const main = project.value;
+  const key = skimProjects.get(m);
+  if (key && key.w === main.width && key.h === main.height) return key.p;
+  const clip = makeClip(mediaClipType(m), { media: m, start: 0, in: 0, dur: m.kind === 'image' ? 5 : m.duration });
+  clip.id = `skim-${m.id}`;
+  clip.lane = 0;
+  const p = { ...newProject(m.name), width: main.width, height: main.height, media: { [m.id]: m }, clips: { [clip.id]: clip }, primary: [clip.id], duration: clip.dur };
+  skimProjects.set(m, { w: main.width, h: main.height, p });
+  return p;
+}
+
+function fmt(t) {
+  const m = Math.floor(t / 60);
+  const s = t - m * 60;
+  return `${m}:${s.toFixed(1).padStart(4, '0')}`;
+}
+
+function FilmstripRow({ m }) {
+  const stripRef = useRef(null);
+  const lineRef = useRef(null);
+  const [width, setWidth] = useState(240);
+  const selected = commands.browserSelection.value === m.id;
+  const range = commands.browserRange.value?.mediaId === m.id ? commands.browserRange.value : null;
+  const stream = m.streams.screen || m.streams.main || m.streams.camera;
+  const audio = m.kind === 'recording' ? (m.streams.camera?.hasAudio ? m.streams.camera : m.streams.screen) : m.streams.main;
+  const hasAudio = Boolean(audio?.hasAudio);
+  const files = m.kind === 'image' ? [m.streams.main?.proxy || m.path] : stream?.thumbs?.files || [];
+  const dur = m.kind === 'image' ? 5 : m.duration;
+  const used = Object.values(project.value.clips).some((c) => c.mediaId === m.id);
+  const lastScrub = useRef(0);
+  const drag = useRef(null);
+
+  useEffect(() => {
+    const ro = new ResizeObserver(() => setWidth(stripRef.current?.clientWidth || 240));
+    ro.observe(stripRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const tileW = 56;
+  const n = Math.max(1, Math.floor(width / tileW));
+  const tiles = [];
+  if (m.kind !== 'audio' && files.length) {
+    for (let i = 0; i < n; i++) {
+      const t = ((i + 0.5) / n) * dur;
+      const idx = m.kind === 'image' ? 0 : Math.max(0, Math.min(files.length - 1, Math.floor(t / (stream.thumbs.interval || 1))));
+      tiles.push(<img key={i} src={fileUrl(files[idx])} style={{ width: `${100 / n}%` }} draggable={false} />);
+    }
+  }
+  const timeAt = (e) => {
+    const r = stripRef.current.getBoundingClientRect();
+    return Math.max(0, Math.min(dur, ((e.clientX - r.left) / r.width) * dur));
+  };
+  const onMove = (e) => {
+    const t = timeAt(e);
+    if (lineRef.current) {
+      lineRef.current.style.display = 'block';
+      lineRef.current.style.left = `${(t / dur) * 100}%`;
+    }
+    if (drag.current) {
+      if (Math.abs(e.clientX - drag.current.x) > 3) drag.current.moved = true;
+      if (drag.current.moved) commands.browserRange.value = { mediaId: m.id, in: Math.min(drag.current.t, t), out: Math.max(drag.current.t, t) };
+    }
+    if (skimming.value && !playing.value) {
+      skim.value = { project: skimProjectFor(m), T: Math.min(t, dur - 1e-3), mediaId: m.id };
+      const now = performance.now();
+      if (audioSkimming.value && hasAudio && now - lastScrub.current > 70) {
+        lastScrub.current = now;
+        scrubAudio();
+      }
+    }
+  };
+  const onLeave = () => {
+    if (lineRef.current) lineRef.current.style.display = 'none';
+    if (skim.value?.mediaId === m.id) skim.value = null;
+  };
+  const onDown = (e) => {
+    if (e.button !== 0) return;
+    commands.browserSelection.value = m.id;
+    drag.current = { x: e.clientX, t: timeAt(e), moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onUp = () => {
+    if (drag.current && !drag.current.moved) commands.browserRange.value = null;
+    drag.current = null;
+  };
+
+  return (
+    <div class={`film-row${selected ? ' selected' : ''}`} onContextMenu={(e) => mediaContextMenu(e, m, used)}>
+      <div
+        class="film-head"
+        draggable
+        onDragStart={(e) => dragData(e, { kind: 'media', id: m.id })}
+        onClick={() => {
+          commands.browserSelection.value = m.id;
+          commands.browserRange.value = null;
+        }}
+        onDblClick={() => commands.addBrowserSelection('append')}
+        title={`${m.path}. Drag to the timeline.`}
+      >
+        {m.kind === 'recording' ? <span class="kind-dot rec">REC</span> : m.kind === 'audio' ? <FileAudio size={12} /> : m.kind === 'image' ? <ImageIcon size={12} /> : <Film size={12} />}
+        <span class="name">{m.name}</span>
+        {used && <span class="used-dot" title="Used in the project" />}
+        <span class="dur">{range ? `${fmt(range.in)} to ${fmt(range.out)}` : m.kind === 'image' ? 'Still' : formatDuration(m.duration)}</span>
+      </div>
+      <div class="film-strip" ref={stripRef} onPointerMove={onMove} onPointerLeave={onLeave} onPointerDown={onDown} onPointerUp={onUp}>
+        {m.kind !== 'audio' && <div class={`frames${tiles.length ? '' : ' empty'}`}>{tiles}</div>}
+        {hasAudio && <MiniWave stream={audio} offset={m.kind === 'recording' ? audio.offset || 0 : 0} dur={dur} tall={m.kind === 'audio'} />}
+        {range && <div class="film-range" style={{ left: `${(range.in / dur) * 100}%`, width: `${((range.out - range.in) / dur) * 100}%` }} />}
+        <div class="film-skimmer" ref={lineRef} />
+      </div>
+    </div>
+  );
+}
+
+function MiniWave({ stream, offset, dur, tall }) {
+  const ref = useRef(null);
+  waveVersion.value;
+  const wave = getWave(stream?.wave);
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const draw = () => {
+      const dpr = window.devicePixelRatio || 1;
+      cv.width = Math.max(1, Math.round(cv.clientWidth * dpr));
+      cv.height = Math.max(1, Math.round(cv.clientHeight * dpr));
+      const g = cv.getContext('2d');
+      g.clearRect(0, 0, cv.width, cv.height);
+      if (!wave) return;
+      g.fillStyle = 'rgba(160, 235, 180, 0.85)';
+      const mid = cv.height / 2;
+      for (let px = 0; px < cv.width; px++) {
+        const t0 = (px / cv.width) * dur - offset;
+        const t1 = ((px + 1) / cv.width) * dur - offset;
+        let i0 = Math.floor(t0 * wave.rate);
+        const i1 = Math.max(i0 + 1, Math.ceil(t1 * wave.rate));
+        let mx = 0;
+        for (; i0 < i1; i0++) if (i0 >= 0 && wave.peaks[i0] > mx) mx = wave.peaks[i0];
+        const hh = Math.max(0.5, (mx / 255) * mid * 0.95);
+        g.fillRect(px, mid - hh, 1, hh * 2);
+      }
+    };
+    draw();
+    const ro = new ResizeObserver(draw);
+    ro.observe(cv);
+    return () => ro.disconnect();
+  }, [wave, dur, offset]);
+  return <canvas ref={ref} class={`film-wave${tall ? ' tall' : ''}`} />;
+}
+
+async function mediaContextMenu(e, m, used) {
+  e.preventDefault();
+  commands.browserSelection.value = m.id;
+  const id = await api.popupMenu([
+    { id: 'append', label: 'Append to Storyline', accelerator: 'E' },
+    { id: 'insert', label: 'Insert at Playhead', accelerator: 'W' },
+    { id: 'connect', label: 'Connect to Storyline', accelerator: 'Q' },
+    { id: 'overwrite', label: 'Overwrite at Playhead', accelerator: 'D' },
+    { separator: true },
+    { id: 'reveal', label: isMac ? 'Reveal in Finder' : 'Show in Explorer' },
+    { id: 'remove', label: 'Remove from Project', enabled: !used },
+  ]);
+  if (['append', 'insert', 'connect', 'overwrite'].includes(id)) commands.addBrowserSelection(id);
+  else if (id === 'reveal') api.reveal(m.path);
+  else if (id === 'remove') commit((p) => delete p.media[m.id]);
 }
 
 /* Små forhåndsvisninger tegnet med tegnemotoren */

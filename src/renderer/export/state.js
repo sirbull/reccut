@@ -3,7 +3,7 @@ import { computed, signal } from '@preact/signals';
 import { CAPTION_LANE, newProject } from '../../shared/model.js';
 import { addMediaClip, autoFormat } from '../../shared/ops.js';
 import { PRESETS } from '../../shared/formats.js';
-import { project as editorProject } from '../editor/store.js';
+import { project as editorProject, withAnalysis } from '../editor/store.js';
 
 const api = window.api;
 
@@ -26,7 +26,7 @@ export async function addFiles(paths) {
   if (!paths.length) return;
   const { items, failed } = await api.importMedia(paths);
   if (failed.length) (await import('../ui.jsx')).toast(`Could not read ${failed.join(', ')}. The file may be damaged or in an unsupported format.`, { kind: 'error', timeout: 9000 });
-  const added = items.map((m) => {
+  const added = items.map(withAnalysis).map((m) => {
     // Hver fil blir et eget lite prosjekt.
     const p = newProject(m.name.replace(/\.[^.]+$/, ''));
     p.media[m.id] = m;

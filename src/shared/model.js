@@ -129,7 +129,7 @@ export const ANIMATION_PRESETS = [
 
 export function applyAnimationPreset(clip, id, W, H) {
   const a = clip.in;
-  const b = clip.in + clip.dur;
+  const b = kfEnd(clip);
   const d = Math.min(0.6, clip.dur / 3);
   const set = (prop, list) => (clip.kf[prop] = list);
   switch (id) {
@@ -179,6 +179,7 @@ export function isVisual(clip) {
 }
 
 export function clipHasAudio(clip, media) {
+  if (clip.props?.audioDetached || clip.speed === 0) return false;
   if (clip.type === 'audio') return true;
   if (clip.type === 'video') return Boolean(media?.streams?.main?.hasAudio);
   if (clip.type === 'recording') return Object.values(media?.streams || {}).some((s) => s.hasAudio);
@@ -187,7 +188,7 @@ export function clipHasAudio(clip, media) {
 
 // Klipp som kan forlenges uten grense (de har ingen kildefil med fast lengde).
 export function isElastic(clip) {
-  return clip.type === 'image' || clip.type === 'title' || clip.type === 'gap' || clip.type === 'caption';
+  return clip.speed === 0 || clip.type === 'image' || clip.type === 'title' || clip.type === 'gap' || clip.type === 'caption';
 }
 
 export function newProject(name = 'Untitled Project') {
@@ -284,15 +285,40 @@ export function mediaClipType(media) {
 
 /* Nøkkelbilder. Tider lagres i kildetid, slik at de følger innholdet når klippet trimmes. */
 
+// Hastighet: 1 er normal, 0.5 er halv fart, 0 er frosset bilde.
+export const speedOf = (clip) => (clip.speed ?? 1);
+// Nøkkelbilder bruker samme tidsakse som kilden, men et frosset bilde animeres i vanlig tempo.
+export const kfRate = (clip) => speedOf(clip) || 1;
+
 export function sourceTime(clip, T) {
-  return clip.in + (T - clip.start);
+  const sp = speedOf(clip);
+  if (sp === 0) return clip.freezeAt ?? clip.in;
+  return clip.in + (T - clip.start) * sp;
+}
+
+export function kfTime(clip, T) {
+  return clip.in + (T - clip.start) * kfRate(clip);
+}
+
+export function kfToTimeline(clip, t) {
+  return clip.start + (t - clip.in) / kfRate(clip);
+}
+
+export function kfEnd(clip) {
+  return clip.in + clip.dur * kfRate(clip);
+}
+
+// Hvor i kildefilen klippet slutter.
+export function srcEnd(clip) {
+  return clip.in + clip.dur * speedOf(clip);
 }
 
 export function valueAt(clip, prop, T) {
   const list = clip.kf?.[prop];
   if (!list || !list.length) return clip.props[prop];
-  const s = sourceTime(clip, T);
-  if (typeof list[0][1] !== 'number' || prop === 'layout') return stepValue(list, s);
+  if (prop === 'layout') return stepValue(list, sourceTime(clip, T));
+  const s = kfTime(clip, T);
+  if (typeof list[0][1] !== 'number') return stepValue(list, s);
   if (s <= list[0][0]) return list[0][1];
   const last = list[list.length - 1];
   if (s >= last[0]) return last[1];
@@ -346,7 +372,7 @@ export function setKeyframeEase(clip, prop, s, ease) {
 // Flytter alle nøkkelbilder i et klipp fra ett tidspunkt til et annet (dra i tidslinjen).
 export function moveKeyframes(clip, from, to) {
   const lo = clip.in;
-  const hi = clip.in + clip.dur;
+  const hi = kfEnd(clip);
   const t = Math.max(lo, Math.min(hi, to));
   for (const [prop, list] of Object.entries(clip.kf)) {
     if (prop === 'layout') continue;
@@ -560,36 +586,95 @@ export function computeFrame(project, T, { captions = true } = {}) {
   return { layers, captions: caps };
 }
 
+// Lydvinduet til et klipp: kan forlenges eller kortes inn i hver ende (utvidet lyd, J- og L-kutt).
+export function audioWindow(clip) {
+  const lead = clip.props?.aLead || 0;
+  const tail = clip.props?.aTail || 0;
+  return [clip.start - lead, clip.start + clip.dur + tail];
+}
+
+function audioEnvelope(clip, T) {
+  const [a, b] = audioWindow(clip);
+  if (T < a || T >= b) return 0;
+  let g = 1;
+  const fin = clip.props.aFadeIn || 0;
+  const fout = clip.props.aFadeOut || 0;
+  if (fin > 0) g *= clamp((T - a) / fin, 0, 1);
+  if (fout > 0) g *= clamp((b - T) / fout, 0, 1);
+  return g;
+}
+
+// Kryssfade mellom to lydklipp som ligger inntil hverandre i samme spor.
+export function audioXfadePartner(project, clip) {
+  if (!clip.axfade) return null;
+  return Object.values(project.clips).find((o) => o.id !== clip.id && o.lane === clip.lane && o.enabled && Math.abs(o.start + o.dur - clip.start) < 1 / 60) || null;
+}
+
+export function audioXfadeWindow(project, clip) {
+  const prev = audioXfadePartner(project, clip);
+  if (!prev) return null;
+  const d = Math.min(clip.axfade, clip.dur, prev.dur);
+  return { prev, a: clip.start - d / 2, b: clip.start + d / 2 };
+}
+
+// Lik effekt gjennom hele overgangen (equal power), slik at lyden ikke dupper i midten.
+const fadeOutGain = (p) => Math.cos((p * Math.PI) / 2);
+const fadeInGain = (p) => Math.sin((p * Math.PI) / 2);
+
 // Lydkilder ved tid T: hvilken fil, hvor i filen og hvor høyt.
+// "over" betyr at klippet høres utenfor sitt eget område fordi en overgang bruker ekstra lyd.
 export function computeAudio(project, T) {
   const out = [];
-  const addClip = (clip, factor) => {
-    if (!clip.enabled || laneMuted(project, clip.lane)) return;
-    const media = project.media[clip.mediaId];
-    if (!media) return;
-    const s = sourceTime(clip, T);
-    const env = fadeEnvelope(clip, T, clip.props.aFadeIn || 0, clip.props.aFadeOut || 0) * factor;
-    if (env <= 0) return;
-    if (clip.type === 'recording') {
-      for (const [key, stream] of Object.entries(media.streams)) {
-        if (!stream.hasAudio) continue;
-        const db = valueAt(clip, key === 'camera' ? 'micVolume' : 'sysVolume', T);
-        out.push({ clip, stream: key, src: s - (stream.offset || 0), gain: dbToGain(db) * env });
-      }
-    } else if (clipHasAudio(clip, media)) {
-      out.push({ clip, stream: 'main', src: s, gain: dbToGain(valueAt(clip, 'volume', T)) * env });
-    }
-  };
+  const factors = new Map();
+  const set = (clip, f, over = false) => factors.set(clip.id, { clip, f, over });
+  const solo = Object.values(project.clips).some((c) => c.solo);
 
   if (!laneMuted(project, 0)) {
     const p = primaryAt(project, T);
     if (p?.transition) {
-      if (p.a) addClip(p.a, 1 - p.transition.p);
-      addClip(p.b, p.transition.p);
-    } else if (p?.clip) addClip(p.clip, 1);
+      if (p.a) set(p.a, fadeOutGain(p.transition.p), true);
+      set(p.b, fadeInGain(p.transition.p), true);
+    } else if (p?.clip) set(p.clip, 1);
   }
   for (const c of Object.values(project.clips)) {
-    if (c.lane !== 0 && c.lane < CAPTION_LANE && T >= c.start && T < c.start + c.dur) addClip(c, 1);
+    if (c.lane === CAPTION_LANE || factors.has(c.id)) continue;
+    const [a, b] = audioWindow(c);
+    const inside = T >= c.start && T < c.start + c.dur;
+    if ((c.lane !== 0 && inside) || (!inside && T >= a && T < b)) set(c, 1);
+  }
+  for (const c of Object.values(project.clips)) {
+    if (c.lane === 0 || c.lane === CAPTION_LANE) continue;
+    const xf = audioXfadeWindow(project, c);
+    if (xf && T >= xf.a && T < xf.b) {
+      const p = clamp((T - xf.a) / (xf.b - xf.a), 0, 1);
+      set(c, fadeInGain(p), true);
+      set(xf.prev, fadeOutGain(p), true);
+    }
+  }
+
+  for (const { clip, f, over } of factors.values()) {
+    if (!clip.enabled || laneMuted(project, clip.lane) || (solo && !clip.solo)) continue;
+    const media = project.media[clip.mediaId];
+    if (!media || !clipHasAudio(clip, media)) continue;
+    const [aw, bw] = audioWindow(clip);
+    // Utenfor lydvinduet høres klippet bare under en overgang.
+    if ((T < aw || T >= bw) && !over) continue;
+    const env = (T < aw || T >= bw ? 1 : audioEnvelope(clip, T)) * f;
+    if (env <= 0) continue;
+    const s = sourceTime(clip, T);
+    if (clip.type === 'recording') {
+      for (const [key, stream] of Object.entries(media.streams)) {
+        if (!stream.hasAudio) continue;
+        const db = valueAt(clip, key === 'camera' ? 'micVolume' : 'sysVolume', T);
+        out.push({ clip, stream: key, src: s - (stream.offset || 0), gain: dbToGain(db) * env, speed: speedOf(clip) });
+      }
+    } else {
+      // Lydklipp kan peke på lyden i en video eller et opptak (frakoblet lyd).
+      const key = clip.stream || 'main';
+      const stream = media.streams[key];
+      if (!stream?.hasAudio) continue;
+      out.push({ clip, stream: key, src: s - (media.kind === 'recording' ? stream.offset || 0 : 0), gain: dbToGain(valueAt(clip, 'volume', T)) * env, speed: speedOf(clip) });
+    }
   }
   return out;
 }

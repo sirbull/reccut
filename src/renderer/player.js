@@ -1,7 +1,7 @@
 // Avspillingsmotor. Hvert aktivt klipp får sitt eget video- eller lydelement,
 // som holdes i takt med spillhodet. Bildet tegnes med samme kode som eksporten.
 // Redigeringen og eksportfanen har hver sin spiller.
-import { computeAudio, computeFrame } from '../shared/model.js';
+import { computeAudio, computeFrame, sourceTime, speedOf } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 
 const PRELOAD = 1.5;
@@ -108,9 +108,9 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     const addVisual = (clip, t) => {
       const m = p.media[clip.mediaId];
       if (!m || m.kind === 'image') return;
-      const s = clip.in + (t - clip.start);
+      const s = sourceTime(clip, t);
       for (const [key, st] of Object.entries(m.streams)) {
-        if (st.hasVideo) out.set(`${clip.id}:${key}`, { clip, key, src: s - (st.offset || 0), gain: 0 });
+        if (st.hasVideo) out.set(`${clip.id}:${key}`, { clip, key, src: s - (st.offset || 0), gain: 0, speed: speedOf(clip) });
       }
     };
     for (const l of frame.layers) {
@@ -122,7 +122,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     for (const a of computeAudio(p, T)) {
       const id = `${a.clip.id}:${a.stream}`;
       const prev = out.get(id);
-      out.set(id, { clip: a.clip, key: a.stream, src: a.src, gain: a.gain + (prev?.gain || 0) });
+      out.set(id, { clip: a.clip, key: a.stream, src: a.src, gain: a.gain + (prev?.gain || 0), speed: a.speed ?? 1 });
     }
     return out;
   }
@@ -133,6 +133,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     const upcoming = isPlaying && rate > 0 ? neededAt(p, T + PRELOAD) : new Map();
     const seen = new Set();
 
+    const scrubbing = !isPlaying && performance.now() < scrubUntil;
     for (const [id, n] of active) {
       seen.add(id);
       const entry = getEl(n.clip, n.key);
@@ -140,19 +141,35 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       const el = entry.el;
       const dur = el.duration || Infinity;
       const target = Math.max(0, n.src);
-      const beyond = target >= dur - 0.01;
-      if (entry.gain) entry.gain.gain.setTargetAtTime(isPlaying && !beyond && rate > 0 ? n.gain : 0, audioCtx.currentTime, 0.015);
-      if (isPlaying && rate > 0) {
-        if (beyond) {
+      // Utenfor filen (for eksempel et J-kutt forbi starten) er det stille.
+      const outside = n.src < -0.01 || target >= dur - 0.01;
+      const speed = n.speed ?? 1;
+      const moving = isPlaying && rate > 0 && speed > 0;
+      el.preservesPitch = n.clip.props?.preservePitch !== false;
+      if (scrubbing && entry.gain && !outside) {
+        // Lyd mens du skummer: et kort utdrag fra der pekeren er.
+        if (entry.scrubId !== scrubId) {
+          entry.scrubId = scrubId;
+          el.playbackRate = 1;
+          el.currentTime = target;
+          el.play().catch(() => {});
+        }
+        entry.gain.gain.setTargetAtTime(n.gain, audioCtx.currentTime, 0.005);
+        continue;
+      }
+      if (entry.gain) entry.gain.gain.setTargetAtTime(moving && !outside ? n.gain : 0, audioCtx.currentTime, 0.015);
+      if (moving) {
+        if (outside) {
           if (!el.paused) el.pause();
           continue;
         }
-        el.playbackRate = rate;
+        const pr = Math.min(16, Math.max(0.0625, rate * speed));
+        if (Math.abs(el.playbackRate - pr) > 1e-3) el.playbackRate = pr;
         const drift = Math.abs(el.currentTime - target);
         if (el.paused) {
           if (drift > 0.05) el.currentTime = target;
           el.play().catch(() => {});
-        } else if (drift > 0.25 * rate) {
+        } else if (drift > 0.25 * Math.max(1, rate * speed)) {
           el.currentTime = target;
         }
       } else {
@@ -188,6 +205,15 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
         entry.pending = null;
       }
     }
+  }
+
+  let scrubUntil = 0;
+  let scrubId = 0;
+  function scrubAudio(ms = 110) {
+    audioCtx.resume();
+    scrubId++;
+    scrubUntil = performance.now() + ms;
+    dirty = true;
   }
 
   function attachCanvas(el) {
@@ -323,7 +349,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     dirty = true;
   }
 
-  return { attachCanvas, resizeCanvas, start, stopLoop, play, pause, toggle, getRate, shuttle, seek, invalidate: () => (dirty = true), dispose };
+  return { attachCanvas, resizeCanvas, start, stopLoop, play, pause, toggle, getRate, shuttle, seek, scrubAudio, invalidate: () => (dirty = true), dispose };
 
   function dispose() {
     stopLoop();

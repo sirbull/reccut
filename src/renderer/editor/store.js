@@ -9,6 +9,7 @@ import {
   updateDuration,
 } from '../../shared/model.js';
 import { addMediaClip, autoFormat } from '../../shared/ops.js';
+import { prefs } from '../prefs.js';
 
 const api = window.api;
 
@@ -18,8 +19,12 @@ export const projectPath = signal(null);
 export const selection = signal([]);
 export const selectedTransition = signal(null);
 export const tool = signal('select');
-export const snapping = signal(true);
-export const skimming = signal(false);
+export const snapping = signal(prefs.value.snapping);
+// Skumming som i Final Cut Pro: S slår av og på, N slår lyden av og på.
+export const skimming = signal(prefs.value.skimming);
+export const audioSkimming = signal(prefs.value.audioSkimming);
+// Når pekeren skummer, viser visningen dette i stedet for spillhodet: { project, T, mediaId? }.
+export const skim = signal(null);
 export const pps = signal(40);
 export const playing = signal(false);
 export const timeSig = signal(0);
@@ -219,7 +224,19 @@ export async function loadInitialProject() {
 /* Media */
 
 // Resultater fra bakgrunnsanalysen legges inn uten å lage et nytt angresteg.
+// Analyser kan bli ferdige før mediet er lagt i prosjektet (bufrede resultater kommer svært raskt).
+// Derfor huskes alle resultater, og legges på når mediet legges til.
+const analysisResults = new Map();
+export function withAnalysis(m) {
+  const res = analysisResults.get(m.id);
+  if (!res) return m;
+  const streams = { ...m.streams };
+  for (const [key, patch] of Object.entries(res)) if (streams[key]) streams[key] = { ...streams[key], ...patch };
+  return { ...m, streams };
+}
+
 api.onAnalyzed(({ mediaId, stream, patch }) => {
+  analysisResults.set(mediaId, { ...(analysisResults.get(mediaId) || {}), [stream]: { ...(analysisResults.get(mediaId)?.[stream] || {}), ...patch } });
   const apply = (p) => {
     const m = p.media[mediaId];
     if (!m?.streams[stream]) return p;
@@ -267,6 +284,7 @@ export async function importPaths(paths, placement) {
 
 export function addMediaRecords(items, placement) {
   if (!items.length) return;
+  items = items.map(withAnalysis);
   commit((p) => {
     for (const m of items) p.media[m.id] = m;
     if (placement) {
@@ -283,7 +301,7 @@ export function addMediaRecords(items, placement) {
 
 // Lager og lagrer et prosjekt for et nytt opptak. Det åpnes først når brukeren vil redigere.
 export async function createProjectFromRecording(dir) {
-  const media = await api.importRecording(dir);
+  const media = withAnalysis(await api.importRecording(dir));
   const p = newProject(media.name);
   p.media[media.id] = media;
   autoFormat(p, media);
@@ -295,7 +313,7 @@ export async function createProjectFromRecording(dir) {
 // Titler lages fra maler (se TITLE_TEMPLATES).
 export function makeTitleClip(templateId, T) {
   const tpl = TITLE_TEMPLATES.find((t) => t.id === templateId) || TITLE_TEMPLATES[0];
-  const clip = makeClip('title', { start: T, dur: 4, lane: 1, name: tpl.label });
+  const clip = makeClip('title', { start: T, dur: prefs.value.titleDur, lane: 1, name: tpl.label });
   Object.assign(clip.props, tpl.props);
   return clip;
 }

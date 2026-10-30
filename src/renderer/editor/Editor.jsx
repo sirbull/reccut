@@ -20,12 +20,16 @@ import {
   selectedTransition,
   selection,
   snapping,
+  skim,
+  skimming,
+  audioSkimming,
   tool,
   undo,
 } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
-import { Button, Modal, Row, toast } from '../ui.jsx';
+import { Button, Modal, NumberField, Row, Section, Toggle, toast } from '../ui.jsx';
+import { prefs, setPrefs } from '../prefs.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -63,17 +67,41 @@ function onKeyDown(e) {
   else if (code === 'BracketRight' && alt) commands.trimToPlayhead('end');
   else if ((code === 'Equal' || code === 'NumpadAdd') && (isMac ? ctrlMac : alt)) commands.adjustVolume(1);
   else if ((code === 'Minus' || code === 'NumpadSubtract') && (isMac ? ctrlMac : alt)) commands.adjustVolume(-1);
+  // Lyd: utvid og koble fra (Control S og Control Shift S på Mac, Alt E og Alt Shift E på Windows).
+  else if (isMac && ctrlMac && code === 'KeyS') e.shiftKey ? commands.detachSelectedAudio() : commands.toggleExpandAudio();
+  else if (!isMac && alt && !e.ctrlKey && code === 'KeyE') e.shiftKey ? commands.detachSelectedAudio() : commands.toggleExpandAudio();
+  else if (alt && !mod && !e.ctrlKey && code === 'KeyS') commands.toggleSolo();
+  else if (alt && !mod && code === 'KeyF') commands.addFreezeFrame();
+  else if (alt && !mod && code === 'KeyW') commands.insertGapAtPlayhead();
+  else if (mod && alt && code === 'KeyR') commands.setSpeedSelected(1);
+  else if (mod && !alt && code === 'KeyR') commands.openRetime();
+  else if (mod && alt && code === 'ArrowUp') commands.liftSelected();
+  else if (mod && alt && code === 'ArrowDown') commands.overwriteSelectedToPrimary();
   else if (mod || e.ctrlKey || alt) handled = false;
   else if (code === 'Backspace' || code === 'Delete') commands.deleteSelection(!e.shiftKey);
   else if (code === 'KeyA') tool.value = 'select';
   else if (code === 'KeyB') tool.value = 'blade';
   else if (code === 'KeyP') tool.value = 'position';
   else if (code === 'KeyH') tool.value = 'hand';
+  else if (code === 'KeyT') tool.value = 'trim';
+  else if (code === 'KeyR') tool.value = 'range';
+  else if (code === 'KeyZ' && !e.shiftKey) tool.value = 'zoom';
+  else if (code === 'KeyD') commands.addBrowserSelection('overwrite');
+  else if (code === 'KeyC') commands.selectClipAtPlayhead();
+  else if (code === 'KeyS') {
+    skimming.value = !skimming.value;
+    if (!skimming.value) skim.value = null;
+  }
   else if (code === 'KeyV') commands.toggleEnabled();
   else if (code === 'KeyE') commands.addBrowserSelection('append');
   else if (code === 'KeyW') commands.addBrowserSelection('insert');
   else if (code === 'KeyQ') commands.addBrowserSelection('connect');
-  else if (code === 'KeyN') snapping.value = !snapping.value;
+  // N slår lyd ved skumming av og på, Shift N slår festing av og på.
+  else if (code === 'KeyN' && e.shiftKey) snapping.value = !snapping.value;
+  else if (code === 'KeyN') {
+    audioSkimming.value = !audioSkimming.value;
+    toast(audioSkimming.value ? 'Audio skimming on' : 'Audio skimming off', { timeout: 1200 });
+  }
   else if (code === 'KeyM') commands.addMarker();
   else if (code === 'KeyI') commands.setRange('in');
   else if (code === 'KeyO') commands.setRange('out');
@@ -96,6 +124,10 @@ export function handleMenu(id) {
   const textCmd = { undo: 'undo', redo: 'redo', cut: 'cut', copy: 'copy', paste: 'paste', selectAll: 'selectAll' }[id];
   if (typing && textCmd) {
     document.execCommand(textCmd);
+    return;
+  }
+  if (id === 'prefs') {
+    commands.prefsOpen.value = true;
     return;
   }
   if (id === 'roomRecord') room.value = 'record';
@@ -121,6 +153,19 @@ export function handleMenu(id) {
   else if (id === 'import') commands.importDialog();
   else if (id === 'export') commands.exportOpen.value = true;
   else if (id === 'zoomIn') commands.zoom(1.5);
+  else if (id === 'prefs') commands.prefsOpen.value = true;
+  else if (id.startsWith('speed:')) commands.setSpeedSelected(Number(id.slice(6)));
+  else if (id === 'retime') commands.openRetime();
+  else if (id === 'freeze') commands.addFreezeFrame();
+  else if (id === 'expandAudio') commands.toggleExpandAudio();
+  else if (id === 'detachAudio') commands.detachSelectedAudio();
+  else if (id === 'solo') commands.toggleSolo();
+  else if (id === 'lift') commands.liftSelected();
+  else if (id === 'overwriteDown') commands.overwriteSelectedToPrimary();
+  else if (id === 'insertGap') commands.insertGapAtPlayhead();
+  else if (id === 'blade') commands.blade();
+  else if (id === 'addTransition') commands.addTransition('dissolve');
+  else if (id === 'toggleEnabled') commands.toggleEnabled();
   else if (id === 'zoomOut') commands.zoom(1 / 1.5);
 }
 
@@ -185,6 +230,7 @@ export function Editor({ active }) {
       {commands.exportOpen.value && <ExportDialog />}
       {commands.projectsOpen.value && <ProjectsDialog />}
       {commands.newProjectOpen.value && <NewProjectDialog />}
+      {commands.prefsOpen.value && <PreferencesDialog />}
     </div>
   );
 }
@@ -298,6 +344,60 @@ function NewProjectDialog() {
         ))}
       </div>
       <p class="hint">You can change the format, size and frame rate later in the project settings.</p>
+    </Modal>
+  );
+}
+
+// Innstillinger: standardlengder og skumming.
+function PreferencesDialog() {
+  const p = prefs.value;
+  const close = () => (commands.prefsOpen.value = false);
+  const num = (key, label, min, max, step = 0.1) => (
+    <Row label={label}>
+      <NumberField value={p[key]} min={min} max={max} step={step} precision={step < 1 ? 1 : 0} unit="s" width={84} onChange={(v) => setPrefs({ [key]: Math.round(v * 100) / 100 })} />
+    </Row>
+  );
+  return (
+    <Modal title="Preferences" width={520} onClose={close} footer={<Button variant="primary" onClick={close}>Done</Button>}>
+      <Section title="Editing" collapsible={false}>
+        {num('transitionDur', 'Default transition duration', 0.1, 10)}
+        {num('audioCrossfadeDur', 'Default audio crossfade', 0.05, 10)}
+        {num('stillDur', 'Still image duration', 0.5, 60)}
+        {num('titleDur', 'Title duration', 0.5, 60)}
+        {num('freezeDur', 'Freeze frame duration', 0.2, 60)}
+      </Section>
+      <Section title="Playback" collapsible={false}>
+        <Row label="Skimming (S)">
+          <Toggle
+            checked={skimming.value}
+            onChange={(v) => {
+              skimming.value = v;
+              setPrefs({ skimming: v });
+            }}
+          />
+        </Row>
+        <Row label="Audio skimming (N)">
+          <Toggle
+            checked={audioSkimming.value}
+            onChange={(v) => {
+              audioSkimming.value = v;
+              setPrefs({ audioSkimming: v });
+            }}
+          />
+        </Row>
+        <Row label="Snapping (Shift N)">
+          <Toggle
+            checked={snapping.value}
+            onChange={(v) => {
+              snapping.value = v;
+              setPrefs({ snapping: v });
+            }}
+          />
+        </Row>
+        <Row label="Preserve pitch when changing speed">
+          <Toggle checked={p.preservePitch} onChange={(v) => setPrefs({ preservePitch: v })} />
+        </Row>
+      </Section>
     </Modal>
   );
 }

@@ -9,6 +9,7 @@ import {
   Loader2,
   Plus,
   Redo2,
+  Settings,
   Share,
   Undo2,
   Video,
@@ -163,6 +164,7 @@ function TitleBar() {
           <IconButton icon={Redo2} title="Redo" disabled={!canRedo()} onClick={redo} />
           <span class="sep" />
           <IconButton icon={FolderOpen} title="Projects" onClick={() => (commands.projectsOpen.value = true)} />
+          <IconButton icon={Settings} title={`Preferences (${isMac ? '⌘' : 'Ctrl+'},)`} onClick={() => (commands.prefsOpen.value = true)} />
           <IconButton icon={Plus} title={`Import media (${isMac ? '⌘' : 'Ctrl+'}I)`} onClick={() => commands.importDialog()} />
           <button class="btn primary" onClick={() => (commands.exportOpen.value = true)} title={`Export project (${isMac ? '⌘' : 'Ctrl+'}E)`}>
             <Share size={15} />

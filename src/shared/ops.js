@@ -2,7 +2,12 @@
 // redigeringsvisningen kloner før og lagrer historikk for angre.
 import {
   CAPTION_LANE,
+  clipHasAudio,
   isElastic,
+  kfRate,
+  kfTime,
+  speedOf,
+  sourceTime,
   isVisual,
   makeClip,
   mediaClipType,
@@ -33,7 +38,7 @@ export function withSync(project, fn) {
     });
     if (parentId) {
       const p = project.clips[parentId];
-      anchors.push({ c, parentId, src: p.in + (c.start - p.start), offset: c.start - p.start });
+      anchors.push({ c, parentId, src: kfTime(p, c.start), offset: c.start - p.start });
     }
   }
   const result = fn();
@@ -42,7 +47,7 @@ export function withSync(project, fn) {
     const p = project.clips[a.parentId];
     if (project.clips[a.c.id] !== a.c || a.c.lane === 0) continue;
     if (p && project.primary.includes(a.parentId)) {
-      a.c.start = Math.max(0, round(p.start + (a.src - p.in)));
+      a.c.start = Math.max(0, round(p.start + (a.src - p.in) / kfRate(p)));
     } else {
       // Klippet under ble slettet: flytt med neste klipp som fortsatt finnes.
       const idx = order.indexOf(a.parentId);
@@ -77,7 +82,7 @@ export function splitClip(project, id, T) {
   const right = structuredClone(c);
   right.id = uid();
   right.start = round(T);
-  right.in = round(c.in + local);
+  right.in = round(c.in + local * kfRate(c));
   right.dur = round(c.dur - local);
   right.transition = undefined;
   right.props.vFadeIn = 0;
@@ -147,14 +152,15 @@ export function trimClip(project, id, edge, delta) {
   if (!c) return;
   const apply = () => {
     const maxLen = mediaLength(project, c);
+    const r = kfRate(c);
     if (edge === 'end') {
-      const max = maxLen === Infinity ? Infinity : maxLen - c.in;
+      const max = maxLen === Infinity ? Infinity : (maxLen - c.in) / r;
       c.dur = round(Math.max(MIN_DUR, Math.min(max, c.dur + delta)));
     } else {
       const minIn = isElastic(c) ? -Infinity : 0;
-      let d = Math.max(minIn - c.in, Math.min(c.dur - MIN_DUR, delta));
+      let d = Math.max((minIn - c.in) / r, Math.min(c.dur - MIN_DUR, delta));
       if (c.lane !== 0) d = Math.max(d, -c.start);
-      c.in = round(c.in + d);
+      c.in = round(c.in + d * r);
       c.dur = round(c.dur - d);
       if (c.lane !== 0) c.start = round(c.start + d);
     }
@@ -208,11 +214,14 @@ export function placeFree(project, clip, start, lane) {
 }
 
 // Legger til media på tidslinjen: append (E), insert (W) eller connect (Q).
-export function addMediaClip(project, media, mode, T, laneHint) {
+// opts: { in, dur } for et utvalg fra biblioteket, eller lengde på stillbilder.
+export function addMediaClip(project, media, mode, T, laneHint, opts = {}) {
   const type = mediaClipType(media);
-  const clip = makeClip(type, { media });
+  const clip = makeClip(type, { media, ...(opts.in != null ? { in: opts.in } : {}), ...(opts.dur ? { dur: opts.dur } : {}) });
   const audioOnly = type === 'audio';
-  if (audioOnly || mode === 'connect') {
+  if (mode === 'overwrite' && !audioOnly) {
+    overwritePrimary(project, clip, T ?? 0);
+  } else if (audioOnly || mode === 'connect') {
     placeFree(project, clip, T ?? 0, laneHint ?? (audioOnly ? -1 : 1));
   } else if (mode === 'append') {
     insertIntoPrimary(project, [clip], null);
@@ -345,7 +354,7 @@ export function positionTrim(project, id, edge, delta) {
       const after = gapAt(project, idx + 1);
       const isLast = idx === project.primary.length - 1;
       let d = delta;
-      const max = maxLen === Infinity ? Infinity : maxLen - c.in;
+      const max = maxLen === Infinity ? Infinity : (maxLen - c.in) / kfRate(c);
       d = Math.min(d, max - c.dur);
       d = Math.max(d, MIN_DUR - c.dur);
       if (d > 0 && !isLast) d = Math.min(d, after ? after.dur : 0);
@@ -366,12 +375,233 @@ export function positionTrim(project, id, edge, delta) {
     } else {
       const before = gapAt(project, idx - 1)?.dur || 0;
       const minIn = isElastic(c) ? -Infinity : 0;
-      let d = Math.max(minIn - c.in, Math.min(c.dur - MIN_DUR, delta));
+      let d = Math.max((minIn - c.in) / kfRate(c), Math.min(c.dur - MIN_DUR, delta));
       d = Math.max(d, -before);
-      c.in = round(c.in + d);
+      c.in = round(c.in + d * kfRate(c));
       c.dur = round(c.dur - d);
       setGapBefore(project, idx, before + d);
     }
     mergeGaps(project);
   });
+}
+
+
+/* Hastighet */
+
+export const SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2, 4, 8, 20];
+
+// Endrer farten. Kildeområdet beholdes, så klippet blir lengre eller kortere på tidslinjen.
+export function setSpeed(project, id, speed) {
+  const c = project.clips[id];
+  if (!c || c.speed === 0 || !['video', 'recording', 'audio'].includes(c.type)) return;
+  const sp = Math.max(0.02, Math.min(50, speed));
+  const srcLen = c.dur * speedOf(c);
+  const apply = () => {
+    c.speed = sp === 1 ? undefined : sp;
+    if (c.speed === undefined) delete c.speed;
+    c.dur = round(Math.max(MIN_DUR, srcLen / sp));
+    if (c.transition) c.transition.dur = Math.min(c.transition.dur, c.dur);
+  };
+  if (c.lane === 0) withSync(project, apply);
+  else {
+    apply();
+    resolveLane(project, c);
+    updateDuration(project);
+  }
+}
+
+// Frosset bilde ved spillhodet: klippet deles og et stillbilde settes inn.
+export function freezeFrame(project, T, dur = 2) {
+  const p = Object.values(project.clips)
+    .filter((c) => (c.type === 'video' || c.type === 'recording') && c.speed !== 0 && c.enabled && T >= c.start && T < c.start + c.dur)
+    .sort((a, b) => (b.lane === 0) - (a.lane === 0) || b.lane - a.lane)[0];
+  if (!p) return null;
+  const frameAt = sourceTime(p, T);
+  const freeze = structuredClone(p);
+  freeze.id = uid();
+  freeze.speed = 0;
+  freeze.freezeAt = round(frameAt);
+  freeze.in = round(frameAt);
+  freeze.dur = dur;
+  freeze.kf = {};
+  freeze.transition = undefined;
+  freeze.name = `${p.name || 'Clip'} (freeze)`;
+  freeze.props.audioDetached = false;
+  if (p.lane === 0) {
+    withSync(project, () => {
+      const right = splitClip(project, p.id, T);
+      const idx = project.primary.indexOf(p.id) + 1;
+      project.clips[freeze.id] = freeze;
+      project.primary.splice(T <= p.start + 1e-6 ? idx - 1 : idx, 0, freeze.id);
+      return right;
+    });
+  } else {
+    splitClip(project, p.id, T);
+    const after = Object.values(project.clips).filter((c) => c.lane === p.lane && c.start >= T - 1e-6 && c.id !== freeze.id);
+    for (const c of after) c.start = round(c.start + dur);
+    placeFree(project, freeze, T, p.lane);
+  }
+  return freeze.id;
+}
+
+/* Lyd */
+
+// Kobler lyden fra et video- eller opptaksklipp til egne lydklipp under hovedsporet.
+export function detachAudio(project, id) {
+  const c = project.clips[id];
+  const m = c && project.media[c.mediaId];
+  if (!m || !clipHasAudio(c, m) || c.type === 'audio') return [];
+  const ids = [];
+  const make = (stream, name, volumeProp) => {
+    const a = makeClip('audio', { media: m, start: c.start, in: c.in, dur: c.dur, lane: -1, name });
+    a.stream = stream;
+    if (c.speed) a.speed = c.speed;
+    a.props.volume = c.props[volumeProp] ?? 0;
+    a.props.aFadeIn = c.props.aFadeIn || 0;
+    a.props.aFadeOut = c.props.aFadeOut || 0;
+    a.props.aLead = c.props.aLead || 0;
+    a.props.aTail = c.props.aTail || 0;
+    a.props.preservePitch = c.props.preservePitch;
+    if (c.kf[volumeProp]) a.kf.volume = structuredClone(c.kf[volumeProp]);
+    placeFree(project, a, c.start, -1);
+    ids.push(a.id);
+  };
+  if (c.type === 'recording') {
+    if (m.streams.camera?.hasAudio) make('camera', `${c.name || m.name} (microphone)`, 'micVolume');
+    if (m.streams.screen?.hasAudio) make('screen', `${c.name || m.name} (system audio)`, 'sysVolume');
+  } else make('main', `${c.name || m.name} (audio)`, 'volume');
+  c.props.audioDetached = true;
+  c.props.aLead = 0;
+  c.props.aTail = 0;
+  c.expanded = false;
+  return ids;
+}
+
+// Kryssfade mellom to lydklipp som ligger rett etter hverandre i samme spor.
+export function setAudioCrossfade(project, firstId, secondId, dur) {
+  const a = project.clips[firstId];
+  const b = project.clips[secondId];
+  if (!a || !b || a.lane !== b.lane || Math.abs(a.start + a.dur - b.start) > 1 / 60) return false;
+  b.axfade = round(Math.max(0.05, Math.min(dur, a.dur, b.dur)));
+  return true;
+}
+
+// Finn par av lydklipp som ligger inntil hverandre blant de valgte.
+export function adjacentAudioPairs(project, ids) {
+  const clips = ids.map((id) => project.clips[id]).filter((c) => c && c.lane < 0);
+  const pairs = [];
+  for (const a of clips) {
+    for (const b of clips) {
+      if (a !== b && a.lane === b.lane && Math.abs(a.start + a.dur - b.start) < 1 / 60) pairs.push([a.id, b.id]);
+    }
+  }
+  return pairs;
+}
+
+/* Trimverktøyet: roll, slip og slide */
+
+// Flytter kuttet mellom to klipp i hovedsporet. Total lengde er uendret.
+export function rollEdit(project, aId, bId, delta) {
+  const a = project.clips[aId];
+  const b = project.clips[bId];
+  if (!a || !b) return;
+  const maxA = mediaLength(project, a) === Infinity ? Infinity : (mediaLength(project, a) - a.in) / kfRate(a) - a.dur;
+  const maxB = isElastic(b) ? Infinity : b.in / kfRate(b);
+  const d = Math.max(-Math.min(a.dur - MIN_DUR, maxB), Math.min(Math.min(maxA, b.dur - MIN_DUR), delta));
+  withSync(project, () => {
+    a.dur = round(a.dur + d);
+    b.in = round(b.in + d * kfRate(b));
+    b.dur = round(b.dur - d);
+  });
+}
+
+// Viser en annen del av kildefilen uten å flytte klippet.
+export function slipClip(project, id, delta) {
+  const c = project.clips[id];
+  if (!c || isElastic(c)) return;
+  const len = mediaLength(project, c);
+  const r = kfRate(c);
+  const maxIn = len - c.dur * r;
+  c.in = round(Math.max(0, Math.min(maxIn, c.in + delta * r)));
+}
+
+// Flytter et klipp mellom naboene. Naboene forlenges og forkortes, så resten står stille.
+export function slideClip(project, id, delta) {
+  const idx = project.primary.indexOf(id);
+  if (idx <= 0 || idx >= project.primary.length - 1) return;
+  const prev = project.clips[project.primary[idx - 1]];
+  const next = project.clips[project.primary[idx + 1]];
+  const maxPrev = mediaLength(project, prev) === Infinity ? Infinity : (mediaLength(project, prev) - prev.in) / kfRate(prev) - prev.dur;
+  const maxNext = isElastic(next) ? Infinity : next.in / kfRate(next);
+  const d = Math.max(-Math.min(prev.dur - MIN_DUR, maxNext), Math.min(Math.min(maxPrev, next.dur - MIN_DUR), delta));
+  withSync(project, () => {
+    prev.dur = round(prev.dur + d);
+    next.in = round(next.in + d * kfRate(next));
+    next.dur = round(next.dur - d);
+  });
+}
+
+/* Hovedsporet */
+
+// Skriver over hovedsporet fra T: det som ligger der blir erstattet (D i Final Cut Pro).
+export function overwritePrimary(project, clip, T) {
+  withSync(project, () => {
+    const end = T + clip.dur;
+    if (T > project.primary.reduce((s, id) => s + project.clips[id].dur, 0)) {
+      const total = project.primary.reduce((s, id) => s + project.clips[id].dur, 0);
+      const g = makeClip('gap', { dur: round(T - total), name: 'Gap' });
+      project.clips[g.id] = g;
+      project.primary.push(g.id);
+    }
+    relayoutPrimary(project);
+    for (const id of [...project.primary]) {
+      const c = project.clips[id];
+      if (T > c.start && T < c.start + c.dur) splitClip(project, id, T);
+    }
+    relayoutPrimary(project);
+    for (const id of [...project.primary]) {
+      const c = project.clips[id];
+      if (end > c.start && end < c.start + c.dur) splitClip(project, id, end);
+    }
+    relayoutPrimary(project);
+    const removed = project.primary.filter((id) => {
+      const c = project.clips[id];
+      return c.start >= T - 1e-6 && c.start + c.dur <= end + 1e-6;
+    });
+    let idx = project.primary.findIndex((id) => project.clips[id].start >= T - 1e-6);
+    if (idx < 0) idx = project.primary.length;
+    project.primary = project.primary.filter((id) => !removed.includes(id));
+    for (const id of removed) delete project.clips[id];
+    clip.lane = 0;
+    project.clips[clip.id] = clip;
+    project.primary.splice(Math.min(idx, project.primary.length), 0, clip.id);
+    mergeGaps(project);
+  });
+}
+
+// Løfter klipp ut av hovedsporet og lar et mellomrom stå igjen (Option Cmd Opp).
+export function liftFromStoryline(project, ids) {
+  const lifted = [];
+  withSync(project, () => {
+    for (const id of ids) {
+      const c = project.clips[id];
+      if (!c || c.lane !== 0 || c.type === 'gap') continue;
+      const gap = makeClip('gap', { dur: c.dur, name: 'Gap' });
+      project.clips[gap.id] = gap;
+      project.primary[project.primary.indexOf(id)] = gap.id;
+      lifted.push({ c, start: c.start });
+    }
+  });
+  for (const { c, start } of lifted) {
+    c.start = start;
+    c.lane = 1;
+    resolveLane(project, c);
+  }
+  updateDuration(project);
+}
+
+export function insertGap(project, T, dur = 3) {
+  const g = makeClip('gap', { dur, name: 'Gap' });
+  insertIntoPrimary(project, [g], T);
+  return g.id;
 }

@@ -84,7 +84,8 @@ test('overgang gir to lag og krysstoner lyden', () => {
   assert.equal(f.layers[0].transition.p, 0.5);
   const audio = computeAudio(p, 10);
   assert.equal(audio.length, 2);
-  assert.ok(Math.abs(audio[0].gain - 0.5) < 1e-9);
+  assert.ok(Math.abs(audio[0].gain - Math.SQRT1_2) < 1e-9, 'lik effekt midt i overgangen');
+  assert.ok(Math.abs(audio[1].gain - Math.SQRT1_2) < 1e-9);
 });
 
 test('volum i dB og toning påvirker lyden', () => {
@@ -216,4 +217,106 @@ test('WebVTT skrives og leses', () => {
   assert.equal(back[0].start, 61.25);
   assert.equal(back[0].text, 'Line one\nLine two');
   assert.equal(parseSrt('WEBVTT\n\n00:05.000 --> 00:06.500\nKort')[0].end, 6.5);
+});
+
+import { setSpeed, freezeFrame, detachAudio, setAudioCrossfade, rollEdit, slipClip, slideClip, overwritePrimary, liftFromStoryline, insertGap } from '../src/shared/ops.js';
+import { sourceTime as srcT, computeAudio as audioAt, computeFrame as frameAt } from '../src/shared/model.js';
+
+test('hastighet: halv fart dobler lengden og kildetiden følger', () => {
+  const p = setup();
+  const [a, b] = p.primary;
+  setSpeed(p, a, 0.5);
+  assert.equal(p.clips[a].dur, 20);
+  assert.equal(p.clips[b].start, 20, 'resten flyttes');
+  assert.equal(srcT(p.clips[a], 10), 5);
+  splitClip(p, a, 10);
+  const right = p.clips[p.primary[1]];
+  assert.equal(right.in, 5, 'kutt bruker kildetid');
+  setSpeed(p, a, 2);
+  assert.equal(p.clips[a].dur, 2.5);
+  const au = audioAt(p, 1).find((x) => x.clip.id === a);
+  assert.equal(au.speed, 2);
+  assert.equal(au.src, 2);
+});
+
+test('frosset bilde settes inn ved spillhodet og er uten lyd', () => {
+  const p = setup();
+  const id = freezeFrame(p, 4, 2);
+  assert.equal(p.primary.length, 4);
+  const f = p.clips[id];
+  assert.equal(f.start, 4);
+  assert.equal(srcT(f, 5.5), 4, 'samme bilde hele tiden');
+  assert.equal(p.clips[p.primary[2]].start, 6);
+  assert.equal(audioAt(p, 5).length, 0);
+});
+
+test('frakoblet lyd blir egne klipp og videoen blir stum', () => {
+  const p = setup();
+  const [a] = p.primary;
+  const ids = detachAudio(p, a);
+  assert.equal(ids.length, 1);
+  const au = p.clips[ids[0]];
+  assert.equal(au.lane, -1);
+  assert.equal(au.stream, 'main');
+  const sources = audioAt(p, 2);
+  assert.equal(sources.length, 1);
+  assert.equal(sources[0].clip.id, ids[0]);
+});
+
+test('utvidet lyd: J-kutt lar lyden starte før bildet', () => {
+  const p = setup();
+  const [a, b] = p.primary;
+  p.clips[b].props.aLead = 1;
+  const at = audioAt(p, 9.5).map((x) => x.clip.id);
+  assert.ok(at.includes(a) && at.includes(b), 'begge høres i overlappet');
+  assert.equal(audioAt(p, 9.5).find((x) => x.clip.id === b).src, -0.5, 'før filens start (stille)');
+  p.clips[a].props.aTail = -2;
+  assert.ok(!audioAt(p, 8.5).some((x) => x.clip.id === a), 'innkortet lyd stopper før bildet');
+});
+
+test('kryssfade mellom to lydklipp i samme spor', () => {
+  const p = setup();
+  const m1 = addMediaClip(p, p.media.m, 'connect', 0);
+  p.clips[m1].dur = 5;
+  const m2 = addMediaClip(p, p.media.m, 'connect', 5);
+  assert.equal(p.clips[m2].lane, -1);
+  assert.ok(setAudioCrossfade(p, m1, m2, 1));
+  const mid = audioAt(p, 5).filter((x) => x.clip.lane === -1);
+  assert.equal(mid.length, 2);
+  for (const x of mid) assert.ok(Math.abs(x.gain - Math.SQRT1_2) < 1e-6);
+  const before = audioAt(p, 4.4).filter((x) => x.clip.lane === -1);
+  assert.equal(before.length, 1, 'før vinduet høres bare første klipp');
+});
+
+test('roll, slip og slide', () => {
+  const p = setup();
+  const [a, b] = p.primary;
+  trimClip(p, a, 'end', -4);
+  rollEdit(p, a, b, 2);
+  assert.equal(p.clips[a].dur, 8);
+  assert.equal(p.clips[b].in, 2);
+  assert.equal(p.duration, 14, 'total lengde uendret');
+  slipClip(p, a, 1);
+  assert.equal(p.clips[a].in, 1);
+  assert.equal(p.clips[a].start, 0);
+  const c = addMediaClip(p, p.media.a, 'append');
+  trimClip(p, c, 'start', 3);
+  slideClip(p, b, -1);
+  assert.equal(p.clips[a].dur, 7);
+  assert.equal(p.clips[c].in, 2);
+  assert.equal(p.clips[b].start, 7);
+});
+
+test('overskriv, løft og sett inn mellomrom', () => {
+  const p = setup();
+  const img = makeClip('image', { dur: 3 });
+  overwritePrimary(p, img, 8);
+  assert.equal(p.duration, 18, 'lengden er uendret');
+  assert.equal(p.clips[img.id].start, 8);
+  liftFromStoryline(p, [img.id]);
+  assert.equal(p.clips[img.id].lane, 1);
+  assert.equal(frameAt(p, 9).layers[0].clip.id, img.id);
+  insertGap(p, 0, 2);
+  assert.equal(p.clips[p.primary[0]].type, 'gap');
+  assert.equal(p.clips[img.id].start, 10, 'tilkoblet klipp følger med');
 });
