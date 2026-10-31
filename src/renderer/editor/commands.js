@@ -32,6 +32,8 @@ import {
 } from '../../shared/ops.js';
 import {
   commit,
+  endTransient,
+  updateTransient,
   getTime,
   importPaths,
   makeCaptionClip,
@@ -289,6 +291,8 @@ export function deleteMarkerAt(id) {
 }
 
 export function setRange(which) {
+  // I og O i biblioteket markerer i klippet under skummeren (eller ved bibliotekets spillhode).
+  if (browserFocus.value && browserMark(which)) return;
   const T = getTime();
   commit((p) => {
     const r = p.range || { in: 0, out: p.duration };
@@ -299,7 +303,46 @@ export function setRange(which) {
 }
 
 export function clearRange() {
+  if (browserFocus.value && browserRange.value) {
+    browserRange.value = null;
+    return;
+  }
   commit((p) => (p.range = null));
+}
+
+// X: området blir hele klippet (i biblioteket eller under spillhodet).
+export function rangeClip() {
+  if (browserFocus.value && browserMarkClip()) return;
+  const ids = targetClipsAtPlayhead();
+  if (!ids.length) return;
+  const cs = ids.map((id) => project.value.clips[id]);
+  const a = Math.min(...cs.map((c) => c.start));
+  const b = Math.max(...cs.map((c) => c.start + c.dur));
+  commit((p) => (p.range = { in: a, out: b }));
+}
+
+// Sporhøyde. 'live' brukes mens man drar (ett angre-steg til slutt), true for rullehjulet.
+let heightTimer = null;
+export function setTrackHeight(lanes, h, mode) {
+  const apply = (q) => {
+    q.lanes = q.lanes || {};
+    for (const lane of lanes) {
+      const cur = { ...(q.lanes[lane] || {}) };
+      if (h == null) delete cur.h;
+      else cur.h = h;
+      q.lanes[lane] = cur;
+    }
+  };
+  if (!mode) return commit(apply);
+  updateTransient(apply);
+  if (mode !== 'live') {
+    clearTimeout(heightTimer);
+    heightTimer = setTimeout(endTrackHeight, 400);
+  }
+}
+export function endTrackHeight() {
+  clearTimeout(heightTimer);
+  endTransient(true);
 }
 
 export function stepFrames(n) {
@@ -369,6 +412,46 @@ export async function confirmImport(opts) {
 
 // Utvalg i biblioteket: et helt klipp eller et område valgt i filmstripen.
 export const browserRange = signal(null); // { mediaId, in, out }
+
+// Hvor skummeren står i biblioteket nå, og bibliotekets eget spillhode (satt med klikk).
+export const browserSkimPos = { mediaId: null, t: 0 };
+export const browserPlayhead = signal(null); // { mediaId, t }
+
+function mediaDuration(m) {
+  return m.kind === 'image' ? prefs.value.stillDur : m.duration;
+}
+
+// Setter start eller slutt på området i et bibliotekklipp. Gir false om ingen klipp er aktuelt.
+export function browserMark(which) {
+  let pos = browserSkimPos.mediaId ? browserSkimPos : browserPlayhead.value;
+  if (!pos || !project.value.media[pos.mediaId]) {
+    const id = browserSelection.value;
+    if (!id || !project.value.media[id]) return false;
+    pos = { mediaId: id, t: which === 'in' ? 0 : mediaDuration(project.value.media[id]) };
+  }
+  const m = project.value.media[pos.mediaId];
+  const dur = mediaDuration(m);
+  const f = frame();
+  const t = Math.max(0, Math.min(dur, pos.t));
+  if (browserSelection.value !== m.id || !browserPicked.value.includes(m.id)) pickMedia(null, m.id, []);
+  const cur = browserRange.value?.mediaId === m.id ? browserRange.value : null;
+  let r;
+  if (which === 'in') r = { in: t, out: cur && cur.out > t + f ? cur.out : dur };
+  else r = { in: cur && cur.in < t - f ? cur.in : 0, out: t };
+  if (r.out - r.in < f) r.out = Math.min(dur, r.in + f);
+  browserRange.value = { mediaId: m.id, ...r };
+  browserPlayhead.value = { mediaId: m.id, t };
+  return true;
+}
+
+// X i biblioteket: hele klippet blir området.
+export function browserMarkClip() {
+  const id = browserSelection.value;
+  const m = id && project.value.media[id];
+  if (!m) return false;
+  browserRange.value = { mediaId: id, in: 0, out: mediaDuration(m) };
+  return true;
+}
 
 export function browserClipOpts(m) {
   const r = browserRange.value;

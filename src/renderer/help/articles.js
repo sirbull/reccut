@@ -108,7 +108,13 @@ Everything is saved as separate files, so in the editor you can still change the
     summary: 'Copy files into the project, or leave them where they are.',
     keywords: 'import copy leave in place formats drag',
     body: `
-Choose Import Media ({{key:import}}) and select files, or drag files into the browser or the timeline. Almost any video, audio and image format works, including ProRes, DNxHR, 10-bit H.264, HEVC, MKV, MXF, WAV, AIFF, FLAC, HEIC and camera RAW photos.
+Choose Import Media ({{key:import}}) and select files, or drag files into the browser or the timeline. Reccut reads about as many formats as VLC, so you should not need to convert anything first:
+
+- **Video:** MP4, MOV, MKV, WebM, AVI, MXF, MPEG 1 and 2, MPEG-TS, M2TS and AVCHD (.mts) from cameras, DV, FLV, WMV, 3GP, OGV, Y4M and raw H.264 or HEVC streams. Codecs include H.264 and HEVC (also 10-bit and 4:2:2), ProRes (also 4444 with alpha), DNxHD and DNxHR, AV1, VP8, VP9, FFV1, MJPEG and Theora.
+- **Audio:** WAV, AIFF, FLAC, MP3, AAC and M4A, ALAC, Ogg, Opus, WMA, AC-3, E-AC-3, DTS, AMR, CAF, WavPack, TTA, Speex, MP2 and more.
+- **Images:** JPEG, PNG, GIF, WebP, TIFF, BMP, TGA, EXR, HDR, DPX, JPEG 2000, QOI and camera RAW photos, plus layered PSD and SVG files.
+
+Interlaced video (from TV and older cameras) is deinterlaced, video with transparency keeps its alpha, and damaged files are read as far as possible.
 
 ![Import options.](import.jpg)
 
@@ -127,12 +133,31 @@ Your choices are remembered and used when you drag files in. Files that cannot b
     id: 'browser',
     section: 'Media',
     title: 'The Browser',
-    summary: 'Filmstrips you can skim, select and drag to the timeline.',
-    keywords: 'browser filmstrip select multiple range skim',
+    summary: 'Filmstrips you can skim, mark with I and O, and add with a key or by dragging.',
+    keywords: 'browser filmstrip select multiple range skim in out mark i o append insert connect overwrite drag row height zoom',
     body: `
-The browser shows every clip as a small filmstrip with its waveform. Hold the pointer over a clip to skim it. Drag across a clip to select a range, then add it with E, W, Q or D.
+The browser shows every clip as a filmstrip with its waveform, like in Final Cut Pro. Hold the pointer over a clip to skim it; the viewer shows the frame under the pointer.
 
 ![Media in the browser. Badges show optimized media, merged audio, HDR and RAW.](browser.jpg)
+
+## Mark a range
+
+- Skim to where the range should start and press {{key:setIn}}. Skim to the end and press {{key:setOut}}. A yellow frame shows the range, and the name bar shows its start, end and length.
+- You can also drag across the filmstrip to select a range, and drag the yellow edges to adjust it.
+- {{key:rangeClip}} marks the whole clip, and {{key:clearRange}} removes the range.
+- A click in the filmstrip places the white browser playhead. I and O use it when the pointer is not over a clip.
+
+## Put it in the timeline
+
+- {{key:append}} appends the range to the end of the storyline.
+- {{key:insert}} inserts it at the playhead, {{key:connect}} connects it above the storyline and {{key:overwrite}} overwrites from the playhead.
+- Or drag the yellow range (or the clip name for the whole clip) down to the timeline.
+
+## Row length and height
+
+Use **Row** above the filmstrips to choose how much time each row shows, from the whole clip down to 5 seconds. Long clips then wrap over several rows, so you can find the exact moment. **Height** makes the frames bigger or smaller. Both are remembered.
+
+## More
 
 - Click to select a clip, {{key:selectAll}} to select all media while you work in the browser, Cmd or Ctrl click to add a clip, and Shift click to select a row of clips.
 - Right click for more: Synchronize Audio, Optimize Media, Reveal in Finder and Remove from Project.
@@ -284,8 +309,8 @@ The main row is the **storyline**. Clips in it always sit next to each other, so
     id: 'timeline',
     section: 'Editing',
     title: 'Moving and Deleting Clips',
-    summary: 'Delete closes the gap; Shift Delete leaves it.',
-    keywords: 'delete move gap lift overwrite storyline',
+    summary: 'Delete closes the gap; Shift Delete leaves it. Make tracks taller or shorter.',
+    keywords: 'delete move gap lift overwrite storyline track height taller shorter resize',
     body: `
 Drag a clip in the storyline to move it; the other clips make room. Drag connected clips freely in time and between tracks.
 
@@ -293,6 +318,10 @@ Drag a clip in the storyline to move it; the other clips make room. Drag connect
 - Delete and Leave Gap ({{key:deleteGap}}) leaves an empty space.
 - Cut, copy and paste work as usual ({{key:cut}}, {{key:copy}}, {{key:paste}}). Pasted clips are placed at the playhead.
 - Comma and period nudge a clip one frame ({{key:nudgeLeft}} {{key:nudgeRight}}).
+
+## Track height
+
+Drag the bottom edge of a track header (to the far left of the timeline) to make the track taller or shorter, like in Premiere Pro. Hold Shift to change all video or all audio tracks at once, and double click the edge to go back to the standard height. Option (Alt) and scrolling over a track header does the same. A taller track shows bigger thumbnails and waveforms.
 `,
     see: ['editing', 'tools'],
   },
@@ -383,7 +412,7 @@ It works the same for audio components: expand the audio ({{key:expandAudio}}), 
     summary: 'Give clips a color to keep track of them, and see which clips are being analyzed.',
     keywords: 'color label tag code mark clips busy analyzing working turquoise',
     body: `
-Select one or more clips, right click and choose a color under **Color**: Red, Orange, Yellow, Green, Blue, Purple, Pink, Brown or Gray. No Color removes it. The clip and its name bar take the color, so you can see at a glance which clips belong together, for example interviews in one color and B-roll in another.
+Select one or more clips, video or audio, right click and choose a color under **Color**: Red, Orange, Yellow, Green, Blue, Purple, Pink, Brown or Gray. No Color removes it. The clip and its name bar take the color, so you can see at a glance which clips belong together, for example interviews in one color and B-roll in another. Audio clips get the color too, and so does the audio part of a video clip when it is expanded.
 
 ![Clips with color codes.](clip-colors.jpg)
 
@@ -422,7 +451,9 @@ Ungroup ({{key:ungroup}}) separates them again.
     summary: 'Mark a part of the timeline with I and O.',
     keywords: 'range in out mark selection',
     body: `
-Set the start of a range with {{key:setIn}} and the end with {{key:setOut}}, or drag with the Range tool ({{key:tool:range}}). Playback and export can use the range. Clear it with {{key:clearRange}}.
+Set the start of a range with {{key:setIn}} and the end with {{key:setOut}}, or drag with the Range tool ({{key:tool:range}}). {{key:rangeClip}} marks the clip under the playhead. Playback and export can use the range. Clear it with {{key:clearRange}}.
+
+When you work in the browser, the same keys mark a range in the clip under the pointer instead. See The Browser.
 `,
     see: ['export'],
   },

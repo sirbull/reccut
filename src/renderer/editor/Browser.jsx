@@ -29,6 +29,7 @@ import { fileUrl, scrubAudio, seek } from './playback.js';
 import * as commands from './commands.js';
 import { CaptionStyleEditor } from './Inspector.jsx';
 import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
+import { prefs } from '../prefs.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -103,6 +104,17 @@ function MediaTab() {
     setMode(v);
     localStorage.setItem('browserView', v);
   };
+  // Utseende på filmstripene: hvor mye tid hver rad viser, og hvor høye bildene er.
+  const [spanIdx, setSpanIdx] = useState(() => Math.max(0, Math.min(SPANS.length - 1, Number(localStorage.getItem('browserSpan')) || 0)));
+  const [stripH, setStripH] = useState(() => Math.max(24, Math.min(96, Number(localStorage.getItem('browserStripH')) || 40)));
+  const changeSpan = (i) => {
+    setSpanIdx(i);
+    localStorage.setItem('browserSpan', String(i));
+  };
+  const changeH = (h) => {
+    setStripH(h);
+    localStorage.setItem('browserStripH', String(h));
+  };
 
   const addRecording = async () => {
     const recs = await api.listRecordings(projectFolders.value?.recordings);
@@ -142,6 +154,19 @@ function MediaTab() {
         <IconButton icon={Rows3} title="Filmstrip view" active={mode === 'filmstrip'} onClick={() => setView('filmstrip')} />
         <IconButton icon={LayoutGrid} title="Grid view" active={mode === 'grid'} onClick={() => setView('grid')} />
       </div>
+      {mode === 'filmstrip' && Object.keys(p.media).length > 0 && (
+        <div class="film-controls">
+          <label title="How much time each filmstrip row shows. Long clips wrap over several rows.">
+            <span>Row</span>
+            <input type="range" min="0" max={SPANS.length - 1} step="1" value={spanIdx} onInput={(e) => changeSpan(Number(e.currentTarget.value))} />
+            <span class="val">{spanLabel(SPANS[spanIdx])}</span>
+          </label>
+          <label title="Height of the filmstrips">
+            <span>Height</span>
+            <input type="range" min="24" max="96" step="4" value={stripH} onInput={(e) => changeH(Number(e.currentTarget.value))} />
+          </label>
+        </div>
+      )}
       {Object.keys(p.media).length > 4 && (
         <div class="search">
           <Search size={13} />
@@ -158,7 +183,7 @@ function MediaTab() {
         mode === 'filmstrip' ? (
           <div class="media-list">
             {items.map((m) => (
-              <FilmstripRow key={m.id} m={m} />
+              <FilmstripRow key={m.id} m={m} span={SPANS[spanIdx]} height={stripH} />
             ))}
           </div>
         ) : (
@@ -170,7 +195,7 @@ function MediaTab() {
         )
       )}
       <p class="hint small">
-        Skim a clip to preview it, drag across it to select a range. Then press E to append, W to insert, Q to connect or D to overwrite at the playhead. Drag the clip name to the timeline.
+        Skim a clip and press I and O to mark a range, or drag across it. Press E to append, W to insert, Q to connect or D to overwrite at the playhead, or drag the range to the timeline.
       </p>
     </div>
   );
@@ -234,51 +259,63 @@ function fmt(t) {
   return `${m}:${s.toFixed(1).padStart(4, '0')}`;
 }
 
-function FilmstripRow({ m }) {
-  const stripRef = useRef(null);
-  const lineRef = useRef(null);
+// Hvor mange sekunder hver rad i filmstripen viser. 0 betyr hele klippet på én rad.
+const SPANS = [0, 300, 120, 60, 30, 10, 5];
+const spanLabel = (s) => (s === 0 ? 'All' : s >= 60 ? `${s / 60} min` : `${s} s`);
+
+function FilmstripRow({ m, span, height }) {
+  const segRefs = useRef([]);
   const [width, setWidth] = useState(240);
+  const wrapRef = useRef(null);
   const selected = commands.browserPicked.value.includes(m.id);
   const range = commands.browserRange.value?.mediaId === m.id ? commands.browserRange.value : null;
+  const head = commands.browserPlayhead.value?.mediaId === m.id ? commands.browserPlayhead.value.t : null;
   const stream = m.streams.screen || m.streams.main || m.streams.camera;
   const audio = m.kind === 'recording' ? (m.streams.camera?.hasAudio ? m.streams.camera : m.streams.screen) : m.streams.main;
   const hasAudio = Boolean(audio?.hasAudio);
   const files = m.kind === 'image' ? [m.streams.main?.proxy || m.path] : stream?.thumbs?.files || [];
-  const dur = m.kind === 'image' ? 5 : m.duration;
+  const dur = m.kind === 'image' ? prefs.value.stillDur : m.duration || 0.04;
   const used = Object.values(project.value.clips).some((c) => c.mediaId === m.id);
   const lastScrub = useRef(0);
   const drag = useRef(null);
+  const [skimAt, setSkimAt] = useState(null);
 
   useEffect(() => {
-    const ro = new ResizeObserver(() => setWidth(stripRef.current?.clientWidth || 240));
-    ro.observe(stripRef.current);
+    const ro = new ResizeObserver(() => setWidth(wrapRef.current?.clientWidth || 240));
+    ro.observe(wrapRef.current);
     return () => ro.disconnect();
   }, []);
 
-  const tileW = 56;
-  const n = Math.max(1, Math.floor(width / tileW));
-  const tiles = [];
-  if (m.kind !== 'audio' && files.length) {
-    for (let i = 0; i < n; i++) {
-      const t = ((i + 0.5) / n) * dur;
-      const idx = m.kind === 'image' ? 0 : Math.max(0, Math.min(files.length - 1, Math.floor(t / (stream.thumbs.interval || 1))));
-      tiles.push(<img key={i} src={fileUrl(files[idx])} style={{ width: `${100 / n}%` }} draggable={false} />);
+  // Klippet deles i rader som i Final Cut Pro. Siste rad blir kortere.
+  const rowSpan = span > 0 && m.kind !== 'image' ? span : dur;
+  const segs = [];
+  for (let t0 = 0; t0 < dur - 1e-6; t0 += rowSpan) segs.push([t0, Math.min(dur, t0 + rowSpan)]);
+  if (!segs.length) segs.push([0, dur]);
+  const aspect = stream?.width && stream?.height ? stream.width / stream.height : 16 / 9;
+  const frameH = m.kind === 'audio' ? 0 : height;
+  const waveH = m.kind === 'audio' ? Math.max(28, height) : hasAudio ? Math.max(14, Math.round(height * 0.45)) : 0;
+  const tileW = Math.max(16, frameH * aspect);
+
+  // Tid for et punkt på skjermen. Over eller under radene gir første eller siste rad.
+  const timeAtPoint = (x, y) => {
+    let best = null;
+    for (let i = 0; i < segs.length; i++) {
+      const el = segRefs.current[i];
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+      if (!best || dy < best.dy) best = { dy, r, i };
     }
-  }
-  const timeAt = (e) => {
-    const r = stripRef.current.getBoundingClientRect();
-    return Math.max(0, Math.min(dur, ((e.clientX - r.left) / r.width) * dur));
+    if (!best) return 0;
+    const [t0, t1] = segs[best.i];
+    const f = Math.max(0, Math.min(1, (x - best.r.left) / best.r.width));
+    return Math.max(0, Math.min(dur, t0 + f * (t1 - t0)));
   };
-  const onMove = (e) => {
-    const t = timeAt(e);
-    if (lineRef.current) {
-      lineRef.current.style.display = 'block';
-      lineRef.current.style.left = `${(t / dur) * 100}%`;
-    }
-    if (drag.current) {
-      if (Math.abs(e.clientX - drag.current.x) > 3) drag.current.moved = true;
-      if (drag.current.moved) commands.browserRange.value = { mediaId: m.id, in: Math.min(drag.current.t, t), out: Math.max(drag.current.t, t) };
-    }
+
+  const skimTo = (t) => {
+    setSkimAt(t);
+    commands.browserSkimPos.mediaId = m.id;
+    commands.browserSkimPos.t = t;
     if (skimming.value && !playing.value) {
       skim.value = { project: skimProjectFor(m), T: Math.min(t, dur - 1e-3), mediaId: m.id };
       const now = performance.now();
@@ -288,31 +325,59 @@ function FilmstripRow({ m }) {
       }
     }
   };
+  const onMove = (e) => {
+    const t = timeAtPoint(e.clientX, e.clientY);
+    skimTo(t);
+    const d = drag.current;
+    if (!d) return;
+    if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) > 3) d.moved = true;
+    if (!d.moved) return;
+    const f = 1 / project.value.fps;
+    const cur = commands.browserRange.value;
+    if (d.edge === 'in' && cur) commands.browserRange.value = { ...cur, in: Math.min(t, cur.out - f) };
+    else if (d.edge === 'out' && cur) commands.browserRange.value = { ...cur, out: Math.max(t, cur.in + f) };
+    else if (!d.edge) commands.browserRange.value = { mediaId: m.id, in: Math.min(d.t, t), out: Math.max(d.t, t) };
+  };
   const onLeave = () => {
-    if (lineRef.current) lineRef.current.style.display = 'none';
+    if (drag.current) return;
+    setSkimAt(null);
+    if (commands.browserSkimPos.mediaId === m.id) commands.browserSkimPos.mediaId = null;
     if (skim.value?.mediaId === m.id) skim.value = null;
   };
   const onDown = (e) => {
     if (e.button !== 0) return;
+    commands.browserFocus.value = true;
     if (e.metaKey || e.ctrlKey || e.shiftKey) {
       commands.pickMedia(e, m.id, mediaOrder);
       return;
     }
+    const edge = e.target.dataset?.edge || null;
     commands.pickMedia(null, m.id, mediaOrder);
-    drag.current = { x: e.clientX, t: timeAt(e), moved: false };
+    const t = timeAtPoint(e.clientX, e.clientY);
+    drag.current = { x: e.clientX, y: e.clientY, t, moved: false, edge };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
-  const onUp = () => {
-    if (drag.current && !drag.current.moved) commands.browserRange.value = null;
+  const onUp = (e) => {
+    const d = drag.current;
     drag.current = null;
+    if (!d) return;
+    // Et klikk uten å dra flytter bibliotekets spillhode og fjerner området.
+    if (!d.moved && !d.edge) {
+      commands.browserRange.value = null;
+      commands.browserPlayhead.value = { mediaId: m.id, t: d.t };
+    }
+    const r = wrapRef.current?.getBoundingClientRect();
+    if (r && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) onLeave();
   };
+  const ids = () => (commands.browserPicked.value.includes(m.id) ? mediaOrder.filter((x) => commands.browserPicked.value.includes(x)) : [m.id]);
+  const pct = (t, t0, t1) => `${((t - t0) / (t1 - t0)) * 100}%`;
 
   return (
     <div class={`film-row${selected ? ' selected' : ''}`} data-media={m.id} onContextMenu={(e) => mediaContextMenu(e, m, used)}>
       <div
         class="film-head"
         draggable
-        onDragStart={(e) => dragData(e, { kind: 'media', id: m.id, ids: commands.browserPicked.value.includes(m.id) ? mediaOrder.filter((x) => commands.browserPicked.value.includes(x)) : [m.id] })}
+        onDragStart={(e) => dragData(e, { kind: 'media', id: m.id, ids: ids() })}
         onClick={(e) => {
           commands.pickMedia(e, m.id, mediaOrder);
           commands.browserRange.value = null;
@@ -324,19 +389,65 @@ function FilmstripRow({ m }) {
         <span class="name">{m.name}</span>
         {used && <span class="used-dot" title="Used in the project" />}
         <MediaBadges m={m} />
-        <span class="dur">{range ? `${fmt(range.in)} to ${fmt(range.out)}` : m.kind === 'image' ? 'Still' : formatDuration(m.duration)}</span>
+        <span class="dur">{range ? `${fmt(range.in)} to ${fmt(range.out)} (${formatDuration(range.out - range.in)})` : m.kind === 'image' ? 'Still' : formatDuration(m.duration)}</span>
       </div>
-      <div class="film-strip" ref={stripRef} onPointerMove={onMove} onPointerLeave={onLeave} onPointerDown={onDown} onPointerUp={onUp}>
-        {m.kind !== 'audio' && <div class={`frames${tiles.length ? '' : ' empty'}`}>{tiles}</div>}
-        {hasAudio && <MiniWave stream={audio} offset={audio.offset || 0} dur={dur} tall={m.kind === 'audio'} />}
-        {range && <div class="film-range" style={{ left: `${(range.in / dur) * 100}%`, width: `${((range.out - range.in) / dur) * 100}%` }} />}
-        <div class="film-skimmer" ref={lineRef} />
+      <div class="film-rows" ref={wrapRef} onPointerMove={onMove} onPointerLeave={onLeave} onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={onUp}>
+        {segs.map(([t0, t1], i) => {
+          const segW = ((t1 - t0) / rowSpan) * width;
+          const n = Math.max(1, Math.ceil(segW / tileW));
+          const tiles = [];
+          if (frameH && files.length) {
+            for (let k = 0; k < n; k++) {
+              const t = t0 + ((k + 0.5) * tileW / segW) * (t1 - t0);
+              const idx = m.kind === 'image' ? 0 : Math.max(0, Math.min(files.length - 1, Math.floor(t / (stream.thumbs.interval || 1))));
+              tiles.push(<img key={k} src={fileUrl(files[idx])} loading="lazy" style={{ width: tileW, flex: `0 0 ${tileW}px` }} draggable={false} />);
+            }
+          }
+          const rIn = range ? Math.max(range.in, t0) : 0;
+          const rOut = range ? Math.min(range.out, t1) : 0;
+          const showRange = range && rOut > rIn;
+          return (
+            <div key={i} class="film-strip" ref={(el) => (segRefs.current[i] = el)} style={{ width: `${((t1 - t0) / rowSpan) * 100}%` }}>
+              {frameH > 0 && (
+                <div class={`frames${tiles.length ? '' : ' empty'}`} style={{ height: frameH }}>
+                  {tiles}
+                </div>
+              )}
+              {hasAudio && <MiniWave stream={audio} offset={audio.offset || 0} from={t0} to={t1} h={waveH} />}
+              {showRange && (
+                <div
+                  class="film-range"
+                  style={{ left: pct(rIn, t0, t1), width: `${((rOut - rIn) / (t1 - t0)) * 100}%` }}
+                  draggable
+                  title="Drag the range to the timeline, or drag its edges to adjust it"
+                  onPointerDown={(e) => {
+                    // Midten av området dras til tidslinjen. Kantene justerer området.
+                    if (!e.target.dataset?.edge) e.stopPropagation();
+                  }}
+                  onDragStart={(e) => {
+                    if (drag.current?.edge) return e.preventDefault();
+                    dragData(e, { kind: 'media', id: m.id, ids: [m.id] });
+                  }}
+                >
+                  {range.in >= t0 && range.in <= t1 && <span class="film-edge in" data-edge="in" />}
+                  {range.out >= t0 && range.out <= t1 && <span class="film-edge out" data-edge="out" />}
+                </div>
+              )}
+              {head != null && head >= t0 && head <= t1 && <div class="film-head-line" style={{ left: pct(head, t0, t1) }} />}
+              {skimAt != null && skimAt >= t0 && skimAt <= t1 && (
+                <div class="film-skimmer" style={{ left: pct(skimAt, t0, t1) }}>
+                  {segs.length > 1 || span > 0 ? <span>{fmt(skimAt)}</span> : null}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function MiniWave({ stream, offset, dur, tall }) {
+function MiniWave({ stream, offset, from, to, h }) {
   const ref = useRef(null);
   waveVersion.value;
   const wave = getWave(stream?.wave);
@@ -352,9 +463,10 @@ function MiniWave({ stream, offset, dur, tall }) {
       if (!wave) return;
       g.fillStyle = 'rgba(160, 235, 180, 0.85)';
       const mid = cv.height / 2;
+      const len = to - from;
       for (let px = 0; px < cv.width; px++) {
-        const t0 = (px / cv.width) * dur - offset;
-        const t1 = ((px + 1) / cv.width) * dur - offset;
+        const t0 = from + (px / cv.width) * len - offset;
+        const t1 = from + ((px + 1) / cv.width) * len - offset;
         let i0 = Math.floor(t0 * wave.rate);
         const i1 = Math.max(i0 + 1, Math.ceil(t1 * wave.rate));
         let mx = 0;
@@ -367,8 +479,8 @@ function MiniWave({ stream, offset, dur, tall }) {
     const ro = new ResizeObserver(draw);
     ro.observe(cv);
     return () => ro.disconnect();
-  }, [wave, dur, offset]);
-  return <canvas ref={ref} class={`film-wave${tall ? ' tall' : ''}`} />;
+  }, [wave, from, to, offset]);
+  return <canvas ref={ref} class="film-wave" style={{ height: h }} />;
 }
 
 async function mediaContextMenu(e, m, used) {

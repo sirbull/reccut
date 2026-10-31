@@ -78,6 +78,12 @@ import * as commands from './commands.js';
 const PAD = 16;
 const RULER_H = 26;
 const HEIGHTS = { caption: 26, video: 46, primary: 78, audio: 54 };
+// Grenser for sporhøyden som kan dras i sporhodet.
+const HEIGHT_LIMITS = { caption: [20, 90], video: [26, 260], primary: [30, 300], audio: [26, 260] };
+export function clampTrackHeight(kind, h) {
+  const [a, b] = HEIGHT_LIMITS[kind] || [26, 260];
+  return Math.round(Math.max(a, Math.min(b, h)));
+}
 const view = signal({ left: 0, width: 1000 });
 
 // Spor: videospor over hovedsporet (V2, V3 ...) og lydspor under (A1, A2 ...).
@@ -90,10 +96,15 @@ export function laneRows(p) {
     maxLane = Math.max(maxLane, c.lane);
     minLane = Math.min(minLane, c.lane);
   }
-  const rows = [{ lane: CAPTION_LANE, h: HEIGHTS.caption, kind: 'caption' }];
-  for (let l = maxLane + 1; l >= 1; l--) rows.push({ lane: l, h: HEIGHTS.video, kind: 'video', spare: l === maxLane + 1 });
-  rows.push({ lane: 0, h: HEIGHTS.primary, kind: 'primary' });
-  for (let l = -1; l >= minLane - 1; l--) rows.push({ lane: l, h: HEIGHTS.audio, kind: 'audio', spare: l === minLane - 1 });
+  // Hvert spor kan ha sin egen høyde (lagret i prosjektet), ellers standardhøyden.
+  const hOf = (lane, kind) => {
+    const h = p.lanes?.[lane]?.h;
+    return h ? clampTrackHeight(kind, h) : HEIGHTS[kind];
+  };
+  const rows = [{ lane: CAPTION_LANE, h: hOf(CAPTION_LANE, 'caption'), kind: 'caption' }];
+  for (let l = maxLane + 1; l >= 1; l--) rows.push({ lane: l, h: l === maxLane + 1 ? HEIGHTS.video : hOf(l, 'video'), kind: 'video', spare: l === maxLane + 1 });
+  rows.push({ lane: 0, h: hOf(0, 'primary'), kind: 'primary' });
+  for (let l = -1; l >= minLane - 1; l--) rows.push({ lane: l, h: l === minLane - 1 ? HEIGHTS.audio : hOf(l, 'audio'), kind: 'audio', spare: l === minLane - 1 });
   let y = 0;
   for (const r of rows) {
     r.y = y;
@@ -103,6 +114,11 @@ export function laneRows(p) {
 }
 
 const tx = (t) => PAD + t * pps.value;
+
+// Alle spor av samme slag (for Shift og endring av høyden på flere spor samtidig).
+function kindLanes(p, kind) {
+  return laneRows(p).rows.filter((r) => r.kind === kind && !r.spare).map((r) => r.lane);
+}
 
 export function Timeline() {
   const p = project.value;
@@ -190,6 +206,17 @@ export function Timeline() {
         const a = anchorRef.current;
         const t = a ? a.t : (sc.scrollLeft + mx - PAD) / pps.value;
         zoomTo(pps.value * Math.exp(-dy * 0.0125), t, a ? a.offset : mx);
+        return;
+      }
+      // Alt og rullehjulet over et sporhode endrer høyden på sporet, som i Premiere Pro.
+      const head = e.altKey && e.target.closest?.('.track-head[data-lane]');
+      if (head) {
+        e.preventDefault();
+        const lane = Number(head.dataset.lane);
+        const kind = head.dataset.kind;
+        const cur = head.getBoundingClientRect().height;
+        const next = clampTrackHeight(kind, cur - Math.max(-30, Math.min(30, (e.deltaY || e.deltaX) * lines * 0.25)));
+        commands.setTrackHeight(e.shiftKey ? kindLanes(project.value, kind) : [lane], next, true);
         return;
       }
       // Over sporhodene og linjalen: rull tidslinjen likevel.
@@ -721,6 +748,29 @@ function TrackHeaders({ rows, p, scrollRef }) {
       q.lanes = q.lanes || {};
       q.lanes[lane] = { ...(q.lanes[lane] || {}), [key]: !q.lanes[lane]?.[key] };
     });
+  // Dra i underkanten av sporhodet for å endre høyden. Shift endrer alle spor av samme slag.
+  const startResize = (e, r) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const y0 = e.clientY;
+    const h0 = r.h;
+    const lanes = e.shiftKey ? kindLanes(p, r.kind) : [r.lane];
+    document.body.classList.add('row-resizing');
+    const move = (ev) => commands.setTrackHeight(lanes, clampTrackHeight(r.kind, h0 + ev.clientY - y0), 'live');
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      document.body.classList.remove('row-resizing');
+      commands.endTrackHeight();
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
   const addTrack = (kind) =>
     commit((q) => {
       const rr = laneRows(q).rows;
@@ -735,7 +785,7 @@ function TrackHeaders({ rows, p, scrollRef }) {
           const l = p.lanes?.[r.lane] || {};
           const name = r.kind === 'caption' ? 'Captions' : r.kind === 'primary' ? 'V1 Storyline' : r.kind === 'video' ? `V${r.lane + 1}` : `A${-r.lane}`;
           return (
-            <div key={r.lane} class={`track-head ${r.kind}${r.spare ? ' spare' : ''}`} style={{ height: r.h, marginBottom: 2 }}>
+            <div key={r.lane} class={`track-head ${r.kind}${r.spare ? ' spare' : ''}${r.h < 34 ? ' short' : ''}`} data-lane={r.spare ? undefined : r.lane} data-kind={r.kind} style={{ height: r.h, marginBottom: 2 }}>
               {r.spare ? (
                 <button class="add-track" onClick={() => addTrack(r.kind)} title={r.kind === 'video' ? 'Add a video track. You can also drop clips here.' : 'Add an audio track. You can also drop clips here.'}>
                   + {r.kind === 'video' ? 'Video' : 'Audio'}
@@ -760,6 +810,12 @@ function TrackHeaders({ rows, p, scrollRef }) {
                       {l.locked ? <Lock size={12} /> : <LockOpen size={12} />}
                     </button>
                   </div>
+                  <div
+                    class="track-resize"
+                    title="Drag to make the track taller or shorter. Shift drag changes all tracks of this kind. Double click resets."
+                    onPointerDown={(e) => startResize(e, r)}
+                    onDblClick={(e) => commands.setTrackHeight(e.shiftKey ? kindLanes(p, r.kind) : [r.lane], null)}
+                  />
                 </>
               )}
             </div>
@@ -1077,8 +1133,10 @@ function AudioBand({ clip, row, media, z, selected }) {
   const comps = audioComponents(clip, media);
   const stream = clipAudioStream(clip, media);
   const sc = selectedComponent.value;
+  // Fargekoden følger med til lyddelen når den er utvidet.
+  const colorTag = CLIP_COLORS.find((c) => c.id === clip.colorLabel);
   return (
-    <div class={`tl-audioband${selected ? ' selected' : ''}`} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y + row.h - h, height: h }}>
+    <div class={`tl-audioband${selected ? ' selected' : ''}${colorTag ? ' labeled' : ''}`} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y + row.h - h, height: h, ...(colorTag ? { '--label': colorTag.color } : {}) }}>
       {comps.length > 1 ? (
         // Én stripe per lydkomponent. Klikk velger komponenten, V slår den av og på.
         comps.map((c, i) => {

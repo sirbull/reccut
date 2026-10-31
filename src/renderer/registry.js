@@ -125,6 +125,7 @@ export const COMMANDS = [
   { id: 'setIn', label: 'Set Range Start', menu: 'Mark', keys: 'I', run: () => commands.setRange('in'), help: 'range' },
   { id: 'setOut', label: 'Set Range End', menu: 'Mark', keys: 'O', run: () => commands.setRange('out'), help: 'range' },
   { id: 'clearRange', label: 'Clear Range', menu: 'Mark', keys: 'Alt+X', run: commands.clearRange, help: 'range' },
+  { id: 'rangeClip', label: 'Select Clip Range', menu: 'Mark', keys: 'X', run: commands.rangeClip, help: 'range', desc: 'Mark the whole clip under the playhead, or the whole clip in the browser.' },
   { id: 'addMarker', label: 'Add Marker', menu: 'Mark', group: 'marker', keys: 'M', run: commands.addMarker, help: 'markers' },
   { id: 'deleteMarker', label: 'Delete Marker', menu: 'Mark', group: 'marker', keys: 'Ctrl+M', run: deleteMarker, help: 'markers' },
   { id: 'prevEdit', label: 'Previous Edit', menu: 'Mark', group: 'go', keys: 'Up', run: () => commands.jumpEdit(-1), help: 'playback' },
