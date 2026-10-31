@@ -1,7 +1,10 @@
 // Tilstand for redigeringen: prosjekt, utvalg, historikk og lagring.
-import { signal, computed } from '@preact/signals';
+import { signal, computed, effect } from '@preact/signals';
+import { produce, setAutoFreeze } from 'immer';
 import {
   CAPTION_LANE,
+  deepClone,
+  sealProject,
   TITLE_TEMPLATES,
   makeClip,
   newProject,
@@ -13,10 +16,15 @@ import { templateDefaults } from '../../shared/titletemplates.js';
 import { hasMotion, setMotion } from '../../shared/stabilize.js';
 import { prefs } from '../prefs.js';
 
+// Objektene i prosjektet endres bare gjennom commit, så de trenger ikke fryses.
+setAutoFreeze(true);
+
 const api = window.api;
 
 export const room = signal('record');
 export const project = signal(newProject());
+// Hver versjon av prosjektet endres aldri etter at den er laget, så tidsindeksen kan gjenbrukes.
+effect(() => sealProject(project.value));
 export const projectPath = signal(null);
 export const selection = signal([]);
 export const selectedTransition = signal(null);
@@ -89,11 +97,35 @@ function pushUndo(prev) {
   historyVersion.value++;
 }
 
+// Endringer lages med delt struktur (immer): bare det som endres kopieres, så selv prosjekter
+// med tusenvis av klipp redigeres raskt, og klipp som ikke endres beholder identiteten sin
+// (tidslinjen tegner dem ikke på nytt).
+// Lengden regnes ut på det ferdige prosjektet (ikke på utkastet), som er mye raskere.
+function withDuration(p) {
+  let end = 0;
+  for (const id in p.clips) {
+    const c = p.clips[id];
+    const e = c.start + c.dur;
+    if (e > end) end = e;
+  }
+  return end === p.duration ? p : { ...p, duration: end };
+}
+
+// Medier som er brukt på tidslinjen (til merket i biblioteket).
+export const usedMedia = computed(() => {
+  const set = new Set();
+  for (const c of Object.values(project.value.clips)) if (c.mediaId) set.add(c.mediaId);
+  return set;
+});
+
 export function commit(mutator) {
   const prev = project.value;
-  const next = structuredClone(prev);
-  const result = mutator(next);
-  updateDuration(next);
+  let result;
+  const next = withDuration(
+    produce(prev, (d) => {
+      result = mutator(d);
+    })
+  );
   pushUndo(prev);
   project.value = next;
   pruneSelection();
@@ -107,10 +139,7 @@ export function beginTransient() {
 }
 export function updateTransient(mutator) {
   if (!transientBase) beginTransient();
-  const next = structuredClone(transientBase);
-  mutator(next);
-  updateDuration(next);
-  project.value = next;
+  project.value = withDuration(produce(transientBase, (d) => mutator(d)));
 }
 export function endTransient(keep = true) {
   if (!transientBase) return;
@@ -211,6 +240,16 @@ export async function openProjectFile(path) {
     if (needs) missing.push(m);
   }
   if (missing.length) api.reanalyze(missing);
+}
+
+// Henter tilbake en tidligere versjon som én endring, så Angre tar deg tilbake.
+export function restoreProject(data) {
+  commit((q) => {
+    for (const k of Object.keys(q)) delete q[k];
+    Object.assign(q, data);
+    relayoutPrimary(q);
+  });
+  selection.value = [];
 }
 
 // Lagre som: ny prosjektmappe med nytt navn og sted. Det nye prosjektet blir det åpne.
@@ -473,7 +512,7 @@ export function makeTitleClip(templateId, T) {
     ? { label: custom.name, props: { template: custom.id, ...templateDefaults(custom) } }
     : TITLE_TEMPLATES.find((t) => t.id === templateId) || TITLE_TEMPLATES[0];
   const clip = makeClip('title', { start: T, dur: prefs.value.titleDur, lane: 1, name: tpl.label });
-  Object.assign(clip.props, structuredClone(tpl.props));
+  Object.assign(clip.props, deepClone(tpl.props));
   return clip;
 }
 

@@ -2,6 +2,7 @@
 // videoklipp ved å sammenligne lydstyrkekurvene (100 verdier per sekund).
 
 import { CAPTION_LANE, uid } from './model.js';
+import { deepClone } from './model.js';
 import { resolveLane, shiftKeyframes } from './ops.js';
 
 export const ENV_RATE = 100;
@@ -218,7 +219,7 @@ export function applySync(project, audioId, matches, { mode = 'first', muteCamer
   const fileStart = a.in - src.offset;
   const fileEnd = fileStart + a.dur;
   const list = mode === 'split' ? matches : matches.slice(0, 1);
-  const original = structuredClone(a);
+  const original = deepClone(a);
   const placed = [];
   for (const m of list) {
     const v = project.clips[m.videoId];
@@ -226,7 +227,7 @@ export function applySync(project, audioId, matches, { mode = 'first', muteCamer
     const f0 = Math.max(fileStart, m.at);
     const f1 = Math.min(fileEnd, m.at + v.dur);
     if (f1 - f0 < 0.1) continue;
-    const c = placed.length ? { ...structuredClone(original), id: uid() } : a;
+    const c = placed.length ? { ...deepClone(original), id: uid() } : a;
     c.in = round3(f0 + src.offset);
     c.dur = round3(f1 - f0);
     c.start = round3(Math.max(0, v.start + (f0 - m.at)));

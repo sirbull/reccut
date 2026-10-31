@@ -1,6 +1,7 @@
 // Prosjektmodell og rene funksjoner for å regne ut hva som vises og høres
 // på et gitt tidspunkt. Brukes av forhåndsvisning, eksport og tester.
 
+import { current, isDraft } from 'immer';
 import { BUILTIN_TEMPLATES, templateDefaults } from './titletemplates.js';
 
 export const LAYOUT_ANIM = 0.32;
@@ -182,6 +183,11 @@ export function applyAnimationPreset(clip, id, W, H) {
       set('scale', [[a, 0.4, 'easeOut'], [a + d, 1]]);
       break;
   }
+}
+
+// Dyp kopi som også virker midt i en endring (der objektene er utkast fra immer).
+export function deepClone(x) {
+  return structuredClone(isDraft(x) ? current(x) : x);
 }
 
 export function uid() {
@@ -689,9 +695,80 @@ export function transitionWindow(clip, hasPrev = true, prev = null) {
 }
 
 // Hvilke klipp i hovedsporet som er aktive, med eventuell overgang.
+/* Tidsindeks for lange prosjekter: klippene sortert i bøtter på ti sekunder, så avspilling og
+   eksport bare ser på klippene nær spillhodet, ikke alle. Bygges på nytt når klippene endres. */
+const BUCKET = 10;
+const timeIndexes = new WeakMap();
+
+// Et raskt fingeravtrykk av tidene, så indeksen bygges på nytt om klipp endres midt i en redigering.
+function fingerprint(project) {
+  let f = project.primary.length * 7919;
+  let n = 0;
+  for (const id in project.clips) {
+    const c = project.clips[id];
+    n++;
+    f += c.start * 1.31 + c.dur * 2.17 + c.lane * 3.7 + (c.props?.aLead || 0) * 5.3 + (c.props?.aTail || 0) * 7.1 + (c.solo ? 11 : 0) + (c.transition ? 13 : 0);
+  }
+  return f + n * 104729;
+}
+
+// Prosjektversjoner som aldri endres etterpå (redigeringen lager alltid nye versjoner, og
+// eksporten endrer ikke prosjektet). For dem holder det å sammenligne identitet.
+const sealedProjects = new WeakSet();
+export function sealProject(project) {
+  if (project && typeof project === 'object' && !isDraft(project)) sealedProjects.add(project);
+}
+
+function timeIndex(project) {
+  let ix = timeIndexes.get(project.clips);
+  const sealed = sealedProjects.has(project);
+  if (ix && ix.primary === project.primary && ix.sealed && sealed) return ix;
+  const fp = fingerprint(project);
+  if (ix && ix.primary === project.primary && ix.fp === fp) {
+    if (sealed) ix.sealed = true;
+    return ix;
+  }
+  const buckets = new Map();
+  let solo = false;
+  for (const c of Object.values(project.clips)) {
+    if (c.solo) solo = true;
+    const lead = Math.max(0, c.props?.aLead || 0);
+    const tail = Math.max(0, c.props?.aTail || 0);
+    // Litt ekstra på hver side for J- og L-kutt, overganger og kryssfade i lyd.
+    const a = c.start - Math.max(lead, c.dur) - 1;
+    const b = c.start + c.dur + tail + 1;
+    for (let k = Math.floor(a / BUCKET); k <= Math.floor(b / BUCKET); k++) {
+      let list = buckets.get(k);
+      if (!list) buckets.set(k, (list = []));
+      list.push(c);
+    }
+  }
+  // Starttidene i hovedsporet, for binærsøk.
+  const starts = project.primary.map((id) => project.clips[id]?.start ?? 0);
+  ix = { buckets, solo, primary: project.primary, starts, fp, sealed };
+  timeIndexes.set(project.clips, ix);
+  return ix;
+}
+
+// Klippene som kan høres eller synes ved tid T (et utvalg, filtreres videre av den som spør).
+export function clipsNear(project, T) {
+  return timeIndex(project).buckets.get(Math.floor(T / BUCKET)) || [];
+}
+
 export function primaryAt(project, T) {
   const list = project.primary;
-  for (let i = 0; i < list.length; i++) {
+  if (!list.length) return null;
+  const { starts } = timeIndex(project);
+  // Siste klipp som starter før eller ved T.
+  let lo = 0;
+  let hi = list.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= T) lo = mid;
+    else hi = mid - 1;
+  }
+  // En overgang ligger rundt kuttet, så naboene sjekkes også (i samme rekkefølge som før).
+  for (let i = Math.max(0, lo - 1); i <= Math.min(list.length - 1, lo + 2); i++) {
     const c = project.clips[list[i]];
     if (!c?.transition) continue;
     const prev = i > 0 ? project.clips[list[i - 1]] : null;
@@ -701,8 +778,8 @@ export function primaryAt(project, T) {
       return { transition: { type: c.transition.type, p }, a: prev, b: c };
     }
   }
-  for (const id of list) {
-    const c = project.clips[id];
+  for (let i = Math.max(0, lo - 1); i <= Math.min(list.length - 1, lo + 1); i++) {
+    const c = project.clips[list[i]];
     if (c && T >= c.start && T < c.start + c.dur) return { clip: c };
   }
   return null;
@@ -737,7 +814,8 @@ export function computeFrame(project, T, { captions = true } = {}) {
     }
   }
   const free = [];
-  for (const c of Object.values(project.clips)) {
+  const near = clipsNear(project, T);
+  for (const c of near) {
     if (c.lane > 0 && c.lane < CAPTION_LANE && c.enabled && isVisual(c) && T >= c.start && T < c.start + c.dur && !laneHidden(project, c.lane)) {
       free.push(c);
     }
@@ -747,7 +825,7 @@ export function computeFrame(project, T, { captions = true } = {}) {
 
   const caps = [];
   if (captions && !laneHidden(project, CAPTION_LANE)) {
-    for (const c of Object.values(project.clips)) {
+    for (const c of near) {
       if (c.type === 'caption' && c.enabled && T >= c.start && T < c.start + c.dur) caps.push(c);
     }
   }
@@ -795,7 +873,8 @@ export function computeAudio(project, T) {
   const out = [];
   const factors = new Map();
   const set = (clip, f, over = false) => factors.set(clip.id, { clip, f, over });
-  const solo = Object.values(project.clips).some((c) => c.solo);
+  const solo = timeIndex(project).solo;
+  const near = clipsNear(project, T);
 
   if (!laneMuted(project, 0)) {
     const p = primaryAt(project, T);
@@ -804,13 +883,13 @@ export function computeAudio(project, T) {
       set(p.b, fadeInGain(p.transition.p), true);
     } else if (p?.clip) set(p.clip, 1);
   }
-  for (const c of Object.values(project.clips)) {
+  for (const c of near) {
     if (c.lane === CAPTION_LANE || factors.has(c.id)) continue;
     const [a, b] = audioWindow(c);
     const inside = T >= c.start && T < c.start + c.dur;
     if ((c.lane !== 0 && inside) || (!inside && T >= a && T < b)) set(c, 1);
   }
-  for (const c of Object.values(project.clips)) {
+  for (const c of near) {
     if (c.lane === 0 || c.lane === CAPTION_LANE) continue;
     const xf = audioXfadeWindow(project, c);
     if (xf && T >= xf.a && T < xf.b) {

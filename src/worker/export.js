@@ -2,7 +2,7 @@
 // kodes med WebCodecs (maskinvare) eller FFmpeg, og lyden mikses med nøkkelbilder.
 import { setMotion } from '../shared/stabilize.js';
 import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOutputFormat, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, WebMOutputFormat, canEncodeVideo } from 'mediabunny';
-import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sourceTime, workPath } from '../shared/model.js';
+import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sealProject, sourceTime, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 import { AUDIO_FORMATS, QUALITIES, VIDEO_FORMATS, audioKbps, outputGeometry, videoBitrate } from '../shared/formats.js';
 import { toSrt, toVtt } from '../shared/srt.js';
@@ -546,6 +546,8 @@ function videoArgsCrf(fmt, q) {
 
 async function runExport(jobId, payload) {
   const { project, settings, ffmpeg: ffmpegBin } = payload;
+  // Eksporten endrer ikke prosjektet, så tidsindeksen kan gjenbrukes for hvert bilde og hver lydblokk.
+  sealProject(project);
   const tmp = path.join(payload.tmpDir, `job-${Date.now()}-${jobId}`);
   fs.mkdirSync(tmp, { recursive: true });
   fs.mkdirSync(path.dirname(settings.output), { recursive: true });

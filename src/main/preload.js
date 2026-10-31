@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('api', {
 
   listScreens: invoke('screens:list'),
   saveProjectAs: invoke('projects:saveAs'),
+  historyList: invoke('history:list'),
+  historyLoad: invoke('history:load'),
+  historySnapshot: invoke('history:snapshot'),
   recState: invoke('rec:state'),
   recShowControls: invoke('rec:showControls'),
   minimizeWindow: invoke('window:minimize'),

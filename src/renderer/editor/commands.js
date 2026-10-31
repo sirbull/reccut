@@ -67,6 +67,7 @@ export const newProjectOpen = signal(false);
 export const prefsOpen = signal(false);
 export const saveAsOpen = signal(false);
 export const packageOpen = signal(false);
+export const historyOpen = signal(false);
 // Valg når et lydklipp passer under flere videoklipp: { audioId, matches }.
 export const syncDialog = signal(null);
 

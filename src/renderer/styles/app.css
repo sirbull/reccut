@@ -4202,3 +4202,22 @@ kbd.keycap {
 .rec-timer.paused {
   color: #f5a50a;
 }
+
+/* Versjonshistorikk */
+.history-list {
+  max-height: 360px;
+  overflow: auto;
+  margin: 8px 0;
+}
+.history-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 5px 2px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.history-row .muted {
+  color: var(--text-3);
+}

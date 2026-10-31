@@ -133,7 +133,7 @@ async function packageProject({ project, files, dest, name, removed }, ctx) {
   }
   p.name = path.basename(root);
   const file = path.join(root, `${path.basename(root)}.reccut`);
-  await projects.save(null, p, file);
+  await projects.save(null, p, file, { history: false });
 
   // Rapporten, som i After Effects.
   const lines = [

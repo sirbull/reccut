@@ -1,7 +1,7 @@
 // Lim inn og fjern egenskaper, som Paste Effects og Paste Attributes i Final Cut Pro.
 // Egenskapene er delt i grupper. Nøkkelbilder følger med, enten med samme timing eller
 // strukket til lengden på klippet de limes inn i.
-import { EFFECT_DEFAULTS, defaultProps, kfRate } from './model.js';
+import { EFFECT_DEFAULTS, deepClone, defaultProps, kfRate } from './model.js';
 import { GRADE_PROPS } from './grade.js';
 import { STAB_DEFAULTS } from './stabilize.js';
 
@@ -50,7 +50,7 @@ function mapKeyframes(list, src, dst, stretch) {
   return list.map((k) => {
     const rel = k[0] - src.in;
     const t = stretch && srcLen > 0 ? dst.in + (rel / srcLen) * dstLen : dst.in + rel;
-    return [Math.round(t * 1e6) / 1e6, structuredClone(k[1]), ...k.slice(2)];
+    return [Math.round(t * 1e6) / 1e6, deepClone(k[1]), ...k.slice(2)];
   });
 }
 
@@ -65,7 +65,7 @@ export function pasteAttributes(src, dst, groupIds, { stretch = false } = {}) {
     if (!groupIds.includes(g.id) || !groupApplies(g, dst) || !groupApplies(g, src)) continue;
     // Gruppen erstattes helt: det som var der fra før forsvinner, som i Final Cut Pro.
     removeGroup(dst, g);
-    for (const [k, v] of Object.entries(src.props)) if (g.keys(k)) dst.props[k] = structuredClone(v);
+    for (const [k, v] of Object.entries(src.props)) if (g.keys(k)) dst.props[k] = deepClone(v);
     for (const [k, list] of Object.entries(src.kf || {})) if (g.keys(k) && list.length) dst.kf[k] = mapKeyframes(list, src, dst, stretch);
     // Opptak har eget volum for mikrofon og systemlyd; andre klipp bruker bare volume.
     if (g.id === 'volume' && dst.type !== 'recording') {
@@ -85,7 +85,7 @@ function removeGroup(clip, g) {
   const defs = defaultProps(clip.type);
   for (const k of Object.keys(clip.props)) {
     if (!g.keys(k)) continue;
-    if (k in defs) clip.props[k] = structuredClone(defs[k]);
+    if (k in defs) clip.props[k] = deepClone(defs[k]);
     else delete clip.props[k];
   }
   if (g.id === 'afx') clip.props.afx = [];

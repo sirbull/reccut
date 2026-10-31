@@ -18,13 +18,13 @@
   },
   "devDependencies": {
     "@huggingface/transformers": "^4.3.2",
+    "@preact/signals": "^2.11.4",
     "electron": "^45.1.0",
     "electron-builder": "^26.0.0",
     "esbuild": "^0.28.2",
-    "preact": "^10.29.8",
-    "@preact/signals": "^2.11.4",
     "lucide-preact": "^1.65.0",
-    "mediabunny": "^1.65.0"
+    "mediabunny": "^1.65.0",
+    "preact": "^10.29.8"
   },
   "build": {
     "appId": "no.sirbull.reccut",
@@ -87,6 +87,7 @@
   },
   "dependencies": {
     "ffmpeg-static": "^5.3.0",
+    "immer": "^10.1.1",
     "uiohook-napi": "^1.5.5"
   }
 }

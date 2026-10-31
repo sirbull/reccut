@@ -1,6 +1,7 @@
 // Redigeringsoperasjoner på tidslinjen. Alle muterer et prosjektobjekt direkte;
 // redigeringsvisningen kloner før og lagrer historikk for angre.
 import {
+  deepClone,
   CAPTION_LANE,
   avgSpeed,
   instSpeed,
@@ -186,7 +187,7 @@ export function splitClip(project, id, T) {
   const r = kfRate(c);
   const off = srcOffset(c, local);
   const total = srcLen(c);
-  const right = structuredClone(c);
+  const right = deepClone(c);
   right.id = uid();
   right.start = round(T);
   right.dur = round(c.dur - local);
@@ -413,7 +414,7 @@ export function copyClips(project, ids) {
   const clips = ids.map((id) => project.clips[id]).filter(Boolean);
   if (!clips.length) return null;
   const t0 = Math.min(...clips.map((c) => c.start));
-  return clips.sort((a, b) => a.start - b.start).map((c) => ({ ...structuredClone(c), start: c.start - t0 }));
+  return clips.sort((a, b) => a.start - b.start).map((c) => ({ ...deepClone(c), start: c.start - t0 }));
 }
 
 export function pasteClips(project, items, T) {
@@ -422,7 +423,7 @@ export function pasteClips(project, items, T) {
   const free = items.filter((c) => c.lane !== 0);
   const groups = new Map();
   const fresh = (c) => {
-    const n = { ...structuredClone(c), id: uid(), transition: undefined };
+    const n = { ...deepClone(c), id: uid(), transition: undefined };
     if (c.group) {
       if (!groups.has(c.group)) groups.set(c.group, uid());
       n.group = groups.get(c.group);
@@ -588,7 +589,7 @@ export function freezeFrame(project, T, dur = 2) {
     .sort((a, b) => (b.lane === 0) - (a.lane === 0) || b.lane - a.lane)[0];
   if (!p) return null;
   const frameAt = sourceTime(p, T);
-  const freeze = structuredClone(p);
+  const freeze = deepClone(p);
   freeze.id = uid();
   freeze.speed = 0;
   freeze.freezeAt = round(frameAt);
@@ -633,7 +634,7 @@ export function detachAudio(project, id) {
     a.props.aLead = c.props.aLead || 0;
     a.props.aTail = c.props.aTail || 0;
     a.props.preservePitch = c.props.preservePitch;
-    if (c.kf[volumeProp]) a.kf.volume = structuredClone(c.kf[volumeProp]);
+    if (c.kf[volumeProp]) a.kf.volume = deepClone(c.kf[volumeProp]);
     placeFree(project, a, c.start, -1);
     ids.push(a.id);
   };

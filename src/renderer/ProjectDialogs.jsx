@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { FilePlus2, FolderOpen, FolderSearch, MoreHorizontal } from 'lucide-preact';
 import { PROJECT_TEMPLATES, formatDuration } from '../shared/model.js';
-import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, saveNow, saveProjectAs } from './editor/store.js';
+import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, restoreProject, saveNow, saveProjectAs } from './editor/store.js';
 import { mediaFiles, reduceProject } from '../shared/package.js';
 import * as commands from './editor/commands.js';
 import { Button, IconButton, Modal, Row, toast } from './ui.jsx';
@@ -367,6 +367,72 @@ export function PackageDialog() {
       <p class="hint">
         The folder gets the project file, a Footage folder, a Recordings folder and a Package Report.txt. Thumbnails, waveforms and proxies are made again automatically when the project is opened.
       </p>
+    </Modal>
+  );
+}
+
+/* Versjonshistorikk: automatiske kopier av prosjektet, som kan hentes tilbake. */
+
+export function HistoryDialog() {
+  const [list, setList] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const close = () => (commands.historyOpen.value = false);
+  const file = projectPath.value;
+  const load = () => (file ? api.historyList(file).then(setList) : setList([]));
+  useEffect(() => {
+    saveNow().then(load);
+  }, []);
+  const restore = async (it) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      // Først en kopi av slik prosjektet er nå, så ingenting går tapt.
+      await saveNow();
+      await api.historySnapshot(file, 'before restore');
+      const data = await api.historyLoad(it.file, file);
+      restoreProject(data);
+      close();
+      toast(`Restored the version from ${new Date(it.time).toLocaleString()}. Undo (Cmd Z) brings back what you had.`, { kind: 'success', timeout: 8000 });
+    } catch (err) {
+      toast(`Could not restore: ${err.message}`, { kind: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const groups = new Map();
+  for (const it of list || []) {
+    const day = new Date(it.time).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    groups.set(day, [...(groups.get(day) || []), it]);
+  }
+  return (
+    <Modal title="Project History" width={520} onClose={close} footer={<Button onClick={close}>Close</Button>}>
+      <p class="lead">Reccut keeps a copy of the project every few minutes while you work, and when you close it. Older copies are thinned out, but one per hour, day, week and month is kept, so you can go far back. Restoring can be undone.</p>
+      {list === null ? (
+        <p class="hint">Loading…</p>
+      ) : !list.length ? (
+        <p class="hint">No earlier versions yet. The first copy is made a few minutes after you start working.</p>
+      ) : (
+        <div class="history-list">
+          {[...groups].map(([day, items]) => (
+            <div key={day}>
+              <div class="sub-head">{day}</div>
+              {items.map((it) => (
+                <div key={it.file} class="history-row">
+                  <span>
+                    <b>{new Date(it.time).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</b>
+                    {it.reason && <span class="muted"> {it.reason}</span>}
+                  </span>
+                  <span class="muted">{Math.max(1, Math.round(it.size / 1024))} kB</span>
+                  <Button class="small" disabled={busy} onClick={() => restore(it)}>
+                    Restore
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+      <p class="hint">The copies are in the Auto-Save folder next to the project file.</p>
     </Modal>
   );
 }

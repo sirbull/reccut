@@ -47,6 +47,7 @@ import {
   primaryComponent,
   titleText,
   CLIP_COLORS,
+  deepClone,
 } from '../../shared/model.js';
 import { groupLead, groupMembers, moveClip, positionMove, positionTrim, rollEdit, slideClip, slipClip, splitClip, trimClip } from '../../shared/ops.js';
 import {
@@ -132,7 +133,16 @@ export function Timeline() {
   const bladeRef = useRef(null);
   const skimRef = useRef(null);
   const lastScrub = useRef(0);
-  const { rows, height } = useMemo(() => laneRows(p), [p]);
+  // Sporene beholder identiteten så lenge de ikke endres, så klipp som ikke er endret
+  // slipper å tegnes på nytt (viktig i lange prosjekter).
+  const rowsRef = useRef(null);
+  const { rows, height } = useMemo(() => {
+    const next = laneRows(p);
+    const key = next.rows.map((r) => `${r.lane}:${r.h}:${r.y}:${r.kind}:${r.spare ? 1 : 0}`).join('|');
+    if (rowsRef.current?.key === key) return rowsRef.current.value;
+    rowsRef.current = { key, value: next };
+    return next;
+  }, [p]);
   const z = pps.value;
   const width = Math.max(view.value.width, PAD * 2 + (p.duration + 30) * z);
 
@@ -334,7 +344,7 @@ export function Timeline() {
     }
     if (hit === 'kf') {
       const clip = proj.clips[el.dataset.clip];
-      dragRef.current = { kind: 'kf', x: e.clientX, y: e.clientY, clip: structuredClone(clip), from: Number(el.dataset.t), moved: false };
+      dragRef.current = { kind: 'kf', x: e.clientX, y: e.clientY, clip: deepClone(clip), from: Number(el.dataset.t), moved: false };
       seek(clip.start + (Number(el.dataset.t) - clip.in) / kfRate(clip));
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
@@ -371,7 +381,7 @@ export function Timeline() {
     // Et klikk velger hele gruppen. Option (Alt) velger bare ett klipp.
     if (!selection.value.includes(clipId)) selection.value = e.altKey ? [clipId] : groupMembers(proj, clipId);
 
-    const base = { x: e.clientX, y: e.clientY, T, clip: structuredClone(clip), moved: false };
+    const base = { x: e.clientX, y: e.clientY, T, clip: deepClone(clip), moved: false };
     const positionTool = tool.value === 'position' && clip.lane === 0;
     if (hit === 'aedge') {
       dragRef.current = { ...base, kind: 'aedge', edge: el.dataset.edge };
@@ -399,7 +409,7 @@ export function Timeline() {
         return;
       }
       dragRef.current = { ...base, kind: 'vol', kfIndex: el.dataset.kf != null ? Number(el.dataset.kf) : null };
-    } else dragRef.current = { ...base, kind: 'move', ids: [...selection.value], originals: selection.value.map((id) => structuredClone(proj.clips[id])), originalProject: proj };
+    } else dragRef.current = { ...base, kind: 'move', ids: [...selection.value], originals: selection.value.map((id) => deepClone(proj.clips[id])), originalProject: proj };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
@@ -675,11 +685,21 @@ export function Timeline() {
             {rows.map((r) => (
               <LaneBg key={r.lane} row={r} p={p} />
             ))}
-            {Object.values(p.clips).map((c) => {
-              const row = rows.find((r) => r.lane === c.lane);
-              if (!row) return null;
-              return <Clip key={c.id} clip={c} row={row} media={p.media[c.mediaId]} selected={selection.value.includes(c.id)} z={z} />;
-            })}
+            {(() => {
+              // Bare klipp i og nær det synlige området blir komponenter (lange prosjekter).
+              const { left, width: vw } = view.value;
+              const t0 = (left - PAD - 600) / z;
+              const t1 = (left + vw + 600) / z;
+              const byLane = new Map(rows.map((r) => [r.lane, r]));
+              const sel = new Set(selection.value);
+              const out = [];
+              for (const c of Object.values(p.clips)) {
+                if (c.start + c.dur < t0 || c.start > t1) continue;
+                const row = byLane.get(c.lane);
+                if (row) out.push(<Clip key={c.id} clip={c} row={row} media={p.media[c.mediaId]} selected={sel.has(c.id)} z={z} />);
+              }
+              return out;
+            })()}
             {p.primary.map((id, i) => {
               const c = p.clips[id];
               if (!c?.transition) return null;

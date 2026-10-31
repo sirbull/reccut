@@ -25,7 +25,7 @@ import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
 import { CAPTION_LANE, EFFECTS, REDACT_MODES, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, mediaClipType, newProject, workPath } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { parseSrt, toSrt, toVtt } from '../../shared/srt.js';
-import { addMediaRecords, projectFolders, audioSkimming, commit, getWave, importPaths, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
+import { addMediaRecords, usedMedia, projectFolders, audioSkimming, commit, getWave, importPaths, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
 import { fileUrl, scrubAudio, seek } from './playback.js';
 import * as commands from './commands.js';
 import { CaptionStyleEditor } from './Inspector.jsx';
@@ -210,7 +210,7 @@ function MediaCard({ m }) {
   const stream = m.streams.screen || m.streams.main || m.streams.camera;
   const thumb = m.kind === 'image' ? m.streams.main?.proxy || m.path : stream?.thumbs?.files?.[Math.min(stream.thumbs.files.length - 1, 2)];
   const analyzing = tasks.value.some((t) => t.kind === 'analyze' && t.state === 'running' && t.title.includes(m.name));
-  const used = Object.values(project.value.clips).some((c) => c.mediaId === m.id);
+  const used = usedMedia.value.has(m.id);
   const Icon = m.kind === 'audio' ? FileAudio : m.kind === 'image' ? ImageIcon : m.kind === 'recording' ? Video : Film;
   const onContext = (e) => mediaContextMenu(e, m, used);
   return (
@@ -279,7 +279,7 @@ function FilmstripRow({ m, span, height }) {
   const hasAudio = Boolean(audio?.hasAudio);
   const files = m.kind === 'image' ? [m.streams.main?.proxy || m.path] : stream?.thumbs?.files || [];
   const dur = m.kind === 'image' ? prefs.value.stillDur : m.duration || 0.04;
-  const used = Object.values(project.value.clips).some((c) => c.mediaId === m.id);
+  const used = usedMedia.value.has(m.id);
   const lastScrub = useRef(0);
   const drag = useRef(null);
   const [skimAt, setSkimAt] = useState(null);

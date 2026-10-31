@@ -5,6 +5,7 @@ const LEGACY_NAME = 'OBSlite';
 const EXTENSIONS = ['.reccut', '.obslite'];
 const { app, shell } = require('electron');
 const fs = require('fs');
+const history = require('./history');
 const path = require('path');
 
 const SUBDIRS = { media: 'Media', recordings: 'Recordings', optimized: 'Optimized Media', exports: 'Exports' };
@@ -131,13 +132,18 @@ async function load(file) {
 }
 
 // Lagrer atomisk, slik at et krasj midt i lagringen ikke ødelegger prosjektet.
-async function save(base, project, file) {
+async function save(base, project, file, { history: keepHistory = true } = {}) {
   if (!file) file = (await create(path.join(base), project.name)).file;
   const tmp = file + '.tmp';
   const data = JSON.parse(JSON.stringify(project));
   addRelative(data, path.dirname(file));
-  await fs.promises.writeFile(tmp, JSON.stringify(data));
+  const text = JSON.stringify(data);
+  await fs.promises.writeFile(tmp, text);
   await fs.promises.rename(tmp, file);
+  if (!keepHistory) return file;
+  lastFile = file;
+  // Versjonshistorikk: en kopi med noen minutters mellomrom (i bakgrunnen).
+  history.snapshot(file, text).catch((err) => console.warn('Versjonshistorikk', err.message));
   return file;
 }
 
@@ -147,6 +153,21 @@ async function saveAs(project, location, name) {
   const p = { ...project, name: created.name };
   await save(null, p, created.file);
   return { file: created.file, name: created.name };
+}
+
+let lastFile = null;
+
+// Versjoner av prosjektet i Auto-Save-mappen.
+async function historyList(file) {
+  return history.list(file);
+}
+async function historyLoad(snapshotFile, projectFile) {
+  const data = await history.read(snapshotFile);
+  resolveRelative(data, path.dirname(projectFile));
+  return data;
+}
+async function historySnapshot(file, reason) {
+  return history.snapshot(file || lastFile, null, { force: true, reason });
 }
 
 async function forget(file) {
@@ -160,4 +181,4 @@ async function trash(base, file) {
   await shell.trashItem(f.own ? f.root : file).catch(() => fs.promises.unlink(file).catch(() => {}));
 }
 
-module.exports = { list, load, save, saveAs, create, folders, forget, trash, touchRecent };
+module.exports = { historyList, historyLoad, historySnapshot, lastSaved: () => lastFile, list, load, save, saveAs, create, folders, forget, trash, touchRecent };

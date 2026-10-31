@@ -11,7 +11,7 @@ fs.mkdirSync(out, { recursive: true });
 const common = {
   bundle: true,
   sourcemap: watch ? 'inline' : false,
-  minify: !watch,
+  minify: !watch && !process.env.NO_MINIFY,
   target: 'chrome130',
   logLevel: 'info',
   jsx: 'automatic',

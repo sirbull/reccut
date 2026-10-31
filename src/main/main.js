@@ -334,10 +334,15 @@ ipcMain.handle('permissions:open', (_e, which) => {
 });
 
 ipcMain.handle('paths:base', () => baseDir());
-ipcMain.handle('app:flushed', () => {
+ipcMain.handle('app:flushed', async () => {
+  // En siste versjon i historikken når appen lukkes.
+  await projects.historySnapshot(null, 'closed').catch(() => {});
   saveFlushed = true;
   win?.close();
 });
+ipcMain.handle('history:list', (_e, file) => projects.historyList(file));
+ipcMain.handle('history:load', (_e, snap, file) => projects.historyLoad(snap, file));
+ipcMain.handle('history:snapshot', (_e, file, reason) => projects.historySnapshot(file, reason));
 
 function stamp() {
   const d = new Date();

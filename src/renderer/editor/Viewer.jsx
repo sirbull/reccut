@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Maximize2, Settings2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-preact';
-import { formatTimecode, isVisual, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
+import { deepClone, formatTimecode, isVisual, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
 import { captionLayout, wrapText } from '../../shared/render.js';
 import { clipMatrix, maskList, shapeAt } from '../../shared/shapes.js';
 import { beginTransient, commit, endTransient, getTime, playing, project, selectedClips, selectedTransition, selection, timeSig, updateTransient } from './store.js';
@@ -33,7 +33,7 @@ export function Viewer() {
     const k = p.width / canvas.getBoundingClientRect().width;
     const T = getTime();
     const start = { x: e.clientX, y: e.clientY };
-    const base = structuredClone(sel);
+    const base = deepClone(sel);
     let origin;
     if (sel.type === 'caption') {
       const g = document.createElement('canvas').getContext('2d');
