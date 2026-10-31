@@ -35,3 +35,14 @@ test('versjonshistorikken lagrer, hopper over like versjoner og tynner ut', asyn
   assert.deepEqual(data, { a: 1 });
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('versjoner sammenlignes riktig, og riktig installasjonsfil velges', () => {
+  const { newer, pickAsset } = require('../src/main/updates.js');
+  assert.ok(newer('0.10.0', '0.9.9'));
+  assert.ok(newer('v1.0.0', '0.2.0'));
+  assert.ok(!newer('0.2.0', '0.2.0'));
+  assert.ok(!newer('0.1.9', '0.2.0'));
+  const assets = [{ name: 'Reccut-0.3.0.dmg' }, { name: 'Reccut Setup 0.3.0.exe' }, { name: 'Reccut-0.3.0.AppImage' }];
+  const a = pickAsset(assets);
+  assert.ok(a && (process.platform === 'linux' ? /AppImage/.test(a.name) : true));
+});

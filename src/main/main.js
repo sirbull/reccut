@@ -24,6 +24,7 @@ const psd = require('./psd');
 const area = require('./area');
 const packager = require('./packager');
 const { createRecordUI } = require('./recordui');
+const updates = require('./updates');
 const { InputTracker, ZOOM_KEYS } = require('./input');
 
 const isMac = process.platform === 'darwin';
@@ -339,6 +340,18 @@ ipcMain.handle('app:flushed', async () => {
   await projects.historySnapshot(null, 'closed').catch(() => {});
   saveFlushed = true;
   win?.close();
+});
+// Nye versjoner på GitHub. Uten nett gir det bare en feil som grensesnittet ignorerer.
+ipcMain.handle('updates:check', () => updates.check());
+ipcMain.handle('updates:download', (_e, asset) => {
+  const { id, done } = jobs.add({ kind: 'download', title: `Downloading ${asset.name}`, queue: 'light', run: (ctx) => updates.download(asset, (p) => ctx.progress(p)) });
+  done.then((file) => send('updates:downloaded', { id, file })).catch((err) => send('updates:downloaded', { id, error: err.message }));
+  return id;
+});
+ipcMain.handle('app:version', () => app.getVersion());
+// Bare nettadresser til GitHub åpnes i nettleseren.
+ipcMain.handle('shell:openExternal', (_e, url) => {
+  if (/^https:\/\/github\.com\//.test(String(url))) return shell.openExternal(url);
 });
 ipcMain.handle('history:list', (_e, file) => projects.historyList(file));
 ipcMain.handle('history:load', (_e, snap, file) => projects.historyLoad(snap, file));

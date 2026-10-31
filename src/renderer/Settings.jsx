@@ -91,7 +91,11 @@ function GeneralPane() {
           }}
         />
         {toggle('reopenLast', 'Open the last project when Reccut starts')}
-        <p class="hint">Projects are saved automatically after every change.</p>
+        <p class="hint">Projects are saved automatically after every change, and earlier versions are kept in Project History.</p>
+      </Section>
+      <Section title="Updates" collapsible={false}>
+        {toggle('checkUpdates', 'Check for new versions on GitHub once a day')}
+        <p class="hint">Reccut works fully offline. When there is a connection, it can tell you about a new version and download the installer for you. Nothing is installed without you opening it.</p>
       </Section>
       <Section title="Media" collapsible={false}>
         {toggle('checkOfflineOnFocus', 'Look for missing media when you return to Reccut')}

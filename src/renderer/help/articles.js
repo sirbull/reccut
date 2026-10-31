@@ -29,6 +29,38 @@ Press {{key:findCommand}} and type what you want to do, for example "blade", "sy
     see: ['projects', 'search', 'shortcuts'],
   },
   {
+    id: 'history',
+    section: 'Getting Started',
+    title: 'Project History and Autosave',
+    summary: 'Nothing is lost: autosave after every change, and earlier versions kept for a long time.',
+    keywords: 'autosave auto save history versions backup restore revert crash undo earlier older',
+    body: `
+Reccut saves the project automatically a moment after every change. The file is written safely, so a crash or power cut in the middle of saving cannot damage it, and the project is saved once more when you quit.
+
+In addition, a copy of the project is kept every few minutes while you work, and when you close Reccut. The copies are in the **Auto-Save** folder next to the project file, compressed. Older copies are thinned out: everything from the last two hours, one per hour for two days, one per day for a month, one per week for a year, and one per month after that.
+
+Choose **Project History** ({{key:history}}) in the File menu to see the copies by date and time, and click **Restore** to go back to one. A copy of how the project looks right now is made first, and the restore can be undone with {{key:undo}}.
+
+[[run:history|Project History]]
+`,
+    see: ['projects', 'package'],
+  },
+  {
+    id: 'updates',
+    section: 'Getting Started',
+    title: 'Updates',
+    summary: 'Reccut works offline and can tell you about new versions on GitHub.',
+    keywords: 'update new version download github release offline',
+    body: `
+Reccut works fully offline. When the computer is online, Reccut checks once a day whether a new version has been released on GitHub. If there is one, you can download the installer for your computer to the Downloads folder, and see what is new. Nothing is installed until you quit Reccut and open the file yourself. Your projects and settings are kept.
+
+Choose **Check for Updates** in the Help menu to check right away. Turn off the automatic check under Settings, General.
+
+[[run:checkUpdates|Check for Updates]]
+`,
+    see: ['projects'],
+  },
+  {
     id: 'package',
     section: 'Getting Started',
     title: 'Packaging a Project for Archiving',
@@ -91,7 +123,7 @@ To collect everything into one folder for archiving, use Package Project.
 
 [[run:newProject|New Project]] [[run:openProject|Open Project]] [[run:saveAs|Save As]] [[run:package|Package Project]] [[run:revealProject|Reveal Project Folder]]
 `,
-    see: ['package', 'import', 'recording'],
+    see: ['history', 'package', 'import', 'recording'],
   },
   {
     id: 'search',
@@ -125,9 +157,33 @@ On a Mac the Help menu also has a search field. Type a word and macOS points to 
     section: 'Recording',
     title: 'Recording Screen and Camera',
     summary: 'Screen, camera and microphone are recorded separately, so everything can be changed afterwards.',
-    keywords: 'record capture webcam pip layout keystrokes cursor zoom system audio area region crop part of screen countdown',
+    keywords: 'record capture webcam pip layout keystrokes cursor zoom system audio area region crop part of screen countdown shortcut hotkey global pause resume window tray menu bar control bar crash recover microphone test level',
     body: `
 Choose a screen, a camera and a microphone in the Record room. Turn on system audio to record the sound from your computer.
+
+## Start recording from any app
+
+Press the record shortcut to start and stop recording: by default **Control Option 0** on a Mac and **Ctrl Shift 0** on Windows (the keys can be changed under Shortcuts in the Record room). It works also when another app is in front and Reccut is in the background or in the Edit room. The same keys with **8** pause and resume. Go to the app you want to record and press the shortcut.
+
+While you record, you can always see that the screen is being recorded, without it ending up in the video:
+
+- a small **control bar** floats over your other apps, with the time, the microphone level, **Pause** and **Stop**. It is hidden from the recording on macOS and Windows.
+- the **Reccut icon** in the menu bar on macOS shows a red dot and the time. On Windows the icon in the taskbar tray turns red; click it for Start, Pause, Stop and Show Reccut.
+- **Hide Reccut while recording** puts the Reccut window away when you start, and brings it back when the recording is saved.
+
+Paused parts are left out of the video, and keystrokes, clicks, cursor zoom and layouts follow along.
+
+## Record one window
+
+Choose a window instead of a screen under **Screen**. Only that window is recorded, even if it is moved or covered. Click Refresh list of windows if a new window is missing. Cursor zoom and click highlights are off for window recordings.
+
+## Check the microphone
+
+Under the microphone meter, Reccut tells you if the microphone is silent, very quiet, good or too loud. Click **Test** to record four seconds and hear them played back.
+
+## If Reccut or the computer crashes
+
+The recording is written to disk while you record. If Reccut is closed by a crash or a power cut, it offers to **recover** the recording the next time it starts, with layouts, keystrokes and cursor movements up to the last few seconds.
 
 ## Record only part of the screen
 

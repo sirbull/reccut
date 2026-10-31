@@ -284,6 +284,8 @@ function App() {
   useEffect(() => {
     engine.initSources();
     loadInitialProject().then(checkRecovery);
+    // Nye versjoner sjekkes litt etter start, så det ikke sinker oppstarten.
+    setTimeout(() => import('./updates.js').then((m) => m.checkForUpdates(false)), 8000);
     const offShortcut = api.onShortcut((a) => {
       if (a.layout) engine.setLayout(a.layout);
       if (a.toggleRecord) toggleRecording();

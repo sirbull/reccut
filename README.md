@@ -6,7 +6,11 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 
 ## Opptak
 
-* Skjerm i native oppløsning, webkamera eller eksternt kamera, intern eller ekstern mikrofon
+* Skjerm i native oppløsning, **et enkelt programvindu**, webkamera eller eksternt kamera, intern eller ekstern mikrofon
+* **Start fra hvilket som helst program**: Control Option 0 (Ctrl Shift 0 på Windows) starter og stopper opptaket også når Reccut ligger i bakgrunnen eller står i Edit. Samme taster med 8 setter på pause og fortsetter. Pausene tas ut av videoen, og tastetrykk, klikk, pekerzoom og oppsett følger med.
+* **Du ser at du tar opp, uten at det kommer med i videoen**: en liten kontrollinje med tid, mikrofonnivå, Pause og Stop flyter over andre programmer og er skjult for opptaket (macOS og Windows). Ikonet i menylinjen på macOS viser rød prikk og tid, og på Windows blir ikonet i systemstatusfeltet rødt. Reccut kan legge seg bort mens du tar opp og komme tilbake når opptaket er lagret.
+* **Sjekk av mikrofonen**: viser om den er stille, svak, god eller overstyrt, og Test tar opp fire sekunder og spiller dem av.
+* **Opptaket redder seg selv**: det skrives til disk underveis (WebM, pakkes om til MP4 når du stopper), og krasjer appen eller maskinen, tilbyr Reccut å hente det inn igjen ved neste start, med oppsett, tastetrykk og pekerbevegelser.
 * **Ta opp bare et område av skjermen**: velg Area, dra opp området rett på skjermen (fritt eller låst til 16:9, 9:16, 1:1 eller 4:3), eller juster det i forhåndsvisningen. Bare området lagres, og pekerzoom, klikk og tastetrykk følger området. En tynn ramme på skjermen viser området og blir rød under opptak; den ligger rett utenfor området og kommer aldri med i videoen.
 * **Nedtelling** på 3, 5 eller 10 sekunder før opptaket starter, i forhåndsvisningen og midt i området på skjermen
 * **Systemlyd** med én bryter
@@ -22,6 +26,7 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 ## Prosjekter og mapper
 
 * Et nytt prosjekt får navn og plassering, og appen lager en egen mappe med prosjektfilen og undermappene **Media**, **Recordings**, **Optimized Media** og **Exports**. Første gang appen startes, må du lage eller åpne et prosjekt.
+* **Autolagring med lang historikk**: prosjektet lagres et øyeblikk etter hver endring, trygt mot krasj og strømbrudd, og en siste gang når du avslutter. I tillegg tas det vare på en kopi hvert femte minutt og når appen lukkes, i mappen Auto-Save ved prosjektet. Eldre kopier tynnes ut: alt fra de siste to timene, én per time i to døgn, én per dag i en måned, én per uke i et år og én per måned etter det. **Project History** (Shift Option Cmd H) henter tilbake en tidligere versjon, og det kan angres.
 * **Prosjektfil**: prosjektet lagres automatisk som en .reccut-fil i prosjektmappen. **Save As** (Shift Cmd S) lagrer det med nytt navn og sted, og en .reccut-fil kan åpnes med dobbeltklikk i Finder eller Utforsker. Prosjektfilen husker filene både med full sti og i forhold til prosjektfilen, så en flyttet eller kopiert prosjektmappe finner filene sine igjen.
 * **Package Project** (Option Shift Cmd P), som Collect Files og Reduce Project i After Effects: prosjektfilen og ALLE filene den bruker kopieres til én mappe (Footage, Recordings og prosjektfilen), så mappen inneholder alt som trengs for å åpne prosjektet på en annen maskin eller om mange år. Før pakkingen kan du fjerne ubrukte media, klipp som er slått av (blir mellomrom i hovedsporet, så ingenting flytter seg), lyd som er slått av i alle klipp og klipp på skjulte spor, og velge om optimalisert media skal med. Vinduet viser antall filer og størrelse og varsler om filer som mangler. Pakkingen går i bakgrunnen, sjekker ledig plass og at hver kopi er komplett, og skriver en Package Report.txt med alt som ble kopiert og fjernet. Det åpne prosjektet endres ikke.
 * Ved import velger du **Copy to project folder** eller **Leave files in place**. Valget huskes og brukes også når du drar filer inn.
@@ -31,6 +36,12 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 * **RAW-bilder** (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 og flere) importeres med kameraets innebygde JPEG i full størrelse, med riktig orientering. Selve RAW-dataene fremkalles ikke, og RAW-video (BRAW, R3D, ProRes RAW) støttes ikke.
 * **Media Offline**: mangler en fil (flyttet, omdøpt eller på en disk som ikke er koblet til), vises et testkort i stil med det gamle NRK-kortet, med filnavnet øverst og MEDIA OFFLINE nederst. Kortet tegnes for prosjektets format, så sirkelen alltid er rund, og det brukes også i eksporten. Appen sjekker på nytt når vinduet får fokus, og **Relink File** (høyreklikk i biblioteket eller Option Cmd L) peker mediet til en ny fil uten at redigeringen går tapt.
 * Merker i biblioteket viser HDR, 10-bit, RAW, optimalisert media og synket lyd. Info-fanen viser hvilken fil som brukes til avspilling.
+
+## Ytelse og oppdateringer
+
+* **Lange prosjekter**: endringer lages med delt struktur, så bare det som endres kopieres, og en tidsindeks gjør at avspilling, eksport og lydmiks bare ser på klippene nær spillhodet. Tidslinjen lager bare komponenter for det som synes. Målt med 3100 klipp over to og en halv time: en endring tar 5 ms (før 27 ms), og oppslag for bilde og lyd 0,05 og 0,03 ms (før 1,3 og 1,8 ms), som også gjør eksport av lange prosjekter mye raskere.
+* **Virker helt uten nett.** Med nett ser Reccut én gang i døgnet etter nye versjoner under Releases på GitHub, og kan laste ned installasjonsfilen for maskinen til Nedlastinger. Ingenting installeres før du selv åpner filen. Help, Check for Updates sjekker med en gang, og den automatiske sjekken kan slås av under Settings.
+* **Ny versjon på GitHub**: øk versjonen i package.json, lag en tagg som `v0.3.0` og push den. Arbeidsflyten i `.github/workflows/build.yml` bygger for Mac (Apple Silicon og Intel) og Windows og legger filene ved en release, og appen finner den automatisk.
 
 ## Redigering
 

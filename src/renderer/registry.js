@@ -139,6 +139,7 @@ export const COMMANDS = [
   { id: 'redact:frosted', label: 'Add Frosted Glass (Redact)', menu: 'Edit', group: 'redact', run: () => commands.addRedact('frosted'), help: 'redact', keywords: 'redact censor hide frosted glass sladd' },
   { id: 'group', label: 'Group Clips', menu: 'Edit', group: 'group', keys: 'CmdOrCtrl+G', run: commands.groupSelected, help: 'grouping', desc: 'Group any clips, such as video, audio, titles and captions, so they move, cut and delete together.' },
   { id: 'ungroup', label: 'Ungroup', menu: 'Edit', group: 'group', keys: 'Shift+CmdOrCtrl+G', run: commands.ungroupSelected, help: 'grouping' },
+  { id: 'checkUpdates', label: 'Check for Updates…', menu: 'Help', group: 'about', rooms: ALL, run: () => import('./updates.js').then((m) => m.checkForUpdates(true)), help: 'updates', keywords: 'update new version download github release' },
   { id: 'findCommand', label: 'Quick Search', menu: 'Help', group: 'search', keys: 'Ctrl+Space', also: ['CmdOrCtrl+K'], rooms: ALL, anywhere: true, run: () => (paletteOpen.value = !paletteOpen.value), help: 'search', keywords: 'find command palette console fx effects tools search everything' },
 
   /* Mark */

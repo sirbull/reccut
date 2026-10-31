@@ -15,6 +15,7 @@ const DEFAULTS = {
   // Egne hurtigtaster: { kommando: 'CmdOrCtrl+Shift+B' }, tom streng betyr ingen.
   shortcuts: {},
   reopenLast: true,
+  checkUpdates: true,
   checkOfflineOnFocus: true,
   playheadAfterEdit: false,
   viewerQuality: 'quality',

@@ -14,6 +14,11 @@ contextBridge.exposeInMainWorld('api', {
 
   listScreens: invoke('screens:list'),
   saveProjectAs: invoke('projects:saveAs'),
+  checkUpdates: invoke('updates:check'),
+  downloadUpdate: invoke('updates:download'),
+  onUpdateDownloaded: on('updates:downloaded'),
+  appVersion: invoke('app:version'),
+  openExternal: invoke('shell:openExternal'),
   historyList: invoke('history:list'),
   historyLoad: invoke('history:load'),
   historySnapshot: invoke('history:snapshot'),
