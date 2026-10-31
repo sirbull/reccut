@@ -23,6 +23,7 @@ const projects = require('./projects');
 const psd = require('./psd');
 const area = require('./area');
 const packager = require('./packager');
+const { createRecordUI } = require('./recordui');
 const { InputTracker, ZOOM_KEYS } = require('./input');
 
 const isMac = process.platform === 'darwin';
@@ -216,28 +217,44 @@ ipcMain.handle('menu:set', (_e, items) => {
 async function listScreens() {
   const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 320, height: 180 } });
   const displays = screen.getAllDisplays();
-  return sources.map((source, i) => {
+  const list = sources.map((source, i) => {
     const display = displays.find((d) => String(d.id) === source.display_id) || displays[i] || screen.getPrimaryDisplay();
     return {
       id: source.id,
+      kind: 'screen',
       displayId: display.id,
       name: sources.length > 1 ? `Display ${i + 1}` : 'Main Display',
       width: Math.round(display.size.width * display.scaleFactor),
       height: Math.round(display.size.height * display.scaleFactor),
     };
   });
+  // Enkeltvinduer fra andre programmer. Reccut sine egne vinduer tas ikke med.
+  try {
+    const own = new Set(BrowserWindow.getAllWindows().map((w) => w.getMediaSourceId?.()).filter(Boolean));
+    const wins = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 }, fetchWindowIcons: false });
+    for (const w of wins) {
+      if (own.has(w.id) || !w.name || /^Reccut$/.test(w.name)) continue;
+      list.push({ id: w.id, kind: 'window', displayId: screen.getPrimaryDisplay().id, name: w.name.length > 60 ? `${w.name.slice(0, 57)}...` : w.name });
+    }
+  } catch (err) {
+    console.warn('Kunne ikke hente vinduer', err.message);
+  }
+  return list;
 }
 
 function registerShortcuts() {
   globalShortcut.unregisterAll();
-  if (!shortcutModifier || !shortcutsActive) return [];
+  if (!shortcutModifier) return [];
   const failed = [];
   const reg = (key, fn) => {
     const acc = `${shortcutModifier}+${key}`;
     if (!globalShortcut.register(acc, fn)) failed.push(acc);
   };
-  for (let n = 1; n <= 6; n++) reg(String(n), () => send('shortcut', { layout: n }));
+  // Start, stopp og pause virker alltid, også når et annet program er foran og Reccut står i Edit.
   reg('0', () => send('shortcut', { toggleRecord: true }));
+  reg('8', () => send('shortcut', { togglePause: true }));
+  if (!shortcutsActive) return failed;
+  for (let n = 1; n <= 6; n++) reg(String(n), () => send('shortcut', { layout: n }));
   // Uten tastaturlytter blir forstørring av pekeren en av/på-snarvei.
   if (!input.started) reg('9', () => input.toggleZoom());
   return failed;
@@ -258,6 +275,17 @@ ipcMain.handle('screens:area', (_e, rect) => {
 });
 ipcMain.handle('area:select', (_e, { displayId, current }) => area.selectArea({ displayId, current, mainWindow: win }));
 ipcMain.handle('area:frame', (_e, state) => area.setFrame(state));
+// Status for opptaket: ikonet i menylinjen og kontrollinjen oppdateres.
+const recordUI = createRecordUI({ send: (ch, payload) => send(ch, payload), getMainWindow: () => win, modifierLabel: () => (shortcutModifier || 'Control+Alt').replace('Command', 'Cmd') });
+ipcMain.handle('rec:state', (_e, s) => recordUI.setState(s));
+ipcMain.handle('rec:showControls', (_e, v) => recordUI.setShowControls(Boolean(v)));
+ipcMain.on('control:cmd', (_e, cmd) => recordUI.command(cmd));
+ipcMain.handle('window:minimize', () => win?.minimize());
+ipcMain.handle('window:restore', () => {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+});
 ipcMain.handle('shortcuts:set', (_e, modifier) => {
   shortcutModifier = modifier;
   input.setAppShortcuts(modifier);
@@ -318,10 +346,15 @@ function stamp() {
 }
 
 // base er opptaksmappen i det åpne prosjektet.
+// Et merke om at et opptak pågår. Krasjer appen, finnes merket ved neste start, og opptaket
+// kan reddes fra filene som allerede er skrevet til disk.
+const markerFile = () => path.join(app.getPath('userData'), 'recording-in-progress.json');
+
 ipcMain.handle('rec:begin', async (_e, { t0, base }) => {
   const dir = path.join(base || path.join(baseDir(), 'Recordings'), `Recording ${stamp()}`);
   await fs.promises.mkdir(dir, { recursive: true });
   recordingDir = dir;
+  await fs.promises.writeFile(markerFile(), JSON.stringify({ dir, t0 })).catch(() => {});
   input.beginSession(t0);
   input.startPolling();
   return dir;
@@ -352,11 +385,94 @@ ipcMain.handle('rec:close', async (_e, id) => {
 });
 
 // Avslutter opptaket: remukser filene og skriver recording.json.
+// Pauser: hendelser i en pause fjernes, og tiden etter flyttes tilbake med lengden på pausene.
+function removePauses(out, pauses) {
+  if (!pauses?.length) return out;
+  const ps = pauses.filter((p) => p[1] > p[0]).sort((a, b) => a[0] - b[0]);
+  const shift = (t) => {
+    let d = 0;
+    for (const [a, b] of ps) {
+      if (t >= b) d += b - a;
+      else if (t > a) return { t: a - d, inside: true };
+    }
+    return { t: Math.round((t - d) * 1000) / 1000, inside: false };
+  };
+  const points = (list) => (list || []).map((e) => [shift(e[0]), ...e.slice(1)]).filter(([s]) => !s.inside).map(([s, ...rest]) => [s.t, ...rest]);
+  out.cursor = points(out.cursor);
+  out.clicks = points(out.clicks);
+  out.keys = points(out.keys);
+  out.layouts = (out.layouts || []).map(([t, v]) => [shift(t).t, v]);
+  out.zooms = (out.zooms || []).map(([a, b]) => [shift(a).t, shift(b).t]).filter(([a, b]) => b > a);
+  delete out.pauses;
+  return out;
+}
+
+// Mellomlagring under opptak (hvert femte sekund): oppsett og hendelser så langt.
+ipcMain.handle('rec:checkpoint', async (_e, meta) => {
+  if (!recordingDir) return;
+  const events = input.session ? { cursor: input.session.cursor, zooms: input.session.zooms, clicks: input.session.clicks, keys: input.session.keys } : {};
+  await fs.promises.writeFile(path.join(recordingDir, 'recording.partial.json'), JSON.stringify({ ...meta, ...events, savedAt: Date.now() })).catch(() => {});
+});
+
+// Opptak som ikke ble avsluttet (krasj eller strømbrudd).
+ipcMain.handle('rec:recoverList', async () => {
+  try {
+    const m = JSON.parse(await fs.promises.readFile(markerFile(), 'utf8'));
+    if (recordingDir || !fs.existsSync(m.dir)) return [];
+    const files = (await fs.promises.readdir(m.dir)).filter((f) => f.includes('.raw.'));
+    if (!files.length) {
+      await fs.promises.unlink(markerFile()).catch(() => {});
+      return [];
+    }
+    let size = 0;
+    for (const f of files) size += (await fs.promises.stat(path.join(m.dir, f))).size;
+    return [{ dir: m.dir, t0: m.t0, size, name: path.basename(m.dir) }];
+  } catch {
+    return [];
+  }
+});
+
+ipcMain.handle('rec:recover', async (_e, dir) => {
+  let partial = {};
+  try {
+    partial = JSON.parse(await fs.promises.readFile(path.join(dir, 'recording.partial.json'), 'utf8'));
+  } catch {}
+  const out = { version: 1, createdAt: new Date(partial.t0 || Date.now()).toISOString(), recovered: true, fps: 30, layouts: [[0, 6]], cursor: [], zooms: [], clicks: [], keys: [], ...partial };
+  delete out.savedAt;
+  // Zoom som var på da det stoppet, avsluttes ved siste kjente tid.
+  const end = Math.max(0, ...(out.cursor || []).map((c) => c[0]), ...(out.keys || []).map((k) => k[0]));
+  out.zooms = (out.zooms || []).map(([a, b]) => [a, b ?? end]);
+  for (const f of await fs.promises.readdir(dir)) {
+    const m = f.match(/^(screen|camera)\.raw\.(\w+)$/);
+    if (!m) continue;
+    const key = m[1];
+    const final = path.join(dir, partial[key]?.file || `${key}.${m[2]}`);
+    try {
+      await ff.remux(path.join(dir, f), final);
+      await fs.promises.unlink(path.join(dir, f)).catch(() => {});
+    } catch {
+      await fs.promises.rename(path.join(dir, f), final);
+    }
+    out[key] = { ...(partial[key] || {}), file: path.basename(final), offset: partial[key]?.offset || 0, hasVideo: partial[key]?.hasVideo ?? true, hasAudio: partial[key]?.hasAudio ?? true };
+    delete out[key].raw;
+  }
+  removePauses(out, out.pauses);
+  await fs.promises.writeFile(path.join(dir, 'recording.json'), JSON.stringify(out, null, 1));
+  await fs.promises.unlink(path.join(dir, 'recording.partial.json')).catch(() => {});
+  await fs.promises.unlink(markerFile()).catch(() => {});
+  return dir;
+});
+
+ipcMain.handle('rec:discard', async (_e, dir) => {
+  await fs.promises.unlink(markerFile()).catch(() => {});
+  if (dir) await shell.trashItem(dir).catch(() => {});
+});
+
 ipcMain.handle('rec:finish', async (_e, meta) => {
   const dir = recordingDir;
   recordingDir = null;
   const events = input.endSession() || { cursor: [], zooms: [], clicks: [], keys: [] };
-  const out = { version: 1, createdAt: new Date().toISOString(), ...meta, ...events };
+  const out = removePauses({ version: 1, createdAt: new Date().toISOString(), ...meta, ...events }, meta.pauses);
   for (const key of ['screen', 'camera']) {
     const s = meta[key];
     if (!s) continue;
@@ -372,6 +488,8 @@ ipcMain.handle('rec:finish', async (_e, meta) => {
     delete out[key].raw;
   }
   await fs.promises.writeFile(path.join(dir, 'recording.json'), JSON.stringify(out, null, 1));
+  await fs.promises.unlink(path.join(dir, 'recording.partial.json')).catch(() => {});
+  await fs.promises.unlink(markerFile()).catch(() => {});
   return dir;
 });
 
@@ -728,7 +846,7 @@ app.whenReady().then(() => {
   session.defaultSession.setDisplayMediaRequestHandler(
     async (_request, callback) => {
       try {
-        const sources = await desktopCapturer.getSources({ types: ['screen'] });
+        const sources = await desktopCapturer.getSources({ types: String(selectedScreenId).startsWith('window:') ? ['window'] : ['screen'] });
         const source = sources.find((s) => s.id === selectedScreenId) || sources[0];
         if (!source) return callback({});
         const audio = wantSystemAudio && process.platform !== 'linux' ? 'loopback' : undefined;
@@ -743,6 +861,7 @@ app.whenReady().then(() => {
   buildMenu();
   if (input.permission(false) === 'granted') input.start();
   createWindow();
+  recordUI.init();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -751,6 +870,7 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
   area.closeFrame();
+  recordUI.destroy();
   globalShortcut.unregisterAll();
   input.stop();
   jobs.destroyWorkers();

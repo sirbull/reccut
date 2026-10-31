@@ -19,6 +19,9 @@ export const finishing = signal(false);
 // Opptaksområde: redigeres i forhåndsvisningen (hele skjermen vises da), og nedtelling før start.
 export const editingArea = signal(false);
 export const countdown = signal(0);
+export const paused = signal(false);
+// Mikrofonen: 'none', 'silent', 'quiet', 'good' eller 'loud' (overstyrt), ut fra de siste sekundene.
+export const micStatus = signal('none');
 let roomActive = false;
 
 let screenStream = null;
@@ -50,9 +53,14 @@ const stop = (s) => s?.getTracks().forEach((t) => t.stop());
 const ready = (v) => v.readyState >= 2 && v.videoWidth > 0;
 
 // Området som tas opp, i andeler av skjermen, eller null for hele skjermen.
+// Er kilden et enkelt programvindu (ikke en hel skjerm)?
+export function isWindowSource() {
+  return String(settings.value.screenId || '').startsWith('window:');
+}
+
 export function activeArea() {
   const s = settings.value;
-  if (s.areaMode !== 'area' || !s.area || !s.screenId) return null;
+  if (s.areaMode !== 'area' || !s.area || !s.screenId || isWindowSource()) return null;
   const a = s.area;
   const x = clamp(a.x, 0, 0.98);
   const y = clamp(a.y, 0, 0.98);
@@ -269,6 +277,59 @@ export function setLayout(n) {
   if (recording.value) layouts.push([round((Date.now() - t0) / 1000), n]);
 }
 
+/* Pause og fortsett. Pausene lagres med tid, og hendelsene i dem fjernes når opptaket lagres. */
+let pauses = [];
+
+function recordedSeconds() {
+  const now = Date.now();
+  let p = 0;
+  for (const [a, b] of pauses) p += (b ?? now) - a;
+  return (now - t0 - p) / 1000;
+}
+
+export function togglePause() {
+  if (!recording.value) return;
+  const now = Date.now();
+  if (paused.value) {
+    for (const r of recorders) if (r.rec.state === 'paused') r.rec.resume();
+    const last = pauses[pauses.length - 1];
+    if (last && last[1] == null) last[1] = now;
+    paused.value = false;
+  } else {
+    for (const r of recorders) if (r.rec.state === 'recording') r.rec.pause();
+    pauses.push([now, null]);
+    paused.value = true;
+  }
+  sendState();
+}
+
+// Det som er kjent om opptaket så langt (til lagring og redning etter krasj).
+function currentMeta() {
+  const s = settings.value;
+  const meta = {
+    t0,
+    fps: s.fps,
+    layouts,
+    pauses: pauses.map(([a, b]) => [round((a - t0) / 1000), round(((b ?? Date.now()) - t0) / 1000)]),
+    ...(activeArea() ? { area: activeArea() } : {}),
+    ...(isWindowSource() ? { source: 'window' } : {}),
+    pip: { size: s.pipSize, shape: s.pipShape, mirror: s.mirror },
+    // Pekerzoom og klikk følger skjermen, så de er av når bare et vindu tas opp.
+    overlays: { keys: s.showKeys, cursorZoom: s.cursorZoom && !isWindowSource(), clicks: s.showClicks && !isWindowSource() },
+  };
+  for (const r of recorders) {
+    const isCam = r.name === 'camera';
+    meta[r.name] = {
+      raw: r.raw,
+      file: r.file,
+      offset: round(Math.max(0, (r.startedAt || t0) - t0) / 1000),
+      hasVideo: isCam ? Boolean(cameraStream) : true,
+      hasAudio: r.rec.stream.getAudioTracks().length > 0,
+    };
+  }
+  return meta;
+}
+
 function effectiveLayout() {
   const hasScreen = ready(screenVideo);
   const hasCamera = ready(cameraVideo);
@@ -353,17 +414,44 @@ function draw() {
 const ticker = new Worker(
   URL.createObjectURL(new Blob(['let id;onmessage=(e)=>{clearInterval(id);if(e.data>0)id=setInterval(()=>postMessage(0),1000/e.data)}'], { type: 'text/javascript' }))
 );
+// Toppnivåene de siste tre sekundene, for å si om mikrofonen er stille, svak, god eller overstyrt.
+const peaks = [];
+let lastState = 0;
+let lastCheckpoint = 0;
 ticker.onmessage = () => {
   draw();
+  const now = performance.now();
   if (micSource) {
     const data = new Float32Array(analyser.fftSize);
     analyser.getFloatTimeDomainData(data);
     let peak = 0;
     for (const v of data) peak = Math.max(peak, Math.abs(v));
     level.value = clamp((20 * Math.log10(peak || 1e-6) + 60) / 60, 0, 1);
-  } else level.value = 0;
-  if (recording.value) elapsed.value = (Date.now() - t0) / 1000;
+    peaks.push([now, peak]);
+    while (peaks.length && now - peaks[0][0] > 3000) peaks.shift();
+    const max = Math.max(...peaks.map((x) => x[1]));
+    const db = 20 * Math.log10(max || 1e-9);
+    micStatus.value = db < -60 ? 'silent' : db < -32 ? 'quiet' : db > -0.5 ? 'loud' : 'good';
+  } else {
+    level.value = 0;
+    micStatus.value = 'none';
+  }
+  if (recording.value) elapsed.value = recordedSeconds();
+  // Status til ikonet i menylinjen og kontrollinjen, fire ganger i sekundet.
+  if ((recording.value || countdown.value) && now - lastState > 250) {
+    lastState = now;
+    sendState();
+  }
+  // Mellomlagring for redning etter krasj, hvert femte sekund.
+  if (recording.value && now - lastCheckpoint > 5000) {
+    lastCheckpoint = now;
+    api.recCheckpoint(currentMeta());
+  }
 };
+
+function sendState() {
+  api.recState({ state: recording.value ? (paused.value ? 'paused' : 'recording') : countdown.value ? 'countdown' : 'idle', elapsed: elapsed.value, level: level.value, countdown: countdown.value });
+}
 export function setActive(active) {
   roomActive = active;
   syncFrame();
@@ -390,17 +478,19 @@ let t0 = 0;
 let layouts = [];
 let recorders = [];
 
+// Opptaket skrives som WebM, som lagres fortløpende til disk (MP4 fra nettleseren skrives først
+// helt når opptaket stoppes, og ville gått tapt ved et krasj). H.264 i WebM pakkes om til MP4
+// uten ny koding når opptaket er ferdig. Gir [mimeType, endelse under opptak, endelig endelse].
 function pickMime(kind) {
   const list =
     kind === 'audio'
-      ? [['audio/webm;codecs=opus', 'webm'], ['audio/mp4;codecs=opus', 'mp4']]
+      ? [['audio/webm;codecs=opus', 'webm', 'webm'], ['audio/mp4;codecs=opus', 'mp4', 'mp4']]
       : [
-          ['video/mp4;codecs=avc1.640033,mp4a.40.2', 'mp4'],
-          ['video/mp4;codecs=avc1,mp4a.40.2', 'mp4'],
-          ['video/mp4;codecs=avc1,opus', 'mp4'],
-          ['video/webm;codecs=h264,opus', 'webm'],
-          ['video/webm;codecs=vp9,opus', 'webm'],
-          ['video/webm', 'webm'],
+          ['video/webm;codecs=h264,opus', 'webm', 'mp4'],
+          ['video/webm;codecs=avc1,opus', 'webm', 'mp4'],
+          ['video/webm;codecs=vp9,opus', 'webm', 'webm'],
+          ['video/mp4;codecs=avc1,mp4a.40.2', 'mp4', 'mp4'],
+          ['video/webm', 'webm', 'webm'],
         ];
   return list.find(([m]) => MediaRecorder.isTypeSupported(m)) || list[list.length - 1];
 }
@@ -456,11 +546,11 @@ function croppedTrack(track, area, fps) {
 }
 
 async function startRecorder(name, tracks, kind, bitrate) {
-  const [mime, ext] = pickMime(kind);
+  const [mime, ext, finalExt] = pickMime(kind);
   const raw = `${name}.raw.${ext}`;
   const fileId = await api.recOpen(raw);
   const rec = new MediaRecorder(new MediaStream(tracks), { mimeType: mime, videoBitsPerSecond: bitrate, audioBitsPerSecond: 192000 });
-  const entry = { name, raw, file: `${name}.${ext}`, rec, fileId, chain: Promise.resolve(), startedAt: 0 };
+  const entry = { name, raw, file: `${name}.${finalExt}`, rec, fileId, chain: Promise.resolve(), startedAt: 0 };
   rec.ondataavailable = (e) => {
     if (!e.data.size) return;
     entry.chain = entry.chain.then(async () => api.recWrite(fileId, new Uint8Array(await e.data.arrayBuffer())));
@@ -478,7 +568,15 @@ export function cancelCountdown() {
   countdownTimer = null;
   countdown.value = 0;
   syncFrame();
+  sendState();
+  if (minimized) {
+    minimized = false;
+    api.restoreWindow();
+  }
 }
+
+// Vinduet legges bort under opptak av skjermen, og kommer tilbake når opptaket er lagret.
+let minimized = false;
 
 export async function startRecording() {
   if (recording.value || finishing.value || countdown.value) return;
@@ -489,14 +587,22 @@ export async function startRecording() {
   }
   editingArea.value = false;
   updateSize();
-  // Nedtelling: tallene vises i forhåndsvisningen og midt i området på skjermen.
+  // Mikrofonen er helt stille: si fra, men ta opp likevel.
+  if (micStream && micStatus.value === 'silent') notice.value = { text: 'The microphone seems to be silent. Check that it is switched on and not muted. Recording anyway.' };
+  if (screenStream && s.minimizeOnRecord) {
+    minimized = true;
+    api.minimizeWindow();
+  }
+  // Nedtelling: tallene vises i kontrollinjen, i forhåndsvisningen og midt i området på skjermen.
   if (s.countdown > 0) {
     countdown.value = s.countdown;
     syncFrame();
+    sendState();
     const go = await new Promise((resolve) => {
       countdownTimer = setInterval(() => {
         countdown.value -= 1;
         syncFrame();
+        sendState();
         if (countdown.value <= 0) {
           clearInterval(countdownTimer);
           countdownTimer = null;
@@ -519,6 +625,8 @@ export function abortCountdown() {
 async function beginRecording() {
   const s = settings.value;
   t0 = Date.now();
+  pauses = [];
+  paused.value = false;
   layouts = [[0, effectiveLayout()]];
   // Opptaket lagres i opptaksmappen til det åpne prosjektet.
   await api.recBegin({ t0, base: projectFolders.value?.recordings || null });
@@ -537,14 +645,25 @@ async function beginRecording() {
   }
   recording.value = true;
   elapsed.value = 0;
-  setActive(true);
+  setActive(roomActive);
+  ticker.postMessage(30);
+  api.setPolling(true);
   syncFrame();
+  sendState();
+  api.recCheckpoint(currentMeta());
 }
 
 export async function stopRecording() {
   if (!recording.value) return null;
+  if (paused.value) {
+    const last = pauses[pauses.length - 1];
+    if (last && last[1] == null) last[1] = Date.now();
+  }
+  const meta = currentMeta();
   recording.value = false;
+  paused.value = false;
   finishing.value = true;
+  sendState();
   try {
     for (const r of recorders) if (r.rec.state !== 'inactive') r.rec.stop();
     await Promise.all(recorders.map((r) => r.stopped));
@@ -555,24 +674,45 @@ export async function stopRecording() {
       await r.chain;
       await api.recClose(r.fileId);
     }
-    const s = settings.value;
-    const meta = { fps: s.fps, layouts, ...(activeArea() ? { area: activeArea() } : {}), pip: { size: s.pipSize, shape: s.pipShape, mirror: s.mirror }, overlays: { keys: s.showKeys, cursorZoom: s.cursorZoom, clicks: s.showClicks } };
-    for (const r of recorders) {
-      const isCam = r.name === 'camera';
-      meta[r.name] = {
-        raw: r.raw,
-        file: r.file,
-        offset: round(Math.max(0, (r.startedAt || t0) - t0) / 1000),
-        hasVideo: isCam ? Boolean(cameraStream) : true,
-        hasAudio: r.rec.stream.getAudioTracks().length > 0,
-      };
-    }
+    delete meta.t0;
     const dir = await api.recFinish(meta);
     return dir;
   } finally {
     finishing.value = false;
     recorders = [];
+    setActive(roomActive);
+    if (minimized) {
+      minimized = false;
+      api.restoreWindow();
+    }
   }
+}
+
+/* Test av mikrofonen: fire sekunder opptak som spilles av med en gang. */
+export const micTest = signal(null); // 'recording' | 'playing' | null
+export async function testMic() {
+  if (!micStream || micTest.value) return;
+  const [mime] = pickMime('audio');
+  const rec = new MediaRecorder(new MediaStream(micStream.getAudioTracks()), { mimeType: mime });
+  const chunks = [];
+  rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  const stopped = new Promise((r) => (rec.onstop = r));
+  micTest.value = 'recording';
+  rec.start();
+  await new Promise((r) => setTimeout(r, 4000));
+  rec.stop();
+  await stopped;
+  micTest.value = 'playing';
+  const url = URL.createObjectURL(new Blob(chunks, { type: mime }));
+  const a = new Audio(url);
+  await new Promise((resolve) => {
+    a.onended = resolve;
+    a.onerror = resolve;
+    a.play().catch(resolve);
+    setTimeout(resolve, 6000);
+  });
+  URL.revokeObjectURL(url);
+  micTest.value = null;
 }
 
 function round(v) {

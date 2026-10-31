@@ -53,6 +53,7 @@ export function Recorder({ active }) {
   }, [active, engine.recording.value]);
 
   useEffect(() => {
+    api.recShowControls(s.showControls);
     api.inputStatus().then(setInput);
     api.hideFromCapture(s.hideFromCapture);
     api.setZoomKey(s.zoomKey);
@@ -108,11 +109,19 @@ export function Recorder({ active }) {
             <Select
               value={s.screenId}
               disabled={recording}
-              options={[{ value: '', label: 'No screen' }, ...engine.screens.value.map((x) => ({ value: x.id, label: `${x.name} (${x.width} × ${x.height})` }))]}
+              options={[
+                { value: '', label: 'No screen' },
+                ...engine.screens.value.filter((x) => x.kind !== 'window').map((x) => ({ value: x.id, label: `${x.name} (${x.width} × ${x.height})` })),
+                ...engine.screens.value.filter((x) => x.kind === 'window').map((x) => ({ value: x.id, label: `Window: ${x.name}` })),
+              ]}
               onChange={(v) => set({ screenId: v }, engine.useScreen)}
             />
+            <button class="link-btn" disabled={recording} onClick={() => engine.refreshScreens()} title="Look for new windows">
+              Refresh list of windows
+            </button>
+            {engine.isWindowSource() && <p class="hint">Only this window is recorded, even if other windows cover it or it is moved. Cursor zoom and click highlights follow the whole screen, so they are off for window recordings.</p>}
           </Row>
-          {s.screenId && (
+          {s.screenId && !engine.isWindowSource() && (
             <Row label={<><Crop size={14} /> Record</>} stacked>
               <Segmented
                 value={s.areaMode === 'area' && s.area ? 'area' : 'full'}
@@ -154,6 +163,24 @@ export function Recorder({ active }) {
             <div class="meter">
               <div style={{ width: `${engine.level.value * 100}%` }} />
             </div>
+            {s.micId && (
+              <div class={`mic-status ${engine.micStatus.value}`}>
+                <span>
+                  {
+                    {
+                      none: 'Waiting for the microphone',
+                      silent: 'No sound. Check that the microphone is on and not muted.',
+                      quiet: 'Very quiet. Move closer or turn up the input level.',
+                      good: 'Good level',
+                      loud: 'Too loud, it distorts. Turn the input level down.',
+                    }[engine.micStatus.value]
+                  }
+                </span>
+                <button class="link-btn" disabled={recording || Boolean(engine.micTest.value)} onClick={engine.testMic}>
+                  {engine.micTest.value === 'recording' ? 'Speak now…' : engine.micTest.value === 'playing' ? 'Playing back…' : 'Test'}
+                </button>
+              </div>
+            )}
           </Row>
           <Row label={<><Volume2 size={14} /> System audio</>}>
             <Toggle checked={s.systemAudio} disabled={recording || !s.screenId} onChange={(v) => set({ systemAudio: v }, engine.useScreen)} />
@@ -235,6 +262,21 @@ export function Recorder({ active }) {
         </Section>
 
         <Section title="Recording">
+          <Row label="Hide Reccut while recording">
+            <Toggle checked={s.minimizeOnRecord} onChange={(v) => set({ minimizeOnRecord: v })} />
+          </Row>
+          <Row label="Show recording controls">
+            <Toggle
+              checked={s.showControls}
+              onChange={(v) => {
+                set({ showControls: v });
+                api.recShowControls(v);
+              }}
+            />
+          </Row>
+          <p class="hint">
+            While you record, a small bar with time, pause and stop floats over your other apps{isMac ? ', and the time is shown in the menu bar' : ', and the Reccut icon in the taskbar tray turns red'}. The bar is hidden from the recording{api.platform === 'linux' ? ' on macOS and Windows' : ''}.
+          </p>
           <Row label={<><Timer size={14} /> Countdown</>}>
             <Segmented
               value={s.countdown}
@@ -276,7 +318,7 @@ export function Recorder({ active }) {
             <Select value={s.modifier} options={MODIFIERS} onChange={(v) => set({ modifier: v })} />
           </Row>
           <p class="hint">
-            {mod.short}1 camera, {mod.short}2 screen, {mod.short}3 to {mod.short}6 corners. {mod.short}0 starts and stops recording.
+            <b>{mod.short}0</b> starts and stops recording from any app, also when Reccut is in the background. <b>{mod.short}8</b> pauses and resumes. While recording, {mod.short}1 camera, {mod.short}2 screen and {mod.short}3 to {mod.short}6 corners.
             {failed.length > 0 && <span class="warn"> Used by another app: {failed.join(', ')}.</span>}
             {isMac && s.modifier === 'Command+Shift' && <span class="warn"> Cmd + Shift + 3, 4 and 5 are used by macOS for screenshots.</span>}
             {!isMac && s.modifier === 'Control+Alt' && <span class="warn"> Ctrl + Alt is the same as AltGr on many European keyboards.</span>}

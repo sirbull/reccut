@@ -22,7 +22,7 @@ import * as engine from './recorder/engine.js';
 import { modifierInfo, settings } from './recorder/settings.js';
 import { Editor } from './editor/Editor.jsx';
 import { byId, commandForEvent, menuTemplate, runCommand } from './registry.js';
-import { effect } from '@preact/signals';
+import { effect, signal } from '@preact/signals';
 import {
   canRedo,
   canUndo,
@@ -41,7 +41,7 @@ import * as commands from './editor/commands.js';
 import { startExport } from './editor/ExportDialog.jsx';
 import { ExportRoom } from './export/ExportRoom.jsx';
 import { formatDuration } from '../shared/model.js';
-import { IconButton, Toasts, toast } from './ui.jsx';
+import { Button, IconButton, Modal, Toasts, toast } from './ui.jsx';
 import { NewProjectDialog, PackageDialog, ProjectsDialog, SaveAsDialog } from './ProjectDialogs.jsx';
 import { CommandPalette, HelpCenter } from './help/Help.jsx';
 import { SettingsWindow } from './Settings.jsx';
@@ -183,7 +183,12 @@ function TitleBar() {
         <div class="actions" />
       ) : (
         <div class="actions">
-          {rec && <span class="rec-timer">{formatDuration(engine.elapsed.value)}</span>}
+          {rec && <span class={`rec-timer${engine.paused.value ? ' paused' : ''}`}>{engine.paused.value ? 'Paused ' : ''}{formatDuration(engine.elapsed.value)}</span>}
+          {rec && (
+            <button class="btn secondary" onClick={engine.togglePause} title={`${engine.paused.value ? 'Resume' : 'Pause'} (${mod.short}8)`}>
+              {engine.paused.value ? 'Resume' : 'Pause'}
+            </button>
+          )}
           <button class={`record-btn${rec ? ' active' : ''}`} disabled={engine.finishing.value} onClick={toggleRecording}>
             <span class="rec-icon" />
             {engine.finishing.value ? 'Saving' : rec ? 'Stop' : engine.countdown.value ? `Starting in ${engine.countdown.value}` : 'Start Recording'}
@@ -278,10 +283,11 @@ function App() {
   const r = room.value;
   useEffect(() => {
     engine.initSources();
-    loadInitialProject();
+    loadInitialProject().then(checkRecovery);
     const offShortcut = api.onShortcut((a) => {
       if (a.layout) engine.setLayout(a.layout);
       if (a.toggleRecord) toggleRecording();
+      if (a.togglePause) engine.togglePause();
     });
     const offMenu = api.onMenu(handleMenu);
     window.addEventListener('keydown', onKeyDown);
@@ -316,8 +322,62 @@ function App() {
       {commands.prefsOpen.value && <SettingsWindow />}
       {helpOpen.value && <HelpCenter />}
       {paletteOpen.value && <CommandPalette />}
+      {recoverList.value.length > 0 && <RecoverDialog />}
       <Toasts />
     </div>
+  );
+}
+
+/* Opptak som ble avbrutt av et krasj eller strømbrudd, reddes ved neste start. */
+const recoverList = signal([]);
+async function checkRecovery() {
+  try {
+    recoverList.value = (await api.recRecoverList()) || [];
+  } catch {}
+}
+
+function RecoverDialog() {
+  const it = recoverList.value[0];
+  const [busy, setBusy] = useState(false);
+  const done = () => (recoverList.value = recoverList.value.slice(1));
+  const recover = async () => {
+    setBusy(true);
+    try {
+      const dir = await api.recRecover(it.dir);
+      await addRecordingToProject(dir);
+      toast(`The recording was recovered and added to ${project.value.name}.`, { kind: 'success', timeout: 8000 });
+    } catch (err) {
+      toast(`Could not recover the recording: ${err.message}`, { kind: 'error' });
+    }
+    setBusy(false);
+    done();
+  };
+  return (
+    <Modal
+      title="Recover Recording"
+      width={480}
+      onClose={null}
+      footer={
+        <>
+          <Button
+            onClick={async () => {
+              if (!confirm('Move the unfinished recording to the Trash?')) return;
+              await api.recDiscard(it.dir);
+              done();
+            }}
+          >
+            Discard
+          </Button>
+          <Button variant="primary" disabled={busy} onClick={recover}>
+            {busy ? 'Recovering…' : 'Recover'}
+          </Button>
+        </>
+      }
+    >
+      <p class="lead">
+        Reccut was closed while recording ({it.name}, {(it.size / 1e6).toFixed(1)} MB saved). The part that was recorded is on disk and can be recovered, with layouts, keystrokes and cursor movements up to the last few seconds.
+      </p>
+    </Modal>
   );
 }
 

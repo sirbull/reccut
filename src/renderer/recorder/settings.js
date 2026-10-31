@@ -35,6 +35,9 @@ const DEFAULTS = {
   areaMode: 'full',
   area: null,
   countdown: 3,
+  // Reccut legges bort mens skjermen tas opp, og kontrollinjen vises over andre programmer.
+  minimizeOnRecord: true,
+  showControls: true,
 };
 
 function load() {
