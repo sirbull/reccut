@@ -4221,3 +4221,15 @@ kbd.keycap {
 .history-row .muted {
   color: var(--text-3);
 }
+
+.pkg-handles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 26px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.pkg-handles input {
+  width: 60px;
+}

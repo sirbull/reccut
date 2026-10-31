@@ -4,7 +4,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { FilePlus2, FolderOpen, FolderSearch, MoreHorizontal } from 'lucide-preact';
 import { PROJECT_TEMPLATES, formatDuration } from '../shared/model.js';
 import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, restoreProject, saveNow, saveProjectAs } from './editor/store.js';
-import { mediaFiles, reduceProject } from '../shared/package.js';
+import { mediaFiles, reduceProject, trimProject } from '../shared/package.js';
 import * as commands from './editor/commands.js';
 import { Button, IconButton, Modal, Row, toast } from './ui.jsx';
 
@@ -275,7 +275,7 @@ export function PackageDialog() {
       return {};
     }
   })();
-  const [opts, setOpts] = useState({ removeUnused: true, removeDisabled: true, removeOffAudio: true, removeHidden: false, includeOptimized: false, ...saved });
+  const [opts, setOpts] = useState({ removeUnused: true, removeDisabled: true, removeOffAudio: true, removeHidden: false, includeOptimized: false, trim: false, handles: 2, ...saved });
   const [name, setName] = useState(`${project.value.name} (Archive)`);
   const [dest, setDest] = useState(localStorage.getItem('packageDest') || '');
   const [sizes, setSizes] = useState(null);
@@ -283,9 +283,15 @@ export function PackageDialog() {
   useEffect(() => {
     if (!dest) api.baseDir().then(setDest);
   }, []);
-  const { project: reduced, removed } = reduceProject(project.value, opts);
+  const reducedResult = reduceProject(project.value, opts);
+  const trimResult = opts.trim ? trimProject(reducedResult.project, { handles: Number(opts.handles) || 0 }) : null;
+  const reduced = trimResult ? trimResult.project : reducedResult.project;
+  const removed = { ...reducedResult.removed, trimmed: trimResult?.trimmed || [] };
   const files = mediaFiles(reduced, opts);
-  const paths = files.flatMap((f) => (f.dir ? [f.dir] : f.sources.map((s) => s.path)));
+  const paths = [...new Set(files.flatMap((f) => (f.dir ? [f.dir] : f.sources.map((s) => s.path))))];
+  // Kuttede deler tar omtrent sin andel av filen.
+  const share = new Map();
+  for (const f of files) for (const s of f.sources || []) if (s.trim) share.set(s.path, (share.get(s.path) || 0) + (s.trim.to - s.trim.from) / Math.max(0.1, s.trim.total || s.trim.to));
   const key = paths.join('|');
   useEffect(() => {
     let alive = true;
@@ -293,7 +299,7 @@ export function PackageDialog() {
     api.packageSizes(paths).then((s) => alive && setSizes(s));
     return () => (alive = false);
   }, [key]);
-  const total = sizes ? Object.values(sizes).reduce((a, b) => a + Math.max(0, b), 0) : null;
+  const total = sizes ? Object.entries(sizes).reduce((a, [k, b]) => a + Math.max(0, b) * Math.min(1, share.get(k) ?? 1), 0) : null;
   const missing = sizes ? Object.entries(sizes).filter(([, v]) => v < 0).map(([k]) => k) : [];
   const set = (patch) => {
     const n = { ...opts, ...patch };
@@ -353,6 +359,14 @@ export function PackageDialog() {
         {check('removeDisabled', 'Remove disabled clips', 'Clips that are switched off are removed. In the storyline they become gaps, so nothing moves.')}
         {check('removeOffAudio', 'Remove switched off audio', 'Synced audio that is switched off in every clip is left out.')}
         {check('removeHidden', 'Remove clips on hidden tracks', 'Clips on tracks you have hidden are removed.')}
+        {check('trim', 'Trim media to the parts that are used', 'Only the parts of each file that are used on the timeline are kept, with extra time on each side. Saves a lot of space for long recordings. The parts are re-encoded in high quality: H.264 (HEVC for 10-bit), ProRes 4444 for transparency and lossless FLAC for audio files.')}
+        {opts.trim && (
+          <label class="pkg-handles">
+            Extra time on each side
+            <input type="number" min="0" max="30" step="0.5" value={opts.handles} onInput={(e) => set({ handles: Math.max(0, Number(e.currentTarget.value) || 0) })} />
+            seconds
+          </label>
+        )}
         {check('includeOptimized', 'Include optimized media', 'Larger, but the project is smooth to edit right away. Otherwise it can be optimized again later.')}
       </div>
       <div class="pkg-summary">
@@ -361,6 +375,7 @@ export function PackageDialog() {
         </div>
         <div class="muted">
           Removed: {removed.media.length} unused media, {removed.clips.length} clips, {removed.streams.length} audio tracks
+          {opts.trim && `. Trimmed: ${removed.trimmed.length} file${removed.trimmed.length === 1 ? '' : 's'}${removed.trimmed.length ? `, ${Math.round(removed.trimmed.reduce((a, t) => a + t.saved, 0) / 60)} min left out` : ''}`}
         </div>
         {missing.length > 0 && <div class="warn">{missing.length} file{missing.length > 1 ? 's are' : ' is'} missing and cannot be copied. They are listed in the report.</div>}
       </div>

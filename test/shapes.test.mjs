@@ -71,3 +71,38 @@ test('pakking fjerner det som er slått av og ikke brukt, uten å flytte rediger
   const files = mediaFiles(project);
   assert.deepEqual(files[0].sources.map((s) => s.path), ['/f/a.mp4']);
 });
+
+import { trimProject, usedRanges } from '../src/shared/package.js';
+
+test('kutting deler opp media i brukte deler og flytter klippene', () => {
+  const p = newProject('Kutt');
+  p.media.v = { id: 'v', name: 'lang.mp4', kind: 'video', path: '/f/lang.mp4', duration: 600, streams: { main: { path: '/f/lang.mp4', hasVideo: true, hasAudio: true, duration: 600 }, ext: { path: '/f/ekstern.wav', hasAudio: true, offset: 5, duration: 600, syncedFrom: 'x' } } };
+  const a = makeClip('video', { media: p.media.v, start: 0, in: 100, dur: 10 });
+  const b = makeClip('video', { media: p.media.v, start: 10, in: 400, dur: 5 });
+  a.kf.opacity = [[102, 1], [108, 0]];
+  for (const c of [a, b]) p.clips[c.id] = c;
+  p.primary = [a.id, b.id];
+  const r = usedRanges(p, 2);
+  assert.deepEqual(r.v, [[98, 112], [398, 407]]);
+  const { project, trimmed } = trimProject(p, { handles: 2 });
+  assert.equal(trimmed[0].parts, 2);
+  assert.ok(!project.media.v);
+  const pa = project.media[project.clips[a.id].mediaId];
+  const pb = project.media[project.clips[b.id].mediaId];
+  assert.equal(pa.duration, 14);
+  assert.equal(project.clips[a.id].in, 2);
+  assert.equal(project.clips[b.id].in, 2);
+  assert.deepEqual(project.clips[a.id].kf.opacity.map((k) => k[0]), [4, 10]);
+  assert.deepEqual(pa.streams.main.trim, { source: '/f/lang.mp4', from: 98, to: 112, total: 600 });
+  // Den eksterne lyden starter 5 s inn i mediet, så den kuttes fra 93 s i sin egen fil.
+  assert.equal(pa.streams.ext.trim.from, 93);
+  assert.equal(pa.streams.ext.offset, 5 + 93 - 98);
+  assert.equal(pb.trimmedFrom.start, 398);
+  // Kort fil som nesten brukes hel, kuttes ikke.
+  const q = newProject('Hel');
+  q.media.s = { id: 's', name: 'kort.mp4', kind: 'video', path: '/f/kort.mp4', duration: 12, streams: { main: { path: '/f/kort.mp4', hasVideo: true, duration: 12 } } };
+  const c = makeClip('video', { media: q.media.s, start: 0, in: 1, dur: 9 });
+  q.clips[c.id] = c;
+  q.primary = [c.id];
+  assert.equal(trimProject(q).trimmed.length, 0);
+});
