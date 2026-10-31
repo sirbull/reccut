@@ -13,6 +13,7 @@ import {
   MousePointer2,
   RectangleHorizontal,
   Square,
+  SlidersHorizontal,
   Volume2,
 } from 'lucide-preact';
 import { Button, Row, Section, Segmented, Select, Toggle } from '../ui.jsx';
@@ -20,6 +21,8 @@ import { MODIFIERS, modifierInfo, saveSettings, settings } from './settings.js';
 import * as engine from './engine.js';
 import { project, projectFolders } from '../editor/store.js';
 import * as editorCommands from '../editor/commands.js';
+import { GainControl, MicrophoneMixer } from './MicrophoneMixer.jsx';
+import { meterDb } from './mixer.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -39,6 +42,7 @@ export function Recorder({ active }) {
   const canvasRef = useRef(null);
   const [input, setInput] = useState(null);
   const [failed, setFailed] = useState([]);
+  const [mixerOpen, setMixerOpen] = useState(false);
   const s = settings.value;
   const mod = modifierInfo();
 
@@ -155,13 +159,16 @@ export function Recorder({ active }) {
           <Row label={<><Mic size={14} /> Microphone</>} stacked>
             <Select
               value={s.micId}
-              disabled={recording}
+              disabled={recording || engine.finishing.value || Boolean(engine.micTest.value)}
               options={[{ value: '', label: 'No microphone' }, ...engine.mics.value.map((m) => ({ value: m.id, label: m.label }))]}
               onChange={(v) => set({ micId: v }, engine.useMic)}
             />
             <div class="meter">
               <div style={{ width: `${engine.level.value * 100}%` }} />
             </div>
+            <div class="mic-inline-level"><span>Output</span><output>{meterDb(engine.micLevels.value.output)}</output></div>
+            <GainControl value={s.micMixer.gain} disabled={!s.micId} onChange={(gain) => engine.setMicMix({ gain })} />
+            <Button class="small mic-open-mixer" icon={SlidersHorizontal} onClick={() => setMixerOpen(true)}>Microphone mixer</Button>
             {s.micId && (
               <div class={`mic-status ${engine.micStatus.value}`}>
                 <span>
@@ -169,13 +176,13 @@ export function Recorder({ active }) {
                     {
                       none: 'Waiting for the microphone',
                       silent: 'No sound. Check that the microphone is on and not muted.',
-                      quiet: 'Very quiet. Move closer or turn up the input level.',
+                      quiet: 'Very quiet. Move closer or increase input gain.',
                       good: 'Good level',
-                      loud: 'Too loud, it distorts. Turn the input level down.',
+                      loud: 'Too loud. Lower gain, or the device input level if the input is clipping.',
                     }[engine.micStatus.value]
                   }
                 </span>
-                <button class="link-btn" disabled={recording || Boolean(engine.micTest.value)} onClick={engine.testMic}>
+                <button class="link-btn" disabled={recording || engine.finishing.value || Boolean(engine.micTest.value)} onClick={engine.testMic}>
                   {engine.micTest.value === 'recording' ? 'Speak now…' : engine.micTest.value === 'playing' ? 'Playing back…' : 'Test'}
                 </button>
               </div>
@@ -329,6 +336,7 @@ export function Recorder({ active }) {
           </p>
         </Section>
       </aside>
+      {mixerOpen && <MicrophoneMixer onClose={() => setMixerOpen(false)} />}
     </div>
   );
 }

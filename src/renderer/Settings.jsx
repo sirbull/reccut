@@ -1,8 +1,9 @@
 // Innstillinger (Cmd ,), bygd som i Final Cut Pro: faner med ikoner øverst, og en kommandoeditor
 // for hurtigtaster. Alle valg lagres med en gang og gjelder hele appen.
+import { ExtensionsPane } from './Extensions.jsx';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { AudioLines, Download, FolderOpen, Keyboard, Play, RotateCcw, Scissors, Search, Settings2, Share, Upload, X } from 'lucide-preact';
-import { prefs, setPrefs } from './prefs.js';
+import { PREVIEW_RESOLUTIONS, prefs, setPrefs } from './prefs.js';
 import { settings as recordingSettings, saveSettings } from './recorder/settings.js';
 import { audioSkimming, skimming, snapping } from './editor/store.js';
 import * as commands from './editor/commands.js';
@@ -32,6 +33,7 @@ const PANES = [
   { id: 'import', label: 'Import', icon: Download },
   { id: 'audio', label: 'Audio', icon: AudioLines },
   { id: 'export', label: 'Export', icon: Share },
+  { id: 'extensions', label: 'AI & Plugins', icon: Settings2 },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard },
 ];
 
@@ -188,17 +190,14 @@ function PlaybackPane() {
       <Section title="Playback" collapsible={false}>
         {toggle('playbackFromSkimmer', 'Start playback at the mouse position')}
         <p class="hint">When skimming the timeline, playback starts at the frame under the pointer. Turn this off to start at the playhead. Skimming must be on.</p>
-        <Row label="Viewer">
+        <Row label="Preview resolution">
           <Segmented
             value={p.viewerQuality}
             onChange={(v) => setPrefs({ viewerQuality: v })}
-            options={[
-              { value: 'quality', label: 'Better quality' },
-              { value: 'performance', label: 'Better performance' },
-            ]}
+            options={PREVIEW_RESOLUTIONS}
           />
         </Row>
-        <p class="hint">Better performance draws the viewer at half resolution, which helps on slower computers with large projects. Exports always use full quality.</p>
+        <p class="hint">Half and Third reduce preview resolution for smoother playback with effects. You can also change this below the preview. Exports always use full quality.</p>
         {toggle('loopPlayback', 'Loop playback')}
         {toggle('preservePitch', 'Keep the pitch when the speed changes')}
       </Section>
@@ -484,6 +483,7 @@ export function SettingsWindow() {
           {current.id === 'audio' && <AudioPane />}
           {current.id === 'export' && <ExportPane />}
           {current.id === 'keyboard' && <KeyboardPane />}
+          {current.id === 'extensions' && <ExtensionsPane />}
         </div>
       </div>
     </div>

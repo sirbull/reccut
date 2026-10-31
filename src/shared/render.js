@@ -1,6 +1,7 @@
 // Tegner ett bilde av prosjektet. Samme kode brukes i forhåndsvisning og eksport,
 // så det du ser i redigeringen er det som havner i filen.
 import { gpuGradeAvailable, gradeImage, gradeParams } from './grade.js';
+import { applyVideoEffects } from './videoEffectsRender.js';
 import { drawTestCard } from './testcard.js';
 import { drawTemplate, findTemplate } from './titletemplates.js';
 import { stabilizeAt } from './stabilize.js';
@@ -155,7 +156,8 @@ function zoomAround(ctx, W, H, s) {
 }
 
 // Fargekorrigering på skjermkortet når det finnes. Uten WebGL2 brukes enkle 2D-filtre.
-function graded(clip, T, src) {
+function graded(clip, T, src, target = 'main') {
+  src = applyVideoEffects(src, clip, target);
   const g = gradeParams(clip, T);
   if (!g) return src;
   const cv = gradeImage(src.img, src.w, src.h, g);
@@ -482,7 +484,7 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
   const screen = media.streams.screen;
   if (screen) {
     let src = getSource(clip, 'screen', s - (screen.offset || 0));
-    if (src) src = graded(clip, T, src);
+    if (src) src = graded(clip, T, src, 'screen');
     if (src) {
       const r = (screenRect = containRect(src.w, src.h, W, H));
       drawWithEffects(ctx, clip, T, r, H, () => {
@@ -506,7 +508,7 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
   if (camera?.hasVideo && showCamera) {
     const rect = screen ? cameraRectAt(clip, s, W, H) : { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
     let src = rect.a > 0.01 ? getSource(clip, 'camera', s - (camera.offset || 0)) : null;
-    if (src) src = graded(clip, T, src);
+    if (src) src = graded(clip, T, src, 'camera');
     if (src) {
       ctx.save();
       ctx.globalAlpha *= rect.a;

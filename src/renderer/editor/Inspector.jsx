@@ -1,4 +1,6 @@
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
+import { ProcessorEffects } from './ProcessorEffects.jsx';
+import { VideoEffects } from './VideoEffects.jsx';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { ArrowDown, ArrowUp, Captions, ChevronLeft, ChevronRight, Circle, Diamond, EyeOff, Film, PenTool, RectangleHorizontal, SquareDashed, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
@@ -753,6 +755,8 @@ function EffectsTab({ clip }) {
     });
   return (
     <>
+      <VideoEffects clip={clip} />
+      <ProcessorEffects clip={clip} />
       <Section title="Effects">
         {active.length === 0 && <p class="hint">No effects yet. Add one below, or drag one from the Effects browser.</p>}
         {active.map((fx) => (

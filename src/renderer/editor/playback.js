@@ -1,28 +1,79 @@
 // Spilleren i redigeringen, koblet til prosjektet og spillhodet i tilstanden.
 // Mens du skummer (tidslinjen eller biblioteket), viser den det pekeren står over.
-import { effect } from '@preact/signals';
-import { primaryAt } from '../../shared/model.js';
+import { computed, effect } from '@preact/signals';
+import { makeClip, mediaClipType, newProject, primaryAt } from '../../shared/model.js';
 import { createPlayer, fileUrl } from '../player.js';
-import { getTime, loadMotion, motionVersion, playing, project, setTime, skim, skimming } from './store.js';
+import { browserPlayhead, getSourceTime, getTime, loadMotion, motionVersion, playing, project, setSourceTime, setTime, skim, skimming, sourceMediaId } from './store.js';
 import { prefs } from '../prefs.js';
 
 export { fileUrl };
 
+const previewProjects = new WeakMap();
+export function mediaPreviewProject(m) {
+  const main = project.value;
+  const dur = m.kind === 'image' ? prefs.value.stillDur : m.duration || 0.04;
+  const cached = previewProjects.get(m);
+  if (cached && cached.width === main.width && cached.height === main.height && cached.fps === main.fps && cached.duration === dur) return cached;
+  const clip = makeClip(mediaClipType(m), { media: m, start: 0, in: 0, dur });
+  clip.id = `source-${m.id}`;
+  clip.lane = 0;
+  const p = { ...newProject(m.name), id: `source-${main.id}-${m.id}`, width: main.width, height: main.height, fps: main.fps, media: { [m.id]: m }, clips: { [clip.id]: clip }, primary: [clip.id], duration: dur };
+  previewProjects.set(m, p);
+  return p;
+}
+
+export const sourceProject = computed(() => {
+  const m = project.value.media[sourceMediaId.value];
+  return m ? mediaPreviewProject(m) : null;
+});
+
+function activeSkim() {
+  const preview = skim.value;
+  return sourceProject.value && preview?.mediaId !== sourceMediaId.value ? null : preview;
+}
+
+export function getViewerTime() {
+  return !playing.value && activeSkim() ? activeSkim().T : sourceProject.value ? getSourceTime() : getTime();
+}
+
 const player = createPlayer({
-  getProject: () => skim.value?.project || project.value,
+  getProject: () => sourceProject.value || skim.value?.project || project.value,
   playing,
-  getTime: () => (skim.value && !playing.value ? skim.value.T : getTime()),
-  setTime,
+  getTime: getViewerTime,
+  setTime: (T, opts) => sourceProject.value ? setSourceTime(T, opts) : setTime(T, opts),
 });
 
 export const { attachCanvas, resizeCanvas, start, stopLoop, getRate, invalidate, scrubAudio } = player;
 
 function preparePlayback() {
-  const preview = skim.value;
+  const preview = activeSkim();
+  const fromSource = sourceProject.value && !playing.value && preview;
   const fromPointer = !playing.value && prefs.value.playbackFromSkimmer && skimming.value &&
     preview && !preview.project && !preview.mediaId && Number.isFinite(preview.T);
   skim.value = null;
-  if (fromPointer) player.seek(preview.T);
+  if (fromSource || fromPointer) player.seek(preview.T);
+}
+
+export function openSource(mediaId, T) {
+  if (!project.value.media[mediaId]) return;
+  player.pause();
+  skim.value = null;
+  const saved = browserPlayhead.value;
+  sourceMediaId.value = mediaId;
+  seekViewer(T ?? (saved?.mediaId === mediaId ? saved.t : 0));
+}
+
+export function showTimeline() {
+  if (sourceMediaId.value) player.pause();
+  sourceMediaId.value = null;
+  skim.value = null;
+}
+
+// Transporten og piltastene søker i klippet som vises, uten å flytte tidslinjen.
+export function seekViewer(T) {
+  skim.value = null;
+  const source = sourceProject.value;
+  player.seek(source ? Math.max(0, Math.min(source.duration, T)) : T);
 }
 
 export function play(r = 1) {
@@ -47,12 +98,13 @@ export function shuttle(dir) {
   player.shuttle(dir);
 }
 export function seek(T) {
-  skim.value = null;
+  showTimeline();
   player.seek(T);
 }
 
 effect(() => {
   project.value;
+  sourceProject.value;
   skim.value;
   motionVersion.value;
   player.invalidate();

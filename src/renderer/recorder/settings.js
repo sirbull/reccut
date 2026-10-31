@@ -1,4 +1,5 @@
 import { computed, effect, signal } from '@preact/signals';
+import { FLAT_MIX, normalizeMix } from './mixer.js';
 
 const isMac = window.api.platform === 'darwin';
 
@@ -19,6 +20,7 @@ const DEFAULTS = {
   micId: null,
   systemAudio: false,
   noiseSuppression: true,
+  micMixer: { ...FLAT_MIX },
   layout: 6,
   pipSize: 'medium',
   pipShape: 'rect',
@@ -46,6 +48,7 @@ function load() {
     const s = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('settings') || '{}') };
     if (!['circle', 'square', 'rect'].includes(s.pipShape)) s.pipShape = 'rect';
     if (!MODIFIERS.some((m) => m.value === s.modifier)) s.modifier = MODIFIERS[0].value;
+    s.micMixer = normalizeMix(s.micMixer);
     return s;
   } catch {
     return { ...DEFAULTS };
@@ -61,6 +64,7 @@ effect(() => {
 });
 
 export function saveSettings(patch) {
+  if ('micMixer' in patch) patch = { ...patch, micMixer: normalizeMix(patch.micMixer) };
   settings.value = { ...settings.value, ...patch };
   try {
     localStorage.setItem('settings', JSON.stringify(settings.value));

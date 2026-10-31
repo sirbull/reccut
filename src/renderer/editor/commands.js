@@ -37,6 +37,7 @@ import {
   commit,
   endTransient,
   updateTransient,
+  browserPlayhead,
   getTime,
   importPaths,
   makeCaptionClip,
@@ -47,8 +48,9 @@ import {
   selectedComponent,
   selectedTransition,
   selection,
+  sourceMediaId,
 } from './store.js';
-import { seek } from './playback.js';
+import { getViewerTime, openSource, seek, seekViewer, sourceProject } from './playback.js';
 import { applyMediaDrop, frameEffectPlacement, libraryDropTarget } from '../../shared/libraryDrop.js';
 import { toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
@@ -526,10 +528,11 @@ export function endTrackHeight() {
 }
 
 export function stepFrames(n) {
-  seek(Math.max(0, getTime() + n * frame()));
+  seekViewer(Math.max(0, getViewerTime() + n * frame()));
 }
 
 export function jumpEdit(dir) {
+  if (sourceProject.value) return seekViewer(dir > 0 ? sourceProject.value.duration : 0);
   const T = getTime();
   const pts = editPoints(project.value);
   const target = dir > 0 ? pts.find((t) => t > T + 1e-4) : [...pts].reverse().find((t) => t < T - 1e-4);
@@ -537,11 +540,11 @@ export function jumpEdit(dir) {
 }
 
 export function goHome() {
-  seek(0);
+  seekViewer(0);
 }
 
 export function goEnd() {
-  seek(project.value.duration);
+  seekViewer(sourceProject.value?.duration ?? project.value.duration);
 }
 
 export function nudge(dir) {
@@ -599,7 +602,7 @@ export const browserRange = signal(null); // { mediaId, in, out }
 
 // Hvor skummeren står i biblioteket nå, og bibliotekets eget spillhode (satt med klikk).
 export const browserSkimPos = { mediaId: null, t: 0 };
-export const browserPlayhead = signal(null); // { mediaId, t }
+export { browserPlayhead };
 
 function mediaDuration(m) {
   return m.kind === 'image' ? prefs.value.stillDur : m.duration;
@@ -607,7 +610,9 @@ function mediaDuration(m) {
 
 // Setter start eller slutt på området i et bibliotekklipp. Gir false om ingen klipp er aktuelt.
 export function browserMark(which) {
-  let pos = browserSkimPos.mediaId ? browserSkimPos : browserPlayhead.value;
+  let pos = sourceProject.value
+    ? { mediaId: sourceMediaId.value, t: getViewerTime() }
+    : browserSkimPos.mediaId ? browserSkimPos : browserPlayhead.value;
   if (!pos || !project.value.media[pos.mediaId]) {
     const id = browserSelection.value;
     if (!id || !project.value.media[id]) return false;
@@ -624,7 +629,7 @@ export function browserMark(which) {
   else r = { in: cur && cur.in < t - f ? cur.in : 0, out: t };
   if (r.out - r.in < f) r.out = Math.min(dur, r.in + f);
   browserRange.value = { mediaId: m.id, ...r };
-  browserPlayhead.value = { mediaId: m.id, t };
+  openSource(m.id, t);
   return true;
 }
 
@@ -916,6 +921,7 @@ export function pickMedia(e, id, order) {
   } else browserPicked.value = [id];
   if (!e?.shiftKey) browserSelection.value = id;
   browserFocus.value = true;
+  openSource(id);
 }
 
 // Relink File: velg filen på nytt for et medium som mangler (eller er flyttet).
@@ -1213,9 +1219,6 @@ export async function clipContextMenu(clipId, T) {
       break;
     case 'toggle':
       toggleEnabled();
-      break;
-    case 'copy':
-      copySelection();
       break;
     case 'cut':
       cutSelection();

@@ -4,7 +4,7 @@
 import { audioWindow, computeAudio, computeFrame, instSpeed, sourceTime, transitionWindow, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 import { activeEffects } from '../shared/audiofx.js';
-import { prefs } from './prefs.js';
+import { prefs, previewResolutionScale } from './prefs.js';
 
 const PRELOAD = 1.5;
 const KEEP = 6;
@@ -45,6 +45,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   master.connect(audioCtx.destination);
   const pool = new Map();
   const images = new Map();
+  const previewSources = new WeakMap();
   let canvas = null;
   let ctx = null;
   let rate = 1;
@@ -53,6 +54,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   let raf = 0;
   let dirty = true;
   let staging = null;
+  let canvasProjectId = null;
   let preloadProject = null;
   let preloadPoints = [];
 
@@ -160,21 +162,43 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     return img.complete && img.naturalWidth ? img : null;
   }
 
+  // Skaler før fargekorrigering og kildeeffekter, så også disse behandler færre piksler.
+  function previewSource(src) {
+    if (!canvas || previewResolutionScale() === 1) return src;
+    const scale = Math.min(1, canvas.width / src.w, canvas.height / src.h);
+    if (scale >= 1) return src;
+    const w = Math.max(2, Math.round(src.w * scale));
+    const h = Math.max(2, Math.round(src.h * scale));
+    let frame = previewSources.get(src.img);
+    if (!frame) {
+      frame = document.createElement('canvas');
+      previewSources.set(src.img, frame);
+    }
+    if (frame.width !== w || frame.height !== h) {
+      frame.width = w;
+      frame.height = h;
+    }
+    const g = frame.getContext('2d');
+    g.clearRect(0, 0, w, h);
+    g.drawImage(src.img, 0, 0, w, h);
+    return { img: frame, w, h, pixelScale: (src.pixelScale ?? 1) * scale };
+  }
+
   // Kilde for tegnemotoren: elementet som allerede står på riktig sted.
   function getSource(clip, key) {
     const m = getProject().media[clip.mediaId];
     if (m?.kind === 'image') {
       const img = getImage(m.streams?.main?.proxy || m.path);
-      return img ? { img, w: img.naturalWidth, h: img.naturalHeight } : null;
+      return img ? previewSource({ img, w: img.naturalWidth, h: img.naturalHeight }) : null;
     }
     const entry = pool.get(`${clip.id}:${key}`);
     const el = entry?.el;
     if (!el) return null;
     if (!el.seeking && el.readyState >= 2 && el.videoWidth) {
       entry.hasFrame = true;
-      return { img: el, w: el.videoWidth, h: el.videoHeight };
+      return previewSource({ img: el, w: el.videoWidth, h: el.videoHeight });
     }
-    return entry.frame ? { img: entry.frame, w: entry.frame.width, h: entry.frame.height } : null;
+    return entry.frame ? previewSource({ img: entry.frame, w: entry.frame.width, h: entry.frame.height, pixelScale: entry.frame.width / (el.videoWidth || entry.frame.width) }) : null;
   }
 
   function upcomingAt(p, T) {
@@ -340,14 +364,12 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   function resizeCanvas(cssW, cssH) {
     if (!canvas) return;
     const p = getProject();
-    // Bedre ytelse: visningen tegnes i halv oppløsning (Settings > Playback).
-    const dpr = (window.devicePixelRatio || 1) * (prefs.value.viewerQuality === 'performance' ? 0.5 : 1);
+    const dpr = window.devicePixelRatio || 1;
     const fit = Math.min(cssW / p.width, cssH / p.height);
-    const w = Math.max(2, Math.round(p.width * fit * dpr));
-    const h = Math.max(2, Math.round(p.height * fit * dpr));
-    const cap = Math.min(1, p.width / w);
-    const W = Math.round(w * cap);
-    const H = Math.round(h * cap);
+    // Reduser etter at full oppløsning er begrenset, også i fullskjerm på Retina.
+    const scale = Math.min(1, fit * dpr) * previewResolutionScale();
+    const W = Math.max(2, Math.round(p.width * scale));
+    const H = Math.max(2, Math.round(p.height * scale));
     if (canvas.width !== W || canvas.height !== H) {
       canvas.width = W;
       canvas.height = H;
@@ -360,6 +382,13 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   function draw(T) {
     if (!ctx) return false;
     const p = getProject();
+    // Ved bytte mellom kilde og tidslinje skal forrige video aldri bli stående
+    // mens den nye dekodes. Innen samme prosjekt beholdes bildet ved scrubbing.
+    if (canvasProjectId !== p.id) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      canvasProjectId = p.id;
+    }
     const frame = computeFrame(p, T);
     staging ||= document.createElement('canvas');
     if (staging.width !== canvas.width || staging.height !== canvas.height) {

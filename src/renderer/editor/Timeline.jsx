@@ -79,11 +79,11 @@ import {
   selectedComponent,
   busyMedia,
 } from './store.js';
-import { fileUrl, scrubAudio, seek } from './playback.js';
+import { fileUrl, scrubAudio, seek, showTimeline, sourceProject } from './playback.js';
 import { IconButton } from '../ui.jsx';
 import * as commands from './commands.js';
 import { prefs, setPrefs } from '../prefs.js';
-import { shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from './volume.js';
+import { formatVolumeDb, shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from './volume.js';
 import { libraryDropTarget, mediaDropPreview, resizedTransitionDuration } from '../../shared/libraryDrop.js';
 import { endLibraryDrag, libraryDrag } from './libraryDrag.js';
 
@@ -97,6 +97,16 @@ export function clampTrackHeight(kind, h) {
   return Math.round(Math.max(a, Math.min(b, h)));
 }
 const view = signal({ left: 0, width: 1000 });
+const volumePreview = signal(null);
+
+function VolumePreview() {
+  const preview = volumePreview.value;
+  if (!preview) return null;
+  const clip = project.value.clips[preview.clipId];
+  if (!clip) return null;
+  const db = preview.index != null ? clip.kf?.[preview.prop]?.[preview.index]?.[1] : valueAt(clip, preview.prop, preview.T);
+  return <div class="volume-preview" role="status" style={{ left: Math.max(8, Math.min(window.innerWidth - 110, preview.x + 14)), top: Math.max(8, Math.min(window.innerHeight - 35, preview.y - 34)) }}>{formatVolumeDb(db ?? 0)}</div>;
+}
 
 // Spor: videospor over hovedsporet (V2, V3 ...) og lydspor under (A1, A2 ...).
 // Antallet følger klippene, pluss spor du har lagt til, pluss ett tomt spor å slippe på.
@@ -332,7 +342,6 @@ export function Timeline() {
 
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
-    commands.browserFocus.value = false;
     const el = e.target.closest('[data-hit]');
     const hit = el?.dataset.hit;
     const T = timeAt(e.clientX);
@@ -444,6 +453,7 @@ export function Timeline() {
         return;
       }
       dragRef.current = { ...base, kind: 'vol', prop, h: Number(el.dataset.height), indices: kfIndex == null ? volumeSegment(clip, prop, T) : [kfIndex] };
+      volumePreview.value = { clipId, prop, T, index: kfIndex, x: e.clientX, y: e.clientY };
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
@@ -487,7 +497,7 @@ export function Timeline() {
       }
     }
     // Skumming: visningen følger pekeren, og lyden spilles i korte utdrag.
-    if (!d && skimming.value && !playing.value && tool.value !== 'hand') {
+    if (!d && !sourceProject.value && skimming.value && !playing.value && tool.value !== 'hand') {
       const st = snap(T).t;
       skim.value = { T: st };
       if (skimRef.current) {
@@ -600,6 +610,7 @@ export function Timeline() {
     if (d.kind === 'vol') {
       const delta = volumeDelta(d.y - e.clientY, d.h);
       updateTransient((p) => shiftVolume(p.clips[c.id], d.prop, delta, d.indices));
+      volumePreview.value = { clipId: c.id, prop: d.prop, T: d.T, index: d.indices.length === 1 ? d.indices[0] : null, x: e.clientX, y: e.clientY };
       return;
     }
     if (d.kind === 'move') {
@@ -657,6 +668,7 @@ export function Timeline() {
   const onPointerUp = (e) => {
     const d = dragRef.current;
     dragRef.current = null;
+    volumePreview.value = null;
     setGhost(null);
     setSnapLine(null);
     if (d?.moved) endTransient(e.type !== 'pointercancel');
@@ -754,8 +766,13 @@ export function Timeline() {
   ) : null;
 
   return (
-    <div class="timeline">
+    <div class="timeline" onPointerDownCapture={(e) => {
+      if (e.button !== 0) return;
+      commands.browserFocus.value = false;
+      showTimeline();
+    }}>
       <TimelineToolbar />
+      <VolumePreview />
       <div class="tl-body">
       <TrackHeaders rows={rows} p={p} scrollRef={scrollRef} />
       <div class="tl-scroll" ref={scrollRef}>
@@ -772,6 +789,7 @@ export function Timeline() {
           }}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onLostPointerCapture={onPointerUp}
           onContextMenu={onContextMenu}
           onDragOver={onDragOver}
           onDragLeave={(e) => {
@@ -1197,19 +1215,27 @@ function Wave({ clip, stream, componentKey, x, w, h, z, offset, lead = 0 }) {
   const kfs = clip.kf?.[prop];
   const path = volumePath(clip, prop, w, h, z, lead);
   const hit = { 'data-hit': 'vol', 'data-clip': clip.id, 'data-prop': prop, 'data-height': h, 'data-key': componentKey };
+  const preview = (e, index = null) => {
+    if (e.buttons) return;
+    const rect = e.currentTarget.closest('.wave').getBoundingClientRect();
+    volumePreview.value = { clipId: clip.id, prop, index, T: clip.start + (e.clientX - rect.left) / z - lead, x: e.clientX, y: e.clientY };
+  };
+  const hidePreview = (e) => { if (!e.buttons) volumePreview.value = null; };
+  const displayDb = valueAt(clip, prop, Math.max(clip.start, Math.min(clip.start + clip.dur, getTime()))) ?? 0;
   return (
     <div class="wave" style={{ height: h }}>
       <canvas ref={ref} style={{ left: visX, width: visW, height: h }} />
       <svg class="vol-kf" width={w} height={h}>
         <path class="vol-line" d={path} />
-        <path class="vol-line-hit" d={path} {...hit}>
-          <title>{`Drag to adjust volume. ${isMac ? 'Option' : 'Alt'} click to add a keyframe. Drag between keyframes to adjust both.`}</title>
+        <path class="vol-line-hit" d={path} {...hit} onPointerMove={preview} onPointerEnter={preview} onPointerLeave={hidePreview}>
+          <title>{`${formatVolumeDb(displayDb)} · Drag to adjust volume. ${isMac ? 'Option' : 'Alt'} click to add a keyframe. Drag between keyframes to adjust both.`}</title>
         </path>
       </svg>
+      {visW > 60 && <span class="vol-db-label" style={{ left: visX + visW - 62 }}>{formatVolumeDb(displayDb)}</span>}
       {kfs?.map(([t, v, ease], i) => {
         const px = ((t - clip.in) / kfRate(clip) + lead) * z;
         if (px < 0 || px > w) return null;
-        return <div key={i} class="vol-kf-point" {...hit} data-kf={i} style={{ left: px - 6, top: volumeY(v, h) - 6 }} title={`${v.toFixed(1)} dB · ${EASINGS.find((e) => e.id === (ease || 'linear'))?.label || ease}. Drag to adjust, right click for easing.`} />;
+        return <div key={i} class="vol-kf-point" {...hit} data-kf={i} onPointerMove={(e) => preview(e, i)} onPointerEnter={(e) => preview(e, i)} onPointerLeave={hidePreview} style={{ left: px - 6, top: volumeY(v, h) - 6 }} title={`${formatVolumeDb(v)} · ${EASINGS.find((e) => e.id === (ease || 'linear'))?.label || ease}. Drag to adjust, right click for easing.`} />;
       })}
     </div>
   );

@@ -1,0 +1,8 @@
+{
+  "format": "reccut-processor-v1",
+  "id": "local-matting",
+  "name": "Local AI matting adapter",
+  "executable": "/absolute/path/to/your/matting-adapter",
+  "args": ["--input", "{input}", "--output", "{output}"],
+  "outputExtension": ".mov"
+}

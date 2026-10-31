@@ -1,3 +1,4 @@
+import { AIChat, aiChatOpen } from './Extensions.jsx';
 import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import {
@@ -170,6 +171,8 @@ function TitleBar() {
       </button>
       <div class="spacer" />
       <TasksIndicator />
+      <button class="btn secondary small" onClick={() => aiChatOpen.value = true}>AI Chat</button>
+      {aiChatOpen.value && <AIChat key={project.value.id} />}
       <IconButton icon={CircleHelp} class="help-btn" title={`Help and command search (${isMac ? '⌘K' : 'Ctrl+K'})`} onClick={() => (paletteOpen.value = true)} />
       {r === 'edit' ? (
         <div class="actions">

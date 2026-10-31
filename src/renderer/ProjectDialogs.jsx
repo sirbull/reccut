@@ -288,7 +288,7 @@ export function PackageDialog() {
   const reduced = trimResult ? trimResult.project : reducedResult.project;
   const removed = { ...reducedResult.removed, trimmed: trimResult?.trimmed || [] };
   const files = mediaFiles(reduced, opts);
-  const paths = [...new Set(files.flatMap((f) => (f.dir ? [f.dir] : f.sources.map((s) => s.path))))];
+  const paths = [...new Set(files.flatMap((f) => ([...(f.dir ? [f.dir] : []), ...f.sources.map((s) => s.path)])))];
   // Kuttede deler tar omtrent sin andel av filen.
   const share = new Map();
   for (const f of files) for (const s of f.sources || []) if (s.trim) share.set(s.path, (share.get(s.path) || 0) + (s.trim.to - s.trim.from) / Math.max(0.1, s.trim.total || s.trim.to));
@@ -359,7 +359,7 @@ export function PackageDialog() {
         {check('removeDisabled', 'Remove disabled clips', 'Clips that are switched off are removed. In the storyline they become gaps, so nothing moves.')}
         {check('removeOffAudio', 'Remove switched off audio', 'Synced audio that is switched off in every clip is left out.')}
         {check('removeHidden', 'Remove clips on hidden tracks', 'Clips on tracks you have hidden are removed.')}
-        {check('trim', 'Trim media to the parts that are used', 'Only the parts of each file that are used on the timeline are kept, with extra time on each side. Saves a lot of space for long recordings. The parts are re-encoded in high quality: H.264 (HEVC for 10-bit), ProRes 4444 for transparency and lossless FLAC for audio files.')}
+        {check('trim', 'Trim media to the parts that are used', 'Only the parts of each file that are used on the timeline are kept, with extra time on each side. Can save space for long source videos. Recording bundles and still images are copied whole. The parts are re-encoded in high quality: H.264 (HEVC for 10-bit), ProRes 4444 for transparency and lossless FLAC for audio files.')}
         {opts.trim && (
           <label class="pkg-handles">
             Extra time on each side
@@ -371,7 +371,7 @@ export function PackageDialog() {
       </div>
       <div class="pkg-summary">
         <div>
-          <b>{files.length}</b> media, <b>{paths.length}</b> files and folders, <b>{total === null ? '…' : fmtBytes(total)}</b>
+          <b>{files.length}</b> media, <b>{paths.length}</b> files and folders, {opts.trim ? 'estimated ' : ''}<b>{total === null ? '…' : fmtBytes(total)}</b>
         </div>
         <div class="muted">
           Removed: {removed.media.length} unused media, {removed.clips.length} clips, {removed.streams.length} audio tracks

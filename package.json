@@ -14,7 +14,8 @@
     "dist": "node scripts/build.mjs && electron-builder --publish never",
     "dist:mac": "node scripts/build.mjs && electron-builder --mac --publish never",
     "dist:win": "node scripts/build.mjs && electron-builder --win --publish never",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "test:render": "electron scripts/verify-effects.cjs"
   },
   "devDependencies": {
     "@huggingface/transformers": "^4.3.2",
@@ -29,7 +30,11 @@
   "build": {
     "appId": "no.sirbull.reccut",
     "productName": "Reccut",
-    "electronLanguages": ["en", "en-US", "en-GB"],
+    "electronLanguages": [
+      "en",
+      "en-US",
+      "en-GB"
+    ],
     "files": [
       "build/**/*",
       "src/main/**/*",
@@ -50,7 +55,9 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "CFBundleDevelopmentRegion": "en",
-        "CFBundleLocalizations": ["en"],
+        "CFBundleLocalizations": [
+          "en"
+        ],
         "NSCameraUsageDescription": "Reccut uses your camera to include you in recordings.",
         "NSMicrophoneUsageDescription": "Reccut uses your microphone to record audio.",
         "NSScreenCaptureUsageDescription": "Reccut records your screen.",
@@ -70,7 +77,9 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "installerLanguages": ["en_US"],
+      "installerLanguages": [
+        "en_US"
+      ],
       "language": "1033"
     },
     "linux": {

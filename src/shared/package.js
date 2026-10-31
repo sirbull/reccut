@@ -67,7 +67,9 @@ export function mediaFiles(p, { includeOptimized = false } = {}) {
   const out = [];
   for (const m of Object.values(p.media)) {
     if (m.kind === 'recording') {
-      out.push({ mediaId: m.id, kind: m.kind, name: m.name, dir: m.path, sources: [] });
+      const outside = (file) => file && !file.replaceAll('\\', '/').startsWith(m.path.replaceAll('\\', '/').replace(/\/$/, '') + '/');
+      const sources = Object.entries(m.streams || {}).filter(([, st]) => outside(st.path)).map(([key, st]) => ({ key, path: st.path, field: 'path' }));
+      out.push({ mediaId: m.id, kind: m.kind, name: m.name, dir: m.path, sources });
       continue;
     }
     const sources = [];
@@ -82,7 +84,7 @@ export function mediaFiles(p, { includeOptimized = false } = {}) {
     for (const [key, st] of Object.entries(m.streams || {})) {
       if (st.trim) {
         // Kuttes med FFmpeg i stedet for å kopieres.
-        sources.push({ key, path: st.trim.source, field: 'path', trim: { from: st.trim.from, to: st.trim.to, total: st.trim.total }, hasVideo: Boolean(st.hasVideo), hasAudio: Boolean(st.hasAudio), alpha: Boolean(st.alpha), bits: st.color?.bits || 8 });
+        sources.push({ key, path: st.trim.source, field: 'path', trim: { from: st.trim.from, to: st.trim.to, total: st.trim.total }, hasVideo: Boolean(st.hasVideo), hasAudio: Boolean(st.hasAudio), alpha: Boolean(st.alpha), bits: st.color?.bits || 8, color: st.color });
         continue;
       }
       add(key, st.path, 'path');
@@ -102,12 +104,21 @@ export function mediaFiles(p, { includeOptimized = false } = {}) {
 
 // Delene av hvert medium som brukes på tidslinjen, i mediets egen tid. { mediaId: [[a, b], ...] }
 export function usedRanges(p, handles = 2) {
+  handles = Number.isFinite(handles) ? Math.max(0, handles) : 2;
   const out = {};
+  const pads = new Map();
+  for (let i = 1; i < (p.primary || []).length; i++) {
+    const c = p.clips[p.primary[i]], prev = p.clips[p.primary[i - 1]];
+    if (!c?.transition || !prev) continue;
+    const half = Math.min(c.transition.dur, c.dur, prev.dur) / 2;
+    pads.set(c.id, { ...pads.get(c.id), lead: half });
+    pads.set(prev.id, { ...pads.get(prev.id), tail: half });
+  }
   for (const c of Object.values(p.clips)) {
     const m = c.mediaId && p.media[c.mediaId];
     if (!m) continue;
-    const lead = Math.max(0, c.props?.aLead || 0);
-    const tail = Math.max(0, c.props?.aTail || 0);
+    const lead = Math.max(0, c.props?.aLead || 0, pads.get(c.id)?.lead || 0);
+    const tail = Math.max(0, c.props?.aTail || 0, pads.get(c.id)?.tail || 0);
     // Kildetiden ved start og slutt (fart, ramper og baklengs er tatt med i sourceTime).
     const s0 = sourceTime(c, c.start - lead);
     const s1 = sourceTime(c, c.start + c.dur + tail);
@@ -117,7 +128,7 @@ export function usedRanges(p, handles = 2) {
     // Overganger bruker litt av nabomaterialet; handles dekker det.
     a = Math.max(0, a - handles);
     b = Math.min(m.duration || b + handles, b + handles);
-    (out[m.id] ||= []).push([a, b]);
+    if (b > a) (out[m.id] ||= []).push([a, b]);
   }
   for (const id of Object.keys(out)) {
     const list = out[id].sort((x, y) => x[0] - y[0]);
@@ -149,17 +160,20 @@ export function trimProject(src, { handles = 2, minSaving = 0.25 } = {}) {
     const m = p.media[id];
     if (!m || m.kind === 'recording' || m.kind === 'image' || !(m.duration > 0)) continue;
     const used = list.reduce((s, [a, b]) => s + (b - a), 0);
-    if (used > m.duration * (1 - minSaving)) continue;
+    if (used > m.duration * (1 - minSaving) || !m.streams?.main?.path) continue;
+    // Never trim a source that cannot be represented by its surviving streams.
+    if (list.some(([a, b]) => !Object.values(m.streams).some((st) => st.path && Math.min(st.duration ?? m.duration, b - (st.offset || 0)) > Math.max(0, a - (st.offset || 0))))) continue;
     const base = m.name.replace(/\.[^.]+$/, '');
     const parts = list.map(([a, b], k) => {
-      const pid = `${id}_p${k + 1}`;
+      let pid = `${id}_p${k + 1}`;
+      while (p.media[pid]) pid += '_';
       const streams = {};
       for (const [key, st] of Object.entries(m.streams || {})) {
         const off = st.offset || 0;
         const len = st.duration ?? m.duration;
         const f0 = Math.max(0, a - off);
         const f1 = Math.min(len, b - off);
-        if (f1 - f0 < 0.05) continue;
+        if (!st.path || f1 <= f0) continue;
         const { proxy, optimized, thumbs, wave, reversed, motion, rel, ...rest } = st;
         // TS-filer som FFmpeg ikke åpner direkte, kuttes fra arbeidskopien.
         streams[key] = { ...rest, ...(st.tsFallback ? { tsFallback: undefined } : {}), offset: round3(f0 + off - a), duration: round3(f1 - f0), trim: { source: st.tsFallback && proxy ? proxy : st.path, from: round3(f0), to: round3(f1), total: len } };
@@ -174,9 +188,9 @@ export function trimProject(src, { handles = 2, minSaving = 0.25 } = {}) {
       const part = parts.find((x) => s >= x.a - 1e-6 && s <= x.b + 1e-6) || parts[0];
       const shift = part.a;
       c.mediaId = part.id;
-      c.in = round3(c.in - shift);
-      if (c.freezeAt != null) c.freezeAt = round3(c.freezeAt - shift);
-      for (const list2 of Object.values(c.kf || {})) for (const k of list2) k[0] = round3(k[0] - shift);
+      c.in -= shift;
+      if (c.freezeAt != null) c.freezeAt -= shift;
+      for (const list2 of Object.values(c.kf || {})) for (const k of list2) k[0] -= shift;
     }
     delete p.media[id];
     trimmed.push({ name: m.name, parts: parts.length, saved: Math.max(0, m.duration - used) });

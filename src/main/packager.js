@@ -16,12 +16,14 @@ function trimSpec(s) {
   return { ext: '.mp4', args: ['-c:v', 'libx264', '-crf', '14', '-preset', 'medium', '-pix_fmt', 'yuv420p', ...audio, '-movflags', '+faststart'] };
 }
 
+const trimKey = (s) => JSON.stringify([s.trim.source || s.path, s.trim.from, s.trim.to, Boolean(s.hasVideo), Boolean(s.hasAudio), Boolean(s.alpha), s.bits || s.color?.bits || 8]);
+
 async function trimFile(s, to, onSeconds, setCancel) {
   const spec = trimSpec(s);
-  const args = ['-ss', String(s.trim.from), '-i', s.path, '-t', String(s.trim.to - s.trim.from), '-map', '0:v:0?', '-map', '0:a:0?', '-map_metadata', '-1', ...spec.args, to];
+  const args = ['-ss', String(s.trim.from), '-i', s.path, '-t', String(s.trim.to - s.trim.from), '-map', '0:v:0?', '-map', '0:a:0?', '-map_metadata', '-1', ...spec.args, ...(s.color?.hdr ? ['-color_primaries', 'bt2020', '-color_trc', s.color.hdr === 'pq' ? 'smpte2084' : 'arib-std-b67', '-colorspace', 'bt2020nc'] : []), to];
   const job = ff.run(args, { onProgress: onSeconds });
-  setCancel?.(() => job.proc?.kill?.('SIGKILL'));
-  await job.promise;
+  setCancel?.(job.kill);
+  try { await job.promise; } finally { setCancel?.(() => {}); }
 }
 
 // Buffer som lages på nytt automatisk, og derfor ikke trengs i pakken.
@@ -67,9 +69,17 @@ const fmtBytes = (b) => (b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : b >= 1e6 ? `$
  * { project, files, dest, name, removed } fra grensesnittet. files er listen fra mediaFiles():
  * { mediaId, kind, name, dir?, sources: [{ key, path, field }] }.
  */
-async function packageProject({ project, files, dest, name, removed }, ctx) {
+async function packageProject(payload, ctx) {
+  const root = uniquePath(payload.dest, safeName(payload.name), new Set());
+  try { return await writePackage(payload, ctx, root); }
+  catch (err) {
+    await fs.promises.rm(root, { recursive: true, force: true }).catch(() => {});
+    throw err;
+  }
+}
+
+async function writePackage({ project, files, dest, removed }, ctx, root) {
   const p = JSON.parse(JSON.stringify(project));
-  const root = uniquePath(dest, safeName(name), new Set());
   const footage = path.join(root, 'Footage');
   const recDir = path.join(root, 'Recordings');
   await fs.promises.mkdir(footage, { recursive: true });
@@ -81,7 +91,6 @@ async function packageProject({ project, files, dest, name, removed }, ctx) {
     if (f.dir) {
       if (fs.existsSync(f.dir)) jobs.push({ f, from: f.dir, dir: true, size: await sizeOf(f.dir) });
       else missing.push(`${f.name}: ${f.dir}`);
-      continue;
     }
     for (const s of f.sources) {
       if (!fs.existsSync(s.path)) {
@@ -122,14 +131,14 @@ async function packageProject({ project, files, dest, name, removed }, ctx) {
       await fs.promises.cp(j.from, to, { recursive: true });
       moved.set(j.from, to);
       log.push(`${path.relative(root, to)}${path.sep}  (${fmtBytes(j.size)}, from ${j.from})`);
-    } else if (j.trim) {
+    } else if (j.trim && !moved.has(trimKey(j.s))) {
       const spec = trimSpec(j.s);
       const stem = path.basename(j.f.name, path.extname(j.f.name));
       const to = uniquePath(footage, `${stem}${spec.ext}`, taken.footage);
       await trimFile(j.s, to, (sec) => ctx.progress(total ? (done + j.size * Math.min(1, sec / j.seconds)) / total : 0, `Trimming ${j.f.name}`), ctx.setCancel);
-      moved.set(`${j.from}|${j.trim.from}`, to);
+      moved.set(trimKey(j.s), to);
       log.push(`${path.relative(root, to)}  (${(j.trim.to - j.trim.from).toFixed(1)} s from ${j.trim.from.toFixed(1)} s in ${j.from})`);
-    } else if (!moved.has(j.from)) {
+    } else if (!j.trim && !moved.has(j.from)) {
       const to = uniquePath(footage, path.basename(j.from), taken.footage);
       await fs.promises.copyFile(j.from, to);
       // Kontroll: kopien skal være like stor som originalen.
@@ -140,6 +149,8 @@ async function packageProject({ project, files, dest, name, removed }, ctx) {
     done += j.size;
   }
 
+  if (ctx.isCanceled()) throw new Error('Canceled');
+
   // Pek prosjektet til kopiene, og fjern buffer som lages på nytt.
   for (const f of files) {
     const m = p.media[f.mediaId];
@@ -149,18 +160,21 @@ async function packageProject({ project, files, dest, name, removed }, ctx) {
       const to = moved.get(f.dir);
       if (!to) continue;
       m.path = to;
-      for (const st of Object.values(m.streams || {})) if (st.path) st.path = path.join(to, path.relative(f.dir, st.path));
+      for (const st of Object.values(m.streams || {})) {
+        const rel = st.path && path.relative(f.dir, st.path);
+        if (rel && rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel)) st.path = path.join(to, rel);
+      }
     } else if (moved.has(m.path)) m.path = moved.get(m.path);
     // Kuttede deler: strømmen pekes til sin del, og mediet til hoveddelen.
     for (const [key, st] of Object.entries(m.streams || {})) {
       if (!st.trim) continue;
-      const to = moved.get(`${st.trim.source}|${st.trim.from}`);
+      const to = moved.get(trimKey(st));
       if (to) {
         st.path = to;
         if (key === 'main' || !m.streams.main) m.path = to;
       }
       delete st.trim;
-      st.needsProxy = false;
+      st.needsProxy = Boolean(st.alpha || st.color?.hdr || st.color?.bits > 8);
     }
     for (const st of Object.values(m.streams || {})) {
       // Filer som ble kopiert, pekes til kopien. Resten av bufferfeltene fjernes.
@@ -176,6 +190,7 @@ async function packageProject({ project, files, dest, name, removed }, ctx) {
   }
   p.name = path.basename(root);
   const file = path.join(root, `${path.basename(root)}.reccut`);
+  if (ctx.isCanceled()) throw new Error('Canceled');
   await projects.save(null, p, file, { history: false });
 
   // Rapporten, som i After Effects.
@@ -185,7 +200,7 @@ async function packageProject({ project, files, dest, name, removed }, ctx) {
     `Packaged: ${new Date().toLocaleString('en-GB')}`,
     `Folder: ${root}`,
     '',
-    `${log.length} files and folders copied, ${fmtBytes(total)} in total.`,
+    `${log.length} files and folders packaged. Estimated source share: ${fmtBytes(total)}.`,
     '',
     'Copied:',
     ...log.map((l) => `  ${l}`),
@@ -205,6 +220,7 @@ async function packageProject({ project, files, dest, name, removed }, ctx) {
     'Titles, captions, masks, effects and title templates are stored in the project file.'
   );
   await fs.promises.writeFile(path.join(root, 'Package Report.txt'), lines.join('\n'));
+  if (ctx.isCanceled()) throw new Error('Canceled');
   ctx.progress(1, 'Done');
   return { file, root, copied: log.length, bytes: total, missing: missing.length };
 }

@@ -38,6 +38,9 @@ export const skimming = signal(prefs.value.skimming);
 export const audioSkimming = signal(prefs.value.audioSkimming);
 // Når pekeren skummer, viser visningen dette i stedet for spillhodet: { project, T, mediaId? }.
 export const skim = signal(null);
+// Kildevisningen beholdes til brukeren aktiverer tidslinjen.
+export const sourceMediaId = signal(null);
+export const browserPlayhead = signal(null); // { mediaId, t }
 export const pps = signal(40);
 export const playing = signal(false);
 export const timeSig = signal(0);
@@ -82,6 +85,20 @@ export function setTime(t, { force = false } = {}) {
 export function onTime(fn) {
   timeListeners.add(fn);
   return () => timeListeners.delete(fn);
+}
+
+let sourceTime = 0;
+let lastSourceSig = 0;
+export function getSourceTime() {
+  return sourceTime;
+}
+export function setSourceTime(t, { force = false } = {}) {
+  sourceTime = Math.max(0, t);
+  const now = performance.now();
+  if (force || !playing.value || now - lastSourceSig > 120) {
+    lastSourceSig = now;
+    browserPlayhead.value = { mediaId: sourceMediaId.value, t: sourceTime };
+  }
 }
 
 /* Historikk */
@@ -215,6 +232,10 @@ export async function saveNow() {
 }
 
 export function setProject(p, path = null) {
+  playing.value = false;
+  sourceMediaId.value = null;
+  browserPlayhead.value = null;
+  skim.value = null;
   undoStack.length = 0;
   redoStack.length = 0;
   historyVersion.value++;

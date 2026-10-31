@@ -1,6 +1,16 @@
 // Innstillinger for hele appen (Preferences, Cmd ,).
 import { signal } from '@preact/signals';
 
+export const PREVIEW_RESOLUTIONS = [
+  { value: 'quality', label: 'Full', scale: 1 },
+  { value: 'performance', label: 'Half', scale: 1 / 2 },
+  { value: 'third', label: 'Third', scale: 1 / 3 },
+];
+
+export function previewResolutionScale(quality = prefs.value.viewerQuality) {
+  return PREVIEW_RESOLUTIONS.find((option) => option.value === quality)?.scale ?? 1;
+}
+
 const DEFAULTS = {
   transitionDur: 1,
   audioCrossfadeDur: 1,

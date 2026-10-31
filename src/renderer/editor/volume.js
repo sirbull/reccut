@@ -3,6 +3,7 @@ import { clamp, kfRate, kfTime } from '../../shared/model.js';
 export const clampDb = (db) => Math.round(clamp(db, -60, 12) * 10) / 10;
 export const volumeY = (db, h) => 2 + (12 - clamp(db, -60, 12)) / 72 * Math.max(1, h - 4);
 export const volumeDelta = (dy, h) => dy * 72 / Math.max(1, h - 4);
+export const formatVolumeDb = (db = 0) => `${db > 0 ? '+' : ''}${(Object.is(db, -0) ? 0 : db).toFixed(1)} dB`;
 
 // Dra et segment: endre bare de to punktene på hver side av pekeren.
 export function volumeSegment(clip, prop, T) {

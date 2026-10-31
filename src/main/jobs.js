@@ -100,6 +100,15 @@ function cancel(id) {
   const t = tasks.get(id);
   if (!t || (t.state !== 'running' && t.state !== 'queued')) return;
   update(id, { state: 'canceled' });
+  // A queued job has no runner yet; settle its promise so awaiting UI controls recover.
+  for (const queue of Object.values(queues)) {
+    const index = queue.items.findIndex((item) => item.id === id);
+    if (index >= 0) {
+      const [item] = queue.items.splice(index, 1);
+      item.rejectDone(new Error('Canceled'));
+      return;
+    }
+  }
   runners.get(id)?.cancel?.();
 }
 

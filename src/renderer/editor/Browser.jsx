@@ -22,11 +22,11 @@ import {
   Wand2,
 } from 'lucide-preact';
 import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { CAPTION_LANE, EFFECTS, REDACT_MODES, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, mediaClipType, newProject, workPath } from '../../shared/model.js';
+import { CAPTION_LANE, EFFECTS, REDACT_MODES, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject, workPath } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { parseSrt, toSrt, toVtt } from '../../shared/srt.js';
 import { addMediaRecords, usedMedia, projectFolders, audioSkimming, commit, getWave, importPaths, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
-import { fileUrl, scrubAudio, seek } from './playback.js';
+import { fileUrl, mediaPreviewProject, openSource, scrubAudio, seek } from './playback.js';
 import * as commands from './commands.js';
 import { startLibraryDrag } from './libraryDrag.js';
 import { CaptionStyleEditor } from './Inspector.jsx';
@@ -247,19 +247,6 @@ function MediaCard({ m }) {
 
 /* Filmstrip: klippet vises som en liten tidslinje du kan skumme og velge et område i */
 
-const skimProjects = new WeakMap();
-function skimProjectFor(m) {
-  const main = project.value;
-  const key = skimProjects.get(m);
-  if (key && key.w === main.width && key.h === main.height) return key.p;
-  const clip = makeClip(mediaClipType(m), { media: m, start: 0, in: 0, dur: m.kind === 'image' ? 5 : m.duration });
-  clip.id = `skim-${m.id}`;
-  clip.lane = 0;
-  const p = { ...newProject(m.name), width: main.width, height: main.height, media: { [m.id]: m }, clips: { [clip.id]: clip }, primary: [clip.id], duration: clip.dur };
-  skimProjects.set(m, { w: main.width, h: main.height, p });
-  return p;
-}
-
 function fmt(t) {
   const m = Math.floor(t / 60);
   const s = t - m * 60;
@@ -323,8 +310,9 @@ function FilmstripRow({ m, span, height }) {
     setSkimAt(t);
     commands.browserSkimPos.mediaId = m.id;
     commands.browserSkimPos.t = t;
-    if (skimming.value && !playing.value) {
-      skim.value = { project: skimProjectFor(m), T: Math.min(t, dur - 1e-3), mediaId: m.id };
+    if (drag.current) openSource(m.id, t);
+    if ((skimming.value || drag.current) && !playing.value) {
+      skim.value = { project: mediaPreviewProject(m), T: Math.min(t, dur - 1e-3), mediaId: m.id };
       const now = performance.now();
       if (audioSkimming.value && hasAudio && now - lastScrub.current > 70) {
         lastScrub.current = now;
@@ -361,6 +349,7 @@ function FilmstripRow({ m, span, height }) {
     const edge = e.target.dataset?.edge || null;
     commands.pickMedia(null, m.id, mediaOrder);
     const t = timeAtPoint(e.clientX, e.clientY);
+    openSource(m.id, t);
     drag.current = { x: e.clientX, y: e.clientY, t, moved: false, edge };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -371,7 +360,7 @@ function FilmstripRow({ m, span, height }) {
     // Et klikk uten å dra flytter bibliotekets spillhode og fjerner området.
     if (!d.moved && !d.edge) {
       commands.browserRange.value = null;
-      commands.browserPlayhead.value = { mediaId: m.id, t: d.t };
+      openSource(m.id, d.t);
     }
     const r = wrapRef.current?.getBoundingClientRect();
     if (r && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) onLeave();

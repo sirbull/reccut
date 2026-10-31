@@ -3,11 +3,11 @@ import { Maximize2, Minimize2, Settings2, Pause, Play, SkipBack, SkipForward, St
 import { deepClone, formatTimecode, isVisual, kfTime, valueAt } from '../../shared/model.js';
 import { captionLayout, wrapText } from '../../shared/render.js';
 import { clipMatrix, maskList, shapeAt } from '../../shared/shapes.js';
-import { beginTransient, commit, endTransient, getTime, playing, project, selectedClips, selectedTransition, selection, timeSig, updateTransient } from './store.js';
+import { beginTransient, browserPlayhead, commit, endTransient, getTime, playing, project, selectedClips, selectedTransition, selection, skim, timeSig, updateTransient } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
 import { IconButton } from '../ui.jsx';
-import { prefs } from '../prefs.js';
+import { PREVIEW_RESOLUTIONS, prefs, setPrefs } from '../prefs.js';
 import { setKeyframe } from './keyframes.js';
 import { toggleViewerFullscreen } from './fullscreen.js';
 import { isTyping } from '../keyboard.js';
@@ -17,6 +17,7 @@ const PlayBackward = ({ size }) => <Play size={size} fill="currentColor" style={
 
 export function Viewer() {
   const p = project.value;
+  const source = playback.sourceProject.value;
   const boxRef = useRef(null);
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
@@ -36,7 +37,7 @@ export function Viewer() {
   }, []);
 
   // Dra valgt klipp, tittel eller undertekst direkte i bildet.
-  const sel = selectedClips.value.length === 1 ? selectedClips.value[0] : null;
+  const sel = !source && !skim.value?.project && selectedClips.value.length === 1 ? selectedClips.value[0] : null;
   const draggable = sel && (sel.type === 'caption' || (isVisual(sel) && sel.type !== 'gap'));
   const sm = commands.selectedMask.value;
   const pen = commands.penMode.value;
@@ -109,12 +110,12 @@ export function Viewer() {
 
   useEffect(() => {
     resize();
-  }, [p.width, p.height, prefs.value.viewerQuality]);
+  }, [p.width, p.height, source, prefs.value.viewerQuality]);
 
   return (
     <div class="viewer" ref={wrapRef}>
       <div class="viewer-head">
-        <span class="title">{p.name}</span>
+        <span class="title">{source ? source.name : p.name}</span>
         <button
           class="fmt-btn"
           title="Project settings"
@@ -134,7 +135,7 @@ export function Viewer() {
         {editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
       </div>
       <div class="transport">
-        <div class="tc big">{formatTimecode(timeSig.value, p.fps)}</div>
+        <div class="tc big">{formatTimecode(source ? (skim.value?.mediaId === browserPlayhead.value?.mediaId ? skim.value.T : browserPlayhead.value?.t || 0) : timeSig.value, p.fps)}</div>
         <div class="controls">
           <IconButton icon={SkipBack} title="Go to start (Home)" onClick={commands.goHome} />
           <IconButton icon={StepBack} title="Previous edit (Up Arrow)" onClick={() => commands.jumpEdit(-1)} />
@@ -146,6 +147,18 @@ export function Viewer() {
           <IconButton icon={SkipForward} title="Go to end (End)" onClick={commands.goEnd} />
         </div>
         <div class="right">
+          <select
+            class="select preview-resolution"
+            aria-label="Preview resolution"
+            title="Preview resolution. Half and Third reduce rendering work for smoother playback."
+            value={prefs.value.viewerQuality}
+            onChange={(e) => {
+              setPrefs({ viewerQuality: e.currentTarget.value });
+              e.currentTarget.blur();
+            }}
+          >
+            {PREVIEW_RESOLUTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
           <IconButton icon={fullscreen ? Minimize2 : Maximize2} title={fullscreen ? 'Exit full screen (Esc)' : 'Full screen'} aria-pressed={fullscreen} onClick={toggleFullscreen} />
         </div>
       </div>

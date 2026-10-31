@@ -76,6 +76,7 @@ Before packaging, you can tidy up, like Reduce Project in After Effects:
 - **Remove switched off audio**: synced audio that is switched off in every clip is left out.
 - **Remove clips on hidden tracks**.
 - **Include optimized media**: larger, but smooth to edit right away.
+- **Trim media to the parts that are used**: re-encode used portions of video and audio, with extra time on each side. Recording folders and still images are copied whole. Size is an estimate; re-encoding can increase it.
 
 The window shows how many files and how much space the package needs, and warns about files that are missing. The packaging runs in the background with progress at the top of the window, and it checks that there is enough free space and that every copy is complete.
 
@@ -180,6 +181,10 @@ Choose a window instead of a screen under **Screen**. Only that window is record
 ## Check the microphone
 
 Under the microphone meter, Reccut tells you if the microphone is silent, very quiet, good or too loud. Click **Test** to record four seconds and hear them played back.
+
+**Input gain** starts at **0 dB**. Drag the slider or type a value to raise or lower the microphone level. Open **Microphone mixer** for input and output meters in dBFS, a peak hold, average level, a frequency spectrum, three-band EQ, an 80 Hz low cut and a compressor. Aim for speech peaks between −18 and −6 dBFS. If the input clips before gain, lower the input level on the microphone or in your system settings.
+
+Choose **Flat**, **Clear speech**, **Warm voice** or **Bright voice** as a starting point. Changes apply to both Test and new recordings, and are saved automatically when the mixer closes and between app launches. **Reset to Flat** restores 0 dB gain and neutral processing. Processing is baked into the recorded microphone audio; system audio stays separate.
 
 ## If Reccut or the computer crashes
 
@@ -820,9 +825,47 @@ Redactions work the same in the viewer and in the exported file.
     summary: 'Blur, vignette, black and white, shadows, borders and more.',
     keywords: 'effects blur vignette sepia shadow border rounded',
     body: `
-The Effects browser ({{key:browser:effects}}) shows every effect with a live preview. At the top are the redactions for hiding passwords and faces, see Redacting Passwords and Faces. Drag an effect onto a clip, or select clips and click it. Adjust or remove effects in the Effects tab of the inspector ({{key:inspector:effects}}). All values can have keyframes.
+The Effects browser ({{key:browser:effects}}) shows every effect with a live preview. At the top are the redactions for hiding passwords and faces, see Redacting Passwords and Faces. Drag an effect onto a clip, or select clips and click it. Adjust or remove effects in the Effects tab of the inspector ({{key:inspector:effects}}). The classic clip effect amounts can have keyframes. Keying and stack effects have their own controls above them.
 `,
-    see: ['keyframes', 'color', 'redact'],
+    see: ['keying', 'ai-plugins', 'keyframes', 'color', 'redact'],
+  },
+  {
+    id: 'keying',
+    section: 'Editing',
+    title: 'Keying and Background Removal',
+    summary: 'Remove a solid or static background, refine edges and stack multiple keys.',
+    keywords: 'greenscreen blue screen chroma key keyer matte despill background remove clean plate difference stack',
+    body: `
+Select a video, image or recording clip and open the Effects inspector. **Remove solid background** samples the source border at the playhead and adds a color key. Use **Screen color** to select a different color.
+
+**Remove static background** estimates a background reference from nine source frames. Keep the camera and lighting fixed. The subject must move enough to reveal the background in most samples. A stationary subject may become part of the reference. For better control, add a **Background reference key**, put the playhead on a frame with the subject out of shot, and choose **Capture clean background**.
+
+Open **Advanced** to adjust color spill, matte black and white points, shrink or expand the edge, feather, invert and inspect the matte. Positive edge values shrink the foreground. Return View to Composite before export: matte view is also exported.
+
+Effects run from top to bottom. Use the arrows to reorder, duplicate a key to remove another color, or switch an instance off to compare. Blur, saturation, contrast and opacity can also be added to the stack. Existing color correction and clip effects follow the stack. Masks can remove unwanted areas afterward. Stack parameters are currently static.
+
+On recordings, choose Camera or Screen before adding an effect. Preview and export share the same renderer. Automatic background estimation is designed for a locked camera; it is not person segmentation or AI foreground reconstruction. Complex footage may need an external AI processor.
+`,
+    see: ['effects', 'masks', 'ai-plugins'],
+  },
+  {
+    id: 'ai-plugins',
+    section: 'Reference',
+    title: 'AI Chat and External Processors',
+    summary: 'Use your own model API key or connect a local video processor.',
+    keywords: 'ai chat model api key openai anthropic local plugins corridorkey ofx processor',
+    body: `
+Open **Settings → AI & Plugins** to configure an OpenAI-compatible or Anthropic Messages API, its base URL, model ID and your own API key. Keys use encrypted operating system storage when available, otherwise session memory only. Changing the endpoint or provider removes the previous key.
+
+**AI Chat** at the top of the app sends your messages and timeline text metadata to that provider. Clip names and captions may be included. Video, audio and local file paths are not uploaded. The assistant cannot see or hear the footage. Provider API charges apply.
+
+The assistant can propose supported property changes, names and stack effects. Review the list and choose Apply to make the changes as one undo step. If the project changes while a request is running, request an updated proposal. The assistant cannot execute code, run plugins or modify files.
+
+**External video processors** install from a Reccut JSON manifest pointing to a trusted local executable. On a video clip, open Effects → External processing to process the full source and apply the result to that clip. The source timing must be preserved; original audio and media remain available. Cancel through Background tasks.
+
+Native OFX and Adobe plugins cannot be loaded directly. CorridorKey needs an adapter that writes an alpha video, or processing in its standalone app followed by importing the result. Models, licences and runtimes are installed separately. There is no bundled CorridorKey adapter or AI matting model.
+`,
+    see: ['keying', 'effects'],
   },
   {
     id: 'inspector',
@@ -933,6 +976,7 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
 ![The Audio tab with audio components.](audio.jpg)
 
 - Drag the yellow volume line on a clip, or use {{key:volumeUp}} and {{key:volumeDown}}. The waveform grows or shrinks with the level. Option (Alt) click the line once to add a volume keyframe.
+- Clip volume starts at **0 dB**. The clip shows its level, and hovering or dragging the volume line or a volume point shows the exact dB value next to the pointer. Positive values boost the level; negative values reduce it.
 - Drag a volume point to adjust it, or drag the line between two points to move both levels together. With four points, lower the middle segment to create a quiet section with smooth transitions and unchanged levels outside it. Right click a point to choose Linear, Ease In, Ease Out, Ease In and Out or Hold, or to delete it.
 - Drag the fade handles at the top corners of the audio to fade in and out.
 - **Expand Audio** ({{key:expandAudio}}) shows the audio below the video. Drag its edges past the video for J and L cuts.

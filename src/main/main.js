@@ -10,6 +10,7 @@ const {
   ipcMain,
   screen,
   session,
+  safeStorage,
   shell,
   systemPreferences,
 } = require('electron');
@@ -27,6 +28,9 @@ const { createRecordUI } = require('./recordui');
 const { createPipPreview } = require('./pip');
 const updates = require('./updates');
 const { InputTracker, ZOOM_KEYS } = require('./input');
+
+const { createExtensionHost } = require('./extensions');
+const extensions = createExtensionHost({ dir: path.join(app.getPath('userData'), 'extensions'), safeStorage });
 
 const isMac = process.platform === 'darwin';
 
@@ -910,3 +914,27 @@ app.on('will-quit', () => {
 });
 
 app.on('window-all-closed', () => app.quit());
+
+// Only the main app frame can configure credentials or launch a local processor.
+function extensionHandler(channel, handler) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Only the main app can use extensions.');
+    return handler(...args);
+  });
+}
+extensionHandler('ai:config', () => extensions.aiConfig());
+extensionHandler('ai:save', (config) => extensions.saveAI(config));
+extensionHandler('ai:chat', (request) => extensions.chat(request));
+extensionHandler('plugins:list', () => extensions.listPlugins());
+extensionHandler('plugins:install', (manifest) => extensions.installPlugin(manifest));
+extensionHandler('plugins:remove', (id) => extensions.removePlugin(id));
+extensionHandler('plugins:process', (request) => {
+  const { done } = jobs.add({ kind: 'processor', title: 'External video processor', queue: 'heavy', run: async (ctx) => {
+    const result = await extensions.processFile({ id: request.id, input: request.input, outputDir: path.join(baseDir(), 'Processed') }, ctx);
+    const imported = await media.importFiles([result.output], notifyAnalyzed);
+    if (!imported.items?.[0]?.streams?.main?.hasVideo) throw new Error('The processor output must be a readable video file.');
+    if (ctx.isCanceled()) throw new Error('Canceled');
+    return { ...result, media: imported.items[0] };
+  } });
+  return done;
+});

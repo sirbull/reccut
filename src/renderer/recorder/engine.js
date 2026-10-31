@@ -4,6 +4,7 @@ import { drawCamera, drawClicks, drawCursor, drawKeys } from '../../shared/rende
 import { KEY_LIFE, LAYOUT_ANIM, easeOutCubic, lerpRect, pipRect, ZOOM_RAMP, clamp } from '../../shared/model.js';
 import { settings, saveSettings } from './settings.js';
 import { projectFolders } from '../editor/store.js';
+import { createMicMixer, EMPTY_LEVELS, normalizeMix } from './mixer.js';
 
 const api = window.api;
 
@@ -13,6 +14,7 @@ export const mics = signal([]);
 export const recording = signal(false);
 export const elapsed = signal(0);
 export const level = signal(0);
+export const micLevels = signal(EMPTY_LEVELS);
 export const canvasSize = signal({ w: 1920, h: 1080 });
 export const notice = signal(null);
 export const finishing = signal(false);
@@ -27,7 +29,8 @@ let roomActive = false;
 let screenStream = null;
 let cameraStream = null;
 let micStream = null;
-let micSource = null;
+let micMixer = null;
+let micRequest = 0;
 const screenVideo = makeVideo();
 const cameraVideo = makeVideo();
 
@@ -36,8 +39,17 @@ let ctx = null;
 let previewScale = 1;
 
 const audioCtx = new AudioContext();
-const analyser = audioCtx.createAnalyser();
-analyser.fftSize = 1024;
+
+export function setMicMix(patch) {
+  const mix = normalizeMix({ ...settings.value.micMixer, ...patch });
+  saveSettings({ micMixer: mix });
+  micMixer?.set(mix);
+}
+
+// Capture and microphone tests always use the processed signal, never the raw input.
+function micTracks() {
+  return micMixer?.stream.getAudioTracks() || [];
+}
 
 function makeVideo() {
   const v = document.createElement('video');
@@ -204,21 +216,33 @@ export async function useCamera() {
 }
 
 export async function useMic() {
+  if (recording.value || countdown.value || finishing.value || micTest.value) return;
+  const request = ++micRequest;
   const id = settings.value.micId;
-  micSource?.disconnect();
-  micSource = null;
+  micMixer?.dispose();
+  micMixer = null;
   stop(micStream);
   micStream = null;
+  peaks.length = 0;
+  micLevels.value = EMPTY_LEVELS;
+  level.value = 0;
+  micStatus.value = 'none';
   if (!id) return;
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       video: false,
       audio: { deviceId: { exact: id }, echoCancellation: false, noiseSuppression: settings.value.noiseSuppression, autoGainControl: false, channelCount: 2 },
     });
-    micSource = audioCtx.createMediaStreamSource(micStream);
-    micSource.connect(analyser);
-    audioCtx.resume();
+    if (request !== micRequest) { stop(stream); return; }
+    micStream = stream;
+    micMixer = createMicMixer(audioCtx, stream, settings.value.micMixer);
+    await audioCtx.resume();
   } catch (err) {
+    if (request !== micRequest) return;
+    micMixer?.dispose();
+    micMixer = null;
+    stop(micStream);
+    micStream = null;
     console.error(err);
     notice.value = { text: 'Could not start the microphone.' };
   }
@@ -503,17 +527,15 @@ ticker.onmessage = () => {
   draw();
   const now = performance.now();
   syncPipPreview(now);
-  if (micSource) {
-    const data = new Float32Array(analyser.fftSize);
-    analyser.getFloatTimeDomainData(data);
-    let peak = 0;
-    for (const v of data) peak = Math.max(peak, Math.abs(v));
-    level.value = clamp((20 * Math.log10(peak || 1e-6) + 60) / 60, 0, 1);
-    peaks.push([now, peak]);
+  if (micMixer) {
+    const levels = micMixer.read(now);
+    micLevels.value = levels;
+    level.value = clamp((levels.output + 60) / 60, 0, 1);
+    peaks.push([now, levels.output, levels.input]);
     while (peaks.length && now - peaks[0][0] > 3000) peaks.shift();
     const max = Math.max(...peaks.map((x) => x[1]));
-    const db = 20 * Math.log10(max || 1e-9);
-    micStatus.value = db < -60 ? 'silent' : db < -32 ? 'quiet' : db > -0.5 ? 'loud' : 'good';
+    const raw = Math.max(...peaks.map((x) => x[2]));
+    micStatus.value = max > -0.5 || raw > -0.5 ? 'loud' : max < -60 ? 'silent' : max < -32 ? 'quiet' : 'good';
   } else {
     level.value = 0;
     micStatus.value = 'none';
@@ -669,6 +691,11 @@ let minimized = false;
 
 export async function startRecording() {
   if (recording.value || finishing.value || countdown.value) return;
+  if (micTest.value) {
+    notice.value = { text: 'Wait for the microphone test to finish before recording.' };
+    return;
+  }
+  await audioCtx.resume();
   const s = settings.value;
   if (!screenStream && !cameraStream && !micStream) {
     notice.value = { text: 'Choose at least one source before you start recording.' };
@@ -728,7 +755,7 @@ async function beginRecording() {
     const bitrate = Math.round(clamp(w * h * s.fps * 0.1, 4e6, 60e6));
     recorders.push(await startRecorder('screen', tracks, 'video', bitrate));
   }
-  const camTracks = [...(cameraStream?.getVideoTracks() || []), ...(micStream?.getAudioTracks() || [])];
+  const camTracks = [...(cameraStream?.getVideoTracks() || []), ...micTracks()];
   if (camTracks.length) {
     recorders.push(await startRecorder('camera', camTracks, cameraStream ? 'video' : 'audio', 8e6));
   }
@@ -780,28 +807,44 @@ export async function stopRecording() {
 /* Test av mikrofonen: fire sekunder opptak som spilles av med en gang. */
 export const micTest = signal(null); // 'recording' | 'playing' | null
 export async function testMic() {
-  if (!micStream || micTest.value) return;
-  const [mime] = pickMime('audio');
-  const rec = new MediaRecorder(new MediaStream(micStream.getAudioTracks()), { mimeType: mime });
-  const chunks = [];
-  rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-  const stopped = new Promise((r) => (rec.onstop = r));
+  if (!micMixer || micTest.value || recording.value || countdown.value || finishing.value) return;
   micTest.value = 'recording';
-  rec.start();
-  await new Promise((r) => setTimeout(r, 4000));
-  rec.stop();
-  await stopped;
-  micTest.value = 'playing';
-  const url = URL.createObjectURL(new Blob(chunks, { type: mime }));
-  const a = new Audio(url);
-  await new Promise((resolve) => {
-    a.onended = resolve;
-    a.onerror = resolve;
-    a.play().catch(resolve);
-    setTimeout(resolve, 6000);
-  });
-  URL.revokeObjectURL(url);
-  micTest.value = null;
+  let url;
+  let rec;
+  let playback;
+  try {
+    await audioCtx.resume();
+    const [mime] = pickMime('audio');
+    rec = new MediaRecorder(new MediaStream(micTracks()), { mimeType: mime });
+    const chunks = [];
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    const stopped = new Promise((resolve, reject) => {
+      rec.onstop = resolve;
+      rec.onerror = (e) => reject(e.error || new Error('Microphone test failed'));
+    });
+    const timer = setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, 4000);
+    try {
+      rec.start();
+      await stopped;
+    } finally { clearTimeout(timer); }
+    micTest.value = 'playing';
+    url = URL.createObjectURL(new Blob(chunks, { type: mime }));
+    playback = new Audio(url);
+    await new Promise((resolve) => {
+      const timeout = setTimeout(resolve, 6000);
+      const done = () => { clearTimeout(timeout); resolve(); };
+      playback.onended = done;
+      playback.onerror = done;
+      playback.play().catch(done);
+    });
+  } catch (err) {
+    notice.value = { text: `Could not test the microphone: ${err.message}` };
+  } finally {
+    if (rec && rec.state !== 'inactive') rec.stop();
+    playback?.pause();
+    if (url) URL.revokeObjectURL(url);
+    micTest.value = null;
+  }
 }
 
 function round(v) {

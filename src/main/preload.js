@@ -8,6 +8,13 @@ const on = (channel) => (cb) => {
 };
 
 contextBridge.exposeInMainWorld('api', {
+  aiConfig: invoke('ai:config'),
+  aiSave: invoke('ai:save'),
+  aiChat: invoke('ai:chat'),
+  pluginsList: invoke('plugins:list'),
+  pluginsInstall: invoke('plugins:install'),
+  pluginsRemove: invoke('plugins:remove'),
+  pluginsProcess: invoke('plugins:process'),
   platform: process.platform,
   // Filstier for filer som dras inn i vinduet.
   pathForFile: (file) => webUtils.getPathForFile(file),
