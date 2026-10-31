@@ -12,7 +12,18 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 * **Forstørret musepeker:** hold inne en tast (standard høyre Cmd på Mac, høyre Ctrl på Windows), så vokser pekeren frem med en animasjon til du slipper
 * Fremheving av museklikk (valgfritt)
 * Skjerm og kamera lagres hver for seg, sammen med oppsett, peker og tastetrykk. Alt kan dermed endres i etterkant.
-* Ferdig MP4 lages automatisk i bakgrunnen etter opptak (kan slås av), og knappen **Rediger** åpner opptaket i redigeringen
+* Ferdig MP4 lages automatisk i bakgrunnen etter opptak (kan slås av), og knappen **Edit** åpner opptaket i redigeringen
+* Opptakene lagres i mappen Recordings i det åpne prosjektet og legges rett inn i prosjektets bibliotek
+
+## Prosjekter og mapper
+
+* Et nytt prosjekt får navn og plassering, og appen lager en egen mappe med prosjektfilen og undermappene **Media**, **Recordings**, **Optimized Media** og **Exports**. Første gang appen startes, må du lage eller åpne et prosjekt.
+* Ved import velger du **Copy to project folder** eller **Leave files in place**. Valget huskes og brukes også når du drar filer inn.
+* Prosjektet som er åpent, vises øverst i vinduet. Klikk på det for å åpne andre prosjekter, vise dem i Finder eller Utforsker, fjerne dem fra listen eller legge dem i papirkurven.
+* **Optimize Media** (Option Cmd O, også som valg ved import) gjør klippene om til et format som er lett å redigere: H.264 med kort GOP for 8-bit, og 10-bit VP9 for 10-bit og HDR. Det skjer i bakgrunnen med fremdrift øverst i vinduet.
+* **HDR** (PQ og HLG) gjenkjennes ved import og vises tonemappet til SDR, med 10 bit i arbeidskopien. Eksport i HDR støttes ikke ennå.
+* **RAW-bilder** (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 og flere) importeres med kameraets innebygde JPEG i full størrelse, med riktig orientering. Selve RAW-dataene fremkalles ikke, og RAW-video (BRAW, R3D, ProRes RAW) støttes ikke.
+* Merker i biblioteket viser HDR, 10-bit, RAW, optimalisert media og synket lyd. Info-fanen viser hvilken fil som brukes til avspilling.
 
 ## Redigering
 
@@ -28,6 +39,9 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 * **Utvid lyd** (Control S, Alt E på Windows) viser lyden for seg under bildet, så kantene kan dras for J- og L-kutt. **Koble fra lyd** (Control Shift S, Alt Shift E) gir egne lydklipp.
 * **Automatisk synk av lyd** (Auto Sync Audio): legg et lydopptak fra en ekstern mikrofon under tidslinjen, høyreklikk og velg Auto Sync Audio (Option Cmd G). Appen sammenligner lyden med lyden i videoklippene og legger opptaket rett under videoen det hører til. Er lydklippet lengre enn videoen, klippes det til; er det kortere, legges det bare på riktig sted. Passer det under flere klipp, kommer det opp et valg: synk med det første klippet, eller del opp og legg en bit under hvert klipp. Lyden kan grupperes med videoen og kameralyden dempes automatisk (valgene huskes, og finnes også i Preferences). Velger du også videoklipp, synkes det bare mot dem.
 * **Grupper klipp** (Cmd G): marker video og lyd og grupper dem, så følger lyden videoen når den flyttes, også om lyden starter før videoen. Et klikk velger hele gruppen, Option klikk velger ett klipp. Shift Cmd G løser opp gruppen. Grupperte klipp har et lenkemerke.
+* **Synk i biblioteket**: marker videoklipp og lydfiler (gjerne alt med Cmd A) og velg Synchronize Audio (Option Cmd G). Lyden flettes inn i videoene som et ekstra lydspor, og kameralyden slås av, men blir liggende. Når klippet dras til tidslinjen, har det begge lydsporene, og du velger selv hvilket du bruker.
+* **Lydkomponenter**: et klipp kan ha flere lydspor (kameralyd, ekstern opptaker, mikrofon og systemlyd). Slå dem av og på i Audio-fanen, i høyreklikkmenyen, eller klikk på et spor i utvidet lyd og trykk V. Et spor som er av, blir liggende grått.
+* **V** slår et klipp av og på. Klippet blir liggende på tidslinjen, men grått.
 * **Kryssfade i lyd**: marker to lydklipp som ligger inntil hverandre og trykk Cmd T. Standardlengden (1 sekund) settes i Preferences (Cmd ,).
 * Overwrite (D), Lift from Storyline (Option Cmd Opp), Overwrite to Storyline (Option Cmd Ned), Insert Gap (Option W), Solo (Option S) og Select Clip (C)
 * Importer nesten alle formater: MP4, MOV, MKV, WebM, AVI, WMV, FLV, MPEG, MXF, ProRes, DNxHR, 10-bit H.264, animert GIF, TIFF, TGA, HEIC, WAV, AIFF, MP3, AAC, FLAC, OGG, WMA, AC3 og flere. Det appen ikke kan spille av direkte konverteres i bakgrunnen. Filer som ikke kan leses avvises med en tydelig melding.
@@ -36,7 +50,7 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 * **Animasjonsmaler**: Fade In, Fade Out, Slow Zoom In og Out, Slide In fra tre kanter, Pop In og Spin In
 * Dra klipp, titler og undertekster direkte i visningen for å plassere dem
 * **Effekter**: Blur, Vignette, Sepia, Black & White, Invert, Hue Shift, Rounded Corners, Drop Shadow og Border
-* Farge: ferdige utseender og justering av eksponering, kontrast, metning og temperatur
+* **Fargekorrigering**: ferdige utseender, eksponering, kontrast, høylys, skygger, metning, temperatur og tint, og fargehjul for skygger, mellomtoner og høylys. Regnes ut på skjermkortet i 16-bit flyttall, så 10-bit klipp beholder jevne overganger. Samme utregning brukes i visningen og eksporten.
 * **Titler** fra åtte maler (Title, Lower Third, Headline, Title Card, Boxed, Typewriter, Callout, End Card) med animasjon inn og ut og alle systemskrifter
 * **Overganger**: Cross Dissolve, Fade to Black, Fade to White, Push i tre retninger, Wipe, Circle Reveal, Zoom og Blur
 * Alle titler, overganger og effekter har levende forhåndsvisning i biblioteket (hold musen over), tegnet med samme motor som eksporten
@@ -63,7 +77,13 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | --- | --- |
 | MP4 (H.264, HEVC, AV1), WebM (VP9, AV1), MOV (H.264, ProRes 422), MKV, GIF | MP3, AAC (M4A), WAV, FLAC, Opus |
 
-## Hurtigtaster
+## Hjelp, søk og hurtigtaster
+
+* Alle verktøy og funksjoner har en hurtigtast, og alle står i menyene med tasten ved siden av. Menyene, tastene, søket og listen over hurtigtaster lages fra én liste i koden (`src/renderer/registry.js`), så de alltid stemmer med hverandre.
+* **Cmd K** (Ctrl K på Windows) åpner kommandosøket: skriv hva du vil gjøre, trykk Enter, så kjøres kommandoen eller verktøyet åpnes. På Mac har også Hjelp-menyen det vanlige søkefeltet som finner menyvalg.
+* **F1** åpner hjelpen med artikler og bilder for alle deler av appen, og et søk som finner både artikler og kommandoer. Knapper i artiklene kjører kommandoen de beskriver.
+* **Option Cmd K** viser alle hurtigtaster, gruppert etter meny.
+
 
 ### Opptak (globale, virker selv om en annen app er i fokus)
 
@@ -90,7 +110,18 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | Control S, Control Shift S | Utvid lyd, koble fra lyd (Alt E og Alt Shift E på Windows) |
 | Option Cmd Opp og Ned | Løft ut av hovedsporet, skriv over til hovedsporet |
 | Cmd G, Shift Cmd G | Grupper klipp, løs opp gruppe |
-| Option Cmd G | Automatisk synk av lyd |
+| Option Cmd G | Synk lyd (i biblioteket og på tidslinjen) |
+| Option Cmd O | Optimaliser media |
+| Option R | Spill klippet baklengs |
+| Shift Option 1 til 6, Shift Option 0 | Fartsrampe, fjern rampe |
+| Shift Option minus og pluss | Sakte 50 %, raskt 2x |
+| Ctrl M | Slett markør |
+| Cmd 4, Option Cmd 4, Cmd 6, Option Cmd 5, Cmd 8 | Video, lyd, farge, effekter og info i inspektøren |
+| Shift Cmd 1, Option Cmd 1, Cmd 5, Shift Cmd 5, Shift Cmd 7 | Media, titler, effekter, overganger og undertekster i biblioteket |
+| Shift Cmd F | Spill av i fullskjerm |
+| Shift Cmd A | Fjern alt utvalg |
+| Shift Cmd R | Vis prosjektmappen |
+| Cmd K, F1, Option Cmd K | Søk etter kommandoer, hjelp, alle hurtigtaster |
 | Cmd , | Preferences |
 | Cmd B, Shift Cmd B | Kutt valgte klipp ved spillhodet, kutt alle |
 | Delete, Shift Delete | Slett og lukk, slett og behold mellomrom |
@@ -137,7 +168,8 @@ npm run dist:mac # eller dist:win, lager installasjonsfil
 | --- | --- |
 | `src/main` | Electron hovedprosess: vindu, opptak til disk, tastaturlytter, FFmpeg, bakgrunnsoppgaver, prosjekter |
 | `src/shared` | Prosjektmodell, redigeringsoperasjoner og tegnemotor, felles for forhåndsvisning og eksport |
-| `src/renderer` | Grensesnittet i Preact: opptak, redigering (bibliotek, visning, inspektør, tidslinje) og eksportfanen |
+| `src/renderer` | Grensesnittet i Preact: opptak, redigering (bibliotek, visning, inspektør, tidslinje), eksportfanen, kommandoregisteret og hjelpen |
+| `assets/help` | Skjermbilder til hjelpen |
 | `src/worker` | Skjulte vinduer for eksport og automatisk teksting |
 
 Åpen kildekode som brukes: Electron, Preact, Lucide (ikoner), Mediabunny (dekoding og koding med WebCodecs), FFmpeg via ffmpeg-static (miksing, omkoding, analyse), uiohook-napi (globale tastetrykk) og Transformers.js med Whisper (teksting). FFmpeg-binærfilene er GPL-lisensiert.

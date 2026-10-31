@@ -3137,7 +3137,8 @@ kbd.keycap {
   margin: 16px 0;
 }
 .help-article figure img {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   border-radius: 8px;
   border: 1px solid var(--line-2);
   display: block;
@@ -3247,4 +3248,25 @@ kbd.keycap {
 }
 .wheel-wrap .slider {
   width: 100%;
+}
+.palette-item,
+.help-cmd,
+.help-hit,
+.help-section button,
+.project-btn,
+.help-run {
+  border: 0;
+  background: none;
+  box-shadow: none;
+  font: inherit;
+  cursor: pointer;
+}
+.palette-item.active {
+  background: var(--accent);
+}
+.help-section button.active {
+  background: var(--accent);
+}
+.help-run {
+  background: rgba(10, 132, 255, 0.18);
 }
