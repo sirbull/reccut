@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('api', {
   historySnapshot: invoke('history:snapshot'),
   recState: invoke('rec:state'),
   recShowControls: invoke('rec:showControls'),
+  recPipPreview: (frame) => ipcRenderer.send('rec:pipPreview', frame),
   minimizeWindow: invoke('window:minimize'),
   restoreWindow: invoke('window:restore'),
   recCheckpoint: invoke('rec:checkpoint'),

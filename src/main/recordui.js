@@ -50,7 +50,7 @@ const fmt = (s) => {
   return `${h ? `${h}:` : ''}${String(m).padStart(h ? 2 : 1, '0')}:${String(sec).padStart(2, '0')}`;
 };
 
-const CONTROL_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
+const CONTROL_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;overflow:hidden;background:transparent;font:600 13px -apple-system,system-ui,"Segoe UI",sans-serif;color:#fff;user-select:none}
 #bar{position:fixed;inset:4px;display:flex;align-items:center;gap:8px;padding:0 8px 0 12px;border-radius:12px;background:rgba(28,28,30,.94);box-shadow:0 6px 20px rgba(0,0,0,.45);-webkit-app-region:drag}
 #dot{width:11px;height:11px;border-radius:50%;background:#ff453a;box-shadow:0 0 0 3px rgba(255,69,58,.25)}

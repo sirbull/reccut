@@ -56,8 +56,16 @@ function drawTransition(ctx, project, layer, getSource) {
   const W = project.width;
   const H = project.height;
   const { type, p } = layer.transition;
-  const A = (alpha = 1) => layer.a && drawClip(ctx, project, layer.a.clip, layer.a.T, getSource, alpha);
-  const B = (alpha = 1) => layer.b && drawClip(ctx, project, layer.b.clip, layer.b.T, getSource, alpha);
+  const drawSide = (side, alpha) => {
+    if (side) return drawClip(ctx, project, side.clip, side.T, getSource, alpha);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  };
+  const A = (alpha = 1) => drawSide(layer.a, alpha);
+  const B = (alpha = 1) => drawSide(layer.b, alpha);
   const e = easeInOut(p);
   switch (type) {
     case 'dip':

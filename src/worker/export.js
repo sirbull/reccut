@@ -53,7 +53,7 @@ function ffmpeg(bin, args, { stdin = false, onTime } = {}) {
   });
   const done = new Promise((resolve, reject) => {
     proc.on('error', reject);
-    proc.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`FFmpeg feilet (${code}): ${err.split('\n').slice(-4).join(' ')}`))));
+    proc.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`FFmpeg failed (${code}): ${err.split('\n').slice(-4).join(' ')}`))));
   });
   return { proc, done };
 }

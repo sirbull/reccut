@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { AudioLines, Download, FolderOpen, Keyboard, Play, RotateCcw, Scissors, Search, Settings2, Share, Upload, X } from 'lucide-preact';
 import { prefs, setPrefs } from './prefs.js';
+import { settings as recordingSettings, saveSettings } from './recorder/settings.js';
 import { audioSkimming, skimming, snapping } from './editor/store.js';
 import * as commands from './editor/commands.js';
 import { Button, NumberField, Row, Section, Segmented, Toggle, toast } from './ui.jsx';
@@ -97,6 +98,12 @@ function GeneralPane() {
         {toggle('checkUpdates', 'Check for new versions on GitHub once a day')}
         <p class="hint">Reccut works fully offline. When there is a connection, it can tell you about a new version and download the installer for you. Nothing is installed without you opening it.</p>
       </Section>
+      <Section title="Screen Capture" collapsible={false}>
+        <Row label="Include Reccut in screenshots and screen recordings">
+          <Toggle checked={!recordingSettings.value.hideFromCapture} onChange={(v) => saveSettings({ hideFromCapture: !v })} />
+        </Row>
+        <p class="hint">Turn this on to capture Reccut as it appears on your screen. When off, supported capture tools show the windows behind Reccut instead.</p>
+      </Section>
       <Section title="Media" collapsible={false}>
         {toggle('checkOfflineOnFocus', 'Look for missing media when you return to Reccut')}
         <p class="hint">Finds a drive that has been connected again, and shows missing files as Media Offline.</p>
@@ -130,6 +137,14 @@ function EditingPane() {
         {seconds('freezeDur', 'Freeze frames', 0.2, 60)}
       </Section>
       <Section title="Timeline" collapsible={false}>
+        <Row label="Default keyframe interpolation">
+          <Segmented
+            value={prefs.value.keyframeEasing}
+            options={[{ value: 'easeInOut', label: 'Eased' }, { value: 'linear', label: 'Linear' }]}
+            onChange={(v) => setPrefs({ keyframeEasing: v })}
+          />
+        </Row>
+        <p class="hint">Applies to new keyframes for all properties. Right click a keyframe to change its easing.</p>
         <Row label="Snapping">
           <Toggle
             checked={snapping.value}
@@ -171,6 +186,8 @@ function PlaybackPane() {
         </Row>
       </Section>
       <Section title="Playback" collapsible={false}>
+        {toggle('playbackFromSkimmer', 'Start playback at the mouse position')}
+        <p class="hint">When skimming the timeline, playback starts at the frame under the pointer. Turn this off to start at the playhead. Skimming must be on.</p>
         <Row label="Viewer">
           <Segmented
             value={p.viewerQuality}

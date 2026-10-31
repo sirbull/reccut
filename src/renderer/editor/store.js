@@ -9,6 +9,7 @@ import {
   makeClip,
   newProject,
   relayoutPrimary,
+  parseTransitionSelection,
   updateDuration,
 } from '../../shared/model.js';
 import { addMediaClip, autoFormat } from '../../shared/ops.js';
@@ -139,7 +140,9 @@ export function beginTransient() {
 }
 export function updateTransient(mutator) {
   if (!transientBase) beginTransient();
-  project.value = withDuration(produce(transientBase, (d) => mutator(d)));
+  project.value = withDuration(produce(transientBase, (d) => {
+    mutator(d);
+  }));
 }
 export function endTransient(keep = true) {
   if (!transientBase) return;
@@ -175,7 +178,13 @@ export const canRedo = () => redoStack.length > 0;
 function pruneSelection() {
   const clips = project.value.clips;
   if (selection.value.some((id) => !clips[id])) selection.value = selection.value.filter((id) => clips[id]);
-  if (selectedTransition.value && !clips[selectedTransition.value]?.transition) selectedTransition.value = null;
+  const value = selectedTransition.value;
+  if (value?.startsWith('ax:')) {
+    if (!clips[value.slice(3)]?.axfade) selectedTransition.value = null;
+  } else if (value) {
+    const { id, key } = parseTransitionSelection(value);
+    if (!clips[id]?.[key]) selectedTransition.value = null;
+  }
 }
 
 /* Lagring */

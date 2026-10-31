@@ -6,6 +6,7 @@ import { memo } from 'preact/compat';
 import {
   AudioLines,
   Captions,
+  Spline,
   Brackets,
   Eye,
   EyeOff,
@@ -34,6 +35,8 @@ import {
   EASINGS,
   audioXfadeWindow,
   dbToGain,
+  componentVolumeProp,
+  kfTime,
   kfRate,
   sourceTime,
   speedOf,
@@ -43,13 +46,16 @@ import {
   isVisual,
   redactLabel,
   transitionWindow,
+  transitionSelection,
   audioComponents,
   primaryComponent,
   titleText,
   CLIP_COLORS,
   deepClone,
+  valueAt,
+  removeKeyframe,
 } from '../../shared/model.js';
-import { groupLead, groupMembers, moveClip, positionMove, positionTrim, rollEdit, slideClip, slipClip, splitClip, trimClip } from '../../shared/ops.js';
+import { groupLead, groupMembers, moveClip, positionMove, positionTrim, rollEdit, setTransition, slideClip, slipClip, splitClip, trimClip } from '../../shared/ops.js';
 import {
   beginTransient,
   commit,
@@ -76,6 +82,10 @@ import {
 import { fileUrl, scrubAudio, seek } from './playback.js';
 import { IconButton } from '../ui.jsx';
 import * as commands from './commands.js';
+import { prefs, setPrefs } from '../prefs.js';
+import { shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from './volume.js';
+import { libraryDropTarget, mediaDropPreview, resizedTransitionDuration } from '../../shared/libraryDrop.js';
+import { endLibraryDrag, libraryDrag } from './libraryDrag.js';
 
 const PAD = 16;
 const RULER_H = 26;
@@ -144,7 +154,35 @@ export function Timeline() {
     return next;
   }, [p]);
   const z = pps.value;
-  const width = Math.max(view.value.width, PAD * 2 + (p.duration + 30) * z);
+  const dragItem = libraryDrag.value;
+  useEffect(() => {
+    if (!dragItem) setGhost(null);
+  }, [dragItem]);
+  const transitions = useMemo(() => p.primary.flatMap((id, i) => {
+    const c = p.clips[id];
+    if (!c) return [];
+    const prev = i > 0 ? p.clips[p.primary[i - 1]] : null;
+    return ['start', 'end'].flatMap((edge) => {
+      const transition = c[edge === 'end' ? 'transitionOut' : 'transition'];
+      if (!transition) return [];
+      const [a, b] = transitionWindow(c, Boolean(prev), prev, edge);
+      return [{ id, edge, transition, a, b, prev: edge === 'start' ? prev : null }];
+    });
+  }), [p]);
+  // Reserve the covered part of each label, including on both sides of a cut.
+  const labelInsets = new Map();
+  for (const tr of [...transitions, ...(ghost?.kind === 'transition' ? [ghost] : [])]) {
+    for (const id of [tr.id, tr.prev?.id]) {
+      const c = p.clips[id];
+      if (!c) continue;
+      const inset = labelInsets.get(id) || { start: 0, end: 0 };
+      if (tr.a <= c.start && tr.b > c.start) inset.start = Math.max(inset.start, (tr.b - c.start) * z);
+      if (tr.a < c.start + c.dur && tr.b >= c.start + c.dur) inset.end = Math.max(inset.end, (c.start + c.dur - tr.a) * z);
+      labelInsets.set(id, inset);
+    }
+  }
+  const previewEnd = ghost?.kind === 'media' ? Math.max(0, ...ghost.clips.map((c) => c.b)) : 0;
+  const width = Math.max(view.value.width, PAD * 2 + (Math.max(p.duration, previewEnd) + 30) * z);
 
   // Spillhodet flyttes direkte i DOM for jevn avspilling.
   useEffect(() => {
@@ -315,7 +353,8 @@ export function Timeline() {
       commands.zoomAt(e.altKey ? 1 / 2 : 2, T, e.clientX - scrollRef.current.getBoundingClientRect().left);
       return;
     }
-    if (tool.value === 'range' && hit !== 'ruler') {
+    const captionHit = proj.clips[el?.dataset.clip]?.type === 'caption';
+    if (tool.value === 'range' && !captionHit && hit !== 'ruler') {
       dragRef.current = { kind: 'range', T0: snap(T).t, moved: false, x: e.clientX, y: e.clientY };
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
@@ -337,13 +376,24 @@ export function Timeline() {
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
-    if (hit === 'transition') {
+    if (hit === 'transition' || hit === 'transition-edge') {
+      const clip = proj.clips[el.dataset.id];
+      if (!clip || proj.lanes?.[clip.lane]?.locked) return;
+      const edge = el.dataset.edge || 'start';
       selection.value = [];
-      selectedTransition.value = el.dataset.id;
+      selectedTransition.value = transitionSelection(clip.id, edge);
+      if (hit === 'transition-edge') {
+        const prev = proj.clips[proj.primary[proj.primary.indexOf(clip.id) - 1]];
+        const range = transitionWindow(clip, Boolean(prev), prev, edge);
+        dragRef.current = { kind: 'transition-resize', x: e.clientX, y: e.clientY, clip: deepClone(clip), edge, handle: el.dataset.handle, centered: edge === 'start' && Boolean(prev), range, moved: false };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      }
       return;
     }
     if (hit === 'kf') {
       const clip = proj.clips[el.dataset.clip];
+      if (!clip || proj.lanes?.[clip.lane]?.locked) return;
       dragRef.current = { kind: 'kf', x: e.clientX, y: e.clientY, clip: deepClone(clip), from: Number(el.dataset.t), moved: false };
       seek(clip.start + (Number(el.dataset.t) - clip.in) / kfRate(clip));
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -380,15 +430,30 @@ export function Timeline() {
     }
     // Et klikk velger hele gruppen. Option (Alt) velger bare ett klipp.
     if (!selection.value.includes(clipId)) selection.value = e.altKey ? [clipId] : groupMembers(proj, clipId);
+    if (clip.type === 'caption' && (getTime() < clip.start || getTime() >= clip.start + clip.dur)) seek(clip.start);
 
     const base = { x: e.clientX, y: e.clientY, T, clip: deepClone(clip), moved: false };
+    if (hit === 'vol') {
+      e.preventDefault();
+      const prop = el.dataset.prop;
+      const kfIndex = el.dataset.kf != null ? Number(el.dataset.kf) : null;
+      if (el.dataset.key) selectedComponent.value = { clipId, key: el.dataset.key };
+      if (e.altKey) {
+        // Et punkt som allerede finnes skal ikke flyttes av et nytt Alt-klikk.
+        if (kfIndex == null) commands.addVolumeKeyframe(clipId, T, prop);
+        return;
+      }
+      dragRef.current = { ...base, kind: 'vol', prop, h: Number(el.dataset.height), indices: kfIndex == null ? volumeSegment(clip, prop, T) : [kfIndex] };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     const positionTool = tool.value === 'position' && clip.lane === 0;
     if (hit === 'aedge') {
       dragRef.current = { ...base, kind: 'aedge', edge: el.dataset.edge };
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
-    if (tool.value === 'trim') {
+    if (tool.value === 'trim' && clip.type !== 'caption') {
       // Trimverktøyet: kant mellom to klipp ruller kuttet, klippet selv slippes, Option glir.
       const idx = proj.primary.indexOf(clip.id);
       if (hit === 'edge' && clip.lane === 0) {
@@ -403,13 +468,7 @@ export function Timeline() {
     if (hit === 'edge') dragRef.current = { ...base, kind: positionTool ? 'ptrim' : 'trim', edge: el.dataset.edge };
     else if (positionTool && hit === 'clip') dragRef.current = { ...base, kind: 'pmove' };
     else if (hit === 'fade') dragRef.current = { ...base, kind: 'fade', which: el.dataset.which };
-    else if (hit === 'vol') {
-      if (e.altKey) {
-        commands.addVolumeKeyframe(clipId, T);
-        return;
-      }
-      dragRef.current = { ...base, kind: 'vol', kfIndex: el.dataset.kf != null ? Number(el.dataset.kf) : null };
-    } else dragRef.current = { ...base, kind: 'move', ids: [...selection.value], originals: selection.value.map((id) => deepClone(proj.clips[id])), originalProject: proj };
+    else dragRef.current = { ...base, kind: 'move', ids: [...selection.value], originals: selection.value.map((id) => deepClone(proj.clips[id])), originalProject: proj };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
@@ -428,7 +487,7 @@ export function Timeline() {
       }
     }
     // Skumming: visningen følger pekeren, og lyden spilles i korte utdrag.
-    if (!d && skimming.value && !playing.value && tool.value !== 'hand' && !e.target.closest('.tl-ruler')) {
+    if (!d && skimming.value && !playing.value && tool.value !== 'hand') {
       const st = snap(T).t;
       skim.value = { T: st };
       if (skimRef.current) {
@@ -460,6 +519,21 @@ export function Timeline() {
     const dt = (e.clientX - d.x) / pps.value;
     const c = d.clip;
 
+    if (d.kind === 'transition-resize') {
+      const index = d.handle === 'start' ? 0 : 1;
+      const exclude = new Set([c.id]);
+      const prev = project.value.primary[project.value.primary.indexOf(c.id) - 1];
+      if (d.centered && prev) exclude.add(prev);
+      const s = snap(d.range[index] + dt, exclude);
+      const dur = resizedTransitionDuration(d.range[1] - d.range[0], s.t - d.range[index], d.handle, d.centered);
+      const transition = c[d.edge === 'end' ? 'transitionOut' : 'transition'];
+      updateTransient((p) => setTransition(p, c.id, transition.type, Math.round(dur * p.fps) / p.fps, d.edge));
+      const current = project.value.clips[c.id];
+      const previous = project.value.clips[prev];
+      const window = transitionWindow(current, Boolean(previous), previous, d.edge);
+      setSnapLine(s.snapped && Math.abs(window[index] - s.t) < 1 / project.value.fps ? window[index] : null);
+      return;
+    }
     if (d.kind === 'range') {
       const t1 = snap(T).t;
       updateTransient((p) => (p.range = { in: Math.min(d.T0, t1), out: Math.max(d.T0, t1) }));
@@ -524,16 +598,8 @@ export function Timeline() {
       return;
     }
     if (d.kind === 'vol') {
-      const dy = (d.y - e.clientY) / 1.5;
-      if (d.kfIndex != null) {
-        const [t0, v0] = c.kf.volume[d.kfIndex];
-        updateTransient((p) => {
-          const list = p.clips[c.id].kf.volume;
-          list[d.kfIndex] = [t0, clampDb(v0 + dy * 0.5)];
-        });
-      } else {
-        updateTransient((p) => (p.clips[c.id].props.volume = clampDb((c.props.volume || 0) + dy * 0.5)));
-      }
+      const delta = volumeDelta(d.y - e.clientY, d.h);
+      updateTransient((p) => shiftVolume(p.clips[c.id], d.prop, delta, d.indices));
       return;
     }
     if (d.kind === 'move') {
@@ -588,12 +654,12 @@ export function Timeline() {
     }
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e) => {
     const d = dragRef.current;
     dragRef.current = null;
     setGhost(null);
     setSnapLine(null);
-    if (d?.moved) endTransient(true);
+    if (d?.moved) endTransient(e.type !== 'pointercancel');
   };
 
   const onContextMenu = async (e) => {
@@ -605,11 +671,14 @@ export function Timeline() {
       if (id === 'del') commit((p) => (p.markers = p.markers.filter((m) => m.id !== el.dataset.id)));
       return;
     }
-    if (el?.dataset.hit === 'kf') {
+    if (el?.dataset.hit === 'kf' || (el?.dataset.hit === 'vol' && el.dataset.kf != null)) {
       const cid = el.dataset.clip;
-      const t = Number(el.dataset.t);
       const c = project.value.clips[cid];
-      const current = Object.values(c.kf).flatMap((l) => l.filter((k) => Math.abs(k[0] - t) < 1e-4)).map((k) => k[2] || 'linear');
+      if (!c || project.value.lanes?.[c.lane]?.locked) return;
+      const prop = el.dataset.hit === 'vol' ? el.dataset.prop : null;
+      const t = prop ? c.kf[prop]?.[Number(el.dataset.kf)]?.[0] : Number(el.dataset.t);
+      if (t == null) return;
+      const current = Object.entries(c.kf).filter(([key]) => !prop || prop === key).flatMap(([, l]) => l.filter((k) => Math.abs(k[0] - t) < 1e-4)).map((k) => k[2] || 'linear');
       const id = await window.api.popupMenu([
         ...EASINGS.map((x) => ({ id: x.id, label: x.label, checked: current.includes(x.id) })),
         { separator: true },
@@ -618,11 +687,13 @@ export function Timeline() {
       if (!id) return;
       commit((p) => {
         const cc = p.clips[cid];
+        if (!cc) return;
         for (const [prop, list] of Object.entries(cc.kf)) {
-          if (prop === 'layout') continue;
+          if (prop === 'layout' || (el.dataset.hit === 'vol' && prop !== el.dataset.prop)) continue;
           if (id === 'delete') {
-            cc.kf[prop] = list.filter((k) => Math.abs(k[0] - t) > 1e-4);
-            if (!cc.kf[prop].length) delete cc.kf[prop];
+            // Behold siste nivå når volumautomatiseringen fjernes helt.
+            if (list.length === 1 && ['volume', 'micVolume', 'sysVolume'].includes(prop)) cc.props[prop] = list[0][1];
+            removeKeyframe(cc, prop, t);
           } else if (list.some((k) => Math.abs(k[0] - t) < 1e-4)) setKeyframeEase(cc, prop, t, id);
         }
       });
@@ -641,14 +712,41 @@ export function Timeline() {
   const onDragOver = (e) => {
     e.preventDefault();
     const row = rowAt(e.clientY);
-    setGhost({ t: snap(timeAt(e.clientX)).t, row });
+    const item = libraryDrag.value;
+    if (item?.kind === 'media') {
+      skim.value = null;
+      if (skimRef.current) skimRef.current.style.display = 'none';
+      const clips = mediaDropPreview(project.value, item, row.lane, snap(timeAt(e.clientX)).t)
+        .map((clip) => ({ ...clip, row: rows.find((r) => r.lane === clip.lane) }))
+        .filter((clip) => clip.row);
+      e.dataTransfer.dropEffect = clips.length ? 'copy' : 'none';
+      setGhost(clips.length ? { kind: 'media', clips } : null);
+    } else if (item && ['transition', 'effect', 'afx', 'apreset', 'frameFx', 'redact'].includes(item.kind)) {
+      skim.value = null;
+      if (skimRef.current) skimRef.current.style.display = 'none';
+      const T = ['frameFx', 'redact'].includes(item.kind) ? snap(timeAt(e.clientX)).t : timeAt(e.clientX);
+      const target = libraryDropTarget(project.value, item, row.lane, T, { transitionDur: prefs.value.transitionDur, tolerance: 12 / pps.value });
+      const targetRow = target && rows.find((r) => r.lane === target.lane);
+      e.dataTransfer.dropEffect = target && targetRow ? 'copy' : 'none';
+      const prev = target?.edge === 'start' ? project.value.clips[project.value.primary[project.value.primary.indexOf(target.id) - 1]] : null;
+      setGhost(target && targetRow ? { ...target, row: targetRow, prev } : null);
+    } else {
+      e.dataTransfer.dropEffect = 'copy';
+      setGhost({ t: snap(timeAt(e.clientX)).t, row });
+    }
   };
   const onDrop = async (e) => {
     e.preventDefault();
     setGhost(null);
     const row = rowAt(e.clientY);
-    const T = snap(timeAt(e.clientX)).t;
-    await commands.handleDrop(e.dataTransfer, row.lane, T);
+    const item = libraryDrag.value;
+    const exact = item && ['transition', 'effect', 'afx', 'apreset'].includes(item.kind);
+    const T = exact ? timeAt(e.clientX) : snap(timeAt(e.clientX)).t;
+    try {
+      await commands.handleDrop(e.dataTransfer, row.lane, T, { tolerance: 12 / pps.value });
+    } finally {
+      endLibraryDrag();
+    }
   };
 
   const rangeEl = p.range ? (
@@ -676,7 +774,9 @@ export function Timeline() {
           onPointerCancel={onPointerUp}
           onContextMenu={onContextMenu}
           onDragOver={onDragOver}
-          onDragLeave={() => setGhost(null)}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) setGhost(null);
+          }}
           onDrop={onDrop}
         >
           <Ruler width={width} />
@@ -696,26 +796,28 @@ export function Timeline() {
               for (const c of Object.values(p.clips)) {
                 if (c.start + c.dur < t0 || c.start > t1) continue;
                 const row = byLane.get(c.lane);
-                if (row) out.push(<Clip key={c.id} clip={c} row={row} media={p.media[c.mediaId]} selected={sel.has(c.id)} z={z} />);
+                if (row) out.push(<Clip key={c.id} clip={c} row={row} media={p.media[c.mediaId]} selected={sel.has(c.id)} z={z} labelStart={labelInsets.get(c.id)?.start || 0} labelEnd={labelInsets.get(c.id)?.end || 0} />);
               }
               return out;
             })()}
-            {p.primary.map((id, i) => {
-              const c = p.clips[id];
-              if (!c?.transition) return null;
-              const prevClip = i > 0 ? p.clips[p.primary[i - 1]] : null;
-              const [a, b] = transitionWindow(c, Boolean(prevClip), prevClip);
+            {transitions.map(({ id, edge, transition, a, b, prev }) => {
               const row = rows.find((r) => r.lane === 0);
+              const label = TRANSITIONS.find((t) => t.id === transition.type)?.label || transition.type;
+              const centered = edge === 'start' && Boolean(prev);
               return (
                 <div
-                  key={`t${id}`}
+                  key={transitionSelection(id, edge)}
                   data-hit="transition"
                   data-id={id}
-                  class={`tl-transition${selectedTransition.value === id ? ' selected' : ''}`}
-                  style={{ left: tx(a), width: Math.max(10, (b - a) * z), top: row.y + 16, height: row.h - 32 }}
-                  title={TRANSITIONS.find((t) => t.id === c.transition.type)?.label}
+                  data-edge={edge}
+                  class={`tl-transition${selectedTransition.value === transitionSelection(id, edge) ? ' selected' : ''}`}
+                  style={{ left: tx(a), width: Math.max(10, (b - a) * z), top: row.y, height: row.h }}
+                  title={`${label}, ${(b - a).toFixed(2)} s. Drag the handles to change duration.`}
                 >
-                  <span>{TRANSITIONS.find((t) => t.id === c.transition.type)?.label}</span>
+                  <TransitionLines />
+                  <TransitionIcon />
+                  {(centered || edge === 'end') && <div class="transition-handle start" data-hit="transition-edge" data-id={id} data-edge={edge} data-handle="start" title="Drag to change transition duration" />}
+                  {(centered || edge === 'start') && <div class="transition-handle end" data-hit="transition-edge" data-id={id} data-edge={edge} data-handle="end" title="Drag to change transition duration" />}
                 </div>
               );
             })}
@@ -739,7 +841,13 @@ export function Timeline() {
                 </div>
               );
             })}
-            {ghost && <div class="tl-ghost" style={{ left: tx(ghost.t), top: ghost.row.y, height: ghost.row.h }} />}
+            {ghost && (ghost.kind === 'media' ? ghost.clips.map((clip, i) => (
+              <div key={i} class="tl-drop-preview media" style={{ left: tx(clip.a), width: Math.max(1, (clip.b - clip.a) * z), top: clip.row.y + 2, height: clip.row.h - 4 }} />
+            )) : ghost.kind ? (
+              <div class={`tl-drop-preview ${ghost.kind}`} style={{ left: tx(ghost.a), width: Math.max(10, (ghost.b - ghost.a) * z), top: ghost.row.y, height: ghost.row.h }}>
+                {ghost.kind === 'transition' ? <><TransitionLines /><TransitionIcon /></> : <span>{ghost.label}</span>}
+              </div>
+            ) : <div class="tl-ghost" style={{ left: tx(ghost.t), top: ghost.row.y, height: ghost.row.h }} />)}
           </div>
           {snapLine != null && <div class="tl-snapline" style={{ left: tx(snapLine) }} />}
           <div class="tl-blade" ref={bladeRef} />
@@ -847,10 +955,6 @@ function TrackHeaders({ rows, p, scrollRef }) {
   );
 }
 
-function clampDb(v) {
-  return Math.round(Math.max(-60, Math.min(12, v)) * 10) / 10;
-}
-
 const isMac = window.api.platform === 'darwin';
 const TOOLS = [
   { id: 'select', icon: MousePointer2, label: 'Select', key: 'A' },
@@ -876,6 +980,7 @@ function TimelineToolbar() {
         <IconButton icon={Magnet} data-toggle="snapping" title="Snapping (N)" active={snapping.value} onClick={() => (snapping.value = !snapping.value)} />
         <IconButton icon={StretchHorizontal} data-toggle="skimming" title="Skimming (S)" active={skimming.value} onClick={() => (skimming.value = !skimming.value)} />
         <IconButton icon={Headphones} data-toggle="audioSkimming" title="Audio skimming (Shift S)" active={skimming.value && audioSkimming.value} disabled={!skimming.value} onClick={() => (audioSkimming.value = !audioSkimming.value)} />
+        <IconButton icon={Spline} data-toggle="keyframeEasing" title={`Default for new keyframes: ${prefs.value.keyframeEasing === 'linear' ? 'Linear. Click for Eased' : 'Eased. Click for Linear'}`} active={prefs.value.keyframeEasing !== 'linear'} onClick={() => setPrefs({ keyframeEasing: prefs.value.keyframeEasing === 'linear' ? 'easeInOut' : 'linear' })} />
       </div>
       <div class="tl-time">
         <span class="tc">{formatTimecode(timeSig.value, p.fps)}</span>
@@ -947,7 +1052,20 @@ function LaneBg({ row, p }) {
   );
 }
 
-const Clip = memo(function Clip({ clip, row, media, selected, z }) {
+function TransitionLines() {
+  return <svg class="transition-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M0 0 L100 100 M0 100 L100 0" /></svg>;
+}
+
+function TransitionIcon() {
+  return (
+    <svg class="transition-icon" viewBox="0 0 28 18" aria-hidden="true">
+      <rect x="1" y="1" width="26" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
+      <path d="M4 4 L14 9 L4 14 Z M24 4 L14 9 L24 14 Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0, labelEnd = 0 }) {
   waveVersion.value;
   const x = PAD + clip.start * z;
   const w = Math.max(2, clip.dur * z);
@@ -964,7 +1082,8 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
   const label = clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? `${redactLabel(clip)} (redact)` : clip.type === 'caption' ? clip.props.text || 'Caption' : clip.name || media?.name || clip.type;
   const narrow = w < 24;
   const thumbStream = media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
-  const audioStream = clipAudioStream(clip, media);
+  const audioComp = primaryComponent(clip, media);
+  const audioStream = audioComp?.stream;
   const bandH = expanded ? bandHeight(row, clip, media) : Math.round(row.h * 0.34);
   const boxH = expanded ? row.h - bandH - 3 : row.h;
   const waveH = expanded ? 0 : clip.type === 'audio' ? row.h - 16 : hasAudio && row.kind !== 'caption' ? bandH : 0;
@@ -974,7 +1093,7 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
   return (
     <div class={cls} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y, height: boxH, ...(colorTag ? { '--label': colorTag.color } : {}) }} title={busy ? `${busy.title}${busy.queued ? ' (waiting)' : ` ${Math.round(busy.progress * 100)} %`}` : undefined}>
       {!narrow && (
-        <div class="clip-label" data-hit="clip" data-clip={clip.id}>
+        <div class="clip-label" data-hit="clip" data-clip={clip.id} style={{ marginLeft: labelStart, marginRight: labelEnd }}>
           {clip.type === 'recording' && <span class="badge">REC</span>}
           {clip.reverse && <span class="badge speed" title="Reversed">Reverse</span>}
           {clip.ramp ? <span class="badge speed" title="Speed ramp">Ramp</span> : speed !== 1 && <span class="badge speed">{speed === 0 ? 'Freeze' : `${Math.round(speed * 100)}%`}</span>}
@@ -990,7 +1109,7 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
       {showStrip && <Filmstrip clip={clip} stream={thumbStream} x={x} w={w} h={stripH} z={z} media={media} />}
       {clip.type === 'recording' && !narrow && <RecBands clip={clip} media={media} />}
       {waveH > 0 && (
-        <Wave clip={clip} stream={audioStream} x={x} w={w} h={waveH} z={z} offset={audioStream?.offset || 0} />
+        <Wave clip={clip} stream={audioStream} componentKey={audioComp?.key} x={x} w={w} h={waveH} z={z} offset={audioStream?.offset || 0} />
       )}
       {selected && <Keyframes clip={clip} z={z} />}
       {hasAudio && !expanded && !narrow && row.kind !== 'caption' && <FadeHandles clip={clip} z={z} h={waveH} />}
@@ -1039,8 +1158,10 @@ function RecBands({ clip, media }) {
   );
 }
 
-function Wave({ clip, stream, x, w, h, z, offset, lead = 0 }) {
+function Wave({ clip, stream, componentKey, x, w, h, z, offset, lead = 0 }) {
+  waveVersion.value;
   const ref = useRef(null);
+  const prop = componentVolumeProp(clip, componentKey);
   const { left, width: vw } = view.value;
   const wave = getWave(stream?.wave);
   const visX = Math.max(0, left - x - 50);
@@ -1054,61 +1175,51 @@ function Wave({ clip, stream, x, w, h, z, offset, lead = 0 }) {
     const g = cv.getContext('2d');
     g.clearRect(0, 0, cv.width, cv.height);
     if (!wave) return;
-    const gain = dbToGain(clip.props.volume ?? clip.props.micVolume ?? 0);
     g.fillStyle = 'rgba(255,255,255,0.55)';
     const mid = cv.height / 2;
     for (let px = 0; px < cv.width; px++) {
       // Kildetid for hver piksel (følger fart, ramper og baklengs).
-      const a0 = sourceTime(clip, clip.start + (visX + px / dpr) / z - lead) - offset;
-      const a1 = sourceTime(clip, clip.start + (visX + (px + 1) / dpr) / z - lead) - offset;
+      const T = clip.start + (visX + px / dpr) / z - lead;
+      const a0 = sourceTime(clip, T) - offset;
+      const a1 = sourceTime(clip, T + 1 / dpr / z) - offset;
       const t0 = Math.min(a0, a1);
       const t1 = Math.max(a0, a1);
       let i0 = Math.floor(t0 * wave.rate);
       const i1 = Math.max(i0 + 1, Math.ceil(t1 * wave.rate));
       let m = 0;
       for (; i0 < i1; i0++) if (i0 >= 0 && wave.peaks[i0] > m) m = wave.peaks[i0];
+      const gain = dbToGain(valueAt(clip, prop, T) ?? 0);
       const v = Math.min(1, (m / 255) * gain);
-      const hh = Math.max(0.5, v * mid * 0.95);
+      const hh = v * mid * 0.95;
       g.fillRect(px, mid - hh, 1, hh * 2);
     }
-  }, [wave, visX, visW, h, z, clip.in, clip.speed, clip.ramp, clip.reverse, lead, clip.props.volume, clip.props.micVolume]);
-  const dbLine = volumeY(clip.props.volume ?? clip.props.micVolume ?? 0, h);
-  const kfs = clip.kf?.volume || clip.kf?.micVolume;
+  }, [wave, visX, visW, h, z, clip.start, clip.in, clip.speed, clip.ramp, clip.reverse, clip.freezeAt, offset, lead, prop, clip.props[prop], clip.kf?.[prop]]);
+  const kfs = clip.kf?.[prop];
+  const path = volumePath(clip, prop, w, h, z, lead);
+  const hit = { 'data-hit': 'vol', 'data-clip': clip.id, 'data-prop': prop, 'data-height': h, 'data-key': componentKey };
   return (
     <div class="wave" style={{ height: h }}>
       <canvas ref={ref} style={{ left: visX, width: visW, height: h }} />
-      {clip.type !== 'recording' && (
-        <>
-          {!kfs && <div class="vol-line" data-hit="vol" data-clip={clip.id} style={{ top: dbLine }} title={`${(clip.props.volume || 0).toFixed(1)} dB`} />}
-          {kfs && (
-            <svg class="vol-kf" width={w} height={h}>
-              <polyline
-                points={kfs.map(([t, v]) => `${((t - clip.in) / kfRate(clip) + lead) * z},${volumeY(v, h)}`).join(' ')}
-                fill="none"
-                stroke="#ffd60a"
-                stroke-width="1.5"
-              />
-            </svg>
-          )}
-          {kfs?.map(([t, v], i) => (
-            <div key={i} class="vol-kf-point" data-hit="vol" data-kf={i} data-clip={clip.id} style={{ left: ((t - clip.in) / kfRate(clip) + lead) * z - 4, top: volumeY(v, h) - 4 }} />
-          ))}
-        </>
-      )}
+      <svg class="vol-kf" width={w} height={h}>
+        <path class="vol-line" d={path} />
+        <path class="vol-line-hit" d={path} {...hit}>
+          <title>{`Drag to adjust volume. ${isMac ? 'Option' : 'Alt'} click to add a keyframe. Drag between keyframes to adjust both.`}</title>
+        </path>
+      </svg>
+      {kfs?.map(([t, v, ease], i) => {
+        const px = ((t - clip.in) / kfRate(clip) + lead) * z;
+        if (px < 0 || px > w) return null;
+        return <div key={i} class="vol-kf-point" {...hit} data-kf={i} style={{ left: px - 6, top: volumeY(v, h) - 6 }} title={`${v.toFixed(1)} dB · ${EASINGS.find((e) => e.id === (ease || 'linear'))?.label || ease}. Drag to adjust, right click for easing.`} />;
+      })}
     </div>
   );
-}
-
-function volumeY(db, h) {
-  const k = (Math.max(-60, Math.min(12, db)) + 60) / 72;
-  return Math.round((1 - k) * (h - 4)) + 2;
 }
 
 function Keyframes({ clip, z }) {
   // Nøkkelbildene kan dras for å endre tidspunkt, og høyreklikkes for myk overgang.
   const times = new Map();
   for (const [prop, list] of Object.entries(clip.kf || {})) {
-    if (prop === 'volume' || prop === 'layout') continue;
+    if (['volume', 'micVolume', 'sysVolume', 'layout'].includes(prop)) continue;
     for (const [t, , e] of list) if (t >= clip.in - 1e-4 && t <= clip.in + clip.dur * kfRate(clip) + 1e-4) times.set(t, [...(times.get(t) || []), prop + (e && e !== 'linear' ? ` (${e})` : '')]);
   }
   return (
@@ -1133,11 +1244,6 @@ function FadeHandles({ clip, z, h }) {
   );
 }
 
-// Lydstrømmen et klipp viser som lydbølge: den første lydkomponenten som er på.
-function clipAudioStream(clip, media) {
-  return primaryComponent(clip, media)?.stream || null;
-}
-
 // Høyden på utvidet lyd. Flere lydkomponenter får en stripe hver.
 function bandHeight(row, clip, media) {
   const n = audioComponents(clip, media).length;
@@ -1152,7 +1258,8 @@ function AudioBand({ clip, row, media, z, selected }) {
   const x = PAD + (clip.start - lead) * z;
   const w = Math.max(4, (clip.dur + lead + tail) * z);
   const comps = audioComponents(clip, media);
-  const stream = clipAudioStream(clip, media);
+  const comp = primaryComponent(clip, media);
+  const stream = comp?.stream;
   const sc = selectedComponent.value;
   // Fargekoden følger med til lyddelen når den er utvidet.
   const colorTag = CLIP_COLORS.find((c) => c.id === clip.colorLabel);
@@ -1173,13 +1280,13 @@ function AudioBand({ clip, row, media, z, selected }) {
               title={`${c.label}${c.off ? ' (off)' : ''}. Click to select, press V to switch it on or off.`}
               style={{ top: i * ch, height: ch }}
             >
-              <Wave clip={clip} stream={c.stream} x={x} w={w} h={ch} z={z} offset={c.stream.offset || 0} lead={lead} />
+              <Wave clip={clip} stream={c.stream} componentKey={c.key} x={x} w={w} h={ch} z={z} offset={c.stream.offset || 0} lead={lead} />
               <span class="comp-label">{c.label}</span>
             </div>
           );
         })
       ) : (
-        <Wave clip={clip} stream={stream} x={x} w={w} h={h} z={z} offset={stream?.offset || 0} lead={lead} />
+        <Wave clip={clip} stream={stream} componentKey={comp?.key} x={x} w={w} h={h} z={z} offset={stream?.offset || 0} lead={lead} />
       )}
       <div class="edge start" data-hit="aedge" data-edge="start" data-clip={clip.id} title="Drag to extend or shorten the audio" />
       <div class="edge end" data-hit="aedge" data-edge="end" data-clip={clip.id} title="Drag to extend or shorten the audio" />

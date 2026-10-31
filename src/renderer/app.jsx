@@ -8,6 +8,8 @@ import {
   FolderOpen,
   ListChecks,
   Loader2,
+  PanelLeft,
+  PanelRight,
   Plus,
   Redo2,
   Settings,
@@ -45,7 +47,9 @@ import { Button, IconButton, Modal, Toasts, toast } from './ui.jsx';
 import { HistoryDialog, NewProjectDialog, PackageDialog, ProjectsDialog, SaveAsDialog } from './ProjectDialogs.jsx';
 import { CommandPalette, HelpCenter } from './help/Help.jsx';
 import { SettingsWindow } from './Settings.jsx';
+import { prefs } from './prefs.js';
 import { helpOpen, paletteOpen } from './registry.js';
+import { isTyping } from './keyboard.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -169,6 +173,9 @@ function TitleBar() {
       <IconButton icon={CircleHelp} class="help-btn" title={`Help and command search (${isMac ? '⌘K' : 'Ctrl+K'})`} onClick={() => (paletteOpen.value = true)} />
       {r === 'edit' ? (
         <div class="actions">
+          <IconButton icon={PanelLeft} title={`${prefs.value.editorBrowserVisible ? 'Hide' : 'Show'} Media Browser`} active={prefs.value.editorBrowserVisible} aria-pressed={prefs.value.editorBrowserVisible} onClick={() => runCommand('toggleBrowser')} />
+          <IconButton icon={PanelRight} title={`${prefs.value.editorInspectorVisible ? 'Hide' : 'Show'} Properties`} active={prefs.value.editorInspectorVisible} aria-pressed={prefs.value.editorInspectorVisible} onClick={() => runCommand('toggleInspector')} />
+          <span class="sep" />
           <IconButton icon={Undo2} title="Undo" disabled={!canUndo()} onClick={undo} />
           <IconButton icon={Redo2} title="Redo" disabled={!canRedo()} onClick={redo} />
           <span class="sep" />
@@ -223,26 +230,19 @@ function Notice() {
   );
 }
 
-function isTyping() {
-  const el = document.activeElement;
-  return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
-}
-
 // Tastetrykk går gjennom kommandoregisteret. Taster i tekstfelt og åpne dialoger røres ikke.
-// Ctrl mellomrom åpner søket fra hvor som helst, også fra tekstfelt som ellers stopper tastene.
 function onKeyDownCapture(e) {
+  if (isTyping(e) || e.isComposing || e.defaultPrevented) return;
   if (document.querySelector('.help-window') || document.querySelector('.palette')) return;
   const any = commandForEvent(e, room.value);
   if (!any?.anywhere) return;
   e.preventDefault();
   e.stopPropagation();
-  // Feltet som hadde fokus, slipper det, så det du skriver havner i søket.
-  if (isTyping()) document.activeElement.blur();
   runCommand(any);
 }
 
 function onKeyDown(e) {
-  if (isTyping() || document.querySelector('.modal-backdrop')) return;
+  if (isTyping(e) || e.isComposing || e.defaultPrevented || document.querySelector('.modal-backdrop')) return;
   const cmd = commandForEvent(e, room.value);
   if (!cmd) return;
   e.preventDefault();
@@ -253,8 +253,8 @@ function onKeyDown(e) {
 // Menyvalg. Klipp ut, kopier, lim inn og angre virker på teksten når du skriver i et felt.
 function handleMenu(id) {
   const cmd = byId.get(id);
-  if (cmd?.text && isTyping()) {
-    document.execCommand(cmd.text);
+  if (isTyping()) {
+    if (cmd?.text) document.execCommand(cmd.text);
     return;
   }
   if (cmd?.register && document.querySelector('.modal-backdrop') && !['roomRecord', 'roomEdit', 'roomExport'].includes(id)) return;
@@ -287,6 +287,7 @@ function App() {
     // Nye versjoner sjekkes litt etter start, så det ikke sinker oppstarten.
     setTimeout(() => import('./updates.js').then((m) => m.checkForUpdates(false)), 8000);
     const offShortcut = api.onShortcut((a) => {
+      if (isTyping()) return;
       if (a.layout) engine.setLayout(a.layout);
       if (a.toggleRecord) toggleRecording();
       if (a.togglePause) engine.togglePause();

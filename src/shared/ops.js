@@ -90,6 +90,8 @@ export function withSync(project, fn) {
   const anchors = [];
   for (const c of Object.values(project.clips)) {
     if (c.lane === 0 || project.lanes?.[c.lane]?.locked) continue;
+    // Undertekster har egne tider. Bare eksplisitt gruppering kobler dem til hovedsporet.
+    if (c.type === 'caption' && !(c.group && groupParent.has(c.group))) continue;
     const parentId =
       (c.group && groupParent.get(c.group)) ||
       order.find((id) => {
@@ -211,6 +213,7 @@ export function splitClip(project, id, T) {
   shiftKeyframes(right, right.in - oldIn - local * r);
   shiftKeyframes(c, c.in - oldIn);
   right.transition = undefined;
+  c.transitionOut = undefined;
   right.axfade = undefined;
   delete right.group;
   right.props.vFadeIn = 0;
@@ -349,10 +352,13 @@ export function placeFree(project, clip, start, lane) {
 }
 
 // Legger til media på tidslinjen: append (E), insert (W) eller connect (Q).
-// opts: { in, dur } for et utvalg fra biblioteket, eller lengde på stillbilder.
+// opts: { in, dur, includeAudio } for et utvalg fra biblioteket.
 export function addMediaClip(project, media, mode, T, laneHint, opts = {}) {
   const type = mediaClipType(media);
   const clip = makeClip(type, { media, ...(opts.in != null ? { in: opts.in } : {}), ...(opts.dur ? { dur: opts.dur } : {}) });
+  if (type !== 'audio' && (opts.includeAudio ?? media.includeAudio) === false) {
+    clip.props.audioOff = { ...clip.props.audioOff, ...Object.fromEntries(Object.entries(media.streams).filter(([, stream]) => stream.hasAudio).map(([key]) => [key, true])) };
+  }
   const audioOnly = type === 'audio';
   if (mode === 'overwrite' && !audioOnly) {
     overwritePrimary(project, clip, T ?? 0);
@@ -395,18 +401,18 @@ export function moveClip(project, id, { start, lane, primaryIndex }) {
   updateDuration(project);
 }
 
-export function setTransition(project, id, type, dur = 1) {
+export function setTransition(project, id, type, dur = 1, edge = 'start') {
   const c = project.clips[id];
   if (!c || c.lane !== 0) return;
   const idx = project.primary.indexOf(id);
-  const prev = idx > 0 ? project.clips[project.primary[idx - 1]] : null;
+  const prev = edge === 'start' && idx > 0 ? project.clips[project.primary[idx - 1]] : null;
   const maxDur = Math.min(c.dur, prev ? prev.dur : c.dur, 4);
-  c.transition = { type, dur: round(Math.max(0.1, Math.min(dur, maxDur))) };
+  c[edge === 'end' ? 'transitionOut' : 'transition'] = { type, dur: round(Math.min(maxDur, Math.max(0.1, dur))) };
 }
 
-export function removeTransition(project, id) {
+export function removeTransition(project, id, edge = 'start') {
   const c = project.clips[id];
-  if (c) delete c.transition;
+  if (c) delete c[edge === 'end' ? 'transitionOut' : 'transition'];
 }
 
 // Kopier og lim inn: tider lagres relativt til det første klippet.
@@ -539,6 +545,7 @@ export function setSpeed(project, id, speed) {
     if (c.speed === undefined) delete c.speed;
     c.dur = round(Math.max(MIN_DUR, length / sp));
     if (c.transition) c.transition.dur = Math.min(c.transition.dur, c.dur);
+    if (c.transitionOut) c.transitionOut.dur = Math.min(c.transitionOut.dur, c.dur);
   };
   if (c.lane === 0) withSync(project, apply);
   else {
@@ -565,6 +572,7 @@ export function setRamp(project, id, ramp) {
     c.ramp = ramp.map(([u, v]) => [u, Math.max(0.02, v)]);
     c.dur = round(Math.max(MIN_DUR, length / rampOffset(c.ramp, 1)));
     if (c.transition) c.transition.dur = Math.min(c.transition.dur, c.dur);
+    if (c.transitionOut) c.transitionOut.dur = Math.min(c.transitionOut.dur, c.dur);
   };
   if (c.lane === 0) withSync(project, apply);
   else {
@@ -597,6 +605,7 @@ export function freezeFrame(project, T, dur = 2) {
   freeze.dur = dur;
   freeze.kf = {};
   freeze.transition = undefined;
+  freeze.transitionOut = undefined;
   freeze.name = `${p.name || 'Clip'} (freeze)`;
   freeze.props.audioDetached = false;
   if (p.lane === 0) {

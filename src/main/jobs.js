@@ -135,7 +135,7 @@ function getWorker(kind) {
     workers[kind] = null;
     for (const [jobId, p] of pending) {
       if (p.kind === kind) {
-        p.reject(new Error('Arbeidsvinduet ble lukket'));
+        p.reject(new Error('The background worker window was closed.'));
         pending.delete(jobId);
       }
     }

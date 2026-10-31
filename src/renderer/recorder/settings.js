@@ -1,4 +1,4 @@
-import { signal } from '@preact/signals';
+import { computed, effect, signal } from '@preact/signals';
 
 const isMac = window.api.platform === 'darwin';
 
@@ -22,6 +22,7 @@ const DEFAULTS = {
   layout: 6,
   pipSize: 'medium',
   pipShape: 'rect',
+  showPipOnScreen: false,
   mirror: false,
   fps: 30,
   hideFromCapture: true,
@@ -52,6 +53,12 @@ function load() {
 }
 
 export const settings = signal(load());
+
+// Gjelder hele appen, også når opptaksrommet ikke er åpent.
+const captureHidden = computed(() => settings.value.hideFromCapture);
+effect(() => {
+  window.api.hideFromCapture(captureHidden.value);
+});
 
 export function saveSettings(patch) {
   settings.value = { ...settings.value, ...patch };

@@ -1,6 +1,6 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
-import { CAPTION_LANE, CLIP_COLORS, EFFECTS, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
+import { CAPTION_LANE, CLIP_COLORS, EFFECTS, parseTransitionSelection, transitionSelection, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, componentVolumeProp, kfTime, valueAt } from '../../shared/model.js';
 import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates.js';
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
 import { addMask, canMask, removeMask } from '../../shared/shapes.js';
@@ -49,8 +49,10 @@ import {
   selection,
 } from './store.js';
 import { seek } from './playback.js';
+import { applyMediaDrop, frameEffectPlacement, libraryDropTarget } from '../../shared/libraryDrop.js';
 import { toast } from '../ui.jsx';
-import { prefs } from '../prefs.js';
+import { prefs, setPrefs } from '../prefs.js';
+import { setKeyframe } from './keyframes.js';
 
 const api = window.api;
 
@@ -63,6 +65,7 @@ export const browserFocus = signal(false);
 export const exportOpen = signal(false);
 export const projectsOpen = signal(false);
 export const inspectorTab = signal(null);
+export const captionEditRequest = signal(null);
 export const newProjectOpen = signal(false);
 export const prefsOpen = signal(false);
 export const saveAsOpen = signal(false);
@@ -115,17 +118,7 @@ export function deleteMask(clipId, id) {
 // Lengden følger området, ellers klippet under spillhodet, ellers 5 sekunder.
 export function addRedact(mode = 'pixelate', T = getTime(), laneHint = null, extra = {}) {
   const p = project.value;
-  let start = T;
-  let dur = 5;
-  if (p.range && p.range.out - p.range.in > 0.05 && laneHint == null) {
-    start = p.range.in;
-    dur = p.range.out - p.range.in;
-  } else {
-    const under = primaryAt(p, T)?.clip;
-    if (under && under.type !== 'gap') dur = Math.max(1, under.start + under.dur - T);
-  }
-  const busy = Object.values(p.clips).filter((c) => c.lane > 0 && c.lane !== CAPTION_LANE && isVisual(c) && c.start < start + dur && start < c.start + c.dur);
-  const lane = laneHint && laneHint > 0 && laneHint !== CAPTION_LANE ? laneHint : Math.max(0, ...busy.map((c) => c.lane)) + 1;
+  const { start, dur, lane } = frameEffectPlacement(p, T, laneHint);
   const W = p.width;
   const H = p.height;
   const clip = makeClip('redact', { start, dur, lane, props: { mode, w: Math.round(W * 0.3), h: Math.round(H * 0.12), ...extra } });
@@ -196,12 +189,9 @@ export function addEffect(id, clipId = null) {
   inspectorTab.value = 'effects';
 }
 
-function hitClipAt(lane, T) {
-  const c = Object.values(project.value.clips).find((x) => x.lane === lane && T >= x.start && T < x.start + x.dur && ['video', 'image', 'recording', 'title'].includes(x.type));
-  return c?.id || null;
-}
-
 export function addCaption(T = getTime(), text = '') {
+  // Avslutt eventuell pågående tekstredigering før det nye klippet opprettes.
+  if (document.activeElement?.matches('input, textarea, [contenteditable="true"]')) document.activeElement.blur();
   const p = project.value;
   // Fyll ut til neste undertekst, men maks tre sekunder.
   const next = Object.values(p.clips)
@@ -213,7 +203,13 @@ export function addCaption(T = getTime(), text = '') {
     p.clips[clip.id] = clip;
   });
   selection.value = [clip.id];
+  browserFocus.value = false;
+  selectedTransition.value = null;
+  selectedComponent.value = null;
+  seek(T);
+  if (!prefs.value.editorInspectorVisible) setPrefs({ editorInspectorVisible: true });
   inspectorTab.value = 'caption';
+  captionEditRequest.value = clip.id;
   return clip.id;
 }
 
@@ -246,8 +242,8 @@ export function deleteSelection(ripple = true) {
     return;
   }
   if (selectedTransition.value) {
-    const id = selectedTransition.value;
-    commit((p) => removeTransition(p, id));
+    const { id, edge } = parseTransitionSelection(selectedTransition.value);
+    commit((p) => removeTransition(p, id, edge));
     selectedTransition.value = null;
     return;
   }
@@ -465,12 +461,6 @@ export function applyAudioPreset(presetId, clipId = null) {
   toast(`${pr.label} added to ${ids.length} clip${ids.length > 1 ? 's' : ''}.`, { timeout: 2000 });
 }
 
-function hitAudioClipAt(lane, T) {
-  const p = project.value;
-  const c = Object.values(p.clips).find((x) => x.lane === lane && T >= x.start && T < x.start + x.dur && clipHasAudio(x, p.media[x.mediaId]));
-  return c?.id || null;
-}
-
 export function addMarker() {
   const T = getTime();
   commit((p) => p.markers.push({ id: Math.random().toString(36).slice(2), t: T, label: '' }));
@@ -564,22 +554,26 @@ export function nudge(dir) {
 
 export function adjustVolume(db) {
   const ids = selection.value.length ? selection.value : targetClipsAtPlayhead();
+  const T = getTime();
   commit((p) => {
     for (const id of ids) {
       const c = p.clips[id];
       if (!c) continue;
-      const key = c.type === 'recording' ? 'micVolume' : 'volume';
+      const comp = selectedComponent.value;
+      const key = comp?.clipId === id ? componentVolumeProp(c, comp.key) : c.type === 'recording' ? 'micVolume' : 'volume';
       if (c.props[key] == null) continue;
-      c.props[key] = Math.max(-60, Math.min(12, Math.round((c.props[key] + db) * 10) / 10));
+      const value = Math.max(-60, Math.min(12, Math.round(((valueAt(c, key, T) ?? 0) + db) * 10) / 10));
+      if (c.kf?.[key]?.length) setKeyframe(c, key, kfTime(c, T), value);
+      else c.props[key] = value;
     }
   });
 }
 
-export function addVolumeKeyframe(clipId, T) {
+export function addVolumeKeyframe(clipId, T, prop = 'volume') {
   commit((p) => {
     const c = p.clips[clipId];
     if (!c) return;
-    setKeyframe(c, 'volume', sourceTime(c, T), valueAt(c, 'volume', T) ?? 0);
+    setKeyframe(c, prop, kfTime(c, T), valueAt(c, prop, T) ?? 0);
   });
 }
 
@@ -643,10 +637,11 @@ export function browserMarkClip() {
   return true;
 }
 
-export function browserClipOpts(m) {
+export function browserClipOpts(m, useRange = true) {
   const r = browserRange.value;
-  if (r && r.mediaId === m.id && r.out - r.in > 0.05) return { in: r.in, dur: r.out - r.in };
-  return m.kind === 'image' ? { dur: prefs.value.stillDur } : {};
+  const opts = { includeAudio: m.includeAudio !== false };
+  if (useRange && r && r.mediaId === m.id && r.out > r.in) return { ...opts, in: r.in, dur: r.out - r.in };
+  return m.kind === 'image' ? { ...opts, dur: prefs.value.stillDur } : opts;
 }
 
 export function addBrowserSelection(mode) {
@@ -662,7 +657,7 @@ export function addBrowserSelection(mode) {
     for (const id of ids) {
       const m = p.media[id];
       autoFormat(p, m);
-      const clipId = addMediaClip(p, m, mode, T, undefined, ids.length === 1 ? browserClipOpts(m) : m.kind === 'image' ? { dur: prefs.value.stillDur } : {});
+      const clipId = addMediaClip(p, m, mode, T, undefined, browserClipOpts(m, ids.length === 1));
       if (!clipId) continue;
       added.push(clipId);
       // Neste klipp legges etter dette (append legger alltid til på slutten).
@@ -1039,37 +1034,29 @@ export function zoomAt(factor, T, offsetPx) {
   timelineView?.zoomAt?.(factor, T, offsetPx);
 }
 
-export async function handleDrop(dt, lane, T) {
+export async function handleDrop(dt, lane, T, options = {}) {
   const raw = dt.getData('application/x-reccut');
   if (raw) {
     const item = JSON.parse(raw);
+    const targeted = ['effect', 'afx', 'apreset', 'transition', 'frameFx', 'redact'].includes(item.kind);
+    const target = targeted ? libraryDropTarget(project.value, item, lane, T, { transitionDur: prefs.value.transitionDur, ...options }) : null;
+    if (targeted && !target) return;
     if (item.kind === 'media') {
-      // Flere valgte medier legges etter hverandre.
-      const list = (item.ids || [item.id]).map((id) => project.value.media[id]).filter(Boolean);
-      if (!list.length) return;
-      const added = [];
+      if (!item.clips) {
+        const ids = item.ids || [item.id];
+        item.clips = ids.filter((id) => project.value.media[id]).map((id) => ({ id, opts: browserClipOpts(project.value.media[id], ids.length === 1) }));
+      }
+      let added = [];
       commit((p) => {
-        let t = T;
-        for (const m of list) {
-          autoFormat(p, m);
-          const audio = m.kind === 'audio';
-          const mode = lane === 0 && !audio ? 'insert' : 'connect';
-          let l = lane;
-          if (audio && l >= 0) l = -1;
-          if (!audio && (l < 0 || l === CAPTION_LANE)) l = 1;
-          const id = addMediaClip(p, m, mode, t, l, list.length === 1 ? browserClipOpts(m) : m.kind === 'image' ? { dur: prefs.value.stillDur } : {});
-          if (id) {
-            added.push(id);
-            t = p.clips[id].start + p.clips[id].dur;
-          }
-        }
+        added = applyMediaDrop(p, item, lane, T);
       });
-      if (added.length) selection.value = added;
+      if (added.length) {
+        selection.value = added;
+        browserFocus.value = false;
+      }
     } else if (item.kind === 'afx' || item.kind === 'apreset') {
-      const target = hitAudioClipAt(lane, T);
-      if (!target) return toast('Drop the audio effect onto a clip with sound.');
-      if (item.kind === 'afx') addAudioEffect(item.id, target);
-      else applyAudioPreset(item.id, target);
+      if (item.kind === 'afx') addAudioEffect(item.id, target.id);
+      else applyAudioPreset(item.id, target.id);
     } else if (item.kind === 'redact') {
       addRedact(item.id, T, lane > 0 && lane !== CAPTION_LANE ? lane : null);
     } else if (item.kind === 'frameFx') {
@@ -1077,18 +1064,11 @@ export async function handleDrop(dt, lane, T) {
     } else if (item.kind === 'title') {
       addTitle(item.id, T);
     } else if (item.kind === 'effect') {
-      addEffect(item.id, hitClipAt(lane, T));
+      addEffect(item.id, target.id);
     } else if (item.kind === 'transition') {
-      const p = project.value;
-      let best = null;
-      for (const id of p.primary) {
-        const c = p.clips[id];
-        if (!best || Math.abs(c.start - T) < Math.abs(p.clips[best].start - T)) best = id;
-      }
-      if (best) {
-        commit((q) => setTransition(q, best, item.id));
-        selectedTransition.value = best;
-      }
+      commit((q) => setTransition(q, target.id, item.id, target.dur, target.edge));
+      selection.value = [];
+      selectedTransition.value = transitionSelection(target.id, target.edge);
     }
     return;
   }
@@ -1118,6 +1098,7 @@ export async function clipContextMenu(clipId, T) {
   if (c.lane === 0 && isVisual(c)) {
     items.push({ id: 'transition', label: 'Add Cross Dissolve', accelerator: 'CmdOrCtrl+T' });
     if (c.transition) items.push({ id: 'removeTransition', label: 'Remove Transition' });
+    if (c.transitionOut) items.push({ id: 'removeTransitionOut', label: 'Remove End Transition' });
     items.push({ separator: true });
   }
   const media = project.value.media[c.mediaId];
@@ -1244,6 +1225,9 @@ export async function clipContextMenu(clipId, T) {
       break;
     case 'removeTransition':
       commit((p) => removeTransition(p, clipId));
+      break;
+    case 'removeTransitionOut':
+      commit((p) => removeTransition(p, clipId, 'end'));
       break;
     case 'reveal':
       api.reveal(project.value.media[c.mediaId].path);

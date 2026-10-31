@@ -3,7 +3,7 @@
 // så den aldri havner i opptaket, og den er skjult for skjermopptak der systemet støtter det.
 const { BrowserWindow, screen } = require('electron');
 
-const PICKER_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>Reccut</title><style>
+const PICKER_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Reccut</title><style>
 html,body{margin:0;height:100%;overflow:hidden;cursor:crosshair;user-select:none;font:13px -apple-system,system-ui,"Segoe UI",sans-serif}
 #tint{position:fixed;inset:0;background:rgba(0,0,0,.42)}
 #sel{position:fixed;box-sizing:border-box;border:2px solid #f7c948;box-shadow:0 0 0 9999px rgba(0,0,0,.42);cursor:move;display:none}
@@ -59,7 +59,7 @@ addEventListener('dblclick',e=>{if(r&&!e.target.closest('#bar'))document.getElem
 draw();
 </script></body></html>`;
 
-const COUNT_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
+const COUNT_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;overflow:hidden;background:#1c1c1e;color:#fff;font:600 64px -apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
 </style></head><body><div id="n"></div><script>window.setN=(v)=>{document.getElementById('n').textContent=v;};</script></body></html>`;
 

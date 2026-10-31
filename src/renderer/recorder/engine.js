@@ -1,7 +1,7 @@
 // Opptaksmotor: kilder, live forhåndsvisning og opptak til separate filer.
 import { signal } from '@preact/signals';
 import { drawCamera, drawClicks, drawCursor, drawKeys } from '../../shared/render.js';
-import { KEY_LIFE, easeOutCubic, lerpRect, pipRect, ZOOM_RAMP, clamp } from '../../shared/model.js';
+import { KEY_LIFE, LAYOUT_ANIM, easeOutCubic, lerpRect, pipRect, ZOOM_RAMP, clamp } from '../../shared/model.js';
 import { settings, saveSettings } from './settings.js';
 import { projectFolders } from '../editor/store.js';
 
@@ -264,6 +264,86 @@ let liveZoom = { on: false, at: 0, off: 0 };
 let liveCursor = null;
 let liveKeys = [];
 let liveClicks = [];
+let inputFrame = null;
+
+// Pekerbevegelse skal ikke vente på neste 30 Hz videobilde. Samle hendelser
+// frem til neste skjermoppdatering, og animer størrelsen videre også i ro.
+function scheduleInputDraw() {
+  if (inputFrame !== null || (!roomActive && !recording.value)) return;
+  inputFrame = requestAnimationFrame(() => {
+    inputFrame = null;
+    draw();
+    if (liveZoom.on || (liveZoom.off && performance.now() - liveZoom.off < ZOOM_RAMP * 1000)) scheduleInputDraw();
+  });
+}
+let pipCanvas = null;
+let lastPipFrame = 0;
+let pipVisible = false;
+let lastPipMotion = '';
+
+// Lite kamerabilde til vinduet over andre programmer, uavhengig av hovedvinduets synlighet.
+function syncPipPreview(now, force = false) {
+  const s = settings.value;
+  const visible = s.showPipOnScreen && (roomActive || recording.value || countdown.value) &&
+    !editingArea.value && !isWindowSource() && !document.hasFocus() &&
+    ready(screenVideo) && ready(cameraVideo) && effectiveLayout() >= 3 && cam?.a > 0.01;
+  if (!visible) {
+    if (pipVisible) api.recPipPreview(null);
+    pipVisible = false;
+    return;
+  }
+  const info = screens.value.find((x) => x.id === s.screenId);
+  if (!info) {
+    if (pipVisible) api.recPipPreview(null);
+    pipVisible = false;
+    return;
+  }
+  const { w: W, h: H } = canvasSize.value;
+  const normalize = (r) => ({ x: r.x / W, y: r.y / H, w: r.w / W, h: r.h / H });
+  let area = activeArea();
+  if (area) {
+    const a = areaPixels(area, screenVideo.videoWidth, screenVideo.videoHeight);
+    area = { x: a.x / screenVideo.videoWidth, y: a.y / screenVideo.videoHeight, w: a.w / screenVideo.videoWidth, h: a.h / screenVideo.videoHeight };
+  }
+  const motion = { from: normalize(camFrom), to: normalize(camTo), start: performance.timeOrigin + camAnimStart, duration: LAYOUT_ANIM * 1000 };
+  const motionKey = JSON.stringify([info.displayId, area, motion]);
+  // Flytting sendes straks; kamerabildene komprimeres sjeldnere og styrer ikke animasjonstakten.
+  const needsImage = force || !pipVisible || now - lastPipFrame >= 1000 / 12;
+  if (!needsImage && motionKey === lastPipMotion) return;
+  let image = null;
+  if (needsImage) {
+    lastPipFrame = now;
+    if (!pipCanvas) pipCanvas = document.createElement('canvas');
+    const scale = Math.min(1, 640 / cam.w);
+    const w = Math.max(1, Math.round(cam.w * scale));
+    const h = Math.max(1, Math.round(cam.h * scale));
+    if (pipCanvas.width !== w || pipCanvas.height !== h) {
+      pipCanvas.width = w;
+      pipCanvas.height = h;
+    }
+    const g = pipCanvas.getContext('2d');
+    g.clearRect(0, 0, w, h);
+    // Samme beskjæring, speiling og form som i opptakets forhåndsvisning.
+    const sx = w / cam.w;
+    const sy = h / cam.h;
+    g.save();
+    g.scale(sx, sy);
+    g.globalAlpha = cam.a;
+    drawCamera(g, cameraVideo, cameraVideo.videoWidth, cameraVideo.videoHeight, { ...cam, x: 0, y: 0, a: 1 }, s.mirror, false);
+    g.restore();
+    image = pipCanvas.toDataURL('image/webp', 0.8);
+  }
+  api.recPipPreview({
+    screenId: s.screenId,
+    displayId: info.displayId,
+    area,
+    rect: normalize(cam),
+    motion,
+    image,
+  });
+  lastPipMotion = motionKey;
+  pipVisible = true;
+}
 
 export function attachCanvas(el) {
   canvas = el;
@@ -350,14 +430,15 @@ function draw() {
   const hasScreen = ready(screenVideo);
   const hasCamera = ready(cameraVideo);
   const target = pipRect(effectiveLayout(), lastCorner, W, H, s.pipSize, s.pipShape);
+  // Fortsett fra posisjonen akkurat nå, også når en ny snarvei avbryter en pågående flytting.
+  const t = Math.min(1, (now - camAnimStart) / (LAYOUT_ANIM * 1000));
+  if (cam) cam = t >= 1 ? camTo : lerpRect(camFrom, camTo, easeOutCubic(t));
   if (!cam) cam = camFrom = camTo = target;
-  else if (['x', 'y', 'w', 'h', 'a'].some((k) => Math.abs(target[k] - camTo[k]) > 0.5 || (k === 'a' && target.a !== camTo.a))) {
+  else if (['x', 'y', 'w', 'h', 'r', 'a'].some((k) => Math.abs(target[k] - camTo[k]) > 0.5 || (k === 'a' && target.a !== camTo.a))) {
     camFrom = { ...cam };
     camTo = target;
     camAnimStart = now;
   }
-  const t = Math.min(1, (now - camAnimStart) / 320);
-  cam = t >= 1 ? camTo : lerpRect(camFrom, camTo, easeOutCubic(t));
 
   let rect = { x: 0, y: 0, w: W, h: H };
   const area = activeArea();
@@ -421,6 +502,7 @@ let lastCheckpoint = 0;
 ticker.onmessage = () => {
   draw();
   const now = performance.now();
+  syncPipPreview(now);
   if (micSource) {
     const data = new Float32Array(analyser.fftSize);
     analyser.getFloatTimeDomainData(data);
@@ -454,7 +536,13 @@ function sendState() {
 }
 export function setActive(active) {
   roomActive = active;
+  if (active || recording.value) scheduleInputDraw();
+  else if (inputFrame !== null) {
+    cancelAnimationFrame(inputFrame);
+    inputFrame = null;
+  }
   syncFrame();
+  syncPipPreview(performance.now(), true);
   ticker.postMessage(active || recording.value ? 30 : 0);
   api.setPolling(active || recording.value);
 }
@@ -470,6 +558,7 @@ api.onInput((e) => {
     liveCursor = [e.x, e.y];
     liveClicks.push({ x: e.x, y: e.y, t: now / 1000 });
   }
+  scheduleInputDraw();
 });
 
 /* Opptak */
@@ -520,7 +609,7 @@ function croppedTrack(track, area, fps) {
       cropStop = () => gen.stop();
       return gen;
     } catch (err) {
-      console.warn('Beskjæring uten kopi er ikke tilgjengelig, bruker lerret', err);
+      console.warn('Zero-copy cropping is unavailable, falling back to canvas', err);
     }
   }
   const vw = screenVideo.videoWidth;

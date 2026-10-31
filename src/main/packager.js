@@ -182,7 +182,7 @@ async function packageProject({ project, files, dest, name, removed }, ctx) {
   const lines = [
     `Reccut package report`,
     `Project: ${project.name}`,
-    `Packaged: ${new Date().toLocaleString()}`,
+    `Packaged: ${new Date().toLocaleString('en-GB')}`,
     `Folder: ${root}`,
     '',
     `${log.length} files and folders copied, ${fmtBytes(total)} in total.`,

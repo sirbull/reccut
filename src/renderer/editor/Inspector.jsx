@@ -18,6 +18,7 @@ import {
   redactLabel,
   TITLE_STYLES,
   TRANSITIONS,
+  parseTransitionSelection,
   applyAnimationPreset,
   clipHasAudio,
   defaultProps,
@@ -26,8 +27,9 @@ import {
   isElastic,
   isVisual,
   keyframeIndexAt,
+  kfTime,
+  kfToTimeline,
   removeKeyframe,
-  setKeyframe,
   setKeyframeEase,
   sourceTime,
   valueAt,
@@ -37,7 +39,9 @@ import { GRADE_PROPS } from '../../shared/grade.js';
 import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
 import { beginTransient, commit, endTransient, getWave, motionVersion, project, selectedClips, selectedTransition, tasks, timeSig, updateTransient, waveVersion } from './store.js';
 import { seek } from './playback.js';
-import { addMaskToSelected, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
+import { setKeyframe } from './keyframes.js';
+import { addMaskToSelected, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
+import { prefs } from '../prefs.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { MASK_MODES, MASK_SHAPES, canMask, defaultPoints, ellipsePoints, maskKey, maskList, setMaskShape } from '../../shared/shapes.js';
@@ -48,8 +52,12 @@ export function Inspector() {
   const transId = selectedTransition.value;
   const p = project.value;
 
+  const source = browserTab.value === 'media' && browserFocus.value && browserPicked.value.includes(browserSelection.value) && p.media[browserSelection.value];
+  if (source) return <MediaInspector key={source.id} media={source} />;
+
   if (transId?.startsWith('ax:') && p.clips[transId.slice(3)]?.axfade) return <CrossfadeInspector clip={p.clips[transId.slice(3)]} />;
-  if (transId && p.clips[transId]?.transition) return <TransitionInspector clip={p.clips[transId]} />;
+  const transition = parseTransitionSelection(transId);
+  if (transId && p.clips[transition.id]?.[transition.key]) return <TransitionInspector clip={p.clips[transition.id]} edge={transition.edge} />;
   if (clips.length === 1) return <ClipInspector clip={clips[0]} />;
   if (clips.length > 1)
     return (
@@ -67,6 +75,46 @@ export function Inspector() {
       </div>
     );
   return <ProjectInspector />;
+}
+
+function MediaInspector({ media }) {
+  const p = project.value;
+  const range = browserRange.value?.mediaId === media.id ? browserRange.value : null;
+  const stream = media.streams.screen || media.streams.main || media.streams.camera;
+  const duration = media.kind === 'image' ? prefs.value.stillDur : media.duration;
+  const hasAudio = media.kind !== 'audio' && Object.values(media.streams).some((s) => s.hasAudio);
+  return (
+    <div class="inspector panel">
+      <div class="insp-head"><Info size={16} /><b title={media.name}>{media.name}</b></div>
+      <div class="insp-body">
+        <Section title="Media properties" collapsible={false}>
+          <InfoRow label="Name">{media.name}</InfoRow>
+          <InfoRow label="Type">{media.kind === 'recording' ? 'Recording' : media.kind === 'audio' ? 'Audio' : media.kind === 'image' ? 'Image' : 'Video'}</InfoRow>
+          <InfoRow label="Duration">{fmtTc(duration, p.fps)}</InfoRow>
+          <InfoRow label="Source in">{fmtTc(range?.in || 0, p.fps)}</InfoRow>
+          <InfoRow label="Source out">{fmtTc(range?.out ?? duration, p.fps)}</InfoRow>
+          {range && <InfoRow label="Selected duration">{fmtTc(range.out - range.in, p.fps)}</InfoRow>}
+          {stream?.width && stream?.height && <InfoRow label="Resolution">{`${stream.width} × ${stream.height}`}</InfoRow>}
+          <InfoRow label="Frame rate">{(stream?.fps || media.fps) ? `${stream?.fps || media.fps} fps` : null}</InfoRow>
+          {hasAudio && <Row label="Include audio">
+            <input type="checkbox" aria-label="Include audio when adding to the timeline" checked={media.includeAudio !== false} onChange={(e) => {
+              const checked = e.currentTarget.checked;
+              commit((q) => { q.media[media.id].includeAudio = checked; });
+            }} />
+          </Row>}
+          {hasAudio && <p class="hint">Include the clip’s audio when adding it to the timeline.</p>}
+        </Section>
+        <Section title="File">
+          <InfoRow label="Location" title={media.path}>{media.path}</InfoRow>
+          <InfoRow label="Status">{media.offline ? 'Offline' : 'Available'}</InfoRow>
+          <MediaColorRows media={media} />
+          <div class="info-actions"><Button variant="secondary" class="small" disabled={media.offline} onClick={() => window.api.reveal(media.path)}>
+            {window.api.platform === 'darwin' ? 'Reveal in Finder' : 'Show in Explorer'}
+          </Button></div>
+        </Section>
+      </div>
+    </div>
+  );
 }
 
 // Fanene som i Final Cut Pro: et ikon for hver del, og klippet velges bare ved å markere det.
@@ -128,7 +176,7 @@ function ClipInspector({ clip }) {
 /* Egenskaper med nøkkelbilder */
 
 function setValue(c, prop, v, T) {
-  if (c.kf?.[prop]?.length) setKeyframe(c, prop, sourceTime(c, T), v);
+  if (c.kf?.[prop]?.length) setKeyframe(c, prop, kfTime(c, T), v);
   else c.props[prop] = v;
 }
 
@@ -138,7 +186,7 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
   const Tc = Math.min(Math.max(T, clip.start), clip.start + clip.dur);
   const raw = valueAt(clip, prop, Tc) ?? 0;
   const value = raw * scale;
-  const s = sourceTime(clip, Tc);
+  const s = kfTime(clip, Tc);
   const list = clip.kf?.[prop] || [];
   const kfIndex = keyframeIndexAt(clip, prop, s);
   const atKf = kfIndex >= 0;
@@ -146,7 +194,7 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
   const apply = (v) => updateTransient((q) => setValue(q.clips[id], prop, v / scale, Tc));
   const prev = list.filter(([t]) => t < s - 1e-3).at(-1);
   const next = list.find(([t]) => t > s + 1e-3);
-  const goto = (t) => seek(clip.start + (t - clip.in));
+  const goto = (t) => seek(kfToTimeline(clip, t));
   const fallback = def ?? defaultProps(clip.type)[prop] ?? 0;
   const isDefault = !list.length && raw === fallback;
 
@@ -505,12 +553,12 @@ function ShapeKeyframe({ clip, prop }) {
   const T = timeSig.value;
   const inside = T >= clip.start && T <= clip.start + clip.dur;
   const Tc = Math.min(Math.max(T, clip.start), clip.start + clip.dur);
-  const s = sourceTime(clip, Tc);
+  const s = kfTime(clip, Tc);
   const list = clip.kf?.[prop] || [];
   const atKf = keyframeIndexAt(clip, prop, s) >= 0;
   const prev = list.filter(([t]) => t < s - 1e-3).at(-1);
   const next = list.find(([t]) => t > s + 1e-3);
-  const goto = (t) => seek(clip.start + (t - clip.in));
+  const goto = (t) => seek(kfToTimeline(clip, t));
   return (
     <div class="param" data-prop={prop}>
       <span class="param-label">Shape</span>
@@ -845,7 +893,7 @@ function AudioTab({ clip }) {
         <Section title="Audio Format">
           <InfoRow label="Source">{main.label}</InfoRow>
           <InfoRow label="Codec">{codecName(a.codec, a.profile)}</InfoRow>
-          <InfoRow label="Sample rate">{a.sampleRate ? `${(a.sampleRate / 1000).toLocaleString()} kHz` : null}</InfoRow>
+          <InfoRow label="Sample rate">{a.sampleRate ? `${(a.sampleRate / 1000).toLocaleString('en-GB')} kHz` : null}</InfoRow>
           <InfoRow label="Channels">{a.layout ? `${a.layout}${a.channels ? ` (${a.channels})` : ''}` : null}</InfoRow>
           <InfoRow label="Bit rate">{a.bitrate ? `${a.bitrate} kbit/s` : null}</InfoRow>
         </Section>
@@ -1170,7 +1218,7 @@ function RecordingTab({ clip, media }) {
           </Row>
           <div class="switch-list">
             {switches.map(([t, v]) => (
-              <button key={t} class={Math.abs(t - s) < 0.05 ? 'on' : ''} onClick={() => seek(clip.start + (t - clip.in))}>
+              <button key={t} class={Math.abs(t - s) < 0.05 ? 'on' : ''} onClick={() => seek(kfToTimeline(clip, t))}>
                 {formatShort(t - clip.in)} <b>{v}</b>
               </button>
             ))}
@@ -1523,11 +1571,19 @@ function CaptionTab({ clip }) {
   const st = { ...DEFAULT_CAPTION_STYLE, ...p.captionStyle };
   const id = clip.id;
   const pos = clip.props.pos;
+  const textRef = useRef(null);
+  const editRequest = captionEditRequest.value;
+  useEffect(() => {
+    if (editRequest !== id) return;
+    textRef.current?.focus();
+    captionEditRequest.value = null;
+  }, [id, editRequest]);
   return (
     <>
       <Section title="Caption">
         <textarea
           class="text-input caption-text"
+          ref={textRef}
           rows={st.maxLines}
           value={clip.props.text}
           placeholder={`Type up to ${st.maxLines} lines. Press Return for a new line.`}
@@ -1621,7 +1677,7 @@ function useDetails(path) {
 }
 
 const fmtBytes = (n) => (n == null ? '' : n > 1e9 ? `${(n / 1e9).toFixed(2)} GB` : n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
-const fmtDate = (t) => (t ? new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '');
+const fmtDate = (t) => (t ? new Date(t).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '');
 const fmtTc = (t, fps) => formatTimecode(Math.max(0, t), fps);
 const CODECS = { h264: 'H.264', hevc: 'HEVC (H.265)', prores: 'Apple ProRes', vp9: 'VP9', vp8: 'VP8', av1: 'AV1', dnxhd: 'Avid DNxHD/HR', mjpeg: 'Motion JPEG', mpeg2video: 'MPEG-2', aac: 'AAC', mp3: 'MP3', opus: 'Opus', flac: 'FLAC', pcm_s16le: 'Linear PCM 16-bit', pcm_s24le: 'Linear PCM 24-bit', pcm_s32le: 'Linear PCM 32-bit', pcm_f32le: 'Linear PCM 32-bit float', vorbis: 'Vorbis', ac3: 'Dolby Digital (AC-3)', eac3: 'Dolby Digital Plus' };
 const codecName = (c, profile) => `${CODECS[c] || c}${profile ? ` ${profile}` : ''}`;
@@ -1703,7 +1759,7 @@ function InfoTab({ clip, media }) {
       {a && (
         <Section title="Audio">
           <InfoRow label="Codec">{codecName(a.codec, a.profile)}</InfoRow>
-          <InfoRow label="Sample rate">{a.sampleRate ? `${(a.sampleRate / 1000).toLocaleString()} kHz` : null}</InfoRow>
+          <InfoRow label="Sample rate">{a.sampleRate ? `${(a.sampleRate / 1000).toLocaleString('en-GB')} kHz` : null}</InfoRow>
           <InfoRow label="Channels">{a.layout ? `${a.layout}${a.channels ? ` (${a.channels})` : ''}` : null}</InfoRow>
           <InfoRow label="Bit rate">{a.bitrate ? `${a.bitrate} kbit/s` : null}</InfoRow>
         </Section>
@@ -1713,8 +1769,8 @@ function InfoTab({ clip, media }) {
   );
 }
 
-function TransitionInspector({ clip }) {
-  const t = clip.transition;
+function TransitionInspector({ clip, edge = 'start' }) {
+  const t = clip[edge === 'end' ? 'transitionOut' : 'transition'];
   return (
     <div class="inspector panel">
       <div class="insp-head">
@@ -1724,12 +1780,12 @@ function TransitionInspector({ clip }) {
       <div class="insp-body">
         <Section title="Transition">
           <Row label="Type">
-            <Select value={t.type} options={TRANSITIONS.map((x) => ({ value: x.id, label: x.label }))} onChange={(v) => commit((q) => setTransition(q, clip.id, v, t.dur))} />
+            <Select value={t.type} options={TRANSITIONS.map((x) => ({ value: x.id, label: x.label }))} onChange={(v) => commit((q) => setTransition(q, clip.id, v, t.dur, edge))} />
           </Row>
           <Row label="Duration">
-            <NumberField value={t.dur} min={0.1} max={4} step={0.05} precision={2} unit="s" onStart={beginTransient} onChange={(v) => updateTransient((q) => setTransition(q, clip.id, t.type, v))} onCommit={() => endTransient(true)} />
+            <NumberField value={t.dur} min={0.1} max={4} step={0.05} precision={2} unit="s" onStart={beginTransient} onChange={(v) => updateTransient((q) => setTransition(q, clip.id, t.type, v, edge))} onCommit={() => endTransient(true)} />
           </Row>
-          <p class="hint">Press Delete to remove it. The transition sits over the cut and uses extra frames before and after when the clips have them.</p>
+          <p class="hint">Drag the transition handles on the timeline to change its duration. Press Delete to remove it. Transitions at a cut use extra frames before and after when available.</p>
         </Section>
       </div>
     </div>

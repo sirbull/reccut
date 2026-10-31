@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { Maximize2, Settings2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-preact';
-import { deepClone, formatTimecode, isVisual, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
+import { Maximize2, Minimize2, Settings2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-preact';
+import { deepClone, formatTimecode, isVisual, kfTime, valueAt } from '../../shared/model.js';
 import { captionLayout, wrapText } from '../../shared/render.js';
 import { clipMatrix, maskList, shapeAt } from '../../shared/shapes.js';
 import { beginTransient, commit, endTransient, getTime, playing, project, selectedClips, selectedTransition, selection, timeSig, updateTransient } from './store.js';
@@ -8,6 +8,9 @@ import * as playback from './playback.js';
 import * as commands from './commands.js';
 import { IconButton } from '../ui.jsx';
 import { prefs } from '../prefs.js';
+import { setKeyframe } from './keyframes.js';
+import { toggleViewerFullscreen } from './fullscreen.js';
+import { isTyping } from '../keyboard.js';
 
 // Spill bakover: avspillingsikonet speilet.
 const PlayBackward = ({ size }) => <Play size={size} fill="currentColor" style={{ transform: 'scaleX(-1)' }} />;
@@ -17,6 +20,20 @@ export function Viewer() {
   const boxRef = useRef(null);
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const toggleFullscreen = () => toggleViewerFullscreen(wrapRef.current);
+  const resize = () => {
+    const box = boxRef.current;
+    const r = box.getBoundingClientRect();
+    const style = getComputedStyle(box);
+    playback.resizeCanvas(r.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), r.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom));
+  };
+
+  useEffect(() => {
+    const changed = () => setFullscreen(document.fullscreenElement === wrapRef.current);
+    document.addEventListener('fullscreenchange', changed);
+    return () => document.removeEventListener('fullscreenchange', changed);
+  }, []);
 
   // Dra valgt klipp, tittel eller undertekst direkte i bildet.
   const sel = selectedClips.value.length === 1 ? selectedClips.value[0] : null;
@@ -28,6 +45,7 @@ export function Viewer() {
     if (!draggable || e.button !== 0) return;
     // Sladding: dra utenfor boksen for å tegne et nytt område.
     if (sel.type === 'redact') return sel.props.shape === 'path' || sel.props.shape === 'full' ? undefined : drawRedactBox(e, sel, canvasRef.current, p);
+    if (isTyping()) document.activeElement?.blur();
     e.preventDefault();
     const canvas = canvasRef.current;
     const k = p.width / canvas.getBoundingClientRect().width;
@@ -54,7 +72,7 @@ export function Viewer() {
           c.props.pos = { x: Math.round(Math.min(100, Math.max(0, origin.x + (dx / p.width) * 100)) * 10) / 10, y: Math.round(Math.min(100, Math.max(0, origin.y + (dy / p.height) * 100)) * 10) / 10 };
         } else {
           for (const [prop, v] of [['x', origin.x + dx], ['y', origin.y + dy]]) {
-            if (c.kf?.[prop]?.length) setKeyframe(c, prop, sourceTime(c, T), Math.round(v));
+            if (c.kf?.[prop]?.length) setKeyframe(c, prop, kfTime(c, T), Math.round(v));
             else c.props[prop] = Math.round(v);
           }
         }
@@ -63,19 +81,24 @@ export function Viewer() {
     const up = () => {
       canvas.removeEventListener('pointermove', move);
       canvas.removeEventListener('pointerup', up);
+      canvas.removeEventListener('pointercancel', cancel);
       endTransient(true);
+    };
+    const cancel = () => {
+      canvas.removeEventListener('pointermove', move);
+      canvas.removeEventListener('pointerup', up);
+      canvas.removeEventListener('pointercancel', cancel);
+      endTransient(false);
     };
     canvas.addEventListener('pointermove', move);
     canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', cancel);
   };
 
   useEffect(() => {
     playback.attachCanvas(canvasRef.current);
     playback.start();
-    const ro = new ResizeObserver(() => {
-      const r = boxRef.current.getBoundingClientRect();
-      playback.resizeCanvas(r.width - 24, r.height - 24);
-    });
+    const ro = new ResizeObserver(resize);
     ro.observe(boxRef.current);
     return () => {
       ro.disconnect();
@@ -85,8 +108,7 @@ export function Viewer() {
   }, []);
 
   useEffect(() => {
-    const r = boxRef.current.getBoundingClientRect();
-    playback.resizeCanvas(r.width - 24, r.height - 24);
+    resize();
   }, [p.width, p.height, prefs.value.viewerQuality]);
 
   return (
@@ -105,7 +127,7 @@ export function Viewer() {
           <Settings2 size={13} />
         </button>
       </div>
-      <div class="viewer-box" ref={boxRef} onDblClick={() => wrapRef.current.requestFullscreen?.()}>
+      <div class="viewer-box" ref={boxRef} onDblClick={toggleFullscreen}>
         <canvas ref={canvasRef} class={draggable ? (sel.type === 'redact' ? 'drawable' : 'movable') : ''} onPointerDown={onCanvasDown} />
         {pen && sel?.id === pen.clipId && <PenOverlay clip={sel} canvasRef={canvasRef} />}
         {sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} label="Redaction. Drag to move, drag the handles to resize." />}
@@ -124,7 +146,7 @@ export function Viewer() {
           <IconButton icon={SkipForward} title="Go to end (End)" onClick={commands.goEnd} />
         </div>
         <div class="right">
-          <IconButton icon={Maximize2} title="Full screen" onClick={() => wrapRef.current.requestFullscreen?.()} />
+          <IconButton icon={fullscreen ? Minimize2 : Maximize2} title={fullscreen ? 'Exit full screen (Esc)' : 'Full screen'} aria-pressed={fullscreen} onClick={toggleFullscreen} />
         </div>
       </div>
     </div>
@@ -135,7 +157,7 @@ export function Viewer() {
 
 // Skriver en verdi på klippet; har egenskapen nøkkelbilder, settes et nøkkelbilde ved spillhodet.
 function putValue(c, prop, v, T) {
-  if (c.kf?.[prop]?.length) setKeyframe(c, prop, sourceTime(c, T), v);
+  if (c.kf?.[prop]?.length) setKeyframe(c, prop, kfTime(c, T), v);
   else c.props[prop] = v;
 }
 
@@ -404,6 +426,7 @@ function PenOverlay({ clip, canvasRef }) {
     ro.observe(cv);
     // Tastene fanges før hurtigtastene, så Retur, Escape og rettetasten bare virker på pennen.
     const onKey = (e) => {
+      if (isTyping(e) || e.isComposing) return;
       if (!['Enter', 'Escape', 'Backspace', 'Delete'].includes(e.key)) return;
       e.preventDefault();
       e.stopImmediatePropagation();

@@ -25,6 +25,7 @@ import * as playback from './editor/playback.js';
 import { toast } from './ui.jsx';
 import { prefs, setPrefs } from './prefs.js';
 import { CLIP_COLORS, RAMP_PRESETS } from '../shared/model.js';
+import { toggleViewerFullscreen } from './editor/fullscreen.js';
 
 const api = window.api;
 export const isMac = api.platform === 'darwin';
@@ -50,6 +51,10 @@ function toggleSignal(sig, pref, on, off) {
 }
 
 function deselectAll() {
+  if (document.fullscreenElement) {
+    toggleViewerFullscreen();
+    return;
+  }
   selection.value = [];
   selectedTransition.value = null;
   commands.browserPicked.value = [];
@@ -64,16 +69,14 @@ function deleteMarker() {
 }
 
 function showInspector(tab) {
+  setPrefs({ editorInspectorVisible: true });
   commands.inspectorTab.value = tab;
   if (!selection.value.length) commands.selectClipAtPlayhead();
 }
 
 function showBrowser(tab) {
+  setPrefs({ editorBrowserVisible: true });
   commands.browserTab.value = tab;
-}
-
-function viewerFullscreen() {
-  document.querySelector('.viewer')?.requestFullscreen?.();
 }
 
 /**
@@ -200,6 +203,16 @@ export const COMMANDS = [
   { id: 'roomRecord', label: 'Record', menu: 'View', keys: 'CmdOrCtrl+1', register: true, rooms: ALL, run: () => (room.value = 'record'), checked: () => room.value === 'record', help: 'recording' },
   { id: 'roomEdit', label: 'Edit', menu: 'View', keys: 'CmdOrCtrl+2', register: true, rooms: ALL, run: () => (room.value = 'edit'), checked: () => room.value === 'edit', help: 'editing' },
   { id: 'roomExport', label: 'Export', menu: 'View', keys: 'CmdOrCtrl+3', register: true, rooms: ALL, run: () => (room.value = 'export'), checked: () => room.value === 'export', help: 'export' },
+  { id: 'toggleBrowser', label: 'Media Browser', menu: 'View', group: 'panels', run: () => {
+    const visible = !prefs.value.editorBrowserVisible;
+    setPrefs({ editorBrowserVisible: visible });
+    if (!visible) {
+      commands.browserFocus.value = false;
+      commands.browserSkimPos.mediaId = null;
+      skim.value = null;
+    }
+  }, checked: () => prefs.value.editorBrowserVisible, help: 'browser', keywords: 'show hide toggle panel browser' },
+  { id: 'toggleInspector', label: 'Properties', menu: 'View', group: 'panels', run: () => setPrefs({ editorInspectorVisible: !prefs.value.editorInspectorVisible }), checked: () => prefs.value.editorInspectorVisible, help: 'inspector', keywords: 'show hide toggle panel properties inspector' },
   { id: 'browser:media', label: 'Show Media', menu: 'View', group: 'browser', keys: 'Shift+CmdOrCtrl+1', run: () => showBrowser('media'), help: 'browser' },
   { id: 'browser:titles', label: 'Show Titles', menu: 'View', group: 'browser', keys: 'Alt+CmdOrCtrl+1', run: () => showBrowser('titles'), help: 'titles' },
   { id: 'browser:transitions', label: 'Show Transitions', menu: 'View', group: 'browser', keys: 'Shift+CmdOrCtrl+5', run: () => showBrowser('transitions'), help: 'transitions' },
@@ -217,7 +230,7 @@ export const COMMANDS = [
   { id: 'skimming', label: 'Skimming', menu: 'View', group: 'toggles', keys: 'S', run: () => toggleSignal(skimming, 'skimming', 'Skimming on', 'Skimming off'), checked: () => skimming.value, help: 'skimming' },
   { id: 'audioSkimming', label: 'Audio Skimming', menu: 'View', group: 'toggles', keys: 'Shift+S', run: () => toggleSignal(audioSkimming, 'audioSkimming', 'Audio skimming on', 'Audio skimming off'), checked: () => audioSkimming.value, help: 'skimming' },
   { id: 'snapping', label: 'Snapping', menu: 'View', group: 'toggles', keys: 'N', run: () => toggleSignal(snapping, 'snapping', 'Snapping on', 'Snapping off'), checked: () => snapping.value, help: 'timeline' },
-  { id: 'viewerFullscreen', label: 'Play Full Screen', menu: 'View', group: 'screen', keys: 'Shift+CmdOrCtrl+F', run: viewerFullscreen, help: 'playback' },
+  { id: 'viewerFullscreen', label: 'Toggle Preview Full Screen', menu: 'View', group: 'screen', keys: 'Shift+CmdOrCtrl+F', run: () => toggleViewerFullscreen(), help: 'playback' },
 
   /* Playback */
   { id: 'play', label: 'Play or Pause', menu: 'Playback', keys: 'Space', run: playback.toggle, help: 'playback' },
@@ -415,7 +428,12 @@ export function menuTemplate() {
       continue;
     }
     if (name === 'Window') {
-      out.push({ label: 'Window', role: 'windowMenu' });
+      out.push({ label: 'Window', role: 'windowMenu', submenu: [
+        { role: 'minimize', label: 'Minimize' },
+        { role: 'zoom', label: 'Zoom' },
+        { separator: true },
+        { role: 'front', label: 'Bring All to Front' },
+      ] });
       continue;
     }
     const items = [];

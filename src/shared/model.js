@@ -524,14 +524,13 @@ export function keyframeIndexAt(clip, prop, s, tol = 1 / 60) {
   return list.findIndex(([t]) => Math.abs(t - s) <= tol);
 }
 
-export function setKeyframe(clip, prop, s, value) {
+export function setKeyframe(clip, prop, s, value, ease = 'easeInOut') {
   const list = (clip.kf[prop] = clip.kf[prop] || []);
   const i = keyframeIndexAt(clip, prop, s);
   if (i >= 0) list[i][1] = value;
   else {
-    // Nye nøkkelbilder arver myk overgang fra forrige, ellers lineær.
-    const prev = list.filter(([t]) => t < s).at(-1);
-    list.push(prev?.[2] ? [s, value, prev[2]] : [s, value]);
+    // Valget lagres på punktet, så senere endringer i innstillinger ikke endrer animasjonen.
+    list.push([s, value, ease]);
     list.sort((a, b) => a[0] - b[0]);
   }
 }
@@ -689,9 +688,18 @@ export function laneMuted(project, lane) {
 }
 
 // En overgang ligger midt over kuttet. Første klipp tones inn fra svart.
-export function transitionWindow(clip, hasPrev = true, prev = null) {
+export function transitionWindow(clip, hasPrev = true, prev = null, edge = 'start') {
+  if (edge === 'end') {
+    const d = Math.min(clip.transitionOut.dur, clip.dur);
+    return [clip.start + clip.dur - d, clip.start + clip.dur];
+  }
   const d = Math.min(clip.transition.dur, clip.dur, prev ? prev.dur : Infinity);
   return hasPrev ? [clip.start - d / 2, clip.start + d / 2] : [clip.start, clip.start + d];
+}
+
+export const transitionSelection = (id, edge = 'start') => edge === 'end' ? `out:${id}` : id;
+export function parseTransitionSelection(value) {
+  return value?.startsWith('out:') ? { id: value.slice(4), edge: 'end', key: 'transitionOut' } : { id: value, edge: 'start', key: 'transition' };
 }
 
 // Hvilke klipp i hovedsporet som er aktive, med eventuell overgang.
@@ -707,7 +715,7 @@ function fingerprint(project) {
   for (const id in project.clips) {
     const c = project.clips[id];
     n++;
-    f += c.start * 1.31 + c.dur * 2.17 + c.lane * 3.7 + (c.props?.aLead || 0) * 5.3 + (c.props?.aTail || 0) * 7.1 + (c.solo ? 11 : 0) + (c.transition ? 13 : 0);
+    f += c.start * 1.31 + c.dur * 2.17 + c.lane * 3.7 + (c.props?.aLead || 0) * 5.3 + (c.props?.aTail || 0) * 7.1 + (c.solo ? 11 : 0) + (c.transition ? 13 : 0) + (c.transitionOut ? 17 : 0);
   }
   return f + n * 104729;
 }
@@ -770,12 +778,18 @@ export function primaryAt(project, T) {
   // En overgang ligger rundt kuttet, så naboene sjekkes også (i samme rekkefølge som før).
   for (let i = Math.max(0, lo - 1); i <= Math.min(list.length - 1, lo + 2); i++) {
     const c = project.clips[list[i]];
-    if (!c?.transition) continue;
-    const prev = i > 0 ? project.clips[list[i - 1]] : null;
-    const [a, b] = transitionWindow(c, Boolean(prev), prev);
-    if (T >= a && T < b) {
-      const p = clamp((T - a) / (b - a), 0, 1);
-      return { transition: { type: c.transition.type, p }, a: prev, b: c };
+    if (!c) continue;
+    if (c.transition) {
+      const prev = i > 0 ? project.clips[list[i - 1]] : null;
+      const [a, b] = transitionWindow(c, Boolean(prev), prev);
+      if (T >= a && T < b) {
+        const p = clamp((T - a) / (b - a), 0, 1);
+        return { transition: { type: c.transition.type, p }, a: prev, b: c };
+      }
+    }
+    if (c.transitionOut) {
+      const [a, b] = transitionWindow(c, false, null, 'end');
+      if (T >= a && T < b) return { transition: { type: c.transitionOut.type, p: clamp((T - a) / (b - a), 0, 1) }, a: c, b: null };
     }
   }
   for (let i = Math.max(0, lo - 1); i <= Math.min(list.length - 1, lo + 1); i++) {
@@ -807,7 +821,7 @@ export function computeFrame(project, T, { captions = true } = {}) {
       layers.push({
         transition: p.transition,
         a: p.a && p.a.enabled ? { clip: p.a, T } : null,
-        b: p.b.enabled ? { clip: p.b, T } : null,
+        b: p.b?.enabled ? { clip: p.b, T } : null,
       });
     } else if (p?.clip && p.clip.enabled && p.clip.type !== 'gap') {
       layers.push({ clip: p.clip, T });
@@ -880,7 +894,7 @@ export function computeAudio(project, T) {
     const p = primaryAt(project, T);
     if (p?.transition) {
       if (p.a) set(p.a, fadeOutGain(p.transition.p), true);
-      set(p.b, fadeInGain(p.transition.p), true);
+      if (p.b) set(p.b, fadeInGain(p.transition.p), true);
     } else if (p?.clip) set(p.clip, 1);
   }
   for (const c of near) {

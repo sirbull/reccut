@@ -3,6 +3,8 @@
 const { screen, systemPreferences } = require('electron');
 
 const isMac = process.platform === 'darwin';
+const CURSOR_INTERVAL = 1000 / 120;
+const ZOOM_RELEASE_MS = 200;
 
 let hook = null;
 let Key = {};
@@ -95,7 +97,12 @@ class InputTracker {
     this.started = false;
     this.pollTimer = null;
     this.lastCursor = null;
+    this.lastRecordedCursor = null;
+    this.lastRecordedAt = 0;
     this.liveUntil = 0;
+    this.onMouseMove = () => {
+      if (this.pollTimer) this.sampleCursor();
+    };
   }
 
   available() {
@@ -114,16 +121,20 @@ class InputTracker {
     hook.on('keydown', (e) => this.onKey(e, true));
     hook.on('keyup', (e) => this.onKey(e, false));
     hook.on('mousedown', () => this.onClick());
+    hook.on('mousemove', this.onMouseMove);
     try {
       hook.start();
       this.started = true;
     } catch (err) {
+      hook.removeListener('mousemove', this.onMouseMove);
       console.warn('Could not start the keyboard listener:', err.message);
     }
     return this.started;
   }
 
   stop() {
+    this.stopPolling();
+    hook?.removeListener('mousemove', this.onMouseMove);
     if (this.started) hook.stop();
     this.started = false;
   }
@@ -174,6 +185,8 @@ class InputTracker {
   setZoom(on) {
     if (on === this.zoomOn) return;
     this.zoomOn = on;
+    // Følg også musen mens den store pekeren krymper etter at tasten slippes.
+    if (!on) this.liveUntil = Math.max(this.liveUntil, Date.now() + ZOOM_RELEASE_MS);
     const [x, y] = this.cursorPoint();
     if (this.session) {
       const t = this.now();
@@ -218,17 +231,25 @@ class InputTracker {
     this.emit({ type: 'click', x, y });
   }
 
-  // Musepekeren leses 30 ganger i sekundet. Under opptak lagres posisjonen.
+  // Native musehendelser oppdaterer forhåndsvisningen straks. Polling er reserve
+  // (bl.a. ved draoperasjoner), og opptaksdata begrenses til 120 punkter/sekund.
+  sampleCursor() {
+    const [x, y] = this.cursorPoint();
+    const now = Date.now();
+    const moved = !this.lastCursor || this.lastCursor[0] !== x || this.lastCursor[1] !== y;
+    this.lastCursor = [x, y];
+    const recorded = this.lastRecordedCursor;
+    if (this.session && (!recorded || recorded[0] !== x || recorded[1] !== y) && now - this.lastRecordedAt >= CURSOR_INTERVAL) {
+      this.session.cursor.push([round(this.now()), round(x, 6), round(y, 6)]);
+      this.lastRecordedCursor = [x, y];
+      this.lastRecordedAt = now;
+    }
+    if (moved && (this.zoomOn || now < this.liveUntil)) this.emit({ type: 'cursor', x, y });
+  }
+
   startPolling() {
     if (this.pollTimer) return;
-    this.pollTimer = setInterval(() => {
-      const [x, y] = this.cursorPoint();
-      const moved = !this.lastCursor || Math.abs(this.lastCursor[0] - x) > 0.0005 || Math.abs(this.lastCursor[1] - y) > 0.0005;
-      if (!moved) return;
-      this.lastCursor = [x, y];
-      if (this.session) this.session.cursor.push([round(this.now()), round(x, 4), round(y, 4)]);
-      if (this.zoomOn || Date.now() < this.liveUntil) this.emit({ type: 'cursor', x, y });
-    }, 33);
+    this.pollTimer = setInterval(() => this.sampleCursor(), Math.ceil(CURSOR_INTERVAL));
   }
 
   stopPolling() {
@@ -241,6 +262,8 @@ class InputTracker {
     this.session = { t0, cursor: [[0, round(x, 4), round(y, 4)]], zooms: [], clicks: [], keys: [] };
     if (this.zoomOn) this.session.zooms.push([0, null]);
     this.lastCursor = [x, y];
+    this.lastRecordedCursor = [x, y];
+    this.lastRecordedAt = Date.now();
   }
 
   endSession() {

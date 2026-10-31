@@ -55,7 +55,6 @@ export function Recorder({ active }) {
   useEffect(() => {
     api.recShowControls(s.showControls);
     api.inputStatus().then(setInput);
-    api.hideFromCapture(s.hideFromCapture);
     api.setZoomKey(s.zoomKey);
   }, []);
 
@@ -213,6 +212,14 @@ export function Recorder({ active }) {
           <Row label="Mirror">
             <Toggle checked={s.mirror} onChange={(v) => set({ mirror: v })} />
           </Row>
+          <Row label="Show PiP on screen">
+            <Toggle checked={s.showPipOnScreen} disabled={engine.isWindowSource()} onChange={(v) => set({ showPipOnScreen: v })} />
+          </Row>
+          <p class="hint">
+            {engine.isWindowSource()
+              ? 'Choose a full display or a screen area to show PiP over the app you are recording.'
+              : <>Shows the camera over your other apps at its recorded size and position. Clicks pass through. Use {mod.short}3–6 to change corners. {api.platform !== 'win32' && 'The on-screen camera can also be captured in the screen file. Turn this off to keep the screen file free of the camera for later editing.'}</>}
+          </p>
         </Section>
 
         <Section title="Overlays">
@@ -298,10 +305,7 @@ export function Recorder({ active }) {
           <Row label={<><AppWindow size={14} /> Hide Reccut from recording</>}>
             <Toggle
               checked={s.hideFromCapture}
-              onChange={(v) => {
-                set({ hideFromCapture: v });
-                api.hideFromCapture(v);
-              }}
+              onChange={(v) => set({ hideFromCapture: v })}
             />
           </Row>
           <Row label="Saved in project" stacked>

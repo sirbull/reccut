@@ -13,6 +13,7 @@ import * as commands from './commands.js';
 import { cancelLayerImport, finish as finishLayers, layerImport } from './layers.js';
 import { Button, Modal, NumberField, Row, Section, Segmented, Toggle, toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
+import { toggleViewerFullscreen } from './fullscreen.js';
 
 const api = window.api;
 
@@ -39,9 +40,14 @@ api.onTranscribeError(({ error }) => {
 export function Editor({ active }) {
   const [split, setSplit] = useState(() => Number(localStorage.getItem('editorSplit')) || 0.56);
   const ref = useRef(null);
+  const browserVisible = prefs.value.editorBrowserVisible;
+  const inspectorVisible = prefs.value.editorInspectorVisible;
 
   useEffect(() => {
-    if (!active) playback.pause();
+    if (!active) {
+      playback.pause();
+      if (document.fullscreenElement === ref.current?.querySelector('.viewer')) toggleViewerFullscreen();
+    }
   }, [active]);
 
   const onDividerDown = (e) => {
@@ -62,10 +68,14 @@ export function Editor({ active }) {
 
   return (
     <div class="editor" ref={ref} style={{ gridTemplateRows: `${split * 100}% 6px 1fr` }}>
-      <div class="editor-top">
-        <Browser />
+      <div class="editor-top" style={{ gridTemplateColumns: [browserVisible && '300px', 'minmax(0, 1fr)', inspectorVisible && '320px'].filter(Boolean).join(' ') }}>
+        <div class="editor-side" hidden={!browserVisible}>
+          <Browser />
+        </div>
         <Viewer />
-        <Inspector />
+        <div class="editor-side" hidden={!inspectorVisible}>
+          <Inspector />
+        </div>
       </div>
       <div class="divider" onPointerDown={onDividerDown} />
       <Timeline />

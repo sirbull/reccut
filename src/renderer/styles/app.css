@@ -361,7 +361,8 @@ main {
   border-radius: 5px;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  cursor: ew-resize;
+  cursor: ns-resize;
+  touch-action: none;
   white-space: nowrap;
   overflow: hidden;
   flex-shrink: 0;
@@ -780,6 +781,15 @@ input[type='color'].color::-webkit-color-swatch {
   background: var(--line);
   min-height: 0;
 }
+.editor-side {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.editor-side > .panel {
+  flex: 1;
+  min-width: 0;
+}
 .divider {
   background: var(--line);
   cursor: row-resize;
@@ -1142,6 +1152,10 @@ input[type='color'].color::-webkit-color-swatch {
 }
 .viewer:fullscreen .viewer-box {
   padding: 0;
+}
+.viewer:fullscreen {
+  width: 100%;
+  height: 100%;
 }
 .transport {
   display: grid;
@@ -1568,38 +1582,44 @@ input[type='color'].color::-webkit-color-swatch {
   pointer-events: none;
 }
 .vol-line {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 7px;
-  margin-top: -3px;
+  fill: none;
+  stroke: var(--yellow);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+.vol-line-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 10;
+  pointer-events: stroke;
   cursor: ns-resize;
-}
-.vol-line::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 3px;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.55);
-}
-.selected .vol-line::after {
-  background: var(--yellow);
 }
 .vol-kf {
   position: absolute;
   left: 0;
   top: 0;
   pointer-events: none;
+  overflow: hidden;
+  z-index: 2;
 }
 .vol-kf-point {
   position: absolute;
+  width: 12px;
+  height: 12px;
+  cursor: ns-resize;
+  z-index: 3;
+}
+.vol-kf-point::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
   width: 8px;
   height: 8px;
   background: var(--yellow);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
   transform: rotate(45deg);
-  cursor: ns-resize;
+  pointer-events: none;
 }
 .fade-handle {
   position: absolute;
@@ -2344,7 +2364,6 @@ input[type='color'].color::-webkit-color-swatch {
 .layout-btn, .media-card, .gen-card, .preset, .chip, .source, .look, .project-item .open, .rooms button, .panel-tabs button, .segmented button, .btn, .icon-btn, .toggle, .play-btn, .layout-btn, .cap-time, .switch-list button, .record-btn { cursor: pointer; }
 .media-card, .gen-card { cursor: grab; }
 .media-card:active, .gen-card:active { cursor: grabbing; }
-.num-field { cursor: ew-resize; }
 .select { cursor: pointer; }
 .divider { cursor: row-resize; }
 
@@ -2659,6 +2678,23 @@ input[type='color'].color::-webkit-color-swatch {
   object-fit: cover;
   pointer-events: none;
 }
+.film-drag-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: grab;
+  opacity: 0;
+}
+.film-strip:hover .film-drag-handle { opacity: 1; }
+.film-drag-handle:active { cursor: grabbing; }
+.film-drag-handle > span { pointer-events: none; }
 .film-wave {
   display: block;
   width: 100%;
@@ -4233,3 +4269,114 @@ kbd.keycap {
 .pkg-handles input {
   width: 60px;
 }
+
+/* Library items travel as a compact box; the timeline shows their exact footprint. */
+.library-drag-preview {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 10000;
+  width: 174px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: #253d43;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.library-drag-preview.transition { background: #39363f; border-color: #c6b5e8; }
+.library-drag-icon { font-size: 23px; flex-shrink: 0; }
+.tl-transition {
+  z-index: 5;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #49444f, #302d36);
+  color: #f4efff;
+  touch-action: none;
+}
+.transition-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.transition-lines path { stroke: rgba(223, 208, 248, 0.25); stroke-width: 1; fill: none; vector-effect: non-scaling-stroke; }
+.tl-transition, .tl-drop-preview.transition { container-type: size; }
+.transition-icon {
+  display: none;
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 18px;
+  flex-shrink: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+@container (min-width: 44px) and (min-height: 26px) {
+  .transition-icon { display: block; }
+}
+.tl-drop-preview > span {
+  position: relative;
+  z-index: 1;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(36, 32, 43, 0.75);
+  text-shadow: 0 1px 2px #000;
+  pointer-events: none;
+}
+.transition-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 2;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.transition-handle.start { left: 0; }
+.transition-handle.end { right: 0; }
+.transition-handle::after {
+  content: '';
+  position: absolute;
+  top: 28%;
+  bottom: 28%;
+  left: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.6);
+}
+.tl-transition:hover .transition-handle, .tl-transition.selected .transition-handle { background: rgba(255, 255, 255, 0.12); }
+.transition-handle:hover { background: rgba(255, 255, 255, 0.3) !important; }
+.tl-drop-preview {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: rgba(45, 154, 166, 0.3);
+  box-shadow: inset 0 0 0 2px var(--accent), 0 0 12px rgba(45, 154, 166, 0.25);
+  color: #fff;
+  font-size: 10px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.tl-drop-preview.transition {
+  background: rgba(113, 92, 148, 0.7);
+  box-shadow: inset 0 0 0 2px #d5baff, 0 0 12px rgba(170, 140, 220, 0.3);
+}
+.tl-drop-preview.media {
+  border-radius: 7px;
+  background: rgba(48, 132, 245, 0.5);
+  box-shadow: inset 0 0 0 2px #64a9ff;
+}
+.tl-drop-preview > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

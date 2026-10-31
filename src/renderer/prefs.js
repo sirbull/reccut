@@ -9,7 +9,9 @@ const DEFAULTS = {
   freezeDur: 2,
   skimming: true,
   audioSkimming: true,
+  playbackFromSkimmer: true,
   snapping: true,
+  keyframeEasing: 'easeInOut',
   preservePitch: true,
   syncMuteCamera: true,
   // Egne hurtigtaster: { kommando: 'CmdOrCtrl+Shift+B' }, tom streng betyr ingen.
@@ -19,6 +21,8 @@ const DEFAULTS = {
   checkOfflineOnFocus: true,
   playheadAfterEdit: false,
   viewerQuality: 'quality',
+  editorBrowserVisible: true,
+  editorInspectorVisible: true,
   loopPlayback: false,
   importAnalyzeStab: false,
   exportDirMode: 'project',

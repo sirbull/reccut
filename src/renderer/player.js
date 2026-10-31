@@ -1,7 +1,7 @@
 // Avspillingsmotor. Hvert aktivt klipp får sitt eget video- eller lydelement,
 // som holdes i takt med spillhodet. Bildet tegnes med samme kode som eksporten.
 // Redigeringen og eksportfanen har hver sin spiller.
-import { computeAudio, computeFrame, instSpeed, sourceTime, workPath } from '../shared/model.js';
+import { audioWindow, computeAudio, computeFrame, instSpeed, sourceTime, transitionWindow, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 import { activeEffects } from '../shared/audiofx.js';
 import { prefs } from './prefs.js';
@@ -18,7 +18,7 @@ let fxReady = false;
 audioCtx.audioWorklet
   .addModule('audiofx-worklet.js')
   .then(() => (fxReady = true))
-  .catch((err) => console.warn('Lydeffektene kunne ikke lastes', err));
+  .catch((err) => console.warn('Could not load audio effects', err));
 
 // Kobler effektkjeden til klippet inn mellom kilden og volumet, og sender nye innstillinger.
 function applyFx(entry, clip) {
@@ -52,6 +52,9 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   let clockBase = 0;
   let raf = 0;
   let dirty = true;
+  let staging = null;
+  let preloadProject = null;
+  let preloadPoints = [];
 
   function streamFor(clip, key) {
     const m = getProject().media[clip.mediaId];
@@ -81,8 +84,6 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       el.playsInline = true;
       el.crossOrigin = 'anonymous';
       el.src = fileUrl(stream.path);
-      el.addEventListener('seeked', () => (dirty = true));
-      el.addEventListener('loadeddata', () => (dirty = true));
       let gain = null;
       let srcNode = null;
       if (stream.hasAudio) {
@@ -91,8 +92,17 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
         gain.gain.value = 0;
         srcNode.connect(gain).connect(master);
       } else el.muted = true;
-      entry = { el, gain, srcNode, fx: null, fxKey: '[]', path: stream.path, rev: stream.rev, D: stream.D, lastUsed: performance.now(), target: 0 };
+      entry = { el, gain, srcNode, fx: null, fxKey: '[]', path: stream.path, rev: stream.rev, D: stream.D, lastUsed: performance.now(), target: null, frame: null, hasFrame: false };
       pool.set(id, entry);
+      el.addEventListener('seeked', () => {
+        rememberFrame(entry);
+        dirty = true;
+      });
+      el.addEventListener('loadeddata', () => {
+        if (entry.target != null && Math.abs(el.currentTime - entry.target) < 0.05) rememberFrame(entry);
+        dirty = true;
+      });
+      el.addEventListener('error', () => (dirty = true));
     }
     entry.lastUsed = performance.now();
     return entry;
@@ -104,7 +114,36 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     entry.el.load();
     entry.gain?.disconnect();
     entry.fx?.disconnect();
+    entry.srcNode?.disconnect();
+    if (entry.frame) entry.frame.width = entry.frame.height = 0;
     pool.delete(id);
+  }
+
+  // Videoelementet kan miste det tegnbare bildet under søking. Behold et bilde i
+  // visningsoppløsning, og erstatt det når dekoderen har levert neste bilde.
+  function rememberFrame(entry) {
+    const el = entry.el;
+    if (el.seeking || el.readyState < 2 || !el.videoWidth) return;
+    const fit = Math.min(1, (canvas?.width || 1280) / el.videoWidth, (canvas?.height || 720) / el.videoHeight);
+    const w = Math.max(2, Math.round(el.videoWidth * fit));
+    const h = Math.max(2, Math.round(el.videoHeight * fit));
+    const frame = entry.frame ||= document.createElement('canvas');
+    if (frame.width !== w || frame.height !== h) {
+      frame.width = w;
+      frame.height = h;
+    }
+    frame.getContext('2d').drawImage(el, 0, 0, w, h);
+    entry.hasFrame = true;
+  }
+
+  function seekEntry(entry, target, tolerance = 0.5 / 60) {
+    const el = entry.el;
+    entry.target = target;
+    // Bare ett søk om gangen. Neste runde bruker alltid nyeste pekertid, slik at
+    // et gammelt ventende søk aldri kan flytte elementet tilbake igjen.
+    if (el.seeking || Math.abs(el.currentTime - target) <= tolerance) return;
+    if (entry.hasFrame) rememberFrame(entry);
+    el.currentTime = target;
   }
 
   function getImage(path) {
@@ -114,6 +153,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       img.decoding = 'async';
       img.crossOrigin = 'anonymous';
       img.onload = () => (dirty = true);
+      img.onerror = () => (dirty = true);
       img.src = fileUrl(path);
       images.set(path, img);
     }
@@ -129,8 +169,53 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     }
     const entry = pool.get(`${clip.id}:${key}`);
     const el = entry?.el;
-    if (!el || el.readyState < 2 || !el.videoWidth) return null;
-    return { img: el, w: el.videoWidth, h: el.videoHeight };
+    if (!el) return null;
+    if (!el.seeking && el.readyState >= 2 && el.videoWidth) {
+      entry.hasFrame = true;
+      return { img: el, w: el.videoWidth, h: el.videoHeight };
+    }
+    return entry.frame ? { img: entry.frame, w: entry.frame.width, h: entry.frame.height } : null;
+  }
+
+  function upcomingAt(p, T) {
+    if (preloadProject !== p) {
+      preloadProject = p;
+      const points = new Set();
+      for (const clip of Object.values(p.clips)) {
+        points.add(clip.start);
+        points.add(clip.start + clip.dur);
+        for (const t of audioWindow(clip)) points.add(t);
+      }
+      p.primary.forEach((id, i) => {
+        const c = p.clips[id];
+        if (c?.transition) for (const t of transitionWindow(c, i > 0, p.clips[p.primary[i - 1]])) points.add(t);
+        if (c?.transitionOut) for (const t of transitionWindow(c, false, null, 'end')) points.add(t);
+      });
+      preloadPoints = [...points].sort((a, b) => a - b);
+    }
+    const dir = Math.sign(rate) || 1;
+    const horizon = PRELOAD * Math.max(1, Math.abs(rate));
+    const from = Math.min(T, T + dir * horizon);
+    const to = Math.max(T, T + dir * horizon);
+    let lo = 0;
+    let hi = preloadPoints.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (preloadPoints[mid] < from) lo = mid + 1;
+      else hi = mid;
+    }
+    const points = [];
+    for (let i = lo; i < preloadPoints.length && preloadPoints[i] <= to; i++) {
+      if (preloadPoints[i] !== T) points.push(preloadPoints[i]);
+    }
+    if (dir < 0) points.reverse();
+    const out = new Map();
+    for (const t of points) {
+      // Last første bildet som faktisk brukes, også for korte, trimmede og
+      // hastighetsendrede klipp, overganger og avspilling bakover.
+      for (const [id, n] of neededAt(p, t + dir * 1e-6)) if (!out.has(id)) out.set(id, n);
+    }
+    return out;
   }
 
   // Hvilke strømmer som trengs ved tid T, med kildetid for hver.
@@ -163,7 +248,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   function sync(T, isPlaying) {
     const p = getProject();
     const active = neededAt(p, T);
-    const upcoming = isPlaying ? neededAt(p, T + PRELOAD * Math.sign(rate)) : new Map();
+    const upcoming = upcomingAt(p, T);
     const seen = new Set();
 
     const scrubbing = !isPlaying && performance.now() < scrubUntil;
@@ -176,9 +261,9 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       const dur = el.duration || Infinity;
       // I en baklengs kopi er tiden speilet.
       const src = entry.rev ? (entry.D ?? dur) - n.src : n.src;
-      const target = Math.max(0, src);
+      const target = Math.min(Math.max(0, src), Math.max(0, dur - 0.001));
       // Utenfor filen (for eksempel et J-kutt forbi starten) er det stille.
-      const outside = src < -0.01 || target >= dur - 0.01;
+      const outside = src < -0.01 || src >= dur - 0.01;
       let speed = n.speed ?? 1;
       if (entry.rev) speed = -speed;
       // Elementet spiller framover når retningen i filen er framover. Ellers vises riktig bilde, men stille.
@@ -187,10 +272,10 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       el.preservesPitch = n.clip.props?.preservePitch !== false;
       if (scrubbing && entry.gain && !outside) {
         // Lyd mens du skummer: et kort utdrag fra der pekeren er.
+        seekEntry(entry, target);
         if (entry.scrubId !== scrubId) {
           entry.scrubId = scrubId;
           el.playbackRate = 1;
-          el.currentTime = target;
           el.play().catch(() => {});
         }
         entry.gain.gain.setTargetAtTime(n.gain, audioCtx.currentTime, 0.005);
@@ -206,18 +291,14 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
         if (Math.abs(el.playbackRate - pr) > 1e-3) el.playbackRate = pr;
         const drift = Math.abs(el.currentTime - target);
         if (el.paused) {
-          if (drift > 0.05) el.currentTime = target;
+          seekEntry(entry, target, 0.05);
           el.play().catch(() => {});
         } else if (drift > 0.25 * Math.max(1, eff)) {
-          el.currentTime = target;
+          seekEntry(entry, target);
         }
       } else {
         if (!el.paused) el.pause();
-        const t = Math.min(target, Math.max(0, dur - 0.04));
-        if (Math.abs(el.currentTime - t) > 0.5 / 60) {
-          if (el.seeking) entry.pending = t;
-          else el.currentTime = t;
-        }
+        seekEntry(entry, target);
       }
     }
     // Forhåndslast klipp som snart starter, så kuttet blir sømløst.
@@ -228,9 +309,9 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       if (!entry) continue;
       if (entry.gain) entry.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.015);
       if (!entry.el.paused) entry.el.pause();
-      const base = entry.rev ? (entry.D ?? 0) - n.src : n.src;
-      const start = Math.max(0, base - PRELOAD);
-      if (Math.abs(entry.el.currentTime - start) > 0.3 && !entry.el.seeking) entry.el.currentTime = start;
+      const dur = entry.el.duration || Infinity;
+      const base = entry.rev ? (entry.D ?? dur) - n.src : n.src;
+      seekEntry(entry, Math.min(Math.max(0, base), Math.max(0, dur - 0.001)));
     }
     const now = performance.now();
     for (const [id, entry] of pool) {
@@ -238,12 +319,6 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       if (entry.gain) entry.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.015);
       if (!entry.el.paused) entry.el.pause();
       if (now - entry.lastUsed > KEEP * 1000) disposeEntry(id, entry);
-    }
-    for (const entry of pool.values()) {
-      if (entry.pending != null && !entry.el.seeking) {
-        entry.el.currentTime = entry.pending;
-        entry.pending = null;
-      }
     }
   }
 
@@ -283,10 +358,32 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   }
 
   function draw(T) {
-    if (!ctx) return;
+    if (!ctx) return false;
     const p = getProject();
     const frame = computeFrame(p, T);
-    drawFrame(ctx, p, frame, getSource, { scale: canvas.width / p.width });
+    staging ||= document.createElement('canvas');
+    if (staging.width !== canvas.width || staging.height !== canvas.height) {
+      staging.width = canvas.width;
+      staging.height = canvas.height;
+    }
+    let waiting = false;
+    drawFrame(staging.getContext('2d', { alpha: false }), p, frame, (clip, key) => {
+      const src = getSource(clip, key);
+      if (!src) {
+        const media = p.media[clip.mediaId];
+        const el = pool.get(`${clip.id}:${key}`)?.el;
+        if (media?.kind === 'image') {
+          const image = images.get(media.streams?.main?.proxy || media.path);
+          if (image && !image.complete) waiting = true;
+        } else if (el && !el.error) waiting = true;
+      }
+      return src;
+    }, { scale: canvas.width / p.width });
+    // Ikke tøm det synlige bildet før alle lagene er klare. Tomme områder og
+    // bevisste toninger til svart tegnes som normalt.
+    if (waiting) return false;
+    ctx.drawImage(staging, 0, 0);
+    return true;
   }
 
   function loop() {
@@ -315,14 +412,12 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       }
       setTime(T);
       sync(T, true);
-      draw(T);
-      dirty = false;
+      dirty = !draw(T);
       return;
     }
     sync(T, false);
     if (dirty) {
-      draw(T);
-      dirty = false;
+      dirty = !draw(T);
     }
   }
 
@@ -397,5 +492,8 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   function dispose() {
     stopLoop();
     for (const [id, entry] of pool) disposeEntry(id, entry);
+    images.clear();
+    staging = null;
+    preloadProject = null;
   }
 }

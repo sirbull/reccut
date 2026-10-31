@@ -28,6 +28,7 @@ import { parseSrt, toSrt, toVtt } from '../../shared/srt.js';
 import { addMediaRecords, usedMedia, projectFolders, audioSkimming, commit, getWave, importPaths, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
 import { fileUrl, scrubAudio, seek } from './playback.js';
 import * as commands from './commands.js';
+import { startLibraryDrag } from './libraryDrag.js';
 import { CaptionStyleEditor } from './Inspector.jsx';
 import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
 import { prefs } from '../prefs.js';
@@ -71,8 +72,11 @@ export function Browser() {
 }
 
 function dragData(e, item) {
-  e.dataTransfer.setData('application/x-reccut', JSON.stringify(item));
-  e.dataTransfer.effectAllowed = 'copy';
+  if (item.kind === 'media') {
+    const ids = item.ids || [item.id];
+    item = { ...item, clips: ids.map((id) => ({ id, opts: commands.browserClipOpts(project.value.media[id], ids.length === 1) })) };
+  }
+  startLibraryDrag(e, item);
 }
 
 /* Media */
@@ -229,15 +233,14 @@ function MediaCard({ m }) {
     >
       <div class={`thumb k-${m.kind}`}>
         {thumb ? <img src={fileUrl(thumb)} draggable={false} /> : <Icon size={26} />}
-        {m.kind !== 'image' && <span class="dur">{formatDuration(m.duration)}</span>}
-        {m.kind === 'recording' && <span class="kind">REC</span>}
-        {used && <span class="used" title="Used in the project" />}
+        {m.kind === 'audio' && <span class="dur">{formatDuration(m.duration)}</span>}
+        {m.kind === 'audio' && used && <span class="used" title="Used in the project" />}
         {analyzing && <span class="busy" />}
-        <span class="badges">
+        {m.kind === 'audio' && <span class="badges">
           <MediaBadges m={m} />
-        </span>
+        </span>}
       </div>
-      <div class="name">{m.name}</div>
+      {m.kind === 'audio' && <div class="name">{m.name}</div>}
     </div>
   );
 }
@@ -297,7 +300,7 @@ function FilmstripRow({ m, span, height }) {
   if (!segs.length) segs.push([0, dur]);
   const aspect = stream?.width && stream?.height ? stream.width / stream.height : 16 / 9;
   const frameH = m.kind === 'audio' ? 0 : height;
-  const waveH = m.kind === 'audio' ? Math.max(28, height) : hasAudio ? Math.max(14, Math.round(height * 0.45)) : 0;
+  const waveH = m.kind === 'audio' ? Math.max(28, height) : 0;
   const tileW = Math.max(16, frameH * aspect);
 
   // Tid for et punkt på skjermen. Over eller under radene gir første eller siste rad.
@@ -377,8 +380,8 @@ function FilmstripRow({ m, span, height }) {
   const pct = (t, t0, t1) => `${((t - t0) / (t1 - t0)) * 100}%`;
 
   return (
-    <div class={`film-row${selected ? ' selected' : ''}`} data-media={m.id} onContextMenu={(e) => mediaContextMenu(e, m, used)}>
-      <div
+    <div class={`film-row${selected ? ' selected' : ''}`} data-media={m.id} aria-label={m.name} onContextMenu={(e) => mediaContextMenu(e, m, used)}>
+      {m.kind === 'audio' && <div
         class="film-head"
         draggable
         onDragStart={(e) => dragData(e, { kind: 'media', id: m.id, ids: ids() })}
@@ -394,8 +397,8 @@ function FilmstripRow({ m, span, height }) {
         {used && <span class="used-dot" title="Used in the project" />}
         <MediaBadges m={m} />
         <span class="dur">{range ? `${fmt(range.in)} to ${fmt(range.out)} (${formatDuration(range.out - range.in)})` : m.kind === 'image' ? 'Still' : formatDuration(m.duration)}</span>
-      </div>
-      <div class="film-rows" ref={wrapRef} onPointerMove={onMove} onPointerLeave={onLeave} onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={onUp}>
+      </div>}
+      <div class="film-rows" ref={wrapRef} onPointerMove={onMove} onPointerLeave={onLeave} onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={onUp} onDblClick={() => commands.addBrowserSelection('append')}>
         {segs.map(([t0, t1], i) => {
           const segW = ((t1 - t0) / rowSpan) * width;
           const n = Math.max(1, Math.ceil(segW / tileW));
@@ -417,7 +420,15 @@ function FilmstripRow({ m, span, height }) {
                   {tiles}
                 </div>
               )}
-              {hasAudio && <MiniWave stream={audio} offset={audio.offset || 0} from={t0} to={t1} h={waveH} />}
+              {waveH > 0 && <MiniWave stream={audio} offset={audio?.offset || 0} from={t0} to={t1} h={waveH} />}
+              {!range && <div
+                class="film-drag-handle"
+                draggable
+                title="Drag the clip to the timeline"
+                aria-label={`Drag ${m.name} to the timeline`}
+                onPointerDown={(e) => { e.stopPropagation(); commands.pickMedia(e, m.id, mediaOrder); }}
+                onDragStart={(e) => dragData(e, { kind: 'media', id: m.id, ids: ids() })}
+              ><span>⋮⋮</span></div>}
               {showRange && (
                 <div
                   class="film-range"
@@ -426,7 +437,10 @@ function FilmstripRow({ m, span, height }) {
                   title="Drag the range to the timeline, or drag its edges to adjust it"
                   onPointerDown={(e) => {
                     // Midten av området dras til tidslinjen. Kantene justerer området.
-                    if (!e.target.dataset?.edge) e.stopPropagation();
+                    if (!e.target.dataset?.edge) {
+                      e.stopPropagation();
+                      commands.pickMedia(e, m.id, mediaOrder);
+                    }
                   }}
                   onDragStart={(e) => {
                     if (drag.current?.edge) return e.preventDefault();
@@ -735,7 +749,7 @@ function TransitionsTab() {
     <>
       <div class="card-grid">
         {TRANSITIONS.map((t) => (
-          <button key={t.id} class="gen-card" draggable onDragStart={(e) => dragData(e, { kind: 'transition', id: t.id })} onClick={() => commands.addTransition(t.id)} title="Click to add to the selected clip, or drag onto a cut">
+          <button key={t.id} class="gen-card" draggable onDragStart={(e) => dragData(e, { kind: 'transition', id: t.id })} onClick={() => commands.addTransition(t.id)} title="Click to add to the selected clip, or drag onto a clip edge or cut">
             <MiniPreview frameAt={transitionFrameAt(t.id)} duration={1.6} still={0.5} label={t.label} />
             <span>{t.label}</span>
           </button>

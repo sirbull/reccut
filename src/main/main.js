@@ -24,10 +24,14 @@ const psd = require('./psd');
 const area = require('./area');
 const packager = require('./packager');
 const { createRecordUI } = require('./recordui');
+const { createPipPreview } = require('./pip');
 const updates = require('./updates');
 const { InputTracker, ZOOM_KEYS } = require('./input');
 
 const isMac = process.platform === 'darwin';
+
+// Keep Electron's built-in UI in English, including on Norwegian systems.
+app.commandLine.appendSwitch('lang', 'en-GB');
 
 // Video og lyd skal starte uten at brukeren må klikke først.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -53,7 +57,7 @@ function serveMedia(request) {
   try {
     stat = fs.statSync(file);
   } catch {
-    return new Response('Ikke funnet', { status: 404 });
+    return new Response('Not found', { status: 404 });
   }
   const headers = {
     'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
@@ -146,6 +150,9 @@ function createWindow() {
     },
   });
   win.loadFile(path.join(__dirname, '..', '..', 'build', 'index.html'));
+  win.on('focus', () => pipPreview.hide());
+  win.webContents.on('render-process-gone', () => pipPreview.hide());
+  win.webContents.on('did-start-loading', () => pipPreview.hide());
   win.on('close', (e) => {
     if (recordingDir) {
       const choice = dialog.showMessageBoxSync(win, {
@@ -171,6 +178,7 @@ function createWindow() {
   });
   win.on('closed', () => {
     win = null;
+    pipPreview.destroy();
     area.closeFrame();
     // Skjulte arbeidsvinduer skal ikke holde appen i live.
     jobs.destroyWorkers();
@@ -238,7 +246,7 @@ async function listScreens() {
       list.push({ id: w.id, kind: 'window', displayId: screen.getPrimaryDisplay().id, name: w.name.length > 60 ? `${w.name.slice(0, 57)}...` : w.name });
     }
   } catch (err) {
-    console.warn('Kunne ikke hente vinduer', err.message);
+    console.warn('Could not list windows', err.message);
   }
   return list;
 }
@@ -278,6 +286,12 @@ ipcMain.handle('area:select', (_e, { displayId, current }) => area.selectArea({ 
 ipcMain.handle('area:frame', (_e, state) => area.setFrame(state));
 // Status for opptaket: ikonet i menylinjen og kontrollinjen oppdateres.
 const recordUI = createRecordUI({ send: (ch, payload) => send(ch, payload), getMainWindow: () => win, modifierLabel: () => (shortcutModifier || 'Control+Alt').replace('Command', 'Cmd') });
+const pipPreview = createPipPreview({ getMainWindow: () => win });
+ipcMain.on('rec:pipPreview', (e, frame) => {
+  if (e.sender !== win?.webContents) return;
+  if (frame && (frame.screenId !== selectedScreenId || !String(selectedScreenId).startsWith('screen:'))) return pipPreview.hide();
+  pipPreview.update(frame);
+});
 ipcMain.handle('rec:state', (_e, s) => recordUI.setState(s));
 ipcMain.handle('rec:showControls', (_e, v) => recordUI.setShowControls(Boolean(v)));
 ipcMain.on('control:cmd', (_e, cmd) => recordUI.command(cmd));
@@ -500,7 +514,7 @@ ipcMain.handle('rec:finish', async (_e, meta) => {
       await ff.remux(raw, final);
       await fs.promises.unlink(raw).catch(() => {});
     } catch (err) {
-      console.error('Remuksing feilet, beholder originalen', err);
+      console.error('Remuxing failed, keeping the original recording', err);
       await fs.promises.rename(raw, final);
     }
     delete out[key].raw;
@@ -857,7 +871,7 @@ ipcMain.handle('project:pendingOpen', () => {
 app.whenReady().then(() => {
   protocol.handle('media', serveMedia);
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(['media', 'display-capture', 'mediaKeySystem', 'notifications'].includes(permission));
+    callback(['media', 'display-capture', 'mediaKeySystem', 'notifications', 'fullscreen'].includes(permission));
   });
 
   // getDisplayMedia i vinduet får skjermen som er valgt i appen, uten systemvelger.
@@ -888,6 +902,7 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
   area.closeFrame();
+  pipPreview.destroy();
   recordUI.destroy();
   globalShortcut.unregisterAll();
   input.stop();

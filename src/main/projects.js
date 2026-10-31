@@ -143,7 +143,7 @@ async function save(base, project, file, { history: keepHistory = true } = {}) {
   if (!keepHistory) return file;
   lastFile = file;
   // Versjonshistorikk: en kopi med noen minutters mellomrom (i bakgrunnen).
-  history.snapshot(file, text).catch((err) => console.warn('Versjonshistorikk', err.message));
+  history.snapshot(file, text).catch((err) => console.warn('Project history', err.message));
   return file;
 }
 

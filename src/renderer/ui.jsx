@@ -1,5 +1,5 @@
 // Små, gjenbrukbare grensesnittkomponenter i samme stil som resten av appen.
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { X } from 'lucide-preact';
 
@@ -91,36 +91,50 @@ export function IconButton({ icon: Icon, title, active, size = 16, class: cls = 
   );
 }
 
-// Tallfelt som kan dras sidelengs for å endre verdien, som i Final Cut Pro.
+// Dra opp/høyre for å øke, ned/venstre for å redusere. Klikk for å skrive.
 export function NumberField({ value, onChange, onCommit, onStart, min = -Infinity, max = Infinity, step = 1, precision = 0, unit = '', width = 64, disabled }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
+  const input = useRef(null);
   const drag = useRef(null);
   const clampV = (v) => Math.min(max, Math.max(min, v));
   const display = value == null || Number.isNaN(value) ? '' : Number(value).toFixed(precision);
 
+  useLayoutEffect(() => {
+    if (editing) {
+      input.current?.focus();
+      input.current?.select();
+    }
+  }, [editing]);
+
   const onPointerDown = (e) => {
-    if (editing || disabled) return;
+    if (editing || disabled || e.button !== 0 || drag.current) return;
     e.preventDefault();
-    drag.current = { x: e.clientX, v: Number(value) || 0, moved: false };
+    drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, v: Number(value) || 0, axis: null };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e) => {
     const d = drag.current;
-    if (!d) return;
+    if (!d || e.pointerId !== d.id) return;
     const dx = e.clientX - d.x;
-    if (!d.moved && Math.abs(dx) < 3) return;
-    if (!d.moved) onStart?.();
-    d.moved = true;
+    const dy = d.y - e.clientY;
+    if (!d.axis) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 3) return;
+      // Lås retningen når draget starter, så små sidebevegelser ikke gir hopp.
+      d.axis = Math.abs(dy) >= Math.abs(dx) ? 'y' : 'x';
+      onStart?.();
+    }
+    const distance = d.axis === 'y' ? dy : dx;
     const k = e.shiftKey ? 10 : e.altKey ? 0.1 : 1;
-    onChange(clampV(Number((d.v + Math.round(dx / 2) * step * k).toFixed(Math.max(precision, 3)))));
+    onChange(clampV(Number((d.v + Math.round(distance / 2) * step * k).toFixed(Math.max(precision, 3)))));
   };
-  const onPointerUp = () => {
+  const finishPointer = (e, allowEdit = false) => {
     const d = drag.current;
+    if (!d || e.pointerId !== d.id) return;
     drag.current = null;
-    if (!d) return;
-    if (d.moved) onCommit?.();
-    else {
+    if (e.currentTarget.hasPointerCapture(d.id)) e.currentTarget.releasePointerCapture(d.id);
+    if (d.axis) onCommit?.();
+    else if (allowEdit) {
       setText(display);
       setEditing(true);
     }
@@ -141,7 +155,7 @@ export function NumberField({ value, onChange, onCommit, onStart, min = -Infinit
         class="num-field editing"
         style={{ width }}
         value={text}
-        ref={(el) => el && setTimeout(() => el.select(), 0)}
+        ref={input}
         onInput={(e) => setText(e.currentTarget.value)}
         onBlur={commitText}
         onKeyDown={(e) => {
@@ -165,7 +179,9 @@ export function NumberField({ value, onChange, onCommit, onStart, min = -Infinit
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
+      onPointerUp={(e) => finishPointer(e, true)}
+      onPointerCancel={finishPointer}
+      onLostPointerCapture={finishPointer}
     >
       {display}
       {unit && <span class="unit">{unit}</span>}

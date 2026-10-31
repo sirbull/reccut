@@ -189,7 +189,7 @@ export function ProjectsDialog() {
               <div>
                 <b>{it.name}</b>
                 <span>
-                  {new Date(it.modified).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · {formatDuration(it.duration)} · {it.folder}
+                  {new Date(it.modified).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })} · {formatDuration(it.duration)} · {it.folder}
                 </span>
               </div>
             </button>
@@ -407,7 +407,7 @@ export function HistoryDialog() {
       const data = await api.historyLoad(it.file, file);
       restoreProject(data);
       close();
-      toast(`Restored the version from ${new Date(it.time).toLocaleString()}. Undo (Cmd Z) brings back what you had.`, { kind: 'success', timeout: 8000 });
+      toast(`Restored the version from ${new Date(it.time).toLocaleString('en-GB')}. Undo (Cmd Z) brings back what you had.`, { kind: 'success', timeout: 8000 });
     } catch (err) {
       toast(`Could not restore: ${err.message}`, { kind: 'error' });
     } finally {
@@ -416,7 +416,7 @@ export function HistoryDialog() {
   };
   const groups = new Map();
   for (const it of list || []) {
-    const day = new Date(it.time).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const day = new Date(it.time).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     groups.set(day, [...(groups.get(day) || []), it]);
   }
   return (
@@ -434,7 +434,7 @@ export function HistoryDialog() {
               {items.map((it) => (
                 <div key={it.file} class="history-row">
                   <span>
-                    <b>{new Date(it.time).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</b>
+                    <b>{new Date(it.time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</b>
                     {it.reason && <span class="muted"> {it.reason}</span>}
                   </span>
                   <span class="muted">{Math.max(1, Math.round(it.size / 1024))} kB</span>

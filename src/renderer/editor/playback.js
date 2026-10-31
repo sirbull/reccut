@@ -3,7 +3,8 @@
 import { effect } from '@preact/signals';
 import { primaryAt } from '../../shared/model.js';
 import { createPlayer, fileUrl } from '../player.js';
-import { getTime, loadMotion, motionVersion, playing, project, setTime, skim } from './store.js';
+import { getTime, loadMotion, motionVersion, playing, project, setTime, skim, skimming } from './store.js';
+import { prefs } from '../prefs.js';
 
 export { fileUrl };
 
@@ -16,28 +17,37 @@ const player = createPlayer({
 
 export const { attachCanvas, resizeCanvas, start, stopLoop, getRate, invalidate, scrubAudio } = player;
 
-export function play(r = 1) {
+function preparePlayback() {
+  const preview = skim.value;
+  const fromPointer = !playing.value && prefs.value.playbackFromSkimmer && skimming.value &&
+    preview && !preview.project && !preview.mediaId && Number.isFinite(preview.T);
   skim.value = null;
+  if (fromPointer) player.seek(preview.T);
+}
+
+export function play(r = 1) {
+  preparePlayback();
   player.play(r);
 }
 export function pause() {
   player.pause();
 }
 export function toggle() {
-  skim.value = null;
+  preparePlayback();
   player.toggle();
 }
 // Shift mellomrom: spill bakover, eller stopp om det allerede spiller.
 export function playReverse() {
-  skim.value = null;
+  preparePlayback();
   if (playing.value) player.pause();
   else player.play(-1);
 }
 export function shuttle(dir) {
-  skim.value = null;
+  if (dir) preparePlayback();
   player.shuttle(dir);
 }
 export function seek(T) {
+  skim.value = null;
   player.seek(T);
 }
 

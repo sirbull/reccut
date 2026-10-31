@@ -132,7 +132,7 @@ To collect everything into one folder for archiving, use Package Project.
     summary: 'Press Control Space, type the name of anything, and it is applied or opened.',
     keywords: 'command palette find help menu console fx console effects tools',
     body: `
-Press {{key:findCommand}} anywhere in Reccut, even while you are typing in a field. A search window opens in the middle of the screen. Type a few letters of what you want and press Enter:
+Press {{key:findCommand}} when you are not typing in a field. A search window opens in the middle of the screen. Type a few letters of what you want and press Enter:
 
 - **Effects** are applied to the selected clips (or the clip under the playhead), and the effect is shown and highlighted in the inspector so you can adjust it right away.
 - **Transitions** are added at the selected edit, or the edit nearest the playhead.
@@ -201,6 +201,7 @@ Choose a countdown of 3, 5 or 10 seconds under Recording. The numbers are shown 
 
 - The layout buttons, or the global shortcuts shown on them, switch between camera full screen, screen only and the camera in a corner. They work even when another app is in front.
 - Choose the camera shape (circle, square or 16:9), size and mirroring.
+- Turn on **Show PiP on screen** under Camera to see the camera over the app you are demonstrating. It follows the recording's position, size and shape, including when recording a screen area. Clicks pass through to the app underneath. It appears while Reccut is in the background and hides when you return. Use the layout shortcuts with **3–6** to switch corners. This is available for display and area capture. On macOS and Linux, the on-screen camera can also appear in the screen file; leave it off if you need a clean screen file for later editing.
 - **Show keystrokes** shows shortcuts you press, but never normal typing and never Reccut's own shortcuts.
 - **Cursor zoom** zooms in on the mouse pointer while you hold the chosen key.
 - The recording is saved in the Recordings folder of the open project and added to its media. If the timeline is empty, it is also placed on the timeline.
@@ -606,6 +607,8 @@ Reversed clips and backwards playback use a reversed copy made in the background
     keywords: 'skim skimming audio scrub preview',
     body: `
 With skimming on ({{key:skimming}}), the viewer shows the frame under the pointer when you move over the timeline or a clip in the browser. Audio skimming ({{key:audioSkimming}}) plays short pieces of sound while you skim.
+
+Playback starts at the frame under the pointer in the timeline. In Settings → Playback, turn off **Start playback at the mouse position** to always start at the playhead instead.
 `,
     see: ['browser', 'playback'],
   },
@@ -738,6 +741,8 @@ Import the template ({{key:importTemplate}}), drop the .reccut-title file on Rec
     keywords: 'captions subtitles srt vtt transcribe whisper',
     body: `
 Add Caption ({{key:addCaption}}) adds a caption at the playhead. The Captions tab ({{key:browser:captions}}) generates captions automatically from speech, and imports and exports SRT and WebVTT. Captions can have one to three lines, any font, color, outline and background, and can be placed anywhere. When exporting, burn them in, embed them, or save them as a separate file.
+
+Captions keep their own timing when video clips are moved, trimmed or deleted. You can add text without selecting a video clip. Type directly in the inspector, drag a caption along the caption track to change its time, or drag it in the viewer to change its position. Only explicit grouping makes a caption follow a video clip. While an input field has focus, editor shortcuts are disabled so you can type freely.
 `,
     see: ['export'],
   },
@@ -858,6 +863,8 @@ Click the diamond next to a value to add a keyframe at the playhead, and change 
     keywords: 'keyframe animate easing',
     body: `
 Most values in the inspector, including position, scale, opacity, color, effects and volume, can have keyframes. Click the diamond to add one, use the arrows to jump between them, and right click a keyframe on the clip to change its easing.
+
+New keyframes use **Ease In and Out** by default. Change this to **Linear** in Settings → Editing → Default keyframe interpolation, or use the curve button in the timeline toolbar. The default applies to all properties; existing keyframes keep their easing.
 `,
     see: ['inspector'],
   },
@@ -925,7 +932,8 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
     body: `
 ![The Audio tab with audio components.](audio.jpg)
 
-- Drag the volume line on a clip, or use {{key:volumeUp}} and {{key:volumeDown}}. Option (Alt) click the line to add a volume keyframe.
+- Drag the yellow volume line on a clip, or use {{key:volumeUp}} and {{key:volumeDown}}. The waveform grows or shrinks with the level. Option (Alt) click the line once to add a volume keyframe.
+- Drag a volume point to adjust it, or drag the line between two points to move both levels together. With four points, lower the middle segment to create a quiet section with smooth transitions and unchanged levels outside it. Right click a point to choose Linear, Ease In, Ease Out, Ease In and Out or Hold, or to delete it.
 - Drag the fade handles at the top corners of the audio to fade in and out.
 - **Expand Audio** ({{key:expandAudio}}) shows the audio below the video. Drag its edges past the video for J and L cuts.
 - The **Levels** at the top of the Audio tab show the waveform of the clip with its peak and average level. Red means the audio clips (goes over 0 dBFS). Audio Format shows the codec, sample rate and channels of the file.
@@ -992,7 +1000,7 @@ Exports are saved in the Exports folder of the project by default, and run in th
     body: `
 Open Settings with {{key:prefs}}. The icons at the top switch between the parts, like in Final Cut Pro. Every change is saved right away.
 
-- **General**: where new projects are created, whether the last project opens at startup, looking for missing media, and Reset All Settings.
+- **General**: where new projects are created, whether the last project opens at startup, including Reccut in screenshots and screen recordings, looking for missing media, and Reset All Settings.
 - **Editing**: default lengths of transitions, crossfades, stills, titles and freeze frames, snapping, and moving the playhead to the end of added clips.
 - **Playback**: skimming, viewer quality (better performance draws the viewer at half resolution), loop playback and keeping the pitch at other speeds.
 - **Import**: copy files into the project or leave them in place, create optimized media, and analyze video for stabilization.

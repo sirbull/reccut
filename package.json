@@ -2,7 +2,7 @@
   "name": "reccut",
   "productName": "Reccut",
   "version": "0.2.0",
-  "description": "Ta opp, rediger og eksporter opplæringsvideoer",
+  "description": "Record, edit and export tutorial videos",
   "main": "src/main/main.js",
   "author": "sirbull",
   "license": "MIT",
@@ -29,6 +29,7 @@
   "build": {
     "appId": "no.sirbull.reccut",
     "productName": "Reccut",
+    "electronLanguages": ["en", "en-US", "en-GB"],
     "files": [
       "build/**/*",
       "src/main/**/*",
@@ -48,10 +49,12 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSCameraUsageDescription": "Reccut bruker kameraet for å vise deg i opptaket.",
-        "NSMicrophoneUsageDescription": "Reccut bruker mikrofonen for å ta opp lyd.",
-        "NSScreenCaptureUsageDescription": "Reccut tar opp skjermen din.",
-        "NSAppleEventsUsageDescription": "Reccut viser tastetrykk i opptaket."
+        "CFBundleDevelopmentRegion": "en",
+        "CFBundleLocalizations": ["en"],
+        "NSCameraUsageDescription": "Reccut uses your camera to include you in recordings.",
+        "NSMicrophoneUsageDescription": "Reccut uses your microphone to record audio.",
+        "NSScreenCaptureUsageDescription": "Reccut records your screen.",
+        "NSAppleEventsUsageDescription": "Reccut displays keystrokes in recordings."
       }
     },
     "win": {
@@ -66,7 +69,9 @@
     },
     "nsis": {
       "oneClick": true,
-      "perMachine": false
+      "perMachine": false,
+      "installerLanguages": ["en_US"],
+      "language": "1033"
     },
     "linux": {
       "target": "AppImage"
