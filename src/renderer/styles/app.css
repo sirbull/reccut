@@ -3338,3 +3338,130 @@ kbd.keycap {
   color: #ffb3ad;
   font-weight: 700;
 }
+
+/* Inspektørfaner med ikoner, som i Final Cut Pro */
+.insp-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 6px 4px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-1);
+  flex-wrap: wrap;
+}
+.insp-tabs button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 40px;
+  padding: 4px 5px 3px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-3);
+  font: 500 9.5px/1.1 var(--font);
+}
+.insp-tabs button:hover {
+  color: var(--text);
+  background: var(--bg-2);
+}
+.insp-tabs button.active {
+  color: var(--accent-2);
+  background: rgba(10, 132, 255, 0.12);
+}
+.level-wave {
+  width: 100%;
+  height: 54px;
+  display: block;
+  border-radius: 6px;
+  background: var(--bg-0);
+  margin-bottom: 6px;
+}
+.levels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.levels .clip {
+  color: #ff6b61;
+  font-weight: 600;
+}
+.info-actions {
+  margin-top: 8px;
+}
+.text-input.small {
+  height: 26px;
+  font-size: 12px;
+  max-width: 170px;
+}
+
+/* Import av lag (PSD og SVG) */
+.layer-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.layer-head img {
+  max-width: 120px;
+  max-height: 80px;
+  border-radius: 4px;
+  background: repeating-conic-gradient(#3a3a3d 0 25%, #2a2a2d 0 50%) 0 0 / 12px 12px;
+}
+.layer-head b,
+.layer-head span {
+  display: block;
+}
+.layer-head span {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.layer-quick .link {
+  margin-right: 10px;
+}
+.layer-list {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line-2);
+  cursor: pointer;
+}
+.layer-row:first-child {
+  border-top: 0;
+}
+.layer-row img {
+  width: 48px;
+  height: 30px;
+  object-fit: contain;
+  border-radius: 3px;
+  background: repeating-conic-gradient(#3a3a3d 0 25%, #2a2a2d 0 50%) 0 0 / 8px 8px;
+}
+.layer-row .layer-name {
+  flex: 1;
+  min-width: 0;
+}
+.layer-row .layer-name small {
+  display: block;
+  color: var(--text-3);
+}
+.layer-row:not(.on) {
+  opacity: 0.6;
+}
+.title-group .group-head {
+  margin: 10px 4px 6px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-3);
+}
+.palette-item .kind.k-lower { background: rgba(106, 75, 176, 0.4); color: #ddd0ff; }

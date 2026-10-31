@@ -1,6 +1,8 @@
 // Prosjektmodell og rene funksjoner for å regne ut hva som vises og høres
 // på et gitt tidspunkt. Brukes av forhåndsvisning, eksport og tester.
 
+import { BUILTIN_TEMPLATES, templateDefaults } from './titletemplates.js';
+
 export const LAYOUT_ANIM = 0.32;
 export const PIP_SIZES = { small: 0.17, medium: 0.23, large: 0.31 };
 export const CAPTION_LANE = 1000;
@@ -28,14 +30,18 @@ export const TITLE_STYLES = [
 // Ferdige titler. Hver mal setter stil og tekst på en tittel.
 export const TITLE_TEMPLATES = [
   { id: 'center', label: 'Title', props: { style: 'center', text: 'Title', size: 96, anim: 'fade' } },
-  { id: 'lower', label: 'Lower Third', props: { style: 'lower', text: 'Jane Doe', subtext: 'Product Designer', size: 56, anim: 'slide' } },
+  { id: 'lower', label: 'Simple Lower Third', category: 'Lower Thirds', props: { style: 'lower', text: 'Jane Doe', subtext: 'Product Designer', size: 56, anim: 'slide' } },
   { id: 'top', label: 'Headline', props: { style: 'top', text: 'Headline', size: 72, anim: 'slide' } },
   { id: 'card', label: 'Title Card', props: { style: 'card', text: 'Chapter 1', subtext: 'Getting started', bgColor: '#111114', anim: 'fade' } },
   { id: 'boxed', label: 'Boxed', props: { style: 'center', text: 'Key point', size: 80, bg: true, bgColor: '#0a84ff', anim: 'pop' } },
   { id: 'typewriter', label: 'Typewriter', props: { style: 'center', text: 'Hello, world', font: 'mono', size: 80, weight: 600, anim: 'type' } },
-  { id: 'callout', label: 'Callout', props: { style: 'lower', text: 'Tip', subtext: 'Press Cmd K to search', size: 52, accent: '#ffd60a', anim: 'slide' } },
+  { id: 'callout', label: 'Callout', category: 'Lower Thirds', props: { style: 'lower', text: 'Tip', subtext: 'Press Cmd K to search', size: 52, accent: '#ffd60a', anim: 'slide' } },
   { id: 'end', label: 'End Card', props: { style: 'card', text: 'Thanks for watching', subtext: 'Subscribe for more', bgColor: '#0b1a33', anim: 'fade' } },
 ];
+
+// Supringer og titler laget som malfiler (se titletemplates.js). De vises i samme bibliotek.
+export const TEMPLATE_TITLES = BUILTIN_TEMPLATES.map((t) => ({ id: t.id, label: t.name, category: t.category, props: { template: t.id, ...templateDefaults(t) } }));
+TITLE_TEMPLATES.push(...TEMPLATE_TITLES);
 
 export const FONTS = {
   sans: 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
@@ -177,6 +183,15 @@ export const dbToGain = (db) => (db <= -60 ? 0 : Math.pow(10, db / 20));
 // Filen som brukes til avspilling og eksport: optimalisert media, arbeidskopi eller originalen.
 export function workPath(stream) {
   return stream ? stream.optimized || stream.proxy || stream.path : null;
+}
+
+// Teksten som vises som navn på en tittel: navnet i en supring, ellers tittelteksten.
+export function titleText(clip) {
+  if (clip.props?.template) {
+    const f = clip.props.fields || {};
+    return f.name || Object.values(f).find(Boolean) || clip.name || 'Title';
+  }
+  return clip.props?.text || 'Title';
 }
 
 export function isVisual(clip) {

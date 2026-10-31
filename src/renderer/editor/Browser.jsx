@@ -20,6 +20,7 @@ import {
   Video,
   Wand2,
 } from 'lucide-preact';
+import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
 import { CAPTION_LANE, EFFECTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, mediaClipType, newProject, workPath } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { parseSrt, toSrt, toVtt } from '../../shared/srt.js';
@@ -515,25 +516,52 @@ function titleFrameAt(tpl) {
     titleFrames.set(tpl.id, (t) => {
       const bg = imageClip('scene', 0, 3);
       const title = { id: 't', type: 'title', lane: 1, start: 0, in: 0, dur: 3, enabled: true, kf: {}, props: { ...defaultProps('title'), ...tpl.props } };
-      const proj = { ...PREVIEW_PROJECT, width: 1920, height: 1080 };
+      // Supringer er små i en liten forhåndsvisning: zoom inn på hjørnet de står i.
+      const anchor = tpl.props.template ? findTemplate(tpl.props.template, project.value.templates || {})?.anchor || '' : tpl.category === 'Lower Thirds' ? 'bottom-left' : '';
+      if (anchor.includes('bottom')) Object.assign(title.props, { scale: 2, x: anchor.includes('right') ? -820 : anchor.includes('left') ? 820 : 0, y: -420 });
+      const proj = { ...PREVIEW_PROJECT, width: 1920, height: 1080, templates: project.value.templates || {} };
       return { project: proj, frame: { layers: [{ clip: bg, T: t }, { clip: title, T: t }], captions: [] } };
     });
   }
   return titleFrames.get(tpl.id);
 }
 
+// Titler og supringer i grupper. Egne maler (importert fra After Effects eller en .reccut-title fil) ligger under Custom.
 function TitlesTab() {
+  const custom = Object.values(project.value.templates || {}).map((t) => ({ id: t.id, label: t.name, category: 'Custom', props: { template: t.id, ...templateDefaults(t) } }));
+  const groups = [
+    ['Lower Thirds', TITLE_TEMPLATES.filter((t) => t.category === 'Lower Thirds')],
+    ['Titles', TITLE_TEMPLATES.filter((t) => t.category !== 'Lower Thirds')],
+    ['Custom', custom],
+  ];
   return (
     <>
-      <div class="card-grid">
-        {TITLE_TEMPLATES.map((tpl) => (
-          <button key={tpl.id} class="gen-card" draggable onDragStart={(e) => dragData(e, { kind: 'title', id: tpl.id })} onClick={() => commands.addTitle(tpl.id)} title="Click to add at the playhead, or drag to the timeline">
-            <MiniPreview frameAt={titleFrameAt(tpl)} duration={3} still={0.5} label={tpl.label} />
-            <span>{tpl.label}</span>
-          </button>
-        ))}
-      </div>
-      <p class="hint small">Hover to preview the animation. Titles are added to the lane above the storyline.</p>
+      {groups.map(([name, list]) =>
+        list.length || name === 'Custom' ? (
+          <div key={name} class="title-group">
+            <h4 class="group-head">{name}</h4>
+            <div class="card-grid">
+              {list.map((tpl) => (
+                <button key={tpl.id} class="gen-card" draggable onDragStart={(e) => dragData(e, { kind: 'title', id: tpl.id })} onClick={() => commands.addTitle(tpl.id)} title="Click to add at the playhead, or drag to the timeline">
+                  <MiniPreview frameAt={titleFrameAt(tpl)} duration={3} still={0.5} label={tpl.label} />
+                  <span>{tpl.label}</span>
+                </button>
+              ))}
+            </div>
+            {name === 'Custom' && (
+              <div class="tab-actions">
+                <Button variant="secondary" icon={Plus} onClick={() => commands.importTitleTemplate()}>
+                  Import Template
+                </Button>
+                <Button variant="ghost" onClick={() => commands.downloadTemplateKit()}>
+                  Get the Template Kit
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : null
+      )}
+      <p class="hint small">Hover to preview the animation. Lower thirds animate in at the start and out at the end of the clip, so just set the length on the timeline. Type the name and title in the inspector.</p>
     </>
   );
 }

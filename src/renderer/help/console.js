@@ -77,6 +77,10 @@ const PARAMS = [
   ['color', 'temperature', 'Temperature', 'white balance warm cool'],
   ['color', 'tint', 'Tint', 'green magenta white balance'],
   ['audio', 'volume', 'Volume', 'loudness gain level db'],
+  ['video', 'cropL', 'Crop Left', 'crop trim edge'],
+  ['video', 'cropR', 'Crop Right', 'crop trim edge'],
+  ['video', 'cropT', 'Crop Top', 'crop trim edge'],
+  ['video', 'cropB', 'Crop Bottom', 'crop trim edge'],
 ];
 
 function itemsFor() {
@@ -116,11 +120,11 @@ function itemsFor() {
   }
   for (const t of TITLE_TEMPLATES) {
     out.push({
-      kind: 'Title',
+      kind: t.category === 'Lower Thirds' ? 'Lower Third' : 'Title',
       id: `title:${t.id}`,
       label: t.label,
-      sub: 'Add a title at the playhead',
-      keywords: 'title text',
+      sub: t.category === 'Lower Thirds' ? 'Animated lower third at the playhead' : 'Add a title at the playhead',
+      keywords: 'title text supring name super',
       run: () => {
         commands.addTitle(t.id);
         flash('.inspector [data-tab="text"]');
@@ -203,7 +207,7 @@ function score(item, words) {
   }
   if (label === words.join(' ')) total += 10;
   // Effekter, verktøy og innstillinger først når de passer like godt, som i FX Console.
-  total += { Effect: 0.6, Setting: 0.5, Transition: 0.4, Title: 0.4, Look: 0.3, Command: 0.3, Animation: 0.2, Media: 0.1, Help: 0 }[item.kind] || 0;
+  total += { Effect: 0.6, Setting: 0.5, Transition: 0.4, Title: 0.4, 'Lower Third': 0.4, Look: 0.3, Command: 0.3, Animation: 0.2, Media: 0.1, Help: 0 }[item.kind] || 0;
   return total;
 }
 

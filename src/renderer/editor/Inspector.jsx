@@ -1,9 +1,10 @@
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
-import { useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { ChevronLeft, ChevronRight, Diamond, Plus, RotateCcw, Sparkles, Trash2 } from 'lucide-preact';
+import { Captions, ChevronLeft, ChevronRight, Diamond, Film, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
 import {
   audioComponents,
+  componentVolumeProp,
   ANIMATION_PRESETS,
   RAMP_PRESETS,
   CAPTION_LANE,
@@ -16,6 +17,8 @@ import {
   applyAnimationPreset,
   clipHasAudio,
   defaultProps,
+  formatTimecode,
+  titleText,
   isElastic,
   isVisual,
   keyframeIndexAt,
@@ -27,7 +30,8 @@ import {
 } from '../../shared/model.js';
 import { setClipDuration, setSpeed, setTransition } from '../../shared/ops.js';
 import { GRADE_PROPS } from '../../shared/grade.js';
-import { beginTransient, commit, endTransient, project, selectedClips, selectedTransition, timeSig, updateTransient } from './store.js';
+import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
+import { beginTransient, commit, endTransient, getWave, project, selectedClips, selectedTransition, timeSig, updateTransient, waveVersion } from './store.js';
 import { seek } from './playback.js';
 import { inspectorTab, newProjectOpen, toggleComponent } from './commands.js';
 import { Button, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
@@ -58,17 +62,18 @@ export function Inspector() {
   return <ProjectInspector />;
 }
 
+// Fanene som i Final Cut Pro: et ikon for hver del, og klippet velges bare ved å markere det.
 function tabsFor(clip, media) {
   const tabs = [];
-  if (clip.type === 'title') tabs.push({ id: 'text', label: 'Text' });
-  if (clip.type === 'caption') tabs.push({ id: 'caption', label: 'Caption' });
-  if (clip.type === 'recording') tabs.push({ id: 'recording', label: 'Recording' });
-  if (isVisual(clip) && clip.type !== 'gap') tabs.push({ id: 'video', label: 'Video' });
-  if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title') tabs.push({ id: 'effects', label: 'Effects' });
-  if (clipHasAudio(clip, media) && clip.type !== 'recording') tabs.push({ id: 'audio', label: 'Audio' });
-  if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording') tabs.push({ id: 'color', label: 'Color' });
-  if (['video', 'recording', 'audio'].includes(clip.type)) tabs.push({ id: 'speed', label: clip.speed === 0 ? 'Freeze' : 'Speed' });
-  tabs.push({ id: 'info', label: 'Info' });
+  if (clip.type === 'title') tabs.push({ id: 'text', label: 'Text', icon: Type });
+  if (clip.type === 'caption') tabs.push({ id: 'caption', label: 'Caption', icon: Captions });
+  if (clip.type === 'recording') tabs.push({ id: 'recording', label: 'Recording', icon: MonitorPlay });
+  if (isVisual(clip) && clip.type !== 'gap') tabs.push({ id: 'video', label: 'Video', icon: Film });
+  if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording') tabs.push({ id: 'color', label: 'Color', icon: Palette });
+  if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title') tabs.push({ id: 'effects', label: 'Effects', icon: Wand2 });
+  if (clipHasAudio(clip, media)) tabs.push({ id: 'audio', label: 'Audio', icon: Volume2 });
+  if (['video', 'recording', 'audio'].includes(clip.type)) tabs.push({ id: 'speed', label: clip.speed === 0 ? 'Freeze' : 'Speed', icon: Gauge });
+  tabs.push({ id: 'info', label: 'Info', icon: Info });
   return tabs;
 }
 
@@ -77,13 +82,14 @@ function ClipInspector({ clip }) {
   const media = p.media[clip.mediaId];
   const tabs = tabsFor(clip, media);
   const tab = tabs.find((t) => t.id === inspectorTab.value) ? inspectorTab.value : tabs[0].id;
-  const title = clip.type === 'title' ? clip.props.text : clip.type === 'caption' ? 'Caption' : clip.type === 'gap' ? 'Gap' : clip.name || media?.name || 'Clip';
+  const title = clip.type === 'title' ? titleText(clip) : clip.type === 'caption' ? 'Caption' : clip.type === 'gap' ? 'Gap' : clip.name || media?.name || 'Clip';
 
   return (
     <div class="inspector panel">
-      <div class="panel-tabs">
+      <div class="insp-tabs">
         {tabs.map((t) => (
-          <button key={t.id} data-tab={t.id} class={tab === t.id ? 'active' : ''} onClick={() => (inspectorTab.value = t.id)}>
+          <button key={t.id} data-tab={t.id} class={tab === t.id ? 'active' : ''} title={t.label} onClick={() => (inspectorTab.value = t.id)}>
+            <t.icon size={16} />
             <span>{t.label}</span>
           </button>
         ))}
@@ -255,6 +261,14 @@ function VideoTab({ clip }) {
         <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
         <p class="hint">Tip: drag the clip directly in the viewer to move it.</p>
       </Section>
+      {(clip.type === 'video' || clip.type === 'image') && (
+        <Section title="Crop">
+          <Param clip={clip} prop="cropL" label="Left" min={0} max={49} scale={100} unit="%" />
+          <Param clip={clip} prop="cropR" label="Right" min={0} max={49} scale={100} unit="%" />
+          <Param clip={clip} prop="cropT" label="Top" min={0} max={49} scale={100} unit="%" />
+          <Param clip={clip} prop="cropB" label="Bottom" min={0} max={49} scale={100} unit="%" />
+        </Section>
+      )}
       <AnimationPresets clip={clip} />
       <Section title="Fade">
         <PlainNumber clip={clip} prop="vFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
@@ -326,20 +340,108 @@ function AudioComponentsSection({ clip }) {
   );
 }
 
-function AudioTab({ clip }) {
-  const isMac = window.api.platform === 'darwin';
+// Nivåer fra lydbølgen innenfor klippet: topp og gjennomsnitt i dBFS, etter volumet på klippet.
+function clipLevels(clip, comp, wave) {
+  if (!wave || !comp) return null;
+  const off = comp.stream.offset || 0;
+  const a = Math.max(0, Math.floor((clip.in - off) * wave.rate));
+  const b = Math.min(wave.peaks.length, Math.ceil((clip.in - off + clip.dur * (clip.speed || 1)) * wave.rate));
+  if (b <= a) return null;
+  let peak = 0;
+  let sum = 0;
+  for (let i = a; i < b; i++) {
+    const v = wave.peaks[i] / 255;
+    if (v > peak) peak = v;
+    sum += v * v;
+  }
+  const gain = (clip.props[componentVolumeProp(clip, comp.key)] || 0);
+  const db = (v) => (v > 0 ? 20 * Math.log10(v) + gain : -Infinity);
+  return { peak: db(peak), avg: db(Math.sqrt(sum / (b - a)) * 0.7), a, b };
+}
+
+function LevelMeter({ clip, comp }) {
+  waveVersion.value;
+  const wave = getWave(comp?.stream?.wave);
+  const ref = useRef(null);
+  const lv = clipLevels(clip, comp, wave);
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv || !wave || !lv) return;
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(cv.clientWidth * dpr);
+    cv.height = Math.round(cv.clientHeight * dpr);
+    const g = cv.getContext('2d');
+    g.clearRect(0, 0, cv.width, cv.height);
+    const mid = cv.height / 2;
+    const gain = Math.pow(10, (clip.props[componentVolumeProp(clip, comp.key)] || 0) / 20);
+    for (let px = 0; px < cv.width; px++) {
+      const i0 = lv.a + Math.floor((px / cv.width) * (lv.b - lv.a));
+      const i1 = Math.max(i0 + 1, lv.a + Math.floor(((px + 1) / cv.width) * (lv.b - lv.a)));
+      let m = 0;
+      for (let i = i0; i < i1; i++) m = Math.max(m, wave.peaks[i] || 0);
+      const v = Math.min(1.2, (m / 255) * gain);
+      g.fillStyle = v >= 1 ? '#ff453a' : v > 0.7 ? '#ffd60a' : 'rgba(120, 220, 150, 0.9)';
+      const h = Math.max(0.5, Math.min(1, v) * mid * 0.95);
+      g.fillRect(px, mid - h, 1, h * 2);
+    }
+  }, [wave, lv?.a, lv?.b, clip.props.volume, clip.props.micVolume, clip.props.sysVolume, comp?.key]);
+  if (!comp) return null;
+  const f = (v) => (Number.isFinite(v) ? `${v.toFixed(1)} dBFS` : 'Silent');
   return (
     <>
+      <canvas ref={ref} class="level-wave" />
+      {lv ? (
+        <div class="levels">
+          <span class={lv.peak >= 0 ? 'clip' : ''}>Peak {f(lv.peak)}</span>
+          <span>Average {f(lv.avg)}</span>
+        </div>
+      ) : (
+        <p class="hint">Analyzing audio</p>
+      )}
+      {lv && lv.peak >= 0 && <p class="hint warn">The audio clips (goes over 0 dBFS). Lower the volume a little.</p>}
+    </>
+  );
+}
+
+// Lydfanen: nivåer, volum per lydspor, toning, lydinfo fra filen og redigering.
+function AudioTab({ clip }) {
+  const isMac = window.api.platform === 'darwin';
+  const media = project.value.media[clip.mediaId];
+  const comps = audioComponents(clip, media);
+  const main = comps.find((c) => !c.off) || comps[0];
+  const d = useDetails(main?.stream?.path);
+  const a = d?.audio?.[0];
+  const props = [...new Set(comps.map((c) => componentVolumeProp(clip, c.key)))];
+  return (
+    <>
+      <Section title="Levels">
+        <LevelMeter clip={clip} comp={main} />
+      </Section>
       <AudioComponentsSection clip={clip} />
       <Section title="Volume">
-        <Param clip={clip} prop="volume" label="Volume" min={-60} max={12} step={0.5} precision={1} unit="dB" center={0} />
+        {props.length <= 1 ? (
+          <Param clip={clip} prop={props[0] || 'volume'} label="Volume" min={-60} max={12} step={0.5} precision={1} unit="dB" center={0} />
+        ) : (
+          comps
+            .filter((c, i, list) => list.findIndex((x) => componentVolumeProp(clip, x.key) === componentVolumeProp(clip, c.key)) === i)
+            .map((c) => <Param key={c.key} clip={clip} prop={componentVolumeProp(clip, c.key)} label={componentVolumeProp(clip, c.key) === 'volume' ? 'Synced audio' : c.label} min={-60} max={12} step={0.5} precision={1} unit="dB" center={0} />)
+        )}
         <p class="hint">{isMac ? 'Option' : 'Alt'} click the volume line on the clip to add keyframes. {isMac ? 'Control' : 'Alt'} + and {isMac ? 'Control' : 'Alt'} - change the level by 1 dB.</p>
       </Section>
       <Section title="Fade">
         <PlainNumber clip={clip} prop="aFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
         <PlainNumber clip={clip} prop="aFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
       </Section>
-      <AudioEditSection clip={clip} />
+      {a && (
+        <Section title="Audio Format">
+          <InfoRow label="Source">{main.label}</InfoRow>
+          <InfoRow label="Codec">{codecName(a.codec, a.profile)}</InfoRow>
+          <InfoRow label="Sample rate">{a.sampleRate ? `${(a.sampleRate / 1000).toLocaleString()} kHz` : null}</InfoRow>
+          <InfoRow label="Channels">{a.layout ? `${a.layout}${a.channels ? ` (${a.channels})` : ''}` : null}</InfoRow>
+          <InfoRow label="Bit rate">{a.bitrate ? `${a.bitrate} kbit/s` : null}</InfoRow>
+        </Section>
+      )}
+      {!clip.props.audioDetached && <AudioEditSection clip={clip} />}
     </>
   );
 }
@@ -708,15 +810,6 @@ function RecordingTab({ clip, media }) {
         </Row>
         <p class="hint">Blade the clip (B or {window.api.platform === 'darwin' ? 'Cmd' : 'Ctrl'} B) to turn overlays on or off for part of the recording.</p>
       </Section>
-      <AudioComponentsSection clip={clip} />
-      <Section title="Audio">
-        {media?.streams?.camera?.hasAudio && <Param clip={clip} prop="micVolume" label="Microphone" min={-60} max={12} step={0.5} precision={1} unit="dB" center={0} />}
-        {media?.streams?.screen?.hasAudio && <Param clip={clip} prop="sysVolume" label="System audio" min={-60} max={12} step={0.5} precision={1} unit="dB" center={0} />}
-        {!media?.streams?.camera?.hasAudio && !media?.streams?.screen?.hasAudio && <p class="hint">This recording has no audio.</p>}
-        <PlainNumber clip={clip} prop="aFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
-        <PlainNumber clip={clip} prop="aFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
-      </Section>
-      {!clip.props.audioDetached && (media?.streams?.camera?.hasAudio || media?.streams?.screen?.hasAudio) && <AudioEditSection clip={clip} />}
     </>
   );
 }
@@ -758,9 +851,88 @@ export function FontSelect({ value, onChange }) {
   );
 }
 
+// Supring eller tittel fra mal: skriv navn og tittel, velg farger, og juster animasjonene.
+// Klippets lengde på tidslinjen bestemmer hvor lenge den står; inn og ut skjer automatisk.
+function TemplateTab({ clip }) {
+  const p = project.value;
+  const pr = clip.props;
+  const tpl = findTemplate(pr.template, p.templates || {});
+  if (!tpl) return <p class="hint">The template for this title is missing.</p>;
+  const choices = [...BUILTIN_TEMPLATES, ...Object.values(p.templates || {})].map((t) => ({ value: t.id, label: `${t.category}: ${t.name}` }));
+  const live = (fn) => updateTransient((q) => fn(q.clips[clip.id].props));
+  const hold = Math.max(0, clip.dur - (pr.inDur ?? 0) - (pr.outDur ?? 0));
+  const switchTo = (id) =>
+    commit((q) => {
+      const t = findTemplate(id, q.templates || {});
+      const c = q.clips[clip.id];
+      const d = templateDefaults(t);
+      // Teksten beholdes når du bytter mal; farger og tider følger den nye malen.
+      c.props.template = id;
+      c.props.fields = { ...d.fields, ...Object.fromEntries(Object.entries(c.props.fields || {}).filter(([k]) => k in d.fields)) };
+      c.props.colors = d.colors;
+      c.props.font = d.font;
+      c.props.inDur = d.inDur;
+      c.props.outDur = d.outDur;
+      c.name = t.name;
+    });
+  return (
+    <>
+      <Section title="Template">
+        <Select value={pr.template} options={choices} onChange={switchTo} />
+      </Section>
+      <Section title="Text">
+        {(tpl.fields || []).map((f) => (
+          <Row key={f.id} label={f.label} stacked>
+            <input
+              class="text-input"
+              value={pr.fields?.[f.id] ?? ''}
+              placeholder={f.default}
+              onKeyDown={(e) => e.stopPropagation()}
+              onFocus={beginTransient}
+              onBlur={() => endTransient(true)}
+              onInput={(e) => {
+                const v = e.currentTarget.value;
+                live((x) => (x.fields = { ...(x.fields || {}), [f.id]: v }));
+              }}
+            />
+          </Row>
+        ))}
+        <Row label="Font">
+          <FontSelect value={pr.font || 'sans'} onChange={(v) => setProp(clip, { font: v })} />
+        </Row>
+      </Section>
+      {(tpl.colors || []).length > 0 && (
+        <Section title="Colors">
+          {tpl.colors.map((c) => (
+            <Row key={c.id} label={c.label}>
+              <ColorField value={pr.colors?.[c.id] ?? c.default} onLive={(v) => live((x) => (x.colors = { ...(x.colors || {}), [c.id]: v }))} />
+            </Row>
+          ))}
+        </Section>
+      )}
+      <Section title="Animation">
+        <Row label="Animate in">
+          <NumberField value={pr.inDur ?? 0.6} min={0} max={5} step={0.05} precision={2} unit="s" onStart={beginTransient} onChange={(v) => live((x) => (x.inDur = v))} onCommit={() => endTransient(true)} />
+        </Row>
+        <Row label="Animate out">
+          <NumberField value={pr.outDur ?? 0.5} min={0} max={5} step={0.05} precision={2} unit="s" onStart={beginTransient} onChange={(v) => live((x) => (x.outDur = v))} onCommit={() => endTransient(true)} />
+        </Row>
+        <Row label="On screen">
+          <span class="value">{hold.toFixed(1)} s</span>
+        </Row>
+        <Row label="Total length">
+          <NumberField value={clip.dur} min={0.5} max={600} step={0.1} precision={1} unit="s" onStart={beginTransient} onChange={(v) => updateTransient((q) => setClipDuration(q, clip.id, v))} onCommit={() => endTransient(true)} />
+        </Row>
+        <p class="hint">The title animates in at the start of the clip and out at the end. Drag the end of the clip on the timeline to keep it on screen longer. Position and size are in the Video tab.</p>
+      </Section>
+    </>
+  );
+}
+
 function TextTab({ clip }) {
   const pr = clip.props;
   const id = clip.id;
+  if (pr.template) return <TemplateTab clip={clip} />;
   return (
     <>
       <Section title="Text">
@@ -1024,40 +1196,111 @@ function MediaColorRows({ media }) {
   );
 }
 
-function InfoTab({ clip, media }) {
+/* Filinfo leses når fanen vises og huskes for resten av økten. */
+const detailsCache = new Map();
+function useDetails(path) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (!path || detailsCache.has(path)) return;
+    detailsCache.set(path, null);
+    window.api
+      .mediaDetails(path)
+      .then((d) => detailsCache.set(path, d), () => detailsCache.set(path, false))
+      .then(() => force((n) => n + 1));
+  }, [path]);
+  return path ? detailsCache.get(path) : null;
+}
+
+const fmtBytes = (n) => (n == null ? '' : n > 1e9 ? `${(n / 1e9).toFixed(2)} GB` : n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
+const fmtDate = (t) => (t ? new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '');
+const fmtTc = (t, fps) => formatTimecode(Math.max(0, t), fps);
+const CODECS = { h264: 'H.264', hevc: 'HEVC (H.265)', prores: 'Apple ProRes', vp9: 'VP9', vp8: 'VP8', av1: 'AV1', dnxhd: 'Avid DNxHD/HR', mjpeg: 'Motion JPEG', mpeg2video: 'MPEG-2', aac: 'AAC', mp3: 'MP3', opus: 'Opus', flac: 'FLAC', pcm_s16le: 'Linear PCM 16-bit', pcm_s24le: 'Linear PCM 24-bit', pcm_s32le: 'Linear PCM 32-bit', pcm_f32le: 'Linear PCM 32-bit float', vorbis: 'Vorbis', ac3: 'Dolby Digital (AC-3)', eac3: 'Dolby Digital Plus' };
+const codecName = (c, profile) => `${CODECS[c] || c}${profile ? ` ${profile}` : ''}`;
+
+function InfoRow({ label, children, title }) {
+  if (children == null || children === '' || children === false) return null;
   return (
-    <Section title="Info">
-      <Row label="Start">
-        <span class="value">{clip.start.toFixed(2)} s</span>
-      </Row>
-      <Row label="Duration">
-        {isElastic(clip) ? (
-          <NumberField value={clip.dur} min={0.1} max={3600} step={0.1} precision={2} unit="s" onStart={beginTransient} onChange={(v) => updateTransient((q) => setClipDuration(q, clip.id, v))} onCommit={() => endTransient(true)} />
-        ) : (
-          <span class="value">{clip.dur.toFixed(2)} s</span>
-        )}
-      </Row>
-      {media && (
-        <>
-          <Row label="File">
-            <span class="value path" title={media.path}>
-              {media.name}
-            </span>
-          </Row>
-          {media.width > 0 && (
-            <Row label="Resolution">
-              <span class="value">
-                {media.width} × {media.height}
-              </span>
-            </Row>
+    <Row label={label}>
+      <span class="value" title={title || (typeof children === 'string' ? children : undefined)}>
+        {children}
+      </span>
+    </Row>
+  );
+}
+
+// Clip info som i Final Cut Pro: klippet på tidslinjen, filen det kommer fra, og bilde og lyd i filen.
+function InfoTab({ clip, media }) {
+  const p = project.value;
+  const st = media && (Object.values(media.streams).find((x) => x.hasVideo && !x.syncedFrom) || Object.values(media.streams).find((x) => x.hasAudio && !x.syncedFrom));
+  const d = useDetails(media?.kind === 'recording' ? st?.path : media?.path);
+  const v = d?.video?.[0];
+  const a = d?.audio?.[0];
+  return (
+    <>
+      <Section title="Clip">
+        <Row label="Name">
+          <input
+            class="text-input small"
+            value={clip.name || media?.name || ''}
+            onKeyDown={(e) => e.stopPropagation()}
+            onChange={(e) => commit((q) => (q.clips[clip.id].name = e.currentTarget.value.trim() || null))}
+          />
+        </Row>
+        <InfoRow label="Start">{fmtTc(clip.start, p.fps)}</InfoRow>
+        <Row label="Duration">
+          {isElastic(clip) ? (
+            <NumberField value={clip.dur} min={0.1} max={3600} step={0.1} precision={2} unit="s" onStart={beginTransient} onChange={(v) => updateTransient((q) => setClipDuration(q, clip.id, v))} onCommit={() => endTransient(true)} />
+          ) : (
+            <span class="value">{fmtTc(clip.dur, p.fps)}</span>
           )}
-          <MediaColorRows media={media} />
-        </>
+        </Row>
+        {media && media.kind !== 'image' && <InfoRow label="Source in">{fmtTc(clip.in, p.fps)}</InfoRow>}
+        {media && media.kind !== 'image' && <InfoRow label="Source out">{fmtTc(clip.in + clip.dur * (clip.speed || 1), p.fps)}</InfoRow>}
+        <InfoRow label="Lane">{clip.lane === 0 ? 'Storyline' : clip.lane === CAPTION_LANE ? 'Captions' : clip.lane > 0 ? `Video ${clip.lane + 1}` : `Audio ${-clip.lane}`}</InfoRow>
+        <InfoRow label="Speed">{clip.speed === 0 ? 'Freeze frame' : clip.ramp ? 'Speed ramp' : (clip.speed ?? 1) !== 1 ? `${Math.round((clip.speed ?? 1) * 100)} %` : null}</InfoRow>
+        <InfoRow label="Group">{clip.group ? 'Grouped' : null}</InfoRow>
+      </Section>
+      {media && (
+        <Section title="File">
+          <InfoRow label="File" title={media.path}>
+            {media.name}
+          </InfoRow>
+          <InfoRow label="Location" title={media.path}>
+            {media.offline ? 'Offline' : media.path.split(/[\\/]/).slice(-2, -1)[0]}
+          </InfoRow>
+          <InfoRow label="Format">{d?.container ? d.container.replace(/,$/, '').split(',')[0].toUpperCase() : null}</InfoRow>
+          <InfoRow label="Size">{d ? fmtBytes(d.size) : null}</InfoRow>
+          <InfoRow label="Bit rate">{d?.bitrate ? `${(d.bitrate / 1000).toFixed(1)} Mbit/s` : null}</InfoRow>
+          <InfoRow label="Created">{d ? fmtDate(d.meta?.creation_time ? Date.parse(d.meta.creation_time) : d.created) : null}</InfoRow>
+          <InfoRow label="Camera">{[d?.meta?.make, d?.meta?.model].filter(Boolean).join(' ') || null}</InfoRow>
+          <InfoRow label="Software">{d?.meta?.software || null}</InfoRow>
+          <div class="info-actions">
+            <Button variant="secondary" class="small" onClick={() => window.api.reveal(media.path)} disabled={media.offline}>
+              {window.api.platform === 'darwin' ? 'Reveal in Finder' : 'Show in Explorer'}
+            </Button>
+          </div>
+        </Section>
       )}
-      <Row label="Lane">
-        <span class="value">{clip.lane === 0 ? 'Storyline' : clip.lane === CAPTION_LANE ? 'Captions' : clip.lane > 0 ? `Lane ${clip.lane}` : `Audio ${-clip.lane}`}</span>
-      </Row>
-    </Section>
+      {v && (
+        <Section title="Video">
+          <InfoRow label="Codec">{codecName(v.codec, v.profile)}</InfoRow>
+          <InfoRow label="Resolution">{`${v.width} × ${v.height}`}</InfoRow>
+          <InfoRow label="Frame rate">{v.fps ? `${v.fps} fps` : null}</InfoRow>
+          <InfoRow label="Bit rate">{v.bitrate ? `${(v.bitrate / 1000).toFixed(1)} Mbit/s` : null}</InfoRow>
+          <MediaColorRows media={media} />
+        </Section>
+      )}
+      {!v && media && <MediaColorRows media={media} />}
+      {a && (
+        <Section title="Audio">
+          <InfoRow label="Codec">{codecName(a.codec, a.profile)}</InfoRow>
+          <InfoRow label="Sample rate">{a.sampleRate ? `${(a.sampleRate / 1000).toLocaleString()} kHz` : null}</InfoRow>
+          <InfoRow label="Channels">{a.layout ? `${a.layout}${a.channels ? ` (${a.channels})` : ''}` : null}</InfoRow>
+          <InfoRow label="Bit rate">{a.bitrate ? `${a.bitrate} kbit/s` : null}</InfoRow>
+        </Section>
+      )}
+      {d === null && media && !media.offline && <p class="hint">Reading file info</p>}
+    </>
   );
 }
 

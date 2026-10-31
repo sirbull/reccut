@@ -182,6 +182,28 @@ The Info tab in the inspector shows the bit depth, HDR format and which file is 
     see: ['color', 'optimize'],
   },
   {
+    id: 'layers',
+    section: 'Media',
+    title: 'Photoshop and Illustrator Layers',
+    summary: 'Import a PSD or SVG and choose which layers to use.',
+    keywords: 'photoshop psd psb illustrator ai svg layers layered graphics logo',
+    body: `
+Import a Photoshop file (.psd or .psb) or an SVG with layers, and Reccut shows its layers with small previews. Tick the layers you want; hidden layers start unticked.
+
+![Choosing layers from a Photoshop file.](layers.jpg)
+
+- **Separate layers**: each layer becomes an image with transparency, in the size of the document, so the layers line up exactly. With Add to the timeline, they are stacked above the storyline, the bottom layer lowest, and grouped so they move together. Animate each layer in the Video tab, for example to slide a logo in.
+- **One merged image**: the ticked layers are combined into one image.
+
+The images are saved in the project's Media folder.
+
+Photoshop files in RGB, grayscale and CMYK, 8, 16 and 32 bit, are supported, with layer groups, names and opacity. Blend modes, masks, adjustment layers and layer styles are not applied.
+
+**Illustrator:** save the artwork as SVG (File > Save As > SVG, or Export As SVG). Each top level layer in Illustrator becomes a layer in Reccut, drawn sharp at a large size. Illustrator files (.ai) cannot be read directly; you can also export them from Illustrator as a Photoshop file with layers.
+`,
+    see: ['import'],
+  },
+  {
     id: 'offline',
     section: 'Media',
     title: 'Media Offline and Relinking',
@@ -455,12 +477,70 @@ Select two audio clips that touch and press {{key:addTransition}} to add an audi
     id: 'titles',
     section: 'Editing',
     title: 'Titles',
-    summary: 'Titles from templates, with animation and any font.',
-    keywords: 'title text lower third font',
+    summary: 'Titles from templates, with animation, any font, color, position and size.',
+    keywords: 'title text font chapter end card',
     body: `
-Add Title ({{key:addTitle}}) adds a title at the playhead. The Titles browser ({{key:browser:titles}}) has eight templates with live previews. Edit the text, font, size, colors and animation in the Text tab of the inspector, and drag the title in the viewer to place it.
+Add Title ({{key:addTitle}}) adds a title at the playhead. The Titles browser ({{key:browser:titles}}) has lower thirds, titles and your own templates, each with a live preview: hold the pointer over one to see the animation, click to add it at the playhead, or drag it to the timeline.
+
+![The Titles browser.](titles.jpg)
+
+Select the title to change it in the inspector: the text in the Text tab, and position, size, rotation and opacity in the Video tab. You can also drag the title in the viewer.
 `,
-    see: ['keyframes'],
+    see: ['lower-thirds', 'templates'],
+  },
+  {
+    id: 'lower-thirds',
+    section: 'Editing',
+    title: 'Lower Thirds',
+    summary: 'Type a name and title, set the length, and the animation in and out takes care of itself.',
+    keywords: 'lower third supring name super chyron animation in out',
+    body: `
+Add Lower Third ({{key:addLowerThird}}) puts an animated lower third at the playhead, or pick one of the designs under Lower Thirds in the Titles browser: Bar, Line, Box, Split, News Band, Minimal, Tag and Right Corner.
+
+![A lower third on the timeline, with the Text tab on the right.](lowerthird-full.jpg)
+
+- Type the **name** and the **title** in the Text tab. The box grows with the text.
+- The lower third **animates in at the start of the clip and out at the end**. Drag the end of the clip on the timeline to keep it on screen longer; the animations stay the same.
+- Change how long the animations take under Animation, if you like. "On screen" shows how long it stands still.
+- Change the **colors** and the **font**, or switch to another design with Template. Your text is kept.
+- Move it and change its size in the Video tab, or drag it in the viewer.
+- In vertical and square projects the lower third stays in its corner.
+
+![The Text tab for a lower third.](lowerthird.jpg)
+`,
+    see: ['templates', 'titles'],
+  },
+  {
+    id: 'templates',
+    section: 'Editing',
+    title: 'Your Own Templates (After Effects)',
+    summary: 'Design lower thirds in After Effects and use them in Reccut.',
+    keywords: 'template after effects jsx script reccut-title custom design kit export',
+    body: `
+Reccut titles are made from templates in an open format, .reccut-title. You can make your own in After Effects with the Template Kit ({{key:templateKit}}), or by hand.
+
+The kit has:
+
+- **Reccut Lower Third Starter.jsx**, which builds a ready made lower third composition in After Effects.
+- **Export to Reccut.jsx**, which saves the open composition as a .reccut-title file.
+- An example template and **FORMAT.md**, which describes the format.
+
+## In After Effects
+
+- Run the starter script with File > Scripts > Run Script File, and change the design.
+- Write **{{name}}** and **{{title}}** where the user's text goes. Other words in braces, such as {{company}}, become extra fields.
+- Keep the composition markers **in** and **out**. The animation before "in" plays at the start of the clip, the animation after "out" at the end, and the part between them lasts as long as the clip.
+- Use text layers, shape layers with a rectangle and solids. Position, scale, rotation and opacity can be animated.
+- Layer comments decide how Reccut uses a layer: **color=accent** makes the color changeable, **w=width(name) + 64** lets a box follow the text.
+- Run Export to Reccut.jsx and save the file.
+
+## In Reccut
+
+Import the template ({{key:importTemplate}}), drop the .reccut-title file on Reccut, or click Import Template under Custom in the Titles browser. It is saved in the project, shows a live preview, and works like the built in lower thirds.
+
+[[run:templateKit|Get the Template Kit]] [[run:importTemplate|Import Template]]
+`,
+    see: ['lower-thirds'],
   },
   {
     id: 'captions',
@@ -487,15 +567,33 @@ The Effects browser ({{key:browser:effects}}) shows every effect with a live pre
   {
     id: 'inspector',
     section: 'Editing',
-    title: 'The Inspector and Keyframes',
-    summary: 'Change everything about the selected clip, and animate it.',
-    keywords: 'inspector keyframes animation easing position scale opacity',
+    title: 'The Inspector',
+    summary: 'Select a clip and adjust it on the right, like in Final Cut Pro.',
+    keywords: 'inspector properties keyframes animation easing position scale opacity crop info audio tabs',
     body: `
-The inspector on the right shows the settings for the selected clip: Video ({{key:inspector:video}}), Audio ({{key:inspector:audio}}), Color ({{key:inspector:color}}), Effects, Speed and Info ({{key:inspector:info}}).
+Select a clip and its properties appear in the inspector on the right. The icons at the top switch between the parts of the clip, and you only see the ones that fit the clip:
 
-Click the diamond next to a value to add a keyframe at the playhead. Change the value at another time to animate it. Keyframes are shown on the selected clip; drag them to move them, and right click one to choose easing (Linear, Ease In, Ease Out, Ease In and Out or Hold). Animation presets add common animations in one click.
+- **Text** for titles and lower thirds: the text, template, colors, font and animation.
+- **Video** ({{key:inspector:video}}): opacity, position, scale, rotation, crop, animation presets and fades.
+- **Color** ({{key:inspector:color}}): looks, light, color and color wheels.
+- **Effects** ({{key:inspector:effects}}): the effects on the clip.
+- **Audio** ({{key:inspector:audio}}): levels, audio components, volume, fades and the audio format.
+- **Speed**: speed, reverse, ramps and freeze frames.
+- **Info** ({{key:inspector:info}}): clip info.
+
+![The Video tab with crop.](video.jpg)
+
+## Clip info
+
+The Info tab shows the clip on the timeline (name, start, duration, source in and out, lane and speed), the file it comes from (name, folder, format, size, bit rate, when it was recorded, camera and software) and the video and audio inside it (codec, resolution, frame rate, color, sample rate and channels). Rename the clip in the Name field.
+
+![Clip info.](info.jpg)
+
+## Keyframes
+
+Click the diamond next to a value to add a keyframe at the playhead, and change the value at another time to animate it. Keyframes are shown on the selected clip; drag them to move them, and right click one to choose easing (Linear, Ease In, Ease Out, Ease In and Out or Hold). Number fields can be dragged sideways, clicked to type a value, or reached with Tab.
 `,
-    see: ['color', 'effects'],
+    see: ['color', 'audio', 'lower-thirds'],
   },
   {
     id: 'keyframes',
@@ -522,6 +620,7 @@ Most values in the inspector, including position, scale, opacity, color, effects
 - Drag the volume line on a clip, or use {{key:volumeUp}} and {{key:volumeDown}}. Option (Alt) click the line to add a volume keyframe.
 - Drag the fade handles at the top corners of the audio to fade in and out.
 - **Expand Audio** ({{key:expandAudio}}) shows the audio below the video. Drag its edges past the video for J and L cuts.
+- The **Levels** at the top of the Audio tab show the waveform of the clip with its peak and average level. Red means the audio clips (goes over 0 dBFS). Audio Format shows the codec, sample rate and channels of the file.
 - **Audio components**: a clip can have several audio tracks, for example the camera microphone and synchronized audio from a recorder. Switch them on and off in the Audio tab, in the right click menu, or by clicking one in the expanded audio and pressing {{key:toggleEnabled}}. A track that is off is kept, greyed out.
 - **Detach Audio** ({{key:detachAudio}}) turns the audio into separate clips.
 - **Solo** ({{key:solo}}) plays only the selected clips.

@@ -44,6 +44,7 @@ import {
   transitionWindow,
   audioComponents,
   primaryComponent,
+  titleText,
 } from '../../shared/model.js';
 import { groupLead, groupMembers, moveClip, positionMove, positionTrim, rollEdit, slideClip, slipClip, splitClip, trimClip } from '../../shared/ops.js';
 import {
@@ -847,7 +848,7 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
   const speed = speedOf(clip);
   const visual = isVisual(clip) && clip.type !== 'title';
   const cls = ['tl-clip', `t-${clip.type}`, selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped', media?.offline && 'offline', audioComponents(clip, media).length > 0 && audioComponents(clip, media).every((c) => c.off) && 'audio-off'].filter(Boolean).join(' ');
-  const label = clip.type === 'title' || clip.type === 'caption' ? clip.props.text || (clip.type === 'caption' ? 'Caption' : 'Title') : clip.name || media?.name || clip.type;
+  const label = clip.type === 'title' ? titleText(clip) : clip.type === 'caption' ? clip.props.text || 'Caption' : clip.name || media?.name || clip.type;
   const narrow = w < 24;
   const thumbStream = media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
   const audioStream = clipAudioStream(clip, media);

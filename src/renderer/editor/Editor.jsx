@@ -9,6 +9,7 @@ import { ExportDialog } from './ExportDialog.jsx';
 import { audioSkimming, commit, makeCaptionClip, project, skimming, snapping } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
+import { cancelLayerImport, finish as finishLayers, layerImport } from './layers.js';
 import { Button, Modal, NumberField, Row, Section, Segmented, Toggle, toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
 
@@ -71,7 +72,91 @@ export function Editor({ active }) {
       {commands.prefsOpen.value && <PreferencesDialog />}
       {commands.syncDialog.value && <SyncDialog />}
       {commands.importOptions.value && <ImportOptionsDialog />}
+      {layerImport.value && <LayerImportDialog key={layerImport.value.file} />}
     </div>
+  );
+}
+
+// Lag fra Photoshop eller Illustrator (SVG): velg lag, og om de skal komme hver for seg eller sammenslått.
+function LayerImportDialog() {
+  const req = layerImport.value;
+  const [picked, setPicked] = useState(() => new Set(req.layers.filter((l) => l.visible).map((l) => l.index)));
+  const [mode, setMode] = useState('layers');
+  const [toTimeline, setToTimeline] = useState(true);
+  const name = req.file.split(/[\\/]/).pop();
+  const toggle = (i) => {
+    const next = new Set(picked);
+    next.has(i) ? next.delete(i) : next.add(i);
+    setPicked(next);
+  };
+  // Øverste lag først, som i Photoshop.
+  const list = [...req.layers].reverse();
+  return (
+    <Modal
+      title={`Import Layers from ${name}`}
+      width={560}
+      onClose={cancelLayerImport}
+      footer={
+        <>
+          <Button onClick={cancelLayerImport}>Cancel</Button>
+          <Button variant="primary" disabled={!picked.size} onClick={() => finishLayers(req, [...picked].sort((a, b) => a - b), mode, toTimeline)}>
+            {mode === 'layers' ? `Import ${picked.size} Layer${picked.size === 1 ? '' : 's'}` : 'Import Merged Image'}
+          </Button>
+        </>
+      }
+    >
+      <div class="layer-head">
+        <img src={req.thumb} alt="" />
+        <div>
+          <b>{name}</b>
+          <span>
+            {req.width} × {req.height}, {req.layers.length} layers
+          </span>
+          <span class="layer-quick">
+            <button class="link" onClick={() => setPicked(new Set(req.layers.map((l) => l.index)))}>
+              All
+            </button>
+            <button class="link" onClick={() => setPicked(new Set(req.layers.filter((l) => l.visible).map((l) => l.index)))}>
+              Visible
+            </button>
+            <button class="link" onClick={() => setPicked(new Set())}>
+              None
+            </button>
+          </span>
+        </div>
+      </div>
+      <div class="layer-list">
+        {list.map((l) => (
+          <label key={l.index} class={`layer-row${picked.has(l.index) ? ' on' : ''}`}>
+            <input type="checkbox" checked={picked.has(l.index)} onChange={() => toggle(l.index)} />
+            <img src={l.thumb} alt="" />
+            <span class="layer-name">
+              {l.name}
+              {l.group && <small>{l.group}</small>}
+            </span>
+            {!l.visible && <small class="dim">Hidden</small>}
+          </label>
+        ))}
+      </div>
+      <Section title="Import As" collapsible={false}>
+        <Segmented
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: 'layers', label: 'Separate layers' },
+            { value: 'merged', label: 'One merged image' },
+          ]}
+        />
+        <Row label="Add to the timeline at the playhead">
+          <Toggle checked={toTimeline} onChange={setToTimeline} />
+        </Row>
+        <p class="hint">
+          {mode === 'layers'
+            ? 'Each layer becomes an image with transparency, in the size of the document, so the layers line up. On the timeline they are stacked above the storyline and grouped, so they move together. Animate each one in the Video tab.'
+            : 'The chosen layers are combined into one image.'}
+        </p>
+      </Section>
+    </Modal>
   );
 }
 

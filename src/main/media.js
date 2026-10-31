@@ -395,7 +395,7 @@ async function relink(media, file, notify) {
 
 // Alle filendelser appen kjenner, for importdialogen.
 function extensions() {
-  return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT, ...raw.RAW_EXT].map((e) => e.slice(1));
+  return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT, ...raw.RAW_EXT, '.psb', '.reccut-title'].map((e) => e.slice(1));
 }
 
 module.exports = { isOffline, relink, scheduleOptimize, reverseStream, scheduleReverse, extensions, importFiles, recordingMedia, kindOf, cacheRoot, newId };

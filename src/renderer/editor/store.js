@@ -9,6 +9,7 @@ import {
   updateDuration,
 } from '../../shared/model.js';
 import { addMediaClip, autoFormat } from '../../shared/ops.js';
+import { templateDefaults } from '../../shared/titletemplates.js';
 import { prefs } from '../prefs.js';
 
 const api = window.api;
@@ -351,6 +352,13 @@ function reportFailed(failed) {
 
 // Import: filene kopieres til prosjektmappen eller blir liggende der de er (valg i Import Options).
 export async function importPaths(paths, placement, opts = {}) {
+  // Titelmaler og lagdelte filer (PSD, SVG) har egne veier inn.
+  const templates = paths.filter((p) => /\.reccut-title$/i.test(p));
+  if (templates.length) import('./commands.js').then((m) => m.importTitleTemplate(templates));
+  paths = paths.filter((p) => !/\.reccut-title$/i.test(p));
+  const layered = paths.filter((p) => /\.(psd|psb|svg)$/i.test(p));
+  if (layered.length) import('./layers.js').then((m) => m.importLayered(layered, placement));
+  paths = paths.filter((p) => !/\.(psd|psb|svg)$/i.test(p));
   if (!paths.length) return [];
   const copy = opts.copy ?? prefs.value.importCopy;
   const folders = projectFolders.value;
@@ -401,9 +409,12 @@ export async function addRecordingToProject(dir) {
 
 // Titler lages fra maler (se TITLE_TEMPLATES).
 export function makeTitleClip(templateId, T) {
-  const tpl = TITLE_TEMPLATES.find((t) => t.id === templateId) || TITLE_TEMPLATES[0];
+  const custom = project.value.templates?.[templateId];
+  const tpl = custom
+    ? { label: custom.name, props: { template: custom.id, ...templateDefaults(custom) } }
+    : TITLE_TEMPLATES.find((t) => t.id === templateId) || TITLE_TEMPLATES[0];
   const clip = makeClip('title', { start: T, dur: prefs.value.titleDur, lane: 1, name: tpl.label });
-  Object.assign(clip.props, tpl.props);
+  Object.assign(clip.props, structuredClone(tpl.props));
   return clip;
 }
 

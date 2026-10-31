@@ -136,6 +136,68 @@ function transcodeExt(color) {
   return (color?.bits || 8) > 8 || color?.hdr ? '.webm' : '.mp4';
 }
 
+/**
+ * Detaljer om en fil til Info- og Audio-fanene: format, bitrate, kodeker, lydformat og metadata.
+ * Leses når fanen vises, så eldre prosjekter også får dem.
+ */
+async function details(file) {
+  const proc = spawn(ffmpegPath, ['-hide_banner', '-i', file], { windowsHide: true });
+  let out = '';
+  proc.stderr.on('data', (d) => (out += d.toString()));
+  await new Promise((r) => proc.on('close', r));
+  const st = await fs.promises.stat(file).catch(() => null);
+  const info = {
+    size: st?.size ?? null,
+    created: st ? Math.round(st.birthtimeMs || st.ctimeMs) : null,
+    modified: st ? Math.round(st.mtimeMs) : null,
+    container: /Input #0, ([\w,]+)/.exec(out)?.[1] ?? null,
+    duration: 0,
+    bitrate: Number(/bitrate: (\d+) kb\/s/.exec(out)?.[1]) || null,
+    video: [],
+    audio: [],
+    meta: {},
+  };
+  const d = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(out);
+  if (d) info.duration = Number(d[1]) * 3600 + Number(d[2]) * 60 + Number(d[3]);
+  // Metadata for hele filen: kamera, programvare og opptakstid.
+  const head = out.split(/\n\s*Duration:/)[0];
+  for (const m of head.matchAll(/^\s{4}(\S[^:]*?)\s*: (.+)$/gm)) {
+    const key = m[1].trim();
+    if (/creation_time|encoder|make|model|software|location|title|artist|comment|date/i.test(key)) info.meta[key.replace(/^com\.apple\.quicktime\./, '')] = m[2].trim();
+  }
+  for (const line of out.split('\n')) {
+    const v = /Stream #\S+: Video: (\w+)(?: \(([^)]*)\))?/.exec(line);
+    if (v && !/attached pic/.test(line)) {
+      const size = /, (\d{2,5})x(\d{2,5})/.exec(line);
+      const pix = /, (yuv\w+|yuvj\w+|nv\d+|rgb\w*|bgr\w*|argb|abgr|rgba|bgra|gray\w*|pal8|gbr\w*)[,( ]/.exec(line)?.[1] ?? null;
+      info.video.push({
+        codec: v[1],
+        profile: v[2] && !/\//.test(v[2]) ? v[2] : null,
+        width: size ? Number(size[1]) : 0,
+        height: size ? Number(size[2]) : 0,
+        fps: Number(/([\d.]+) fps/.exec(line)?.[1]) || null,
+        bitrate: Number(/(\d+) kb\/s/.exec(line)?.[1]) || null,
+        pixFmt: pix,
+        color: parseColor(line, pix),
+      });
+    }
+    const a = /Stream #\S+: Audio: (\w+)(?: \(([^)]*)\))?/.exec(line);
+    if (a) {
+      const layout = /Hz, ([^,]+),/.exec(line)?.[1] ?? null;
+      info.audio.push({
+        codec: a[1],
+        profile: a[2] && !/\//.test(a[2]) ? a[2] : null,
+        sampleRate: Number(/(\d+) Hz/.exec(line)?.[1]) || null,
+        layout,
+        channels: layout === 'mono' ? 1 : layout === 'stereo' ? 2 : Number(/(\d+) channels/.exec(line)?.[1]) || (/5\.1/.test(layout || '') ? 6 : /7\.1/.test(layout || '') ? 8 : null),
+        sampleFormat: /Hz, [^,]+, (\w+)/.exec(line)?.[1] ?? null,
+        bitrate: Number(/(\d+) kb\/s/.exec(line)?.[1]) || null,
+      });
+    }
+  }
+  return info;
+}
+
 // Gjør MediaRecorder-filer søkbare og gir dem riktig varighet, uten omkoding.
 async function remux(input, output) {
   const ext = path.extname(output).toLowerCase();
@@ -202,5 +264,5 @@ async function convertImage(file, output) {
 }
 
 module.exports = {
-  transcode, transcodeExt, hasFilter,
+  transcode, transcodeExt, hasFilter, details,
   convertImage, getFfmpegPath, run, probe, remux, thumbnails, waveform, optimize, decodePcm };

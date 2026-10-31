@@ -1,6 +1,7 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
 import { CAPTION_LANE, EFFECTS, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
+import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
 import {
   adjacentAudioPairs,
@@ -655,6 +656,38 @@ export async function relinkDialog(id) {
   } catch (err) {
     toast(`Could not relink: ${err.message}`, { kind: 'error' });
   }
+}
+
+/* Titelmaler (.reccut-title): import av egne maler og nedlasting av malpakken for After Effects. */
+
+export async function importTitleTemplate(paths = null) {
+  if (!paths) {
+    const file = await api.openFileDialog({ title: 'Import Title Template', filters: [{ name: 'Reccut title template', extensions: ['reccut-title', 'json'] }] });
+    if (!file) return;
+    paths = [file];
+  }
+  const added = [];
+  for (const file of paths) {
+    try {
+      const tpl = validateTemplate(JSON.parse(await api.readText(file)));
+      added.push(tpl);
+    } catch (err) {
+      toast(`${file.split(/[\\/]/).pop()}: ${err.message}`, { kind: 'error', timeout: 8000 });
+    }
+  }
+  if (!added.length) return;
+  commit((p) => {
+    p.templates = { ...(p.templates || {}) };
+    for (const t of added) p.templates[t.id] = t;
+  });
+  browserTab.value = 'titles';
+  toast(`Imported ${added.map((t) => t.name).join(', ')}. ${added.length > 1 ? 'They are' : 'It is'} under Custom in the Titles browser.`, { kind: 'success', timeout: 5000 });
+}
+
+export async function downloadTemplateKit() {
+  const example = { ...BUILTIN_TEMPLATES.find((t) => t.id === 'lt-bar'), id: 'example-bar', name: 'Example Bar', category: 'Custom', version: 1 };
+  const dir = await api.saveTemplateKit(JSON.stringify(example, null, 2));
+  if (dir) toast('Saved the Reccut Template Kit. Open README.txt to get started.', { kind: 'success', timeout: 6000 });
 }
 
 /* Grupper (Cmd/Ctrl G): lyden følger videoen når den flyttes. */

@@ -2,6 +2,7 @@
 // så det du ser i redigeringen er det som havner i filen.
 import { gpuGradeAvailable, gradeImage, gradeParams } from './grade.js';
 import { drawTestCard } from './testcard.js';
+import { drawTemplate, findTemplate } from './titletemplates.js';
 import {
   DEFAULT_CAPTION_STYLE,
   FONTS,
@@ -269,16 +270,30 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1) {
     let src = getSource(clip, 'main', s);
     if (src) src = graded(clip, T, src);
     if (src) {
-      const r = containRect(src.w, src.h, W, H);
+      const full = containRect(src.w, src.h, W, H);
+      // Beskjæring (Crop): kantene trimmes, og bildet blir stående der det er.
+      const cl = clamp(valueAt(clip, 'cropL', T) || 0, 0, 0.49);
+      const cr = clamp(valueAt(clip, 'cropR', T) || 0, 0, 0.49);
+      const ct = clamp(valueAt(clip, 'cropT', T) || 0, 0, 0.49);
+      const cb = clamp(valueAt(clip, 'cropB', T) || 0, 0, 0.49);
+      const r = { x: full.x + cl * full.w, y: full.y + ct * full.h, w: full.w * (1 - cl - cr), h: full.h * (1 - ct - cb) };
+      const img = src.img;
+      const nw = img.videoWidth || img.displayWidth || img.naturalWidth || img.width || src.w;
+      const nh = img.videoHeight || img.displayHeight || img.naturalHeight || img.height || src.h;
       drawWithEffects(ctx, clip, T, r, H, () => {
         ctx.filter = colorFilter(clip, T, H);
-        ctx.drawImage(src.img, r.x, r.y, r.w, r.h);
+        if (cl || cr || ct || cb) ctx.drawImage(img, cl * nw, ct * nh, nw * (1 - cl - cr), nh * (1 - ct - cb), r.x, r.y, r.w, r.h);
+        else ctx.drawImage(img, r.x, r.y, r.w, r.h);
       });
     }
   } else if (clip.type === 'recording' && media) {
     drawRecording(ctx, project, clip, media, T, s, getSource);
   } else if (clip.type === 'title') {
-    drawTitle(ctx, clip, T, W, H);
+    if (clip.props.template) {
+      // Malbasert tittel: inn- og ut-animasjonen følger starten og slutten på klippet.
+      const tpl = findTemplate(clip.props.template, project.templates || {});
+      if (tpl) drawTemplate(ctx, tpl, T - clip.start, clip.dur, W, H, clip.props);
+    } else drawTitle(ctx, clip, T, W, H);
   }
   ctx.restore();
 }

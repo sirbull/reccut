@@ -54,7 +54,11 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 * Dra klipp, titler og undertekster direkte i visningen for å plassere dem
 * **Effekter**: Blur, Vignette, Sepia, Black & White, Invert, Hue Shift, Rounded Corners, Drop Shadow og Border
 * **Fargekorrigering**: ferdige utseender, eksponering, kontrast, høylys, skygger, metning, temperatur og tint, og fargehjul for skygger, mellomtoner og høylys. Regnes ut på skjermkortet i 16-bit flyttall, så 10-bit klipp beholder jevne overganger. Samme utregning brukes i visningen og eksporten.
-* **Titler** fra åtte maler (Title, Lower Third, Headline, Title Card, Boxed, Typewriter, Callout, End Card) med animasjon inn og ut og alle systemskrifter
+* **Inspektøren som i Final Cut Pro**: marker et klipp, så vises egenskapene til høyre, med ikonfaner for Text, Video (posisjon, skala, rotasjon, beskjæring, animasjon og toning), Color, Effects, Audio, Speed og Info. Info viser klippet, filen (format, størrelse, bitrate, opptakstid, kamera) og bilde og lyd i den. Audio viser nivåer med topp og gjennomsnitt, lydspor, volum, toning og lydformatet.
+* **Titler** fra maler (Title, Headline, Title Card, Boxed, Typewriter, End Card, Chapter) med animasjon inn og ut, alle systemskrifter, farge, plassering og størrelse
+* **Supringer (lower thirds)** med animasjon: Bar, Line, Box, Split, News Band, Minimal, Tag og Right Corner. Skriv navn og tittel i inspektøren, så animeres supringen inn i starten og ut på slutten av klippet; lengden på tidslinjen bestemmer hvor lenge den står. Farger, skrift og lengden på animasjonene kan justeres, og boksen vokser med teksten.
+* **Egne maler fra After Effects**: Get the Template Kit (Help-menyen) gir et skript som lager en supring i After Effects, og et som eksporterer komposisjonen til en `.reccut-title`-fil. Formatet er åpent JSON og beskrevet i pakken, så maler også kan lages for hånd eller med andre verktøy. Importerte maler lagres i prosjektet.
+* **Photoshop og Illustrator med lag**: importer en PSD eller PSB (eller SVG fra Illustrator) og velg hvilke lag som skal med, som egne bilder stablet og gruppert på tidslinjen, eller som ett sammenslått bilde. Lagene legges i prosjektets Media-mappe.
 * **Overganger**: Cross Dissolve, Fade to Black, Fade to White, Push i tre retninger, Wipe, Circle Reveal, Zoom og Blur
 * Alle titler, overganger og effekter har levende forhåndsvisning i biblioteket (hold musen over), tegnet med samme motor som eksporten
 * **Undertekster**: én til tre linjer, venstre, midtstilt eller høyre, plassert øverst, i midten, nederst, fritt med X og Y, eller dratt i visningen. Skrift, størrelse, vekt, tekstfarge, konturfarge og konturtykkelse, bakgrunn med farge og gjennomsiktighet, og skygge. Import og eksport av SRT og WebVTT, og automatisk teksting med Whisper.
@@ -126,6 +130,8 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | Shift Cmd R | Vis prosjektmappen |
 | Ctrl mellomrom, F1, Option Cmd K | Hurtigsøk, hjelp, alle hurtigtaster |
 | Option Cmd L | Relink File (finn en fil som mangler) |
+| Shift Ctrl T | Legg til supring (Shift Alt T på Windows) |
+| Shift Option Cmd I, Shift Option Cmd K | Importer titelmal, hent malpakken |
 | Cmd , | Preferences |
 | Cmd B, Shift Cmd B | Kutt valgte klipp ved spillhodet, kutt alle |
 | Delete, Shift Delete | Slett og lukk, slett og behold mellomrom |
@@ -174,6 +180,7 @@ npm run dist:mac # eller dist:win, lager installasjonsfil
 | `src/shared` | Prosjektmodell, redigeringsoperasjoner og tegnemotor, felles for forhåndsvisning og eksport |
 | `src/renderer` | Grensesnittet i Preact: opptak, redigering (bibliotek, visning, inspektør, tidslinje), eksportfanen, kommandoregisteret og hjelpen |
 | `assets/help` | Skjermbilder til hjelpen |
+| `assets/template-kit` | Malpakken for After Effects og beskrivelsen av `.reccut-title`-formatet |
 | `src/worker` | Skjulte vinduer for eksport og automatisk teksting |
 
 Åpen kildekode som brukes: Electron, Preact, Lucide (ikoner), Mediabunny (dekoding og koding med WebCodecs), FFmpeg via ffmpeg-static (miksing, omkoding, analyse), uiohook-napi (globale tastetrykk) og Transformers.js med Whisper (teksting). FFmpeg-binærfilene er GPL-lisensiert.

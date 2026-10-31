@@ -20,6 +20,7 @@ const ff = require('./ffmpeg');
 const jobs = require('./jobs');
 const media = require('./media');
 const projects = require('./projects');
+const psd = require('./psd');
 const { InputTracker, ZOOM_KEYS } = require('./input');
 
 const isMac = process.platform === 'darwin';
@@ -380,6 +381,59 @@ ipcMain.handle('media:reanalyze', async (_e, items) => {
 ipcMain.handle('media:reverse', (_e, m) => {
   media.scheduleReverse(m, notifyAnalyzed);
 });
+// Malpakken: kopierer skriptene og beskrivelsen til en mappe brukeren velger, pluss eksempelmalen.
+ipcMain.handle('kit:save', async (_e, exampleJson) => {
+  const r = await dialog.showOpenDialog(win, { title: 'Choose where to save the Reccut Template Kit', defaultPath: app.getPath('downloads'), properties: ['openDirectory', 'createDirectory'] });
+  if (r.canceled) return null;
+  const dir = path.join(r.filePaths[0], 'Reccut Template Kit');
+  await fs.promises.mkdir(dir, { recursive: true });
+  const src = path.join(__dirname, '..', '..', 'build', 'template-kit');
+  for (const f of await fs.promises.readdir(src)) await fs.promises.writeFile(path.join(dir, f), await fs.promises.readFile(path.join(src, f)));
+  await fs.promises.writeFile(path.join(dir, 'Example Lower Third.reccut-title'), exampleJson);
+  shell.showItemInFolder(path.join(dir, 'README.txt'));
+  return dir;
+});
+/* Lagdelte filer (PSD). Dokumentet huskes mellom oversikten og uttrekket. */
+const psdDocs = new Map();
+ipcMain.handle('layers:psd', async (_e, file) => {
+  const doc = await psd.readPsd(file);
+  psdDocs.set(file, doc);
+  const merged = doc.composite || psd.flatten(doc, doc.layers.filter((l) => l.visible));
+  return {
+    width: doc.width,
+    height: doc.height,
+    thumb: psd.thumbnail(doc, merged, 160),
+    layers: doc.layers.map((l) => ({ index: l.index, name: l.name, group: l.group, visible: l.visible, thumb: psd.thumbnail(doc, psd.layerCanvas(doc, l), 64) })),
+  };
+});
+// Skriver valgte lag som PNG i dokumentets størrelse, eller ett sammenslått bilde.
+ipcMain.handle('layers:psdExtract', async (_e, file, indices, mode, outDir) => {
+  const doc = psdDocs.get(file) || (await psd.readPsd(file));
+  await fs.promises.mkdir(outDir, { recursive: true });
+  const base = path.basename(file, path.extname(file));
+  const safe = (s) => String(s).replace(/[\\/:*?"<>|]/g, '_').trim() || 'Layer';
+  const chosen = doc.layers.filter((l) => indices.includes(l.index));
+  const out = [];
+  if (mode === 'merged') {
+    const all = indices.length === doc.layers.length && doc.composite && doc.layers.every((l) => l.visible);
+    const rgba = all ? doc.composite : psd.flatten(doc, chosen);
+    const target = path.join(outDir, `${safe(base)}.png`);
+    await fs.promises.writeFile(target, psd.encodePng(rgba, doc.width, doc.height));
+    out.push({ path: target, name: base });
+  } else {
+    for (const l of chosen) {
+      const target = path.join(outDir, `${safe(base)} ${String(l.index + 1).padStart(2, '0')} ${safe(l.name)}.png`);
+      await fs.promises.writeFile(target, psd.encodePng(psd.layerCanvas(doc, l), doc.width, doc.height));
+      out.push({ path: target, name: `${base}: ${l.name}` });
+    }
+  }
+  return out;
+});
+ipcMain.handle('file:writeBinary', async (_e, file, data) => {
+  await fs.promises.mkdir(path.dirname(file), { recursive: true });
+  await fs.promises.writeFile(file, Buffer.from(data));
+});
+ipcMain.handle('media:details', (_e, file) => ff.details(file));
 ipcMain.handle('media:offline', (_e, items) => items.filter((m) => media.isOffline(m)).map((m) => m.id));
 ipcMain.handle('media:relink', (_e, m, file) => media.relink(m, file, notifyAnalyzed));
 ipcMain.handle('media:optimize', (_e, items, outDir) => {

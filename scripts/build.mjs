@@ -42,6 +42,11 @@ function copyStatic() {
   const helpOut = path.join(out, 'help');
   fs.mkdirSync(helpOut, { recursive: true });
   if (fs.existsSync(help)) for (const f of fs.readdirSync(help)) fs.copyFileSync(path.join(help, f), path.join(helpOut, f));
+  // Malpakken for After Effects (lastes ned fra Titles-biblioteket).
+  const kit = path.join(root, 'assets/template-kit');
+  const kitOut = path.join(out, 'template-kit');
+  fs.mkdirSync(kitOut, { recursive: true });
+  if (fs.existsSync(kit)) for (const f of fs.readdirSync(kit)) fs.copyFileSync(path.join(kit, f), path.join(kitOut, f));
   // Whisper kjører med onnxruntime-web, som trenger wasm-filene lokalt.
   const ort = path.join(root, 'node_modules/onnxruntime-web/dist');
   const ortOut = path.join(out, 'ort');
