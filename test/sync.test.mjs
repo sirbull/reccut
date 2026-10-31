@@ -149,3 +149,27 @@ test('synk i biblioteket fletter lyden inn i videoene og slår av kameralyden', 
   removeMediaSync(p, 'v1');
   assert.deepEqual(audioComponents(p.clips[v1], p.media.v1).map((c) => [c.key, c.off]), [['main', false]]);
 });
+
+import { CAPTION_LANE, makeClip } from '../src/shared/model.js';
+
+test('titler, undertekster, video og lyd kan grupperes, og grupper slås sammen', () => {
+  const { p, v1, a } = syncProject();
+  const title = makeClip('title', { start: 2, dur: 3, lane: 1 });
+  const cap = makeClip('caption', { start: 3, dur: 2, lane: CAPTION_LANE });
+  p.clips[title.id] = title;
+  p.clips[cap.id] = cap;
+  Object.assign(p.clips[a], { start: 4, dur: 6 });
+  groupClips(p, [title, cap].map((c) => c.id));
+  assert.equal(p.clips[title.id].group, p.clips[cap.id].group);
+  // Gruppering av ett medlem sammen med andre klipp tar med hele den gamle gruppen.
+  groupClips(p, [title.id, v1, a]);
+  const g = p.clips[v1].group;
+  assert.ok(g);
+  for (const id of [title.id, cap.id, a]) assert.equal(p.clips[id].group, g);
+  // Flytter videoen, følger tittel, undertekst og lyd med.
+  moveClip(p, v1, { lane: 0, primaryIndex: 1 });
+  assert.equal(p.clips[v1].start, 40);
+  assert.equal(p.clips[title.id].start, 42);
+  assert.equal(p.clips[cap.id].start, 43);
+  assert.equal(p.clips[a].start, 44);
+});

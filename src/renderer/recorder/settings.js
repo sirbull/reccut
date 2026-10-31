@@ -31,6 +31,10 @@ const DEFAULTS = {
   showClicks: false,
   zoomKey: isMac ? 'MetaRight' : 'CtrlRight',
   autoRender: true,
+  // Opptaksområde: hele skjermen eller et område (andeler av skjermen).
+  areaMode: 'full',
+  area: null,
+  countdown: 3,
 };
 
 function load() {

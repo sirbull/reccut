@@ -83,9 +83,21 @@ On a Mac the Help menu also has a search field. Type a word and macOS points to 
     section: 'Recording',
     title: 'Recording Screen and Camera',
     summary: 'Screen, camera and microphone are recorded separately, so everything can be changed afterwards.',
-    keywords: 'record capture webcam pip layout keystrokes cursor zoom system audio',
+    keywords: 'record capture webcam pip layout keystrokes cursor zoom system audio area region crop part of screen countdown',
     body: `
 Choose a screen, a camera and a microphone in the Record room. Turn on system audio to record the sound from your computer.
+
+## Record only part of the screen
+
+Under **Record**, choose **Area** instead of Full Screen. The screen is covered with a dark layer: drag to select the area, drag the box or its corners to adjust it, and click **Use Area** (or press Return). The buttons at the bottom lock the shape to 16:9, 9:16, 1:1 or 4:3.
+
+- **Adjust in Preview** shows the whole screen in the preview, so you can move and resize the area there instead.
+- A thin frame on the screen shows the area while you are in the Record room. It turns red while you record. It is drawn just outside the area, so it never ends up in the video.
+- Only the area is saved, so the rest of the screen never ends up in the file. The cursor zoom, clicks and keystrokes follow the area.
+
+## Countdown
+
+Choose a countdown of 3, 5 or 10 seconds under Recording. The numbers are shown in the preview and in the middle of the area on the screen. Press the record button again to cancel it.
 
 ![The Record room. The layouts at the bottom switch between camera, screen and picture in picture.](record.jpg)
 
@@ -97,7 +109,7 @@ Choose a screen, a camera and a microphone in the Record room. Turn on system au
 
 Everything is saved as separate files, so in the editor you can still change the layout, camera shape, overlays and the level of the microphone and system audio.
 `,
-    see: ['projects', 'editing'],
+    see: ['projects', 'editing', 'redact'],
   },
 
   /* Media */
@@ -430,12 +442,12 @@ While Reccut works on a clip in the background, for example analyzing motion for
     id: 'grouping',
     section: 'Editing',
     title: 'Grouping Clips',
-    summary: 'Keep video and audio together.',
-    keywords: 'group ungroup link attach follow',
+    summary: 'Keep any clips together: video, audio, titles, captions and redactions.',
+    keywords: 'group ungroup link attach follow title caption',
     body: `
-Select clips, for example a video clip and the audio below it, and choose Group Clips ({{key:group}}). Grouped clips have a link badge.
+Select clips and choose Group Clips ({{key:group}}). Any kind of clip can be grouped: video, audio, images, titles, lower thirds, captions and redactions. Grouped clips have a link badge. If one of the clips is already in a group, the groups are joined into one.
 
-- Moving the video moves the audio too, even if the audio starts before the video.
+- Moving the video moves the rest of the group too, for example the audio, a lower third and a caption, even if a clip starts before the video.
 - A click selects the whole group; Option (Alt) click selects one clip.
 - Deleting the video in the storyline deletes the grouped audio.
 - Copy and paste makes a new group.
@@ -632,15 +644,45 @@ Add Caption ({{key:addCaption}}) adds a caption at the playhead. The Captions ta
     see: ['export'],
   },
   {
+    id: 'redact',
+    section: 'Editing',
+    title: 'Redacting Passwords and Faces',
+    summary: 'Pixelate, blur or cover part of the picture.',
+    keywords: 'redact censor hide password private sensitive pixelate mosaic blur face license plate black box frosted sladd',
+    body: `
+Use a redaction to hide something in the picture, such as a password, an email address, a face or a license plate. A redaction is a clip of its own above the video, and it affects everything below it.
+
+- Choose **Add Pixelate** ({{key:redact:pixelate}}) or **Add Blur** ({{key:redact:blur}}) in the Edit menu, or drag Pixelate, Blur, Solid or Frosted from the **Redact** section of the Effects browser ({{key:browser:effects}}) to the timeline.
+- It is placed above everything at the playhead. If a range is marked ({{key:setIn}} and {{key:setOut}}), it covers the range; otherwise it lasts to the end of the clip below.
+- Drag the box in the viewer to move it, and drag its corners and edges to resize it. Hold Option (Alt) to resize from the center. Drag outside the box to draw a new area.
+
+## Styles
+
+- **Pixelate** turns the area into large blocks. Good for text and faces.
+- **Blur** makes it soft. Use a high amount for text.
+- **Solid** covers the area with a color. This is the safest for passwords, because nothing of the original is left.
+- **Frosted** combines blur and blocks, like frosted glass.
+
+In the Redact tab of the inspector you can choose the shape (rectangle, rounded or ellipse), the amount, a soft edge, rotation and **Redact outside**, which hides everything except the area.
+
+## Follow something that moves
+
+Position, size and rotation can have keyframes. Go to where the object starts, click the keyframe button next to Position and Size, move the playhead and drag the box to the new place. Reccut moves the box smoothly between the keyframes.
+
+Redactions work the same in the viewer and in the exported file.
+`,
+    see: ['keyframes', 'effects'],
+  },
+  {
     id: 'effects',
     section: 'Editing',
     title: 'Effects',
     summary: 'Blur, vignette, black and white, shadows, borders and more.',
     keywords: 'effects blur vignette sepia shadow border rounded',
     body: `
-The Effects browser ({{key:browser:effects}}) shows every effect with a live preview. Drag an effect onto a clip, or select clips and click it. Adjust or remove effects in the Effects tab of the inspector ({{key:inspector:effects}}). All values can have keyframes.
+The Effects browser ({{key:browser:effects}}) shows every effect with a live preview. At the top are the redactions for hiding passwords and faces, see Redacting Passwords and Faces. Drag an effect onto a clip, or select clips and click it. Adjust or remove effects in the Effects tab of the inspector ({{key:inspector:effects}}). All values can have keyframes.
 `,
-    see: ['keyframes', 'color'],
+    see: ['keyframes', 'color', 'redact'],
   },
   {
     id: 'inspector',

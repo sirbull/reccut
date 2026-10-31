@@ -89,6 +89,7 @@ class InputTracker {
     this.zoomKey = ZOOM_KEYS[0].value;
     this.appShortcuts = { modifiers: [], keys: [] };
     this.display = null;
+    this.area = null;
     this.session = null;
     this.zoomOn = false;
     this.started = false;
@@ -154,7 +155,12 @@ class InputTracker {
     if (!this.display) this.setDisplay(null);
     const p = screen.getCursorScreenPoint();
     const b = this.display.bounds;
-    return [(p.x - b.x) / b.width, (p.y - b.y) / b.height];
+    const x = (p.x - b.x) / b.width;
+    const y = (p.y - b.y) / b.height;
+    // Tar vi bare opp et område, regnes posisjonen i forhold til området.
+    const a = this.area;
+    if (a && a.w > 0 && a.h > 0) return [(x - a.x) / a.w, (y - a.y) / a.h];
+    return [x, y];
   }
 
   now() {

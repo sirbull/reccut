@@ -117,7 +117,11 @@ export const COMMANDS = [
   { id: 'addTitle', label: 'Add Title', menu: 'Edit', group: 'insertfx', mac: 'Ctrl+T', win: 'Alt+T', run: () => commands.addTitle('center'), help: 'titles' },
   { id: 'addLowerThird', label: 'Add Lower Third', menu: 'Edit', group: 'insertfx', mac: 'Shift+Ctrl+T', win: 'Shift+Alt+T', run: () => commands.addTitle('lt-bar'), help: 'lower-thirds', keywords: 'supring name super chyron', desc: 'Add an animated lower third at the playhead. Type the name and title in the inspector.' },
   { id: 'addCaption', label: 'Add Caption', menu: 'Edit', group: 'insertfx', keys: 'Alt+C', run: () => commands.addCaption(), help: 'captions' },
-  { id: 'group', label: 'Group Clips', menu: 'Edit', group: 'group', keys: 'CmdOrCtrl+G', run: commands.groupSelected, help: 'grouping', desc: 'Group video and audio so they move, cut and delete together.' },
+  { id: 'redact:pixelate', label: 'Add Pixelate (Redact)', menu: 'Edit', group: 'redact', keys: 'Alt+P', run: () => commands.addRedact('pixelate'), help: 'redact', keywords: 'redact censor hide password sensitive mosaic pixel blur face sladd', desc: 'Pixelate an area of the picture, for example a password. Move and resize it in the viewer.' },
+  { id: 'redact:blur', label: 'Add Blur (Redact)', menu: 'Edit', group: 'redact', keys: 'Alt+Shift+P', run: () => commands.addRedact('blur'), help: 'redact', keywords: 'redact censor hide password sensitive blur face sladd' },
+  { id: 'redact:solid', label: 'Add Solid Box (Redact)', menu: 'Edit', group: 'redact', run: () => commands.addRedact('solid'), help: 'redact', keywords: 'redact censor hide password black bar box sladd' },
+  { id: 'redact:frosted', label: 'Add Frosted Glass (Redact)', menu: 'Edit', group: 'redact', run: () => commands.addRedact('frosted'), help: 'redact', keywords: 'redact censor hide frosted glass sladd' },
+  { id: 'group', label: 'Group Clips', menu: 'Edit', group: 'group', keys: 'CmdOrCtrl+G', run: commands.groupSelected, help: 'grouping', desc: 'Group any clips, such as video, audio, titles and captions, so they move, cut and delete together.' },
   { id: 'ungroup', label: 'Ungroup', menu: 'Edit', group: 'group', keys: 'Shift+CmdOrCtrl+G', run: commands.ungroupSelected, help: 'grouping' },
   { id: 'findCommand', label: 'Quick Search', menu: 'Help', group: 'search', keys: 'Ctrl+Space', also: ['CmdOrCtrl+K'], rooms: ALL, anywhere: true, run: () => (paletteOpen.value = !paletteOpen.value), help: 'search', keywords: 'find command palette console fx effects tools search everything' },
 

@@ -14,6 +14,7 @@ import {
   easeInOut,
   easeOutCubic,
   keysAt,
+  redactStrength,
   sourceTime,
   valueAt,
   visualOpacity,
@@ -245,6 +246,7 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1) {
   const H = project.height;
   const alpha = visualOpacity(clip, T) * alphaMul;
   if (alpha <= 0.001) return;
+  if (clip.type === 'redact') return drawRedact(ctx, clip, T, W, H, alpha);
   const media = project.media[clip.mediaId];
 
   ctx.save();
@@ -311,6 +313,133 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1) {
       if (tpl) drawTemplate(ctx, tpl, T - clip.start, clip.dur, W, H, clip.props);
     } else drawTitle(ctx, clip, T, W, H);
   }
+  ctx.restore();
+}
+
+/* Sladding. Leser det som allerede er tegnet under (alle lag), gjør området ugjenkjennelig
+   i et eget lerret og legger det over igjen. Myk kant lages med en uskarp maske. */
+
+// Formen i prosjektets koordinater: midtpunkt, størrelse og rotasjon.
+export function redactShape(clip, T, W, H) {
+  return {
+    cx: W / 2 + (valueAt(clip, 'x', T) || 0),
+    cy: H / 2 + (valueAt(clip, 'y', T) || 0),
+    w: Math.max(4, valueAt(clip, 'w', T) ?? W * 0.25),
+    h: Math.max(4, valueAt(clip, 'h', T) ?? H * 0.1),
+    rot: ((valueAt(clip, 'rotation', T) || 0) * Math.PI) / 180,
+  };
+}
+
+export function redactPath(clip, T, W, H) {
+  const { cx, cy, w, h, rot } = redactShape(clip, T, W, H);
+  const local = new Path2D();
+  const shape = clip.props.shape || 'rect';
+  if (shape === 'ellipse') local.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+  else if (shape === 'rounded' && local.roundRect) local.roundRect(-w / 2, -h / 2, w, h, Math.min(w, h) * 0.22);
+  else local.rect(-w / 2, -h / 2, w, h);
+  const path = new Path2D();
+  path.addPath(local, new DOMMatrix().translate(cx, cy).rotate((rot * 180) / Math.PI));
+  return { path, cx, cy, w, h, rot };
+}
+
+const scratch = [null, null];
+function scratchCanvas(i, w, h) {
+  let c = scratch[i];
+  if (!c) {
+    c = scratch[i] = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
+  }
+  if (c.width < w || c.height < h) {
+    c.width = Math.max(c.width, w);
+    c.height = Math.max(c.height, h);
+  }
+  const g = c.getContext('2d');
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  g.filter = 'none';
+  g.imageSmoothingEnabled = true;
+  g.clearRect(0, 0, w, h);
+  return { c, g };
+}
+
+function drawRedact(ctx, clip, T, W, H, alpha) {
+  const pr = clip.props;
+  const mode = pr.mode || 'pixelate';
+  const m = ctx.getTransform();
+  const k = Math.hypot(m.a, m.b) || 1;
+  const { path, cx, cy, w, h, rot } = redactPath(clip, T, W, H);
+  const devPath = new Path2D();
+  devPath.addPath(path, m);
+  const feather = Math.max(0, valueAt(clip, 'feather', T) || 0) * k;
+  // Området som må behandles, i lerretets piksler.
+  let pts;
+  if (pr.invert) pts = [[0, 0], [W, 0], [0, H], [W, H]];
+  else {
+    const c = Math.cos(rot);
+    const sn = Math.sin(rot);
+    pts = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([u, v]) => [cx + (u * w * c) / 2 - (v * h * sn) / 2, cy + (u * w * sn) / 2 + (v * h * c) / 2]);
+  }
+  const dev = pts.map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]);
+  const cw = ctx.canvas.width;
+  const ch = ctx.canvas.height;
+  const pad = pr.invert ? 0 : feather * 2;
+  const bx = Math.max(0, Math.floor(Math.min(...dev.map((d) => d[0])) - pad));
+  const by = Math.max(0, Math.floor(Math.min(...dev.map((d) => d[1])) - pad));
+  const bx2 = Math.min(cw, Math.ceil(Math.max(...dev.map((d) => d[0])) + pad));
+  const by2 = Math.min(ch, Math.ceil(Math.max(...dev.map((d) => d[1])) + pad));
+  const bw = bx2 - bx;
+  const bh = by2 - by;
+  if (bw < 1 || bh < 1) return;
+  const src = ctx.canvas;
+  const { block, blur } = redactStrength(pr.amount, H);
+  const { c: P, g } = scratchCanvas(0, bw, bh);
+  if (mode === 'solid') {
+    g.fillStyle = pr.color || '#000';
+    g.fillRect(0, 0, bw, bh);
+  } else if (mode === 'blur') {
+    const r = blur * k;
+    const ex = Math.max(0, Math.floor(bx - r * 3));
+    const ey = Math.max(0, Math.floor(by - r * 3));
+    const ew = Math.min(cw, Math.ceil(bx2 + r * 3)) - ex;
+    const eh = Math.min(ch, Math.ceil(by2 + r * 3)) - ey;
+    // Først nedskalert (fjerner fine detaljer helt), så uskarpt.
+    const f = Math.max(1, r / 3);
+    const sw = Math.max(1, Math.round(ew / f));
+    const sh = Math.max(1, Math.round(eh / f));
+    const { c: S, g: sg } = scratchCanvas(1, sw, sh);
+    sg.drawImage(src, ex, ey, ew, eh, 0, 0, sw, sh);
+    g.filter = `blur(${(r * 0.8).toFixed(1)}px)`;
+    g.drawImage(S, 0, 0, sw, sh, ex - bx, ey - by, ew, eh);
+    g.filter = 'none';
+  } else {
+    // Pikselering (og frostet glass: mindre blokker som gjøres myke).
+    const frosted = mode === 'frosted';
+    const blk = Math.max(2, block * k * (frosted ? 0.6 : 1));
+    const sw = Math.max(1, Math.ceil(bw / blk));
+    const sh = Math.max(1, Math.ceil(bh / blk));
+    const { c: S, g: sg } = scratchCanvas(1, sw, sh);
+    sg.imageSmoothingQuality = 'high';
+    sg.drawImage(src, bx, by, bw, bh, 0, 0, sw, sh);
+    g.imageSmoothingEnabled = frosted;
+    if (frosted) g.filter = `blur(${(blk * 0.45).toFixed(1)}px)`;
+    g.drawImage(S, 0, 0, sw, sh, 0, 0, bw, bh);
+    g.filter = 'none';
+  }
+  // Masken: formen (eller alt utenfor den), med myk kant om ønsket.
+  g.setTransform(1, 0, 0, 1, -bx, -by);
+  g.globalCompositeOperation = pr.invert ? 'destination-out' : 'destination-in';
+  if (feather > 0.5) g.filter = `blur(${(feather / 2).toFixed(1)}px)`;
+  g.fillStyle = '#000';
+  g.fill(devPath);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.filter = 'none';
+  g.globalCompositeOperation = 'source-over';
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = alpha;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.filter = 'none';
+  ctx.drawImage(P, 0, 0, bw, bh, bx, by, bw, bh);
   ctx.restore();
 }
 

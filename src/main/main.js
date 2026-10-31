@@ -21,6 +21,7 @@ const jobs = require('./jobs');
 const media = require('./media');
 const projects = require('./projects');
 const psd = require('./psd');
+const area = require('./area');
 const { InputTracker, ZOOM_KEYS } = require('./input');
 
 const isMac = process.platform === 'darwin';
@@ -167,6 +168,7 @@ function createWindow() {
   });
   win.on('closed', () => {
     win = null;
+    area.closeFrame();
     // Skjulte arbeidsvinduer skal ikke holde appen i live.
     jobs.destroyWorkers();
     app.quit();
@@ -243,11 +245,18 @@ function registerShortcuts() {
 input.listener = (event) => send('input', event);
 
 ipcMain.handle('screens:list', () => listScreens());
-ipcMain.handle('screens:select', (_e, { id, displayId, systemAudio }) => {
+ipcMain.handle('screens:select', (_e, { id, displayId, systemAudio, area: rect }) => {
   selectedScreenId = id;
   wantSystemAudio = Boolean(systemAudio);
   input.setDisplay(displayId);
+  input.area = rect || null;
 });
+// Opptaksområde: pekeren, klikk og zoom regnes om til området.
+ipcMain.handle('screens:area', (_e, rect) => {
+  input.area = rect || null;
+});
+ipcMain.handle('area:select', (_e, { displayId, current }) => area.selectArea({ displayId, current, mainWindow: win }));
+ipcMain.handle('area:frame', (_e, state) => area.setFrame(state));
 ipcMain.handle('shortcuts:set', (_e, modifier) => {
   shortcutModifier = modifier;
   input.setAppShortcuts(modifier);
@@ -707,6 +716,7 @@ app.whenReady().then(() => {
 });
 
 app.on('will-quit', () => {
+  area.closeFrame();
   globalShortcut.unregisterAll();
   input.stop();
   jobs.destroyWorkers();

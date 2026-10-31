@@ -140,8 +140,13 @@ export function groupLead(project, ids) {
   return project.primary.find((id) => project.clips[id].group === g) || null;
 }
 
+// Alle slags klipp kan grupperes: video, lyd, bilder, titler, sladding og undertekster.
+// Er noen av klippene allerede i en gruppe, slås gruppene sammen til én.
 export function groupClips(project, ids) {
-  const list = ids.map((id) => project.clips[id]).filter((c) => c && c.lane !== CAPTION_LANE);
+  const old = new Set(ids.map((id) => project.clips[id]?.group).filter(Boolean));
+  const all = new Set(ids);
+  for (const c of Object.values(project.clips)) if (c.group && old.has(c.group)) all.add(c.id);
+  const list = [...all].map((id) => project.clips[id]).filter(Boolean);
   if (list.length < 2) return null;
   const g = uid();
   list.forEach((c) => (c.group = g));
@@ -366,7 +371,8 @@ export function moveClip(project, id, { start, lane, primaryIndex }) {
   if (!c) return;
   const wasPrimary = c.lane === 0;
   if (lane === 0) {
-    if (!isVisual(c)) return;
+    // Sladding virker på det som ligger under, så den hører ikke hjemme i hovedsporet.
+    if (!isVisual(c) || c.type === 'redact') return;
     withSync(project, () => {
       project.primary = project.primary.filter((x) => x !== id);
       const idx = Math.max(0, Math.min(primaryIndex ?? project.primary.length, project.primary.length));

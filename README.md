@@ -7,6 +7,8 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 ## Opptak
 
 * Skjerm i native oppløsning, webkamera eller eksternt kamera, intern eller ekstern mikrofon
+* **Ta opp bare et område av skjermen**: velg Area, dra opp området rett på skjermen (fritt eller låst til 16:9, 9:16, 1:1 eller 4:3), eller juster det i forhåndsvisningen. Bare området lagres, og pekerzoom, klikk og tastetrykk følger området. En tynn ramme på skjermen viser området og blir rød under opptak; den ligger rett utenfor området og kommer aldri med i videoen.
+* **Nedtelling** på 3, 5 eller 10 sekunder før opptaket starter, i forhåndsvisningen og midt i området på skjermen
 * **Systemlyd** med én bryter
 * Kamerabildet som sirkel, kvadrat eller 16:9, i tre størrelser
 * Seks oppsett som byttes med hurtigtast under opptak: 1 kamera, 2 skjerm, 3 til 6 bilde i bilde i hvert hjørne
@@ -44,7 +46,7 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 * **Fargekoder**: marker ett eller flere klipp, høyreklikk og velg farge under Color (rød, oransje, gul, grønn, blå, lilla, rosa, brun eller grå), eller bruk Control Option 1 til 9 (Ctrl Shift Alt 1 til 9 på Windows). Control Option 0 fjerner fargen. Gjelder både video og lyd, også lyddelen av et utvidet klipp.
 * **Sporhøyde som i Premiere Pro**: dra i underkanten av sporhodet helt til venstre for å gjøre sporet høyere eller lavere. Shift endrer alle video- eller lydspor, dobbeltklikk tilbakestiller, og Option (Alt) med rulling over sporhodet gjør det samme. Høyden lagres i prosjektet.
 * **Klipp som analyseres** får turkise striper i bevegelse og en fremdriftslinje nederst, så du ser at maskinen jobber (stabilisering, optimalisert media og baklengs kopi). Turkis brukes aldri som fargekode.
-* **Grupper klipp** (Cmd G): marker video og lyd og grupper dem, så følger lyden videoen når den flyttes, også om lyden starter før videoen. Et klikk velger hele gruppen, Option klikk velger ett klipp. Shift Cmd G løser opp gruppen. Grupperte klipp har et lenkemerke.
+* **Grupper klipp** (Cmd G): alle slags klipp kan grupperes, også titler, supringer, undertekster og sladding sammen med video og lyd. Flyttes videoen, følger resten av gruppen med, også klipp som starter før videoen. Grupperer du et klipp som allerede er i en gruppe, slås gruppene sammen. Et klikk velger hele gruppen, Option klikk velger ett klipp. Shift Cmd G løser opp gruppen. Grupperte klipp har et lenkemerke.
 * **Synk i biblioteket**: marker videoklipp og lydfiler (gjerne alt med Cmd A) og velg Synchronize Audio (Option Cmd G). Lyden flettes inn i videoene som et ekstra lydspor, og kameralyden slås av, men blir liggende. Når klippet dras til tidslinjen, har det begge lydsporene, og du velger selv hvilket du bruker.
 * **Lydkomponenter**: et klipp kan ha flere lydspor (kameralyd, ekstern opptaker, mikrofon og systemlyd). Slå dem av og på i Audio-fanen, i høyreklikkmenyen, eller klikk på et spor i utvidet lyd og trykk V. Et spor som er av, blir liggende grått.
 * **V** slår et klipp av og på. Klippet blir liggende på tidslinjen, men grått.
@@ -56,6 +58,7 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 * **Animasjonsmaler**: Fade In, Fade Out, Slow Zoom In og Out, Slide In fra tre kanter, Pop In og Spin In
 * Dra klipp, titler og undertekster direkte i visningen for å plassere dem
 * **Effekter**: Blur, Vignette, Sepia, Black & White, Invert, Hue Shift, Rounded Corners, Drop Shadow og Border
+* **Sladding** av passord, ansikter og skilt: Pixelate (Option P), Blur (Option Shift P), Solid og Frosted. Sladden er et eget klipp over videoen og virker på alt under. Flytt og endre størrelse rett i visningen, eller tegn et nytt område. Form (rektangel, avrundet eller ellipse), styrke, myk kant, rotasjon og Redact outside (alt utenom området skjules). Posisjon og størrelse kan ha nøkkelbilder, så sladden kan følge noe som beveger seg. Likt i visningen og eksporten.
 * **Stabilisering** (Shift Option S eller Stabilize i Video-fanen), som i Final Cut Pro: kamerabevegelsen analyseres i bakgrunnen (hundrevis av punkter følges fra bilde til bilde, og bevegelse i motivet blir sortert bort), og ristingen glattes ut. Velg Automatic, Smooth eller Tripod, juster X, Y og rotasjon hver for seg, og la zoomen skjule kantene automatisk eller sett den selv. Samme korreksjon brukes i visningen og eksporten. Analysen kan også kjøres ved import.
 * **Fargekorrigering**: ferdige utseender, eksponering, kontrast, høylys, skygger, metning, temperatur og tint, og fargehjul for skygger, mellomtoner og høylys. Regnes ut på skjermkortet i 16-bit flyttall, så 10-bit klipp beholder jevne overganger. Samme utregning brukes i visningen og eksporten.
 * **Inspektøren som i Final Cut Pro**: marker et klipp, så vises egenskapene til høyre, med ikonfaner for Text, Video (posisjon, skala, rotasjon, beskjæring, animasjon og toning), Color, Effects, Audio, Speed og Info. Info viser klippet, filen (format, størrelse, bitrate, opptakstid, kamera) og bilde og lyd i den. Audio viser nivåer med topp og gjennomsnitt, lydspor, volum, toning og lydformatet.

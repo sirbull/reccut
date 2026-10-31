@@ -1,7 +1,7 @@
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { Captions, ChevronLeft, ChevronRight, Diamond, Film, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
+import { Captions, ChevronLeft, ChevronRight, Diamond, EyeOff, Film, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
 import {
   audioComponents,
   CLIP_COLORS,
@@ -13,6 +13,9 @@ import {
   DEFAULT_CAPTION_STYLE,
   EASINGS,
   EFFECTS,
+  REDACT_MODES,
+  REDACT_SHAPES,
+  redactLabel,
   TITLE_STYLES,
   TRANSITIONS,
   applyAnimationPreset,
@@ -70,7 +73,8 @@ function tabsFor(clip, media) {
   if (clip.type === 'title') tabs.push({ id: 'text', label: 'Text', icon: Type });
   if (clip.type === 'caption') tabs.push({ id: 'caption', label: 'Caption', icon: Captions });
   if (clip.type === 'recording') tabs.push({ id: 'recording', label: 'Recording', icon: MonitorPlay });
-  if (isVisual(clip) && clip.type !== 'gap') tabs.push({ id: 'video', label: 'Video', icon: Film });
+  if (clip.type === 'redact') tabs.push({ id: 'redact', label: 'Redact', icon: EyeOff });
+  if (isVisual(clip) && clip.type !== 'gap' && clip.type !== 'redact') tabs.push({ id: 'video', label: 'Video', icon: Film });
   if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording') tabs.push({ id: 'color', label: 'Color', icon: Palette });
   if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title') tabs.push({ id: 'effects', label: 'Effects', icon: Wand2 });
   if (clipHasAudio(clip, media)) tabs.push({ id: 'audio', label: 'Audio', icon: Volume2 });
@@ -84,7 +88,7 @@ function ClipInspector({ clip }) {
   const media = p.media[clip.mediaId];
   const tabs = tabsFor(clip, media);
   const tab = tabs.find((t) => t.id === inspectorTab.value) ? inspectorTab.value : tabs[0].id;
-  const title = clip.type === 'title' ? titleText(clip) : clip.type === 'caption' ? 'Caption' : clip.type === 'gap' ? 'Gap' : clip.name || media?.name || 'Clip';
+  const title = clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? redactLabel(clip) : clip.type === 'caption' ? 'Caption' : clip.type === 'gap' ? 'Gap' : clip.name || media?.name || 'Clip';
 
   return (
     <div class="inspector panel">
@@ -106,6 +110,7 @@ function ClipInspector({ clip }) {
         {tab === 'caption' && <CaptionTab clip={clip} />}
         {tab === 'recording' && <RecordingTab clip={clip} media={media} />}
         {tab === 'video' && <VideoTab clip={clip} />}
+        {tab === 'redact' && <RedactTab clip={clip} />}
         {tab === 'effects' && <EffectsTab clip={clip} />}
         {tab === 'audio' && <AudioTab clip={clip} />}
         {tab === 'color' && <ColorTab clip={clip} />}
@@ -273,6 +278,48 @@ function VideoTab({ clip }) {
         </Section>
       )}
       <AnimationPresets clip={clip} />
+      <Section title="Fade">
+        <PlainNumber clip={clip} prop="vFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
+        <PlainNumber clip={clip} prop="vFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
+      </Section>
+    </>
+  );
+}
+
+// Sladding: stil, form, styrke og plassering. Plassering og størrelse kan animeres med nøkkelbilder,
+// så sladden kan følge noe som beveger seg.
+function RedactTab({ clip }) {
+  const p = project.value;
+  const pr = clip.props;
+  const set = (patch) => commit((q) => Object.assign(q.clips[clip.id].props, patch));
+  const mode = REDACT_MODES.find((m) => m.id === pr.mode) || REDACT_MODES[0];
+  return (
+    <>
+      <Section title="Style">
+        <Segmented value={pr.mode} onChange={(v) => set({ mode: v })} options={REDACT_MODES.map((m) => ({ value: m.id, label: m.label, title: m.desc }))} />
+        <p class="hint">{mode.desc}</p>
+        {pr.mode === 'solid' ? (
+          <Row label="Color">
+            <ColorField value={pr.color || '#000000'} onLive={(v) => updateTransient((q) => (q.clips[clip.id].props.color = v))} />
+          </Row>
+        ) : (
+          <Param clip={clip} prop="amount" label="Amount" min={0} max={100} scale={100} unit="%" keyframes={false} />
+        )}
+        <Row label="Redact outside">
+          <Toggle checked={Boolean(pr.invert)} onChange={(v) => set({ invert: v })} />
+        </Row>
+        <Param clip={clip} prop="opacity" label="Opacity" min={0} max={100} scale={100} unit="%" />
+      </Section>
+      <Section title="Shape">
+        <Segmented value={pr.shape || 'rect'} onChange={(v) => set({ shape: v })} options={REDACT_SHAPES.map((s) => ({ value: s.id, label: s.label }))} />
+        <Param clip={clip} prop="x" label="Position X" min={-p.width} max={p.width} unit="px" slider={false} />
+        <Param clip={clip} prop="y" label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} />
+        <Param clip={clip} prop="w" label="Width" min={8} max={p.width * 1.5} unit="px" />
+        <Param clip={clip} prop="h" label="Height" min={8} max={p.height * 1.5} unit="px" />
+        <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
+        <Param clip={clip} prop="feather" label="Soft edge" min={0} max={200} unit="px" />
+        <p class="hint">Drag the box in the viewer to move it, and drag its corners and edges to resize it. Add keyframes to make it follow something that moves.</p>
+      </Section>
       <Section title="Fade">
         <PlainNumber clip={clip} prop="vFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
         <PlainNumber clip={clip} prop="vFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />

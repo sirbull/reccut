@@ -21,7 +21,7 @@ import {
   Wand2,
 } from 'lucide-preact';
 import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { CAPTION_LANE, EFFECTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, mediaClipType, newProject, workPath } from '../../shared/model.js';
+import { CAPTION_LANE, EFFECTS, REDACT_MODES, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, mediaClipType, newProject, workPath } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { parseSrt, toSrt, toVtt } from '../../shared/srt.js';
 import { addMediaRecords, projectFolders, audioSkimming, commit, getWave, importPaths, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
@@ -576,13 +576,45 @@ function sceneCanvas() {
   return c;
 }
 
+// Et påloggingsvindu med passord, til forhåndsvisning av sladding.
+function loginCanvas() {
+  const c = document.createElement('canvas');
+  c.width = 320;
+  c.height = 180;
+  const g = c.getContext('2d');
+  g.fillStyle = '#e9edf3';
+  g.fillRect(0, 0, 320, 180);
+  g.fillStyle = '#ffffff';
+  g.fillRect(60, 28, 200, 124);
+  g.strokeStyle = '#c7cfdb';
+  g.strokeRect(60.5, 28.5, 199, 123);
+  g.fillStyle = '#1b2433';
+  g.font = '600 13px system-ui, sans-serif';
+  g.fillText('Sign in', 76, 50);
+  g.font = '10px system-ui, sans-serif';
+  g.fillStyle = '#5b6678';
+  g.fillText('Email', 76, 68);
+  g.fillText('Password', 76, 102);
+  for (const y of [72, 106]) {
+    g.strokeStyle = '#aab4c3';
+    g.strokeRect(76.5, y + 0.5, 168, 18);
+  }
+  g.fillStyle = '#1b2433';
+  g.font = '11px ui-monospace, monospace';
+  g.fillText('kari@example.com', 81, 85);
+  g.fillText('Hemmelig#2026', 81, 119);
+  g.fillStyle = '#2f6fd6';
+  g.fillRect(76, 130, 60, 15);
+  return c;
+}
+
 let samples = null;
 function getSamples() {
-  if (!samples) samples = { a: sampleCanvas(['#2f6fd6', '#18315f'], 'A'), b: sampleCanvas(['#e0892e', '#7a3f10'], 'B'), scene: sceneCanvas() };
+  if (!samples) samples = { a: sampleCanvas(['#2f6fd6', '#18315f'], 'A'), b: sampleCanvas(['#e0892e', '#7a3f10'], 'B'), scene: sceneCanvas(), login: loginCanvas() };
   return samples;
 }
 
-const PREVIEW_PROJECT = { width: 320, height: 180, media: { a: { id: 'a', kind: 'image', streams: {} }, b: { id: 'b', kind: 'image', streams: {} }, scene: { id: 'scene', kind: 'image', streams: {} } }, captionStyle: {} };
+const PREVIEW_PROJECT = { width: 320, height: 180, media: { a: { id: 'a', kind: 'image', streams: {} }, b: { id: 'b', kind: 'image', streams: {} }, scene: { id: 'scene', kind: 'image', streams: {} }, login: { id: 'login', kind: 'image', streams: {} } }, captionStyle: {} };
 
 function imageClip(id, start, dur, props = {}) {
   return { id, type: 'image', mediaId: id, lane: 0, start, in: 0, dur, enabled: true, kf: {}, props: { ...defaultProps('image'), ...props } };
@@ -596,7 +628,7 @@ function MiniPreview({ frameAt, duration = 1.6, still = 0.5, label }) {
     const g = cv.getContext('2d');
     const s = getSamples();
     const getSource = (clip) => {
-      const img = clip.mediaId === 'b' ? s.b : clip.mediaId === 'scene' ? s.scene : s.a;
+      const img = clip.mediaId === 'b' ? s.b : clip.mediaId === 'scene' ? s.scene : clip.mediaId === 'login' ? s.login : s.a;
       return { img, w: img.width, h: img.height };
     };
     const draw = (t) => {
@@ -729,9 +761,33 @@ function effectFrameAt(fx) {
   return fxFrames.get(fx.id);
 }
 
+// Sladding: et passordfelt som pikseleres, gjøres uskarpt eller dekkes til.
+const redactFrames = new Map();
+function redactFrameAt(mode) {
+  if (!redactFrames.has(mode)) {
+    redactFrames.set(mode, (t) => {
+      const bg = imageClip('login', 0, 2);
+      const r = { id: 'r', type: 'redact', lane: 1, start: 0, in: 0, dur: 2, enabled: true, kf: {}, props: { ...defaultProps('redact'), mode, x: 0, y: 115 - 90, w: 176, h: 26, amount: 0.25 + 0.25 * Math.min(1, t) } };
+      return { project: { ...PREVIEW_PROJECT }, frame: { layers: [{ clip: bg, T: t }, { clip: r, T: t }], captions: [] } };
+    });
+  }
+  return redactFrames.get(mode);
+}
+
 function EffectsTab() {
   return (
     <>
+      <div class="sub-head">Redact</div>
+      <div class="card-grid">
+        {REDACT_MODES.map((m) => (
+          <button key={m.id} class="gen-card" data-redact={m.id} draggable onDragStart={(e) => dragData(e, { kind: 'redact', id: m.id })} onClick={() => commands.addRedact(m.id)} title={`${m.desc} Click to add above everything at the playhead, or drag to the timeline.`}>
+            <MiniPreview frameAt={redactFrameAt(m.id)} duration={1} still={1} label={m.label} />
+            <span>{m.label}</span>
+          </button>
+        ))}
+      </div>
+      <p class="hint small">Hide passwords, faces and other private details. Move and resize the box in the viewer.</p>
+      <div class="sub-head">Effects</div>
       <div class="card-grid">
         {EFFECTS.map((fx) => (
           <button key={fx.id} class="gen-card" draggable onDragStart={(e) => dragData(e, { kind: 'effect', id: fx.id })} onClick={() => commands.addEffect(fx.id)} title="Click to add to the selected clips, or drag onto a clip">

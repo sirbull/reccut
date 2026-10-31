@@ -41,6 +41,7 @@ import {
   moveKeyframes,
   setKeyframeEase,
   isVisual,
+  redactLabel,
   transitionWindow,
   audioComponents,
   primaryComponent,
@@ -936,11 +937,11 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
   const hasAudio = clipHasAudio(clip, media);
   const expanded = clip.expanded && hasAudio && clip.type !== 'audio';
   const speed = speedOf(clip);
-  const visual = isVisual(clip) && clip.type !== 'title';
+  const visual = isVisual(clip) && clip.type !== 'title' && clip.type !== 'redact';
   const busy = media ? busyMedia.value.get(media.id) : null;
   const colorTag = CLIP_COLORS.find((c) => c.id === clip.colorLabel);
   const cls = ['tl-clip', `t-${clip.type}`, busy && 'busy', colorTag && 'labeled', selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped', media?.offline && 'offline', audioComponents(clip, media).length > 0 && audioComponents(clip, media).every((c) => c.off) && 'audio-off'].filter(Boolean).join(' ');
-  const label = clip.type === 'title' ? titleText(clip) : clip.type === 'caption' ? clip.props.text || 'Caption' : clip.name || media?.name || clip.type;
+  const label = clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? `${redactLabel(clip)} (redact)` : clip.type === 'caption' ? clip.props.text || 'Caption' : clip.name || media?.name || clip.type;
   const narrow = w < 24;
   const thumbStream = media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
   const audioStream = clipAudioStream(clip, media);

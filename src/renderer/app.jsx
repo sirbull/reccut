@@ -73,6 +73,7 @@ async function finishRecording() {
 
 export function toggleRecording() {
   if (engine.finishing.value) return;
+  if (engine.countdown.value) return engine.abortCountdown();
   if (engine.recording.value) finishRecording().catch((err) => toast(`Could not save the recording: ${err.message}`, { kind: 'error' }));
   else engine.startRecording().catch((err) => toast(`Could not start recording: ${err.message}`, { kind: 'error' }));
 }
@@ -185,7 +186,7 @@ function TitleBar() {
           {rec && <span class="rec-timer">{formatDuration(engine.elapsed.value)}</span>}
           <button class={`record-btn${rec ? ' active' : ''}`} disabled={engine.finishing.value} onClick={toggleRecording}>
             <span class="rec-icon" />
-            {engine.finishing.value ? 'Saving' : rec ? 'Stop' : 'Start Recording'}
+            {engine.finishing.value ? 'Saving' : rec ? 'Stop' : engine.countdown.value ? `Starting in ${engine.countdown.value}` : 'Start Recording'}
             <kbd>{mod.short}0</kbd>
           </button>
           {!rec && (

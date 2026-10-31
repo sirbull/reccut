@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import {
   AppWindow,
   Camera,
+  Crop,
+  Maximize,
+  Timer,
   Circle,
   FolderOpen,
   Keyboard,
@@ -12,7 +15,7 @@ import {
   Square,
   Volume2,
 } from 'lucide-preact';
-import { Row, Section, Segmented, Select, Toggle } from '../ui.jsx';
+import { Button, Row, Section, Segmented, Select, Toggle } from '../ui.jsx';
 import { MODIFIERS, modifierInfo, saveSettings, settings } from './settings.js';
 import * as engine from './engine.js';
 import { project, projectFolders } from '../editor/store.js';
@@ -70,7 +73,7 @@ export function Recorder({ active }) {
     if (r.permission !== 'granted' && isMac) api.openPermissionSettings('accessibility');
   };
 
-  const recording = engine.recording.value;
+  const recording = engine.recording.value || engine.countdown.value > 0;
   const zoomKeys = input?.zoomKeys || [];
   const zoomLabel = zoomKeys.find((k) => k.value === s.zoomKey)?.label || 'tasten';
   const inputReady = input?.started;
@@ -80,7 +83,9 @@ export function Recorder({ active }) {
       <div class="rec-stage">
         <div class={`rec-preview${recording ? ' live' : ''}`}>
           <canvas ref={canvasRef} />
+          {engine.editingArea.value && engine.activeArea() && <AreaEditor canvasRef={canvasRef} />}
           {recording && <div class="rec-badge">REC</div>}
+          {engine.countdown.value > 0 && <div class="rec-countdown">{engine.countdown.value}</div>}
         </div>
         <div class="layout-row">
           {LAYOUTS.map((l) => (
@@ -107,6 +112,30 @@ export function Recorder({ active }) {
               onChange={(v) => set({ screenId: v }, engine.useScreen)}
             />
           </Row>
+          {s.screenId && (
+            <Row label={<><Crop size={14} /> Record</>} stacked>
+              <Segmented
+                value={s.areaMode === 'area' && s.area ? 'area' : 'full'}
+                disabled={recording}
+                onChange={(v) => (v === 'area' && !s.area ? engine.pickAreaOnScreen() : engine.setAreaMode(v))}
+                options={[
+                  { value: 'full', label: 'Full Screen', icon: Maximize, showLabel: true },
+                  { value: 'area', label: 'Area', icon: Crop, showLabel: true },
+                ]}
+              />
+              {s.areaMode === 'area' && s.area && (
+                <div class="area-tools">
+                  <Button variant="secondary" class="small" disabled={recording} onClick={engine.pickAreaOnScreen}>
+                    Select on Screen
+                  </Button>
+                  <Button variant={engine.editingArea.value ? 'primary' : 'ghost'} class="small" disabled={recording} onClick={() => engine.setEditingArea(!engine.editingArea.value)}>
+                    {engine.editingArea.value ? 'Done' : 'Adjust in Preview'}
+                  </Button>
+                </div>
+              )}
+              {s.areaMode === 'area' && s.area && <p class="hint">Only the area is recorded{(() => { engine.canvasSize.value; const o = engine.areaOutputSize(); return o ? `, ${o.w} × ${o.h} pixels` : ''; })()}. A dashed frame on the screen shows it, and it turns red while you record.</p>}
+            </Row>
+          )}
           <Row label={<><Camera size={14} /> Camera</>} stacked>
             <Select
               value={s.cameraId}
@@ -206,6 +235,18 @@ export function Recorder({ active }) {
         </Section>
 
         <Section title="Recording">
+          <Row label={<><Timer size={14} /> Countdown</>}>
+            <Segmented
+              value={s.countdown}
+              onChange={(v) => set({ countdown: v })}
+              options={[
+                { value: 0, label: 'Off' },
+                { value: 3, label: '3 s' },
+                { value: 5, label: '5 s' },
+                { value: 10, label: '10 s' },
+              ]}
+            />
+          </Row>
           <Row label="Frame rate">
             <Segmented value={s.fps} disabled={recording} onChange={(v) => set({ fps: v }, engine.useScreen)} options={[{ value: 30, label: '30' }, { value: 60, label: '60' }]} />
           </Row>
@@ -242,6 +283,81 @@ export function Recorder({ active }) {
           </p>
         </Section>
       </aside>
+    </div>
+  );
+}
+
+// Juster området i forhåndsvisningen: hele skjermen vises, og området kan flyttes og endres.
+const AREA_HANDLES = [
+  [-1, -1], [0, -1], [1, -1],
+  [-1, 0], [1, 0],
+  [-1, 1], [0, 1], [1, 1],
+];
+
+function AreaEditor({ canvasRef }) {
+  const [box, setBox] = useState(null);
+  const a = engine.activeArea();
+  useEffect(() => {
+    const cv = canvasRef.current;
+    const measure = () => setBox({ left: cv.offsetLeft, top: cv.offsetTop, width: cv.offsetWidth, height: cv.offsetHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(cv);
+    return () => ro.disconnect();
+  }, []);
+  if (!box || !a) return null;
+  const start = (e, hx, hy) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const a0 = { ...a };
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const move = (ev) => {
+      const dx = (ev.clientX - x0) / box.width;
+      const dy = (ev.clientY - y0) / box.height;
+      let { x, y, w, h } = a0;
+      if (!hx && !hy) {
+        x = Math.min(Math.max(0, x + dx), 1 - w);
+        y = Math.min(Math.max(0, y + dy), 1 - h);
+      } else {
+        let x1 = x;
+        let y1 = y;
+        let x2 = x + w;
+        let y2 = y + h;
+        if (hx < 0) x1 = Math.min(Math.max(0, x1 + dx), x2 - 0.03);
+        if (hx > 0) x2 = Math.max(Math.min(1, x2 + dx), x1 + 0.03);
+        if (hy < 0) y1 = Math.min(Math.max(0, y1 + dy), y2 - 0.03);
+        if (hy > 0) y2 = Math.max(Math.min(1, y2 + dy), y1 + 0.03);
+        [x, y, w, h] = [x1, y1, x2 - x1, y2 - y1];
+      }
+      engine.setArea({ x, y, w, h });
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  };
+  return (
+    <div
+      class="area-box"
+      title="Drag to move the area, drag the corners and edges to resize it"
+      style={{ left: box.left + a.x * box.width, top: box.top + a.y * box.height, width: a.w * box.width, height: a.h * box.height }}
+      onPointerDown={(e) => start(e, 0, 0)}
+    >
+      <span class="area-size">
+        {(() => {
+          const o = engine.areaOutputSize();
+          return o ? `${o.w} × ${o.h}` : '';
+        })()}
+      </span>
+      {AREA_HANDLES.map(([hx, hy]) => (
+        <span key={`${hx}${hy}`} class="area-handle" style={{ left: `${(hx + 1) * 50}%`, top: `${(hy + 1) * 50}%`, cursor: hx && hy ? (hx === hy ? 'nwse-resize' : 'nesw-resize') : hx ? 'ew-resize' : 'ns-resize' }} onPointerDown={(e) => start(e, hx, hy)} />
+      ))}
     </div>
   );
 }

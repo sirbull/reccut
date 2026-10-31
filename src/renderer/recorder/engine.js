@@ -16,6 +16,10 @@ export const level = signal(0);
 export const canvasSize = signal({ w: 1920, h: 1080 });
 export const notice = signal(null);
 export const finishing = signal(false);
+// Opptaksområde: redigeres i forhåndsvisningen (hele skjermen vises da), og nedtelling før start.
+export const editingArea = signal(false);
+export const countdown = signal(0);
+let roomActive = false;
 
 let screenStream = null;
 let cameraStream = null;
@@ -44,6 +48,73 @@ function makeVideo() {
 
 const stop = (s) => s?.getTracks().forEach((t) => t.stop());
 const ready = (v) => v.readyState >= 2 && v.videoWidth > 0;
+
+// Området som tas opp, i andeler av skjermen, eller null for hele skjermen.
+export function activeArea() {
+  const s = settings.value;
+  if (s.areaMode !== 'area' || !s.area || !s.screenId) return null;
+  const a = s.area;
+  const x = clamp(a.x, 0, 0.98);
+  const y = clamp(a.y, 0, 0.98);
+  return { x, y, w: clamp(a.w, 0.02, 1 - x), h: clamp(a.h, 0.02, 1 - y) };
+}
+
+// Området i skjermens piksler, med partall (videokoding krever det).
+function areaPixels(a, vw, vh) {
+  const even = (v) => Math.floor(v / 2) * 2;
+  const x = Math.max(0, Math.min(even(a.x * vw), vw - 2));
+  const y = Math.max(0, Math.min(even(a.y * vh), vh - 2));
+  const w = Math.max(2, Math.min(even(a.w * vw + 1), even(vw - x)));
+  const h = Math.max(2, Math.min(even(a.h * vh + 1), even(vh - y)));
+  return { x, y, w, h };
+}
+
+// Størrelsen opptaket får med området, i piksler.
+export function areaOutputSize() {
+  const a = activeArea();
+  if (!a || !screenVideo.videoWidth) return null;
+  const r = areaPixels(a, screenVideo.videoWidth, screenVideo.videoHeight);
+  return { w: r.w, h: r.h };
+}
+
+export function setArea(area, mode = 'area') {
+  saveSettings({ area, areaMode: area ? mode : 'full' });
+  api.setCaptureArea(activeArea());
+  updateSize();
+  syncFrame();
+}
+
+export function setAreaMode(mode) {
+  saveSettings({ areaMode: mode });
+  api.setCaptureArea(activeArea());
+  if (mode === 'full') editingArea.value = false;
+  updateSize();
+  syncFrame();
+}
+
+export function setEditingArea(on) {
+  editingArea.value = on;
+  updateSize();
+}
+
+// Velg området rett på skjermen (Reccut skjules imens).
+export async function pickAreaOnScreen() {
+  const info = screens.value.find((x) => x.id === settings.value.screenId);
+  if (!info) return;
+  api.areaFrame({ visible: false });
+  const r = await api.selectArea({ displayId: info.displayId, current: settings.value.area });
+  if (r === 'full') setAreaMode('full');
+  else if (r) setArea(r);
+  syncFrame();
+}
+
+// Rammen på skjermen rundt området: synlig i Record-rommet og under opptak.
+export function syncFrame() {
+  const a = activeArea();
+  const info = screens.value.find((x) => x.id === settings.value.screenId);
+  const visible = Boolean(a && info && (roomActive || recording.value || countdown.value));
+  api.areaFrame({ visible, displayId: info?.displayId, area: a, recording: recording.value, countdown: countdown.value });
+}
 
 /* Kilder */
 
@@ -80,7 +151,7 @@ export async function useScreen() {
   if (!s.screenId) return updateSize();
   const info = screens.value.find((x) => x.id === s.screenId);
   try {
-    await api.selectScreen({ id: s.screenId, displayId: info?.displayId, systemAudio: s.systemAudio });
+    await api.selectScreen({ id: s.screenId, displayId: info?.displayId, systemAudio: s.systemAudio, area: activeArea() });
     screenStream = await navigator.mediaDevices.getDisplayMedia({
       audio: s.systemAudio,
       video: {
@@ -150,7 +221,11 @@ function updateSize() {
   const apply = () => {
     let w = 1920;
     let h = 1080;
-    if (screenStream && screenVideo.videoWidth) [w, h] = [screenVideo.videoWidth, screenVideo.videoHeight];
+    const a = activeArea();
+    if (screenStream && screenVideo.videoWidth && a && !editingArea.value) {
+      const r = areaPixels(a, screenVideo.videoWidth, screenVideo.videoHeight);
+      [w, h] = [r.w, r.h];
+    } else if (screenStream && screenVideo.videoWidth) [w, h] = [screenVideo.videoWidth, screenVideo.videoHeight];
     else if (cameraStream && cameraVideo.videoWidth) [w, h] = [cameraVideo.videoWidth, cameraVideo.videoHeight];
     w -= w % 2;
     h -= h % 2;
@@ -224,13 +299,21 @@ function draw() {
   cam = t >= 1 ? camTo : lerpRect(camFrom, camTo, easeOutCubic(t));
 
   let rect = { x: 0, y: 0, w: W, h: H };
-  if (hasScreen) {
+  const area = activeArea();
+  const editing = editingArea.value && area;
+  if (hasScreen && area && !editing) {
+    // Bare området: samme utsnitt som opptaket får.
+    const r = areaPixels(area, screenVideo.videoWidth, screenVideo.videoHeight);
+    ctx.drawImage(screenVideo, r.x, r.y, r.w, r.h, 0, 0, W, H);
+  }
+  if (hasScreen && (!area || editing)) {
     const sc = Math.min(W / screenVideo.videoWidth, H / screenVideo.videoHeight);
     rect = { w: screenVideo.videoWidth * sc, h: screenVideo.videoHeight * sc };
     rect.x = (W - rect.w) / 2;
     rect.y = (H - rect.h) / 2;
     ctx.drawImage(screenVideo, rect.x, rect.y, rect.w, rect.h);
-
+  }
+  if (hasScreen && !editing) {
     if (s.showClicks) {
       const nowS = now / 1000;
       liveClicks = liveClicks.filter((c) => nowS - c.t < 0.5);
@@ -243,7 +326,7 @@ function draw() {
       if (p > 0.01) drawCursor(ctx, rect.x + liveCursor[0] * rect.w, rect.y + liveCursor[1] * rect.h, p, rect.h);
     }
   }
-  if (hasCamera && cam.a > 0.01) {
+  if (hasCamera && cam.a > 0.01 && !editing) {
     ctx.save();
     ctx.globalAlpha = cam.a;
     drawCamera(ctx, cameraVideo, cameraVideo.videoWidth, cameraVideo.videoHeight, cam, s.mirror, cam.w < W * 0.9);
@@ -282,6 +365,8 @@ ticker.onmessage = () => {
   if (recording.value) elapsed.value = (Date.now() - t0) / 1000;
 };
 export function setActive(active) {
+  roomActive = active;
+  syncFrame();
   ticker.postMessage(active || recording.value ? 30 : 0);
   api.setPolling(active || recording.value);
 }
@@ -320,6 +405,56 @@ function pickMime(kind) {
   return list.find(([m]) => MediaRecorder.isTypeSupported(m)) || list[list.length - 1];
 }
 
+// Skjermbildet beskjæres til området før det tas opp, så resten av skjermen aldri lagres.
+// Med MediaStreamTrackProcessor skjer det uten å kopiere bildet; ellers via et lerret.
+let cropStop = null;
+function croppedTrack(track, area, fps) {
+  if (typeof MediaStreamTrackProcessor !== 'undefined' && typeof MediaStreamTrackGenerator !== 'undefined' && typeof VideoFrame !== 'undefined') {
+    try {
+      const proc = new MediaStreamTrackProcessor({ track });
+      const gen = new MediaStreamTrackGenerator({ kind: 'video' });
+      const ts = new TransformStream({
+        transform(frame, ctl) {
+          try {
+            const vr = frame.visibleRect || { x: 0, y: 0, width: frame.codedWidth, height: frame.codedHeight };
+            const r = areaPixels(area, vr.width, vr.height);
+            ctl.enqueue(new VideoFrame(frame, { visibleRect: { x: vr.x + r.x, y: vr.y + r.y, width: r.w, height: r.h }, displayWidth: r.w, displayHeight: r.h }));
+          } catch (err) {
+            console.error(err);
+          } finally {
+            frame.close();
+          }
+        },
+      });
+      proc.readable.pipeThrough(ts).pipeTo(gen.writable).catch(() => {});
+      cropStop = () => gen.stop();
+      return gen;
+    } catch (err) {
+      console.warn('Beskjæring uten kopi er ikke tilgjengelig, bruker lerret', err);
+    }
+  }
+  const vw = screenVideo.videoWidth;
+  const vh = screenVideo.videoHeight;
+  const r = areaPixels(area, vw, vh);
+  const cv = document.createElement('canvas');
+  cv.width = r.w;
+  cv.height = r.h;
+  const g = cv.getContext('2d', { alpha: false });
+  const out = cv.captureStream(fps).getVideoTracks()[0];
+  let on = true;
+  const tick = () => {
+    if (!on) return;
+    g.drawImage(screenVideo, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+    screenVideo.requestVideoFrameCallback(tick);
+  };
+  screenVideo.requestVideoFrameCallback(tick);
+  cropStop = () => {
+    on = false;
+    out.stop();
+  };
+  return out;
+}
+
 async function startRecorder(name, tracks, kind, bitrate) {
   const [mime, ext] = pickMime(kind);
   const raw = `${name}.raw.${ext}`;
@@ -336,13 +471,53 @@ async function startRecorder(name, tracks, kind, bitrate) {
   return entry;
 }
 
+let countdownTimer = null;
+
+export function cancelCountdown() {
+  clearInterval(countdownTimer);
+  countdownTimer = null;
+  countdown.value = 0;
+  syncFrame();
+}
+
 export async function startRecording() {
-  if (recording.value || finishing.value) return;
+  if (recording.value || finishing.value || countdown.value) return;
   const s = settings.value;
   if (!screenStream && !cameraStream && !micStream) {
     notice.value = { text: 'Choose at least one source before you start recording.' };
     return;
   }
+  editingArea.value = false;
+  updateSize();
+  // Nedtelling: tallene vises i forhåndsvisningen og midt i området på skjermen.
+  if (s.countdown > 0) {
+    countdown.value = s.countdown;
+    syncFrame();
+    const go = await new Promise((resolve) => {
+      countdownTimer = setInterval(() => {
+        countdown.value -= 1;
+        syncFrame();
+        if (countdown.value <= 0) {
+          clearInterval(countdownTimer);
+          countdownTimer = null;
+          resolve(true);
+        }
+      }, 1000);
+      cancelResolve = () => resolve(false);
+    });
+    cancelResolve = null;
+    if (!go) return;
+  }
+  await beginRecording();
+}
+let cancelResolve = null;
+export function abortCountdown() {
+  cancelCountdown();
+  cancelResolve?.();
+}
+
+async function beginRecording() {
+  const s = settings.value;
   t0 = Date.now();
   layouts = [[0, effectiveLayout()]];
   // Opptaket lagres i opptaksmappen til det åpne prosjektet.
@@ -350,7 +525,9 @@ export async function startRecording() {
   recorders = [];
   const { w, h } = canvasSize.value;
   if (screenStream) {
-    const tracks = [...screenStream.getVideoTracks(), ...screenStream.getAudioTracks()];
+    const area = activeArea();
+    const video = area ? [croppedTrack(screenStream.getVideoTracks()[0], area, s.fps)] : screenStream.getVideoTracks();
+    const tracks = [...video, ...screenStream.getAudioTracks()];
     const bitrate = Math.round(clamp(w * h * s.fps * 0.1, 4e6, 60e6));
     recorders.push(await startRecorder('screen', tracks, 'video', bitrate));
   }
@@ -361,6 +538,7 @@ export async function startRecording() {
   recording.value = true;
   elapsed.value = 0;
   setActive(true);
+  syncFrame();
 }
 
 export async function stopRecording() {
@@ -370,12 +548,15 @@ export async function stopRecording() {
   try {
     for (const r of recorders) if (r.rec.state !== 'inactive') r.rec.stop();
     await Promise.all(recorders.map((r) => r.stopped));
+    cropStop?.();
+    cropStop = null;
+    syncFrame();
     for (const r of recorders) {
       await r.chain;
       await api.recClose(r.fileId);
     }
     const s = settings.value;
-    const meta = { fps: s.fps, layouts, pip: { size: s.pipSize, shape: s.pipShape, mirror: s.mirror }, overlays: { keys: s.showKeys, cursorZoom: s.cursorZoom, clicks: s.showClicks } };
+    const meta = { fps: s.fps, layouts, ...(activeArea() ? { area: activeArea() } : {}), pip: { size: s.pipSize, shape: s.pipShape, mirror: s.mirror }, overlays: { keys: s.showKeys, cursorZoom: s.cursorZoom, clicks: s.showClicks } };
     for (const r of recorders) {
       const isCam = r.name === 'camera';
       meta[r.name] = {

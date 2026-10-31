@@ -38,7 +38,7 @@ export function flash(selector, { focus = false, tries = 12 } = {}) {
 // Klippene en effekt eller innstilling skal gjelde: utvalget, eller klippet under spillhodet.
 function visualTargets() {
   const p = project.value;
-  let ids = selection.value.filter((id) => p.clips[id] && isVisual(p.clips[id]) && p.clips[id].type !== 'caption');
+  let ids = selection.value.filter((id) => p.clips[id] && isVisual(p.clips[id]) && p.clips[id].type !== 'caption' && p.clips[id].type !== 'redact');
   if (!ids.length) {
     commands.selectClipAtPlayhead();
     ids = selection.value.filter((id) => p.clips[id] && isVisual(p.clips[id]));

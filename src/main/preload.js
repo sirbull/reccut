@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('api', {
 
   listScreens: invoke('screens:list'),
   selectScreen: invoke('screens:select'),
+  setCaptureArea: invoke('screens:area'),
+  selectArea: invoke('area:select'),
+  areaFrame: invoke('area:frame'),
   setShortcuts: invoke('shortcuts:set'),
   setShortcutsActive: invoke('shortcuts:active'),
   inputStatus: invoke('input:status'),

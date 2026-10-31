@@ -1,6 +1,6 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
-import { CAPTION_LANE, CLIP_COLORS, EFFECTS, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
+import { CAPTION_LANE, CLIP_COLORS, EFFECTS, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
 import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates.js';
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
@@ -79,6 +79,30 @@ export function addTitle(style = 'center', T = getTime()) {
   commit((p) => placeFree(p, clip, T, 1));
   selection.value = [clip.id];
   inspectorTab.value = 'text';
+}
+
+// Sladding (Redact): legges over alt annet der spillhodet står, eller over området (I og O).
+// Lengden følger området, ellers klippet under spillhodet, ellers 5 sekunder.
+export function addRedact(mode = 'pixelate', T = getTime(), laneHint = null) {
+  const p = project.value;
+  let start = T;
+  let dur = 5;
+  if (p.range && p.range.out - p.range.in > 0.05 && laneHint == null) {
+    start = p.range.in;
+    dur = p.range.out - p.range.in;
+  } else {
+    const under = primaryAt(p, T)?.clip;
+    if (under && under.type !== 'gap') dur = Math.max(1, under.start + under.dur - T);
+  }
+  const busy = Object.values(p.clips).filter((c) => c.lane > 0 && c.lane !== CAPTION_LANE && isVisual(c) && c.start < start + dur && start < c.start + c.dur);
+  const lane = laneHint && laneHint > 0 && laneHint !== CAPTION_LANE ? laneHint : Math.max(0, ...busy.map((c) => c.lane)) + 1;
+  const W = p.width;
+  const H = p.height;
+  const clip = makeClip('redact', { start, dur, lane, props: { mode, w: Math.round(W * 0.3), h: Math.round(H * 0.12) } });
+  commit((q) => placeFree(q, clip, start, lane));
+  selection.value = [clip.id];
+  inspectorTab.value = 'redact';
+  return clip.id;
 }
 
 // Effekt fra effektbiblioteket: legges på valgte klipp, eller klippet den slippes på.
@@ -556,7 +580,7 @@ export function liftSelected() {
 export function overwriteSelectedToPrimary() {
   const ids = selection.value.filter((id) => {
     const c = project.value.clips[id];
-    return c && c.lane > 0 && c.lane !== CAPTION_LANE && isVisual(c);
+    return c && c.lane > 0 && c.lane !== CAPTION_LANE && isVisual(c) && c.type !== 'redact';
   });
   if (!ids.length) return;
   commit((q) => {
@@ -875,6 +899,8 @@ export async function handleDrop(dt, lane, T) {
         }
       });
       if (added.length) selection.value = added;
+    } else if (item.kind === 'redact') {
+      addRedact(item.id, T, lane > 0 && lane !== CAPTION_LANE ? lane : null);
     } else if (item.kind === 'title') {
       addTitle(item.id, T);
     } else if (item.kind === 'effect') {

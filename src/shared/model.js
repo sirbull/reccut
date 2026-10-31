@@ -208,7 +208,30 @@ export function titleText(clip) {
 }
 
 export function isVisual(clip) {
-  return clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title' || clip.type === 'gap';
+  return clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title' || clip.type === 'gap' || clip.type === 'redact';
+}
+
+/* Sladding: et eget klipp over bildet som gjør et område ugjenkjennelig (passord, ansikter, skilt).
+   Det virker på alt som ligger under, også flere lag, som et justeringslag. */
+export const REDACT_MODES = [
+  { id: 'pixelate', label: 'Pixelate', desc: 'Large blocks. Good for text and faces.' },
+  { id: 'blur', label: 'Blur', desc: 'Soft blur. Use a high amount for text.' },
+  { id: 'solid', label: 'Solid', desc: 'A solid color box. The safest for passwords.' },
+  { id: 'frosted', label: 'Frosted', desc: 'Blur and pixelate together, like frosted glass.' },
+];
+export const REDACT_SHAPES = [
+  { id: 'rect', label: 'Rectangle' },
+  { id: 'rounded', label: 'Rounded' },
+  { id: 'ellipse', label: 'Ellipse' },
+];
+export function redactLabel(clip) {
+  const m = REDACT_MODES.find((x) => x.id === clip.props?.mode);
+  return clip.name || (m ? m.label : 'Redact');
+}
+// Størrelsen på blokkene og uskarpheten, ut fra styrken (0 til 1) og bildehøyden.
+export function redactStrength(amount, H) {
+  const a = clamp(amount ?? 0.5, 0, 1);
+  return { block: Math.max(3, (0.008 + a * 0.06) * H), blur: Math.max(1, (0.003 + a * 0.03) * H) };
 }
 
 export function clipHasAudio(clip, media) {
@@ -255,7 +278,7 @@ export function primaryComponent(clip, media) {
 
 // Klipp som kan forlenges uten grense (de har ingen kildefil med fast lengde).
 export function isElastic(clip) {
-  return (clip.speed === 0 && !clip.ramp) || clip.type === 'image' || clip.type === 'title' || clip.type === 'gap' || clip.type === 'caption';
+  return (clip.speed === 0 && !clip.ramp) || clip.type === 'image' || clip.type === 'title' || clip.type === 'gap' || clip.type === 'caption' || clip.type === 'redact';
 }
 
 export function newProject(name = 'Untitled Project') {
@@ -323,6 +346,8 @@ export function defaultProps(type, media) {
       };
     case 'caption':
       return { text: '', align: null, pos: null };
+    case 'redact':
+      return { opacity: 1, vFadeIn: 0, vFadeOut: 0, x: 0, y: 0, w: 480, h: 120, rotation: 0, mode: 'pixelate', shape: 'rounded', amount: 0.5, color: '#000000', invert: false, feather: 0 };
     default:
       return {};
   }
