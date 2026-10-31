@@ -69,7 +69,6 @@ export function Editor({ active }) {
       <div class="divider" onPointerDown={onDividerDown} />
       <Timeline />
       {commands.exportOpen.value && <ExportDialog />}
-      {commands.prefsOpen.value && <PreferencesDialog />}
       {commands.syncDialog.value && <SyncDialog />}
       {commands.importOptions.value && <ImportOptionsDialog />}
       {layerImport.value && <LayerImportDialog key={layerImport.value.file} />}
@@ -260,64 +259,3 @@ function SyncDialog() {
   );
 }
 
-// Innstillinger: standardlengder, skumming, synk og import.
-function PreferencesDialog() {
-  const p = prefs.value;
-  const close = () => (commands.prefsOpen.value = false);
-  const num = (key, label, min, max, step = 0.1) => (
-    <Row label={label}>
-      <NumberField value={p[key]} min={min} max={max} step={step} precision={step < 1 ? 1 : 0} unit="s" width={84} onChange={(v) => setPrefs({ [key]: Math.round(v * 100) / 100 })} />
-    </Row>
-  );
-  return (
-    <Modal title="Preferences" width={520} onClose={close} footer={<Button variant="primary" onClick={close}>Done</Button>}>
-      <Section title="Editing" collapsible={false}>
-        {num('transitionDur', 'Default transition duration', 0.1, 10)}
-        {num('audioCrossfadeDur', 'Default audio crossfade', 0.05, 10)}
-        {num('stillDur', 'Still image duration', 0.5, 60)}
-        {num('titleDur', 'Title duration', 0.5, 60)}
-        {num('freezeDur', 'Freeze frame duration', 0.2, 60)}
-      </Section>
-      <Section title="Playback" collapsible={false}>
-        <Row label="Skimming (S)">
-          <Toggle
-            checked={skimming.value}
-            onChange={(v) => {
-              skimming.value = v;
-              setPrefs({ skimming: v });
-            }}
-          />
-        </Row>
-        <Row label="Audio skimming (Shift S)">
-          <Toggle
-            checked={audioSkimming.value}
-            onChange={(v) => {
-              audioSkimming.value = v;
-              setPrefs({ audioSkimming: v });
-            }}
-          />
-        </Row>
-        <Row label="Snapping (N)">
-          <Toggle
-            checked={snapping.value}
-            onChange={(v) => {
-              snapping.value = v;
-              setPrefs({ snapping: v });
-            }}
-          />
-        </Row>
-        <Row label="Preserve pitch when changing speed">
-          <Toggle checked={p.preservePitch} onChange={(v) => setPrefs({ preservePitch: v })} />
-        </Row>
-      </Section>
-      <Section title="Auto Sync Audio" collapsible={false}>
-        <Row label="Group synced audio with the video">
-          <Toggle checked={p.syncGroup} onChange={(v) => setPrefs({ syncGroup: v })} />
-        </Row>
-        <Row label="Switch off the camera audio after syncing">
-          <Toggle checked={p.syncMuteCamera} onChange={(v) => setPrefs({ syncMuteCamera: v })} />
-        </Row>
-      </Section>
-    </Modal>
-  );
-}

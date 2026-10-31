@@ -3,6 +3,7 @@
 // Redigeringen og eksportfanen har hver sin spiller.
 import { computeAudio, computeFrame, instSpeed, sourceTime, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
+import { prefs } from './prefs.js';
 
 const PRELOAD = 1.5;
 const KEEP = 6;
@@ -237,7 +238,8 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   function resizeCanvas(cssW, cssH) {
     if (!canvas) return;
     const p = getProject();
-    const dpr = window.devicePixelRatio || 1;
+    // Bedre ytelse: visningen tegnes i halv oppløsning (Settings > Playback).
+    const dpr = (window.devicePixelRatio || 1) * (prefs.value.viewerQuality === 'performance' ? 0.5 : 1);
     const fit = Math.min(cssW / p.width, cssH / p.height);
     const w = Math.max(2, Math.round(p.width * fit * dpr));
     const h = Math.max(2, Math.round(p.height * fit * dpr));
@@ -270,8 +272,15 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       if (rate > 0) {
         const end = p.range ? p.range.out : p.duration;
         if (T >= end) {
-          T = end;
-          pause();
+          if (prefs.value.loopPlayback && end > 0) {
+            // Avspilling i løkke: tilbake til starten av området eller tidslinjen.
+            T = p.range ? p.range.in : 0;
+            clockBase = T;
+            clockStart = now;
+          } else {
+            T = end;
+            pause();
+          }
         }
       } else if (T <= 0) {
         T = 0;

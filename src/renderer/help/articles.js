@@ -461,6 +461,26 @@ Show Speed Controls ({{key:retime}}) opens the Speed tab for the selected clip.
     see: ['playback'],
   },
   {
+    id: 'stabilize',
+    section: 'Editing',
+    title: 'Stabilization',
+    summary: 'Smooth out shaky handheld video, like in Final Cut Pro.',
+    keywords: 'stabilize stabilization shaky handheld smooth tripod steady camera shake',
+    body: `
+Select a video clip and choose Stabilize Clip ({{key:stabilize}}), or turn on Stabilize in the Video tab. Reccut analyzes the camera motion in the background (progress is shown at the top), and the clip is stabilized as soon as the analysis is done. The analysis is saved, so it only runs once per file. To have it ready before you edit, turn on Analyze video for stabilization in Settings > Import.
+
+![Stabilization in the Video tab.](stabilize.jpg)
+
+- **Automatic** chooses for you: if the camera hardly moves it is locked like on a tripod, otherwise the movement is smoothed.
+- **Smooth** keeps the camera movement, but takes out the shake. **Smooth X**, **Smooth Y** and **Smooth rotation** set how much each direction is smoothed. At 0 a direction is left as it is.
+- **Tripod** removes all camera movement in the clip.
+- **Zoom**: the picture is zoomed in just enough to hide the edges that moving it would show. Automatic shows how much. Choose Manual to set the zoom yourself; with less zoom, edges can show when the correction is large.
+
+The same correction is used in the viewer and in exports. How it works: Reccut follows hundreds of points from frame to frame, finds the camera movement (sideways, up and down, and rotation) while ignoring things that move in the picture, smooths the path and moves each frame from the shaky path to the smooth one.
+`,
+    see: ['inspector'],
+  },
+  {
     id: 'transitions',
     section: 'Editing',
     title: 'Transitions',
@@ -678,20 +698,38 @@ Exports are saved in the Exports folder of the project by default, and run in th
   {
     id: 'preferences',
     section: 'Reference',
-    title: 'Preferences',
-    summary: 'Default durations, skimming, sync and import choices.',
-    keywords: 'preferences settings default duration',
+    title: 'Settings',
+    summary: 'Defaults for editing, playback, import, audio and export, and your own keyboard shortcuts.',
+    keywords: 'settings preferences options defaults keyboard shortcuts command editor customize',
     body: `
-Open Preferences with {{key:prefs}}.
+Open Settings with {{key:prefs}}. The icons at the top switch between the parts, like in Final Cut Pro. Every change is saved right away.
 
-![Preferences.](prefs.jpg)
+- **General**: where new projects are created, whether the last project opens at startup, looking for missing media, and Reset All Settings.
+- **Editing**: default lengths of transitions, crossfades, stills, titles and freeze frames, snapping, and moving the playhead to the end of added clips.
+- **Playback**: skimming, viewer quality (better performance draws the viewer at half resolution), loop playback and keeping the pitch at other speeds.
+- **Import**: copy files into the project or leave them in place, create optimized media, and analyze video for stabilization.
+- **Audio**: how Auto Sync Audio groups audio and switches off the camera audio.
+- **Export**: whether exports go to the project's Exports folder or another folder.
 
-- Default lengths for transitions, audio crossfades, still images, titles and freeze frames.
-- Skimming, audio skimming, snapping and preserve pitch.
-- Whether Auto Sync Audio groups the audio with the video and switches off the camera audio.
+![General settings.](settings.jpg)
 
-[[run:prefs|Open Preferences]]
+## Keyboard shortcuts
+
+Under **Keyboard** you can change the shortcut of any command:
+
+- Search for a command or a key, or pick a menu on the left.
+- Click the shortcut and press the new keys. Esc cancels.
+- If the keys are already used, Reccut says by which command, and you choose whether to move them.
+- The × removes a shortcut, and the arrow brings back the default. Changed only shows what you have changed, and Reset All goes back to the defaults.
+- Export saves your shortcuts to a file, and Import loads them, for example on another computer.
+
+The menus, the Keyboard Shortcuts list ({{key:shortcuts}}) and Quick Search always show your own shortcuts.
+
+![The keyboard shortcut editor.](keyboard.jpg)
+
+[[run:prefs|Open Settings]]
 `,
+    see: ['shortcuts', 'search'],
   },
   { id: 'shortcuts', section: 'Reference', title: 'Keyboard Shortcuts', summary: 'Every shortcut in Reccut, grouped by menu.', keywords: 'keys keyboard hotkeys', body: '' },
 ];

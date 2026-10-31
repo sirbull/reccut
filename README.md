@@ -53,6 +53,7 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 * **Animasjonsmaler**: Fade In, Fade Out, Slow Zoom In og Out, Slide In fra tre kanter, Pop In og Spin In
 * Dra klipp, titler og undertekster direkte i visningen for å plassere dem
 * **Effekter**: Blur, Vignette, Sepia, Black & White, Invert, Hue Shift, Rounded Corners, Drop Shadow og Border
+* **Stabilisering** (Shift Option S eller Stabilize i Video-fanen), som i Final Cut Pro: kamerabevegelsen analyseres i bakgrunnen (hundrevis av punkter følges fra bilde til bilde, og bevegelse i motivet blir sortert bort), og ristingen glattes ut. Velg Automatic, Smooth eller Tripod, juster X, Y og rotasjon hver for seg, og la zoomen skjule kantene automatisk eller sett den selv. Samme korreksjon brukes i visningen og eksporten. Analysen kan også kjøres ved import.
 * **Fargekorrigering**: ferdige utseender, eksponering, kontrast, høylys, skygger, metning, temperatur og tint, og fargehjul for skygger, mellomtoner og høylys. Regnes ut på skjermkortet i 16-bit flyttall, så 10-bit klipp beholder jevne overganger. Samme utregning brukes i visningen og eksporten.
 * **Inspektøren som i Final Cut Pro**: marker et klipp, så vises egenskapene til høyre, med ikonfaner for Text, Video (posisjon, skala, rotasjon, beskjæring, animasjon og toning), Color, Effects, Audio, Speed og Info. Info viser klippet, filen (format, størrelse, bitrate, opptakstid, kamera) og bilde og lyd i den. Audio viser nivåer med topp og gjennomsnitt, lydspor, volum, toning og lydformatet.
 * **Titler** fra maler (Title, Headline, Title Card, Boxed, Typewriter, End Card, Chapter) med animasjon inn og ut, alle systemskrifter, farge, plassering og størrelse
@@ -83,6 +84,18 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | Video | Lyd |
 | --- | --- |
 | MP4 (H.264, HEVC, AV1), WebM (VP9, AV1), MOV (H.264, ProRes 422), MKV, GIF | MP3, AAC (M4A), WAV, FLAC, Opus |
+
+## Innstillinger
+
+Settings (Cmd ,) er bygd som i Final Cut Pro, med faner øverst:
+
+* **General**: plassering for nye prosjekter, åpne siste prosjekt ved oppstart, se etter media som mangler, og nullstill alt
+* **Editing**: standardlengder for overganger, kryssfade, bilder, titler og frosne bilder, festing, og spillhodet til slutten av klipp som legges til
+* **Playback**: skumming, visningskvalitet (bedre ytelse tegner visningen i halv oppløsning), avspilling i løkke og tonehøyde ved endret fart
+* **Import**: kopier eller la filene ligge, optimalisert media og analyse for stabilisering
+* **Audio**: valgene for automatisk synk
+* **Export**: prosjektets Exports-mappe eller en annen mappe
+* **Keyboard**: endre hurtigtasten for alle kommandoer. Søk, klikk på tasten og trykk den nye. Er tasten i bruk, sier appen av hvilken kommando, og du velger om den skal flyttes. Tilbake til standard for én eller alle, og eksporter eller importer hurtigtastene til en fil. Menyene, søket og hjelpen viser alltid dine egne taster.
 
 ## Hjelp, søk og hurtigtaster
 
@@ -130,6 +143,7 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | Shift Cmd R | Vis prosjektmappen |
 | Ctrl mellomrom, F1, Option Cmd K | Hurtigsøk, hjelp, alle hurtigtaster |
 | Option Cmd L | Relink File (finn en fil som mangler) |
+| Shift Option S | Stabiliser klipp |
 | Shift Ctrl T | Legg til supring (Shift Alt T på Windows) |
 | Shift Option Cmd I, Shift Option Cmd K | Importer titelmal, hent malpakken |
 | Cmd , | Preferences |

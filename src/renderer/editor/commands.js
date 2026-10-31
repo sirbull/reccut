@@ -397,6 +397,11 @@ export function addBrowserSelection(mode) {
     }
   });
   if (added.length) selection.value = added;
+  // Innstilling: spillhodet til slutten av det som ble lagt til.
+  if (added.length && prefs.value.playheadAfterEdit) {
+    const last = project.value.clips[added[added.length - 1]];
+    if (last) seek(last.start + last.dur);
+  }
 }
 
 // Medier i samme rekkefølge som i biblioteket.

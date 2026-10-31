@@ -44,6 +44,7 @@ import { formatDuration } from '../shared/model.js';
 import { IconButton, Toasts, toast } from './ui.jsx';
 import { NewProjectDialog, ProjectsDialog } from './ProjectDialogs.jsx';
 import { CommandPalette, HelpCenter } from './help/Help.jsx';
+import { SettingsWindow } from './Settings.jsx';
 import { helpOpen, paletteOpen } from './registry.js';
 
 const api = window.api;
@@ -170,7 +171,7 @@ function TitleBar() {
           <IconButton icon={Undo2} title="Undo" disabled={!canUndo()} onClick={undo} />
           <IconButton icon={Redo2} title="Redo" disabled={!canRedo()} onClick={redo} />
           <span class="sep" />
-          <IconButton icon={Settings} title={`Preferences (${isMac ? '⌘' : 'Ctrl+'},)`} onClick={() => (commands.prefsOpen.value = true)} />
+          <IconButton icon={Settings} title={`Settings (${isMac ? '⌘' : 'Ctrl+'},)`} onClick={() => (commands.prefsOpen.value = true)} />
           <IconButton icon={Plus} title={`Import media (${isMac ? '⌘' : 'Ctrl+'}I)`} onClick={() => commands.importDialog()} />
           <button class="btn primary" onClick={() => (commands.exportOpen.value = true)} title={`Export project (${isMac ? '⌘' : 'Ctrl+'}E)`}>
             <Share size={15} />
@@ -300,6 +301,7 @@ function App() {
       </main>
       {(commands.newProjectOpen.value || needsProject.value) && <NewProjectDialog />}
       {commands.projectsOpen.value && !needsProject.value && <ProjectsDialog />}
+      {commands.prefsOpen.value && <SettingsWindow />}
       {helpOpen.value && <HelpCenter />}
       {paletteOpen.value && <CommandPalette />}
       <Toasts />

@@ -4,6 +4,7 @@ import { Apple, Feather, FileVideo, Film, FolderOpen, Gem, Globe, Image as Image
 import { CAPTION_LANE, formatDuration } from '../../shared/model.js';
 import { AUDIO_FORMATS, CAPTION_EXPORT, CAPTION_EXPORT_AUDIO, PRESETS, QUALITIES, VIDEO_FORMATS, estimateSize, formatBytes, outputSize } from '../../shared/formats.js';
 import { project, projectFolders, room } from './store.js';
+import { prefs } from '../prefs.js';
 import { exportOpen } from './commands.js';
 import { Button, Modal, Row, Segmented, Select, toast } from '../ui.jsx';
 
@@ -25,6 +26,7 @@ export async function startExport(p, settings) {
 
 // Eksporter legges i prosjektets Exports-mappe.
 export async function defaultExportDir() {
+  if (prefs.value.exportDirMode === 'custom' && prefs.value.exportDir) return prefs.value.exportDir;
   return projectFolders.value?.exports || `${await api.baseDir()}${api.platform === 'win32' ? '\\' : '/'}Exports`;
 }
 

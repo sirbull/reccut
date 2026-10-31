@@ -23,7 +23,7 @@ import {
 import * as commands from './editor/commands.js';
 import * as playback from './editor/playback.js';
 import { toast } from './ui.jsx';
-import { setPrefs } from './prefs.js';
+import { prefs, setPrefs } from './prefs.js';
 import { RAMP_PRESETS } from '../shared/model.js';
 
 const api = window.api;
@@ -32,6 +32,8 @@ export const isMac = api.platform === 'darwin';
 // Hjelpen og kommandosøket.
 export const helpOpen = signal(null); // null eller { article?, query? }
 export const paletteOpen = signal(false);
+// Mens en ny hurtigtast tas opp i Settings, registrerer ikke menyen tastene, så alle tastetrykk når fram.
+export const recordingShortcut = signal(false);
 
 const EDIT = ['edit'];
 const ALL = ['record', 'edit', 'export'];
@@ -94,7 +96,7 @@ export const COMMANDS = [
   { id: 'templateKit', label: 'Get the Template Kit', menu: 'Help', group: 'help', keys: 'Shift+Alt+CmdOrCtrl+K', rooms: ALL, run: () => commands.downloadTemplateKit(), help: 'templates', keywords: 'after effects script jsx lower third design' },
   { id: 'relink', label: 'Relink File', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+L', run: () => { const id = commands.browserTargets()[0]; return id ? commands.relinkDialog(id) : toast('Select a clip in the browser or on the timeline first.'); }, help: 'offline', keywords: 'missing offline media find reconnect', desc: 'Point the selected media to a new file, for example when it is missing or has been moved.' },
   { id: 'export', label: 'Export', menu: 'File', group: 'export', keys: 'CmdOrCtrl+E', register: true, rooms: ALL, run: () => (room.value === 'edit' ? (commands.exportOpen.value = true) : (room.value = 'export')), help: 'export', desc: 'Export the project to a video, audio or image sequence file.' },
-  { id: 'prefs', label: 'Preferences', menu: isMac ? 'App' : 'File', group: 'prefs', keys: 'CmdOrCtrl+,', register: true, rooms: ALL, run: () => (commands.prefsOpen.value = true), help: 'preferences' },
+  { id: 'prefs', label: 'Settings', menu: isMac ? 'App' : 'File', group: 'prefs', keys: 'CmdOrCtrl+,', register: true, rooms: ALL, run: () => (commands.prefsOpen.value = true), help: 'preferences' },
 
   /* Edit */
   { id: 'undo', label: 'Undo', menu: 'Edit', keys: 'CmdOrCtrl+Z', register: true, text: 'undo', run: undo, enabled: canUndo },
@@ -210,9 +212,72 @@ export const byId = new Map(COMMANDS.map((c) => [c.id, c]));
 /* Hurtigtaster */
 
 // Hurtigtasten for denne plattformen.
-export function keysFor(cmd) {
+// Standardtasten for denne plattformen.
+export function defaultKeys(cmd) {
   const main = isMac ? cmd.mac ?? cmd.keys : cmd.win ?? cmd.keys;
   return [main, ...(cmd.also || [])].filter(Boolean);
+}
+
+// Hurtigtasten som gjelder: egen tast fra Settings > Keyboard, ellers standarden.
+// En tom streng betyr at brukeren har fjernet hurtigtasten.
+export function keysFor(cmd) {
+  const own = prefs.value.shortcuts?.[cmd.id];
+  if (own === '') return [];
+  if (typeof own === 'string') return [own];
+  return defaultKeys(cmd);
+}
+
+export function isCustomized(cmd) {
+  return typeof prefs.value.shortcuts?.[cmd.id] === 'string';
+}
+
+export function setShortcut(id, accel) {
+  setPrefs({ shortcuts: { ...(prefs.value.shortcuts || {}), [id]: accel } });
+}
+
+export function resetShortcut(id) {
+  const next = { ...(prefs.value.shortcuts || {}) };
+  delete next[id];
+  setPrefs({ shortcuts: next });
+}
+
+export function resetAllShortcuts() {
+  setPrefs({ shortcuts: {} });
+}
+
+// Gjør et tastetrykk om til en hurtigtast i Electron-format, eller null for bare modifikatorer.
+const KEY_FROM_CODE = {
+  Space: 'Space', ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down', Backspace: 'Backspace', Delete: 'Delete',
+  Home: 'Home', End: 'End', Enter: 'Enter', Tab: 'Tab', BracketLeft: '[', BracketRight: ']', Comma: ',', Period: '.', Slash: '/',
+  Equal: '=', Minus: '-', Semicolon: ';', Quote: "'", Backquote: '`', Backslash: '\\', PageUp: 'PageUp', PageDown: 'PageDown',
+};
+export function accelFromEvent(e) {
+  let key = KEY_FROM_CODE[e.code];
+  if (!key && /^Key[A-Z]$/.test(e.code)) key = e.code.slice(3);
+  if (!key && /^Digit\d$/.test(e.code)) key = e.code.slice(5);
+  if (!key && /^F\d{1,2}$/.test(e.code)) key = e.code;
+  if (!key) return null;
+  const parts = [];
+  if (isMac ? e.metaKey : e.ctrlKey) parts.push('CmdOrCtrl');
+  if (isMac && e.ctrlKey) parts.push('Ctrl');
+  if (e.altKey) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+  return [...parts, key].join('+');
+}
+
+// To hurtigtaster er like når de gir samme tast og modifikatorer.
+export function sameAccel(a, b) {
+  if (!a || !b) return false;
+  const x = parse(a);
+  const y = parse(b);
+  return x.code === y.code && x.meta === y.meta && x.ctrl === y.ctrl && x.alt === y.alt && x.shift === y.shift;
+}
+
+// Kommandoene som allerede bruker en hurtigtast (i samme rom).
+export function conflictsFor(accel, exceptId) {
+  const target = byId.get(exceptId);
+  const rooms = target?.rooms || EDIT;
+  return COMMANDS.filter((c) => c.id !== exceptId && !c.menuOnly && (c.rooms || EDIT).some((r) => rooms.includes(r)) && keysFor(c).some((k) => sameAccel(k, accel)));
 }
 
 const CODE = {
@@ -242,8 +307,10 @@ function parse(accel) {
 
 const parsed = new Map();
 function parsedKeys(cmd) {
-  if (!parsed.has(cmd.id)) parsed.set(cmd.id, keysFor(cmd).map(parse));
-  return parsed.get(cmd.id);
+  return keysFor(cmd).map((k) => {
+    if (!parsed.has(k)) parsed.set(k, parse(k));
+    return parsed.get(k);
+  });
 }
 
 // Tegn for tegnsettingstaster, så de også virker på tastaturer der tasten ligger et annet sted.
@@ -308,7 +375,7 @@ const MENU_ORDER = isMac ? ['App', 'File', 'Edit', 'Mark', 'Clip', 'Tools', 'Pla
 
 function itemFor(cmd) {
   const accel = keysFor(cmd)[0];
-  const it = { id: cmd.id, label: cmd.menuLabel || cmd.label, accelerator: accel, register: Boolean(cmd.register) };
+  const it = { id: cmd.id, label: cmd.menuLabel || cmd.label, accelerator: accel, register: Boolean(cmd.register) && !recordingShortcut.value };
   if (cmd.checked) it.checked = Boolean(cmd.checked());
   if (cmd.enabled) it.enabled = Boolean(cmd.enabled());
   return it;

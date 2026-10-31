@@ -3466,3 +3466,213 @@ kbd.keycap {
 }
 .palette-item .kind.k-lower { background: rgba(106, 75, 176, 0.4); color: #ddd0ff; }
 .row .value.narrow { min-width: 42px; text-align: right; }
+
+/* Innstillinger, som i Final Cut Pro */
+.settings-window {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100vw - 40px));
+  height: min(620px, calc(100vh - 60px));
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.settings-window.pane-keyboard {
+  width: min(900px, calc(100vw - 40px));
+}
+.settings-toolbar {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 44px 8px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line-2);
+}
+.settings-toolbar button[data-pane] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 66px;
+  padding: 6px 8px 5px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-2);
+  font: 500 11px/1.1 var(--font);
+}
+.settings-toolbar button[data-pane]:hover {
+  background: var(--bg-3);
+  color: var(--text);
+}
+.settings-toolbar button[data-pane].active {
+  background: rgba(10, 132, 255, 0.16);
+  color: var(--accent-2);
+}
+.settings-close {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+}
+.settings-body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 18px 18px;
+}
+.pane-keyboard .settings-body {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+}
+.hint.inline {
+  margin-left: 8px;
+}
+.keyboard-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.kb-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-2);
+}
+.kb-toolbar .search.small {
+  flex: 1;
+  margin: 0;
+}
+.kb-changed {
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.kb-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.kb-menus {
+  width: 120px;
+  padding: 8px;
+  border-right: 1px solid var(--line-2);
+  overflow: auto;
+}
+.kb-menus button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+}
+.kb-menus button.active {
+  background: var(--accent);
+  color: #fff;
+}
+.kb-list {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 10px 10px;
+}
+.kb-row {
+  display: grid;
+  grid-template-columns: 1fr 210px 56px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--line-2);
+}
+.kb-row.custom .kb-label span {
+  color: var(--accent-2);
+}
+.kb-label span {
+  display: block;
+}
+.kb-label small {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.kb-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-height: 26px;
+  padding: 2px 6px;
+  border: 1px dashed transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kb-key:hover {
+  border-color: var(--line-2);
+  background: var(--bg-2);
+}
+.kb-key.recording {
+  border-color: var(--accent);
+  background: rgba(10, 132, 255, 0.14);
+  color: var(--accent-2);
+}
+.kb-actions {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+}
+.kb-conflict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 159, 10, 0.14);
+  color: #ffdca8;
+  font-size: 12.5px;
+}
+.kb-conflict .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.kb-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line-2);
+}
+.kb-footer .hint {
+  margin: 0;
+}
+.kb-io {
+  display: flex;
+  gap: 4px;
+}
+.dim.pad {
+  padding: 12px;
+}
+.settings-body .path-btn {
+  max-width: 100%;
+  min-width: 0;
+}
+.settings-body .path-btn span {
+  direction: ltr;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -234,7 +234,7 @@ function defaultName() {
 
 export async function loadInitialProject() {
   const last = localStorage.getItem('lastProject');
-  if (last && (await api.exists(last))) {
+  if (prefs.value.reopenLast && last && (await api.exists(last))) {
     try {
       await openProjectFile(last);
       return;
@@ -314,6 +314,7 @@ export async function checkOffline() {
 
 let focusTimer = null;
 window.addEventListener('focus', () => {
+  if (!prefs.value.checkOfflineOnFocus) return;
   clearTimeout(focusTimer);
   focusTimer = setTimeout(checkOffline, 400);
 });
@@ -391,6 +392,8 @@ export async function importPaths(paths, placement, opts = {}) {
   reportFailed(failed);
   addMediaRecords(items, placement);
   if (opts.optimize ?? prefs.value.importOptimize) import('./commands.js').then((m) => m.optimizeMedia(items.map((x) => x.id)));
+  // Analyse for stabilisering i bakgrunnen, så Stabilize Clip virker med en gang.
+  if (prefs.value.importAnalyzeStab) for (const m of items) if (m.kind === 'video') api.analyzeMotion(m);
   return items;
 }
 

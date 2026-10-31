@@ -6,6 +6,7 @@ import { beginTransient, endTransient, getTime, playing, project, selectedClips,
 import * as playback from './playback.js';
 import * as commands from './commands.js';
 import { IconButton } from '../ui.jsx';
+import { prefs } from '../prefs.js';
 
 // Spill bakover: avspillingsikonet speilet.
 const PlayBackward = ({ size }) => <Play size={size} fill="currentColor" style={{ transform: 'scaleX(-1)' }} />;
@@ -80,7 +81,7 @@ export function Viewer() {
   useEffect(() => {
     const r = boxRef.current.getBoundingClientRect();
     playback.resizeCanvas(r.width - 24, r.height - 24);
-  }, [p.width, p.height]);
+  }, [p.width, p.height, prefs.value.viewerQuality]);
 
   return (
     <div class="viewer" ref={wrapRef}>

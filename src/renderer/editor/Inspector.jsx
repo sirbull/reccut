@@ -683,7 +683,7 @@ function CrossfadeInspector({ clip }) {
           <Row label="Duration">
             <NumberField value={clip.axfade} min={0.05} max={10} step={0.05} precision={2} unit="s" onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.clips[clip.id].axfade = Math.round(v * 100) / 100))} onCommit={() => endTransient(true)} />
           </Row>
-          <p class="hint">An equal power crossfade between the two clips. Press Delete to remove it. The default length is set in Preferences.</p>
+          <p class="hint">An equal power crossfade between the two clips. Press Delete to remove it. The default length is set in Settings.</p>
         </Section>
       </div>
     </div>
