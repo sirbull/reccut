@@ -7,10 +7,11 @@ const ff = require('./ffmpeg');
 const jobs = require('./jobs');
 const raw = require('./raw');
 const motion = require('./motion');
+const tsdemux = require('./tsdemux');
 
-const VIDEO_EXT = new Set(['.mp4', '.m4v', '.mov', '.qt', '.webm', '.mkv', '.avi', '.divx', '.mts', '.m2ts', '.ts', '.wmv', '.asf', '.flv', '.f4v', '.mpg', '.mpeg', '.m2v', '.vob', '.mod', '.3gp', '.3g2', '.mxf', '.ogv', '.dv', '.y4m', '.rm', '.rmvb']);
-const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a', '.m4b', '.aac', '.flac', '.ogg', '.oga', '.opus', '.weba', '.aif', '.aiff', '.aifc', '.wma', '.caf', '.mka', '.ac3', '.eac3', '.dts', '.amr', '.ape', '.wv', '.au', '.mp2']);
-const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.jfif', '.webp', '.gif', '.bmp', '.avif', '.svg', '.tif', '.tiff', '.heic', '.heif', '.tga', '.psd', '.ico', '.dds', '.exr', '.jp2', '.jxl']);
+const VIDEO_EXT = new Set(['.mp4', '.m4v', '.mov', '.qt', '.webm', '.mkv', '.avi', '.divx', '.mts', '.m2ts', '.ts', '.wmv', '.asf', '.flv', '.f4v', '.mpg', '.mpeg', '.m2v', '.vob', '.mod', '.3gp', '.3g2', '.mxf', '.ogv', '.dv', '.y4m', '.rm', '.rmvb', '.h264', '.264', '.avc', '.h265', '.265', '.hevc', '.m1v', '.mpv', '.vc1', '.ivf', '.obu', '.nut', '.ogm', '.xvid', '.evo', '.trp', '.tp', '.m2t', '.f4p', '.bik', '.smk', '.nsv', '.amv', '.mjpeg', '.mjpg', '.dav', '.vro', '.wtv', '.dvr-ms', '.gxf', '.r3d', '.braw']);
+const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a', '.m4b', '.aac', '.flac', '.ogg', '.oga', '.opus', '.weba', '.aif', '.aiff', '.aifc', '.wma', '.caf', '.mka', '.ac3', '.eac3', '.dts', '.amr', '.ape', '.wv', '.au', '.mp2', '.spx', '.tta', '.w64', '.rf64', '.mpc', '.ra', '.voc', '.snd', '.gsm', '.m4r', '.3ga', '.dsf', '.dff', '.thd', '.truehd', '.mlp', '.shn', '.tak', '.ofr', '.awb', '.qcp', '.sln', '.adts', '.mp1', '.m2a', '.oma', '.aa3', '.xa', '.vqf']);
+const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.jfif', '.pjpeg', '.webp', '.gif', '.bmp', '.dib', '.avif', '.svg', '.tif', '.tiff', '.heic', '.heif', '.tga', '.psd', '.ico', '.cur', '.dds', '.exr', '.jp2', '.j2k', '.jpx', '.jxl', '.dpx', '.cin', '.hdr', '.pcx', '.ppm', '.pgm', '.pbm', '.pam', '.pfm', '.sgi', '.rgb', '.rgba', '.bw', '.xwd', '.xbm', '.xpm', '.sun', '.ras', '.qoi', '.fits', '.fit', '.pic', '.vbn', '.wbmp', '.jls', '.jng']);
 // Bildeformater Chromium viser direkte. Andre konverteres til PNG ved import.
 const NATIVE_IMAGE = new Set(['.png', '.jpg', '.jpeg', '.jfif', '.webp', '.gif', '.bmp', '.avif', '.svg', '.ico']);
 
@@ -41,7 +42,8 @@ function kindOf(file) {
 // Ukjente endelser: la FFmpeg avgjøre hva filen inneholder.
 function kindFromProbe(info) {
   if (info.hasVideo && (info.duration > 0.2 || !info.hasAudio)) {
-    const still = /image2|png_pipe|jpeg_pipe|tiff_pipe|bmp_pipe|webp_pipe|psd_pipe/.test(info.format || '');
+    // Alle FFmpegs bildeformater heter noe med _pipe (dpx_pipe, sgi_pipe og så videre) eller image2.
+    const still = /image2|_pipe\b/.test(info.format || '') || (!(info.duration > 0) && !info.hasAudio && /^(png|mjpeg|bmp|tiff|webp|dpx|sgi|pcx|ppm|pgm|pbm|pam|xwd|hdr|qoi|exr|jpeg2000|targa|sunrast|fits)$/.test(info.videoCodec || ''));
     return still ? 'image' : 'video';
   }
   if (info.hasAudio) return 'audio';
@@ -52,6 +54,9 @@ function needsOptimizing(file, info) {
   const ext = path.extname(file).toLowerCase();
   // HDR tonemappes til en arbeidskopi, så bildet ser likt ut i visningen og eksporten.
   if (info.hasVideo && info.color?.hdr) return true;
+  // Linjeflettet video avflettes, og gjennomsiktighet utenfor WebM må over i VP9 med alfa for å vises.
+  if (info.hasVideo && info.interlaced) return true;
+  if (info.hasVideo && info.alpha && ext !== '.webm' && !/gif|png|apng|webp/.test(info.videoCodec || '')) return true;
   if (!PLAYABLE_CONTAINERS.has(ext)) return true;
   if (info.hasVideo && !PLAYABLE_VIDEO.has(info.videoCodec)) return true;
   // 10-bit og 4:2:2 H.264 kan ikke spilles av i Chromium.
@@ -77,6 +82,8 @@ async function streamFromFile(file, kind, info) {
     fps: info.fps,
     needsProxy: kind !== 'image' && needsOptimizing(file, info),
     color: info.hasVideo ? info.color : undefined,
+    alpha: Boolean(info.hasVideo && info.alpha),
+    interlaced: Boolean(info.hasVideo && info.interlaced),
   };
   return stream;
 }
@@ -95,7 +102,18 @@ async function importFiles(files, notify) {
       continue;
     }
     try {
-      const info = await ff.probe(file);
+      let info = await ff.probe(file);
+      // MPEG-TS (AVCHD og lignende) som FFmpeg ikke klarer å åpne: les strømmene selv og lag en arbeidskopi.
+      if (!info.hasVideo && !info.hasAudio && kind !== 'image') {
+        const fb = await tsFallback(file).catch((err) => (console.error('TS fallback failed', file, err), null));
+        if (fb) {
+          info = fb.info;
+          const stream = await streamFromFile(file, fb.info.hasVideo ? 'video' : 'audio', info);
+          Object.assign(stream, { proxy: fb.proxy, needsProxy: false, tsFallback: true });
+          result.push(await makeMedia(file, fb.info.hasVideo ? 'video' : 'audio', { main: stream }, notify));
+          continue;
+        }
+      }
       const readable = info.hasVideo || info.hasAudio || (kind === 'image' && info.width > 0);
       if (!readable) {
         failed.push(path.basename(file));
@@ -106,6 +124,8 @@ async function importFiles(files, notify) {
         failed.push(path.basename(file));
         continue;
       }
+      // Rå videostrømmer (.h264, .hevc, .m2v) og noen opptak oppgir ikke lengden: les den fra pakkene.
+      if ((kind === 'video' || kind === 'audio') && !(info.duration > 0)) info.duration = await ff.scanDuration(file, info.fps);
       if ((kind === 'video' || kind === 'audio') && !(info.duration > 0)) {
         failed.push(path.basename(file));
         continue;
@@ -166,6 +186,33 @@ async function importRaw(file, notify) {
   return makeMedia(file, 'image', { main: stream }, notify, { raw: true });
 }
 
+// Reserve for TS-filer: strømmene hentes ut med tsdemux og settes sammen til en MP4 i bufferen.
+async function tsFallback(file) {
+  const head = Buffer.alloc(2048);
+  const fd = await fs.promises.open(file, 'r');
+  await fd.read(head, 0, head.length, 0);
+  await fd.close();
+  if (!tsdemux.packetLayout(head)) return null;
+  const dir = await cacheDirFor(file);
+  const proxy = path.join(dir, 'arbeidskopi-ts.mp4');
+  if (!fs.existsSync(proxy)) {
+    const es = await tsdemux.demux(file, path.join(dir, 'ts-stream'));
+    if (!es) return null;
+    const args = [];
+    if (es.video) args.push('-framerate', String(es.video.fps || 25), '-i', es.video.file);
+    if (es.audio) args.push('-i', es.audio.file);
+    if (es.video) args.push('-map', '0:v:0', '-vf', "bwdif=mode=send_frame:deint=interlaced,scale='trunc(iw*sar/2)*2':'trunc(ih/2)*2',setsar=1,format=yuv420p", '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-g', '15', '-bf', '0');
+    if (es.audio) args.push('-map', `${es.video ? 1 : 0}:a:0`, '-c:a', 'aac', '-b:a', '256k', '-ac', '2', '-ar', '48000');
+    args.push('-movflags', '+faststart', proxy + '.tmp.mp4');
+    await ff.run(args).promise;
+    await fs.promises.rename(proxy + '.tmp.mp4', proxy);
+    for (const f of [es.video?.file, es.audio?.file]) if (f) await fs.promises.unlink(f).catch(() => {});
+  }
+  const info = await ff.probe(proxy);
+  if (!info.hasVideo && !info.hasAudio) return null;
+  return { info, proxy };
+}
+
 async function makeMedia(file, kind, streams, notify, extra = {}) {
   const main = streams.main || streams.screen || streams.camera;
   const media = {
@@ -195,17 +242,16 @@ function scheduleAnalysis(media, notify) {
       run: async (ctx) => {
         const dir = await cacheDirFor(stream.path);
         const patch = {};
-        let source = stream.path;
+        // Filer FFmpeg ikke kan åpne direkte (TS-reserven) analyseres fra arbeidskopien.
+        let source = stream.tsFallback && stream.proxy ? stream.proxy : stream.path;
 
         if (stream.needsProxy && !stream.optimized) {
           const old = path.join(dir, 'optimalisert.mp4');
-          const proxy = !stream.color?.hdr && fs.existsSync(old) ? old : path.join(dir, `arbeidskopi${ff.transcodeExt(stream.color)}`);
+          const proxy = !stream.color?.hdr && !stream.alpha && stream.hasVideo && fs.existsSync(old) ? old : path.join(dir, `arbeidskopi${ff.transcodeExt(stream.color, stream.alpha, stream.hasVideo)}`);
           if (!fs.existsSync(proxy)) {
             ctx.progress(0, stream.color?.hdr ? 'Tone mapping HDR' : 'Creating a playable copy');
             const tmp = proxy + `.tmp${path.extname(proxy)}`;
-            const job = ff.transcode(stream.path, tmp, { color: stream.color, duration: stream.duration, quality: 'proxy' }, (p) => ctx.progress(p * 0.7));
-            ctx.setCancel(job.kill);
-            await job.promise;
+            await ff.transcodeRobust(stream.path, tmp, { color: stream.color, alpha: stream.alpha, interlaced: stream.interlaced, hasVideo: stream.hasVideo, duration: stream.duration, quality: 'proxy' }, (p) => ctx.progress(p * 0.7), ctx.setCancel);
             await fs.promises.rename(tmp, proxy);
           }
           patch.proxy = proxy;
@@ -362,15 +408,13 @@ function scheduleOptimize(media, outDir, notify) {
       for (const [i, key] of keys.entries()) {
         const st = media.streams[key];
         const stem = path.basename(media.kind === 'recording' ? `${media.name} ${key}` : media.name, path.extname(media.name));
-        const ext = ff.transcodeExt(st.color);
+        const ext = ff.transcodeExt(st.color, st.alpha);
         let out = path.join(outDir, `${stem}${ext}`);
         let n = 2;
         while (fs.existsSync(out)) out = path.join(outDir, `${stem} ${n++}${ext}`);
         const tmp = out + `.part${ext}`;
-        const job = ff.transcode(st.path, tmp, { color: st.color, duration: st.duration, quality: 'optimized' }, (p) => ctx.progress((i + Math.min(1, p)) / keys.length, st.color?.hdr ? 'Tone mapping HDR' : 'Transcoding'));
-        ctx.setCancel(job.kill);
         try {
-          await job.promise;
+          await ff.transcodeRobust(st.tsFallback && st.proxy ? st.proxy : st.path, tmp, { color: st.color, alpha: st.alpha, interlaced: st.interlaced, duration: st.duration, quality: 'optimized' }, (p) => ctx.progress((i + Math.min(1, p)) / keys.length, st.color?.hdr ? 'Tone mapping HDR' : 'Transcoding'), ctx.setCancel);
         } catch (err) {
           await fs.promises.unlink(tmp).catch(() => {});
           throw err;

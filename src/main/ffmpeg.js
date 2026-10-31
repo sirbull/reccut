@@ -54,6 +54,8 @@ async function probe(file) {
       info.videoCodec = /Video: (\w+)/.exec(line)?.[1] ?? null;
       info.pixFmt = /, (yuv\w+|yuvj\w+|nv\d+|rgb\w*|bgr\w*|argb|abgr|rgba|bgra|gray\w*|pal8|gbr\w*)[,( ]/.exec(line)?.[1] ?? null;
       info.color = parseColor(line, info.pixFmt);
+      info.interlaced = /top first|bottom first|top coded first|bottom coded first|\binterlaced\b/.test(line);
+      info.alpha = /^(yuva|rgba|bgra|argb|abgr|gbrap|ya\d|ya8)/.test(info.pixFmt || '');
       const s = /, (\d{2,5})x(\d{2,5})/.exec(line);
       if (s) {
         info.width = Number(s[1]);
@@ -106,34 +108,85 @@ function hasFilter(name) {
  * HDR tonemappes til Rec. 709, så bildet ser riktig ut i redigeringen og eksporten.
  * quality 'optimized' gir høy kvalitet, 'proxy' går raskere.
  */
-function transcode(file, output, { color, duration, quality = 'optimized', audio = true }, onProgress) {
+function transcode(file, output, { color, duration, quality = 'optimized', audio = true, alpha = false, interlaced = false, hasVideo = true, safe = false }, onProgress) {
   const tenBit = (color?.bits || 8) > 8 || Boolean(color?.hdr);
-  const args = ['-i', file, '-map', '0:v:0?', ...(audio ? ['-map', '0:a?'] : [])];
-  const vf = [];
-  if (color?.hdr && hasFilter('zscale') && hasFilter('tonemap')) {
-    const tin = color.hdr === 'pq' ? 'smpte2084' : 'arib-std-b67';
-    vf.push(`zscale=tin=${tin}:min=bt2020nc:pin=bt2020:t=linear:npl=203`, 'format=gbrpf32le', 'zscale=p=bt709', 'tonemap=tonemap=hable:desat=0', 'zscale=t=bt709:m=bt709:r=tv');
+  // Gjennomsiktig video (ProRes 4444, animasjoner med alfa) blir VP9 med alfa, som Chromium viser.
+  const vp9 = tenBit || alpha;
+  const fast = quality === 'proxy';
+  const args = ['-fflags', '+genpts', ...(safe ? ['-err_detect', 'ignore_err'] : []), '-i', file, '-map', '0:v:0?', ...(audio ? ['-map', '0:a:0?'] : []), '-map_metadata', '-1'];
+  if (hasVideo) {
+    const vf = [];
+    // Linjeflettet video (TV, DV, eldre kameraer) avflettes, ellers blir bevegelser hakkete.
+    if (interlaced) vf.push('bwdif=mode=send_frame:deint=interlaced');
+    if (color?.hdr && hasFilter('zscale') && hasFilter('tonemap')) {
+      const tin = color.hdr === 'pq' ? 'smpte2084' : 'arib-std-b67';
+      vf.push(`zscale=tin=${tin}:min=bt2020nc:pin=bt2020:t=linear:npl=203`, 'format=gbrpf32le', 'zscale=p=bt709', 'tonemap=tonemap=hable:desat=0', 'zscale=t=bt709:m=bt709:r=tv');
+    }
+    // Koderne krever partall bredde og høyde, og firkantede piksler gjør resten av appen enklere.
+    vf.push("scale='trunc(iw*sar/2)*2':'trunc(ih/2)*2'", 'setsar=1');
+    vf.push(alpha ? 'format=yuva420p' : tenBit ? 'format=yuv420p10le' : 'format=yuv420p');
+    args.push('-vf', vf.join(','));
   }
-  vf.push(tenBit ? 'format=yuv420p10le' : 'format=yuv420p');
-  args.push('-vf', vf.join(','));
-  if (tenBit) {
-    const fast = quality === 'proxy';
-    args.push('-c:v', 'libvpx-vp9', '-profile:v', '2', '-crf', fast ? '24' : '15', '-b:v', '0', '-g', '15', '-row-mt', '1', '-tile-columns', '2', '-deadline', fast ? 'realtime' : 'good', '-cpu-used', fast ? '8' : '4');
-    args.push('-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709');
-    if (color?.hdr) args.push('-metadata:s:v:0', `reccut_tonemapped=${color.hdr}`);
-    if (audio) args.push('-c:a', 'libopus', '-b:a', '256k');
+  if (vp9) {
+    if (hasVideo) {
+      args.push('-c:v', 'libvpx-vp9', '-crf', fast ? '24' : '15', '-b:v', '0', '-g', '15', '-row-mt', '1', '-tile-columns', '2', '-deadline', fast ? 'realtime' : 'good', '-cpu-used', fast ? '8' : '4');
+      if (alpha) args.push('-auto-alt-ref', '0');
+      else args.push('-profile:v', '2', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709');
+      if (color?.hdr) args.push('-metadata:s:v:0', `reccut_tonemapped=${color.hdr}`);
+    }
+    if (audio) args.push('-c:a', 'libopus', '-b:a', '192k', '-ac', '2', '-ar', '48000');
   } else {
-    args.push('-c:v', 'libx264', '-preset', quality === 'proxy' ? 'veryfast' : 'medium', '-crf', quality === 'proxy' ? '18' : '12', '-g', '15', '-bf', '0', '-profile:v', 'high');
-    if (audio) args.push('-c:a', 'aac', '-b:a', '320k', '-ar', '48000');
+    if (hasVideo) args.push('-c:v', 'libx264', '-preset', fast ? 'veryfast' : 'medium', '-crf', fast ? '18' : '12', '-g', '15', '-bf', '0', '-profile:v', 'high');
+    // Lyden blir alltid stereo 48 kHz: det tåler alle kodere, og miksen i appen er stereo uansett.
+    if (audio) args.push('-c:a', 'aac', '-b:a', '256k', '-ac', '2', '-ar', '48000');
     args.push('-movflags', '+faststart');
   }
-  args.push(output);
+  args.push('-max_muxing_queue_size', '9999', output);
   return run(args, { onProgress: (s) => onProgress?.(s / Math.max(duration || 0, 0.1)) });
 }
 
+// Prøver omkodingen på nytt med færre krav hvis første forsøk feiler (for eksempel en skadet fil).
+async function transcodeRobust(file, output, opts, onProgress, setCancel) {
+  const first = transcode(file, output, opts, onProgress);
+  setCancel?.(first.kill);
+  try {
+    return await first.promise;
+  } catch (err) {
+    await fs.promises.unlink(output).catch(() => {});
+    const again = transcode(file, output, { ...opts, safe: true, quality: 'proxy' }, onProgress);
+    setCancel?.(again.kill);
+    try {
+      return await again.promise;
+    } catch {
+      throw err;
+    }
+  }
+}
+
+// Lengden på filer som ikke oppgir den selv (rå videostrømmer og enkelte opptak): pakkene telles
+// uten å dekode bildene. Har pakkene tidsstempler, brukes det siste; ellers antall bilder delt på fps.
+async function scanDuration(file, fps = 25) {
+  const r = run(['-i', file, '-map', '0:v:0?', '-c', 'copy', '-f', 'framecrc', '-']);
+  const out = await r.promise.catch(() => Buffer.alloc(0));
+  let tb = null;
+  let end = 0;
+  let count = 0;
+  for (const line of out.toString().split('\n')) {
+    const t = /^#tb 0: (\d+)\/(\d+)/.exec(line);
+    if (t) tb = Number(t[1]) / Number(t[2]);
+    if (!/^0,/.test(line)) continue;
+    count++;
+    const [, , pts, dur] = line.split(',').map((x) => Number(x.trim()));
+    if (tb && Number.isFinite(pts)) end = Math.max(end, (pts + (Number.isFinite(dur) ? dur : 0)) * tb);
+  }
+  if (end > 0) return end;
+  return count > 0 ? count / (fps || 25) : 0;
+}
+
 // Filendelsen omkodingen får.
-function transcodeExt(color) {
-  return (color?.bits || 8) > 8 || color?.hdr ? '.webm' : '.mp4';
+function transcodeExt(color, alpha = false, hasVideo = true) {
+  if (!hasVideo) return '.m4a';
+  return (color?.bits || 8) > 8 || color?.hdr || alpha ? '.webm' : '.mp4';
 }
 
 /**
@@ -264,5 +317,5 @@ async function convertImage(file, output) {
 }
 
 module.exports = {
-  transcode, transcodeExt, hasFilter, details,
+  transcode, transcodeRobust, scanDuration, transcodeExt, hasFilter, details,
   convertImage, getFfmpegPath, run, probe, remux, thumbnails, waveform, optimize, decodePcm };
