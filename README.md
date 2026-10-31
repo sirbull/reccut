@@ -87,6 +87,12 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | --- | --- |
 | MP4 (H.264, HEVC, AV1), WebM (VP9, AV1), MOV (H.264, ProRes 422), MKV, GIF | MP3, AAC (M4A), WAV, FLAC, Opus |
 
+## Styreflate og mus
+
+* To fingre sidelengs flytter langs tidslinjen, to fingre opp og ned ruller mellom sporene, som i Final Cut Pro. Det virker også over sporhodene til venstre.
+* Knip zoomer inn og ut, og punktet under pekeren blir stående der det er.
+* Med mus: rullehjulet ruller opp og ned, Shift og rullehjulet sidelengs, og Ctrl eller Cmd og rullehjulet zoomer ett steg om gangen.
+
 ## Innstillinger
 
 Settings (Cmd ,) er bygd som i Final Cut Pro, med faner øverst:

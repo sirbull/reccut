@@ -270,6 +270,12 @@ The main row is the **storyline**. Clips in it always sit next to each other, so
 - Lift from Storyline ({{key:lift}}) moves a clip up so you can place it freely; Overwrite to Storyline ({{key:overwriteDown}}) brings it back.
 - Insert Gap ({{key:insertGap}}) adds an empty space at the playhead.
 - Zoom with {{key:zoomIn}} and {{key:zoomOut}}, or {{key:zoomFit}} to fit everything.
+
+## Trackpad and mouse
+
+- **Two fingers sideways** move along the timeline, **two fingers up and down** scroll between the tracks, like in Final Cut Pro. This also works over the track headers on the left.
+- **Pinch** to zoom in and out. The point under the pointer stays where it is, so you zoom straight into the part you are looking at.
+- With a mouse, the wheel scrolls up and down, Shift and the wheel scrolls sideways, and Ctrl or Cmd and the wheel zooms one step at a time. {{key:zoomFit}} fits the whole project.
 - Snapping ({{key:snapping}}) makes clips and the playhead snap to edits and markers.
 `,
     see: ['tools', 'adding', 'grouping'],

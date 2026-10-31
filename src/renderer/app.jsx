@@ -255,6 +255,15 @@ function handleMenu(id) {
   runCommand(id);
 }
 
+// Knip og Ctrl + rullehjul skal aldri zoome hele vinduet; tidslinjen bruker dem selv.
+window.addEventListener(
+  'wheel',
+  (e) => {
+    if (e.ctrlKey && !e.defaultPrevented) e.preventDefault();
+  },
+  { passive: false }
+);
+
 // Menylinjen bygges på nytt når noe som vises med hake endres (verktøy, rom, skumming).
 let menuTimer = null;
 effect(() => {

@@ -1,6 +1,6 @@
 // Tidslinjen: magnetisk hovedspor i midten, tilkoblede klipp over og lyd under,
 // som i Final Cut Pro.
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { memo } from 'preact/compat';
 import {
@@ -151,36 +151,68 @@ export function Timeline() {
     };
   }, []);
 
-  // Knipezoom og Ctrl/Cmd + rullehjul zoomer rundt pekeren.
+  // Zoom holder tiden under pekeren (eller spillhodet) på samme sted på skjermen.
+  // Mange hendelser kan komme før tidslinjen er tegnet på nytt, så ankeret huskes til den er det.
+  const anchorRef = useRef(null);
+  const zoomTo = (next, t, offset) => {
+    const a = anchorRef.current || { t, offset };
+    const value = Math.min(800, Math.max(1, next));
+    // Ved grensen for zoom skjer ingen ny tegning, så ankeret glemmes med en gang.
+    if (Math.abs(value - pps.value) < 1e-9) {
+      anchorRef.current = null;
+      return;
+    }
+    anchorRef.current = a;
+    pps.value = value;
+  };
+  useLayoutEffect(() => {
+    const a = anchorRef.current;
+    const sc = scrollRef.current;
+    if (!a || !sc) return;
+    anchorRef.current = null;
+    sc.scrollLeft = Math.max(0, PAD + a.t * pps.value - a.offset);
+    view.value = { left: sc.scrollLeft, width: sc.clientWidth };
+  }, [z]);
+
+  // Styreflate som i Final Cut Pro: to fingre ruller sidelengs og opp og ned (vanlig rulling),
+  // knip zoomer rundt pekeren. Ctrl eller Cmd og rullehjulet zoomer også, ett hakk om gangen.
   useEffect(() => {
     const sc = scrollRef.current;
+    const root = sc.closest('.timeline');
     const onWheel = (e) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      const rect = sc.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const t = (sc.scrollLeft + mx - PAD) / pps.value;
-      const next = Math.min(800, Math.max(1, pps.value * Math.exp(-e.deltaY * 0.01)));
-      pps.value = next;
-      requestAnimationFrame(() => (sc.scrollLeft = Math.max(0, PAD + t * next - mx)));
+      const lines = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? sc.clientHeight : 1;
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const rect = sc.getBoundingClientRect();
+        const mx = Math.max(0, Math.min(sc.clientWidth, e.clientX - rect.left));
+        // Knip gir små verdier; et rullehjul gir store hakk som begrenses, så zoomen blir jevn.
+        const dy = Math.max(-40, Math.min(40, e.deltaY * lines));
+        const a = anchorRef.current;
+        const t = a ? a.t : (sc.scrollLeft + mx - PAD) / pps.value;
+        zoomTo(pps.value * Math.exp(-dy * 0.0125), t, a ? a.offset : mx);
+        return;
+      }
+      // Over sporhodene og linjalen: rull tidslinjen likevel.
+      if (!sc.contains(e.target)) {
+        e.preventDefault();
+        sc.scrollTop += e.deltaY * lines;
+        sc.scrollLeft += (e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX) * lines;
+      }
     };
-    sc.addEventListener('wheel', onWheel, { passive: false });
-    return () => sc.removeEventListener('wheel', onWheel);
+    root.addEventListener('wheel', onWheel, { passive: false });
+    return () => root.removeEventListener('wheel', onWheel);
   }, []);
 
   useEffect(() => {
     commands.registerTimelineView({
-      zoomAt: (factor, t, offset) => {
-        const sc = scrollRef.current;
-        pps.value = Math.min(800, Math.max(1, pps.value * factor));
-        requestAnimationFrame(() => (sc.scrollLeft = Math.max(0, PAD + t * pps.value - offset)));
-      },
+      zoomAt: (factor, t, offset) => zoomTo(pps.value * factor, t, offset),
       zoom: (factor) => {
         const sc = scrollRef.current;
         const t = getTime();
-        const offset = tx(t) - sc.scrollLeft;
-        pps.value = Math.min(800, Math.max(1, pps.value * factor));
-        requestAnimationFrame(() => (sc.scrollLeft = Math.max(0, PAD + t * pps.value - offset)));
+        // Spillhodet blir stående; er det utenfor bildet, zoomes det rundt midten.
+        let offset = tx(t) - sc.scrollLeft;
+        if (offset < 0 || offset > sc.clientWidth) offset = sc.clientWidth / 2;
+        zoomTo(pps.value * factor, offset === sc.clientWidth / 2 ? (sc.scrollLeft + offset - PAD) / pps.value : t, offset);
       },
       fit: () => {
         const sc = scrollRef.current;
