@@ -90,6 +90,7 @@ export const COMMANDS = [
   { id: 'optimize', label: 'Optimize Media', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+O', run: () => commands.optimizeMedia(), help: 'optimize', desc: 'Convert the selected clips to a high quality format that is smooth to edit. Runs in the background.' },
   { id: 'syncAudio', label: 'Synchronize Audio', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+G', run: () => commands.autoSyncAudio(), help: 'sync', keywords: 'auto sync audio merge external microphone recorder', desc: 'In the browser: merge audio files into the video clips they belong to. On the timeline: place audio clips under the matching video.' },
   { id: 'removeSync', label: 'Remove Synchronized Audio', menu: 'File', group: 'media', keys: 'Shift+Alt+CmdOrCtrl+G', run: () => commands.removeSyncedAudio(), help: 'sync', desc: 'Remove merged audio from the selected clips and switch the camera audio back on.' },
+  { id: 'relink', label: 'Relink File', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+L', run: () => { const id = commands.browserTargets()[0]; return id ? commands.relinkDialog(id) : toast('Select a clip in the browser or on the timeline first.'); }, help: 'offline', keywords: 'missing offline media find reconnect', desc: 'Point the selected media to a new file, for example when it is missing or has been moved.' },
   { id: 'export', label: 'Export', menu: 'File', group: 'export', keys: 'CmdOrCtrl+E', register: true, rooms: ALL, run: () => (room.value === 'edit' ? (commands.exportOpen.value = true) : (room.value = 'export')), help: 'export', desc: 'Export the project to a video, audio or image sequence file.' },
   { id: 'prefs', label: 'Preferences', menu: isMac ? 'App' : 'File', group: 'prefs', keys: 'CmdOrCtrl+,', register: true, rooms: ALL, run: () => (commands.prefsOpen.value = true), help: 'preferences' },
 
@@ -113,7 +114,7 @@ export const COMMANDS = [
   { id: 'addCaption', label: 'Add Caption', menu: 'Edit', group: 'insertfx', keys: 'Alt+C', run: () => commands.addCaption(), help: 'captions' },
   { id: 'group', label: 'Group Clips', menu: 'Edit', group: 'group', keys: 'CmdOrCtrl+G', run: commands.groupSelected, help: 'grouping', desc: 'Group video and audio so they move, cut and delete together.' },
   { id: 'ungroup', label: 'Ungroup', menu: 'Edit', group: 'group', keys: 'Shift+CmdOrCtrl+G', run: commands.ungroupSelected, help: 'grouping' },
-  { id: 'findCommand', label: 'Search Commands and Help', menu: 'Help', group: 'search', keys: 'CmdOrCtrl+K', rooms: ALL, run: () => (paletteOpen.value = true), help: 'search', keywords: 'find command palette' },
+  { id: 'findCommand', label: 'Quick Search', menu: 'Help', group: 'search', keys: 'Ctrl+Space', also: ['CmdOrCtrl+K'], rooms: ALL, anywhere: true, run: () => (paletteOpen.value = !paletteOpen.value), help: 'search', keywords: 'find command palette console fx effects tools search everything' },
 
   /* Mark */
   { id: 'setIn', label: 'Set Range Start', menu: 'Mark', keys: 'I', run: () => commands.setRange('in'), help: 'range' },
@@ -195,7 +196,7 @@ export const COMMANDS = [
   { id: 'shuttleForward', label: 'Play Forward (faster each press)', menu: 'Playback', group: 'jkl', keys: 'L', run: () => playback.shuttle(1), help: 'playback' },
 
   /* Help */
-  { id: 'help', label: 'OBSlite Help', menu: 'Help', group: 'help', keys: 'F1', rooms: ALL, run: () => (helpOpen.value = {}), help: 'search' },
+  { id: 'help', label: 'Reccut Help', menu: 'Help', group: 'help', keys: 'F1', rooms: ALL, run: () => (helpOpen.value = {}), help: 'search' },
   { id: 'shortcuts', label: 'Keyboard Shortcuts', menu: 'Help', group: 'help', keys: 'Alt+CmdOrCtrl+K', rooms: ALL, run: () => (helpOpen.value = { article: 'shortcuts' }), help: 'shortcuts' },
   { id: 'escape', label: 'Deselect', keys: 'Escape', hidden: true, run: deselectAll },
 ];
@@ -314,7 +315,7 @@ export function menuTemplate() {
   const out = [];
   for (const name of MENU_ORDER) {
     if (name === 'App') {
-      out.push({ label: 'OBSlite', submenu: [{ role: 'about', label: 'About OBSlite' }, { separator: true }, itemFor(byId.get('prefs')), { separator: true }, { role: 'hide', label: 'Hide OBSlite' }, { role: 'hideOthers', label: 'Hide Others' }, { separator: true }, { role: 'quit', label: 'Quit OBSlite' }] });
+      out.push({ label: 'Reccut', submenu: [{ role: 'about', label: 'About Reccut' }, { separator: true }, itemFor(byId.get('prefs')), { separator: true }, { role: 'hide', label: 'Hide Reccut' }, { role: 'hideOthers', label: 'Hide Others' }, { separator: true }, { role: 'quit', label: 'Quit Reccut' }] });
       continue;
     }
     if (name === 'Window') {

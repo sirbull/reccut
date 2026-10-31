@@ -36,6 +36,7 @@ import {
   makeTitleClip,
   project,
   projectFolders,
+  relinkMedia,
   selectedComponent,
   selectedTransition,
   selection,
@@ -642,6 +643,20 @@ export function pickMedia(e, id, order) {
   browserFocus.value = true;
 }
 
+// Relink File: velg filen på nytt for et medium som mangler (eller er flyttet).
+export async function relinkDialog(id) {
+  const m = project.value.media[id];
+  if (!m) return;
+  const file = await api.openFileDialog({ title: `Find ${m.name}`, filters: [{ name: 'Media', extensions: ['*'] }] });
+  if (!file) return;
+  try {
+    await relinkMedia(id, file);
+    toast(`${m.name} is linked to ${file.split(/[\\/]/).pop()}.`, { kind: 'success', timeout: 4000 });
+  } catch (err) {
+    toast(`Could not relink: ${err.message}`, { kind: 'error' });
+  }
+}
+
 /* Grupper (Cmd/Ctrl G): lyden følger videoen når den flyttes. */
 
 export function groupSelected() {
@@ -667,7 +682,7 @@ export function zoomAt(factor, T, offsetPx) {
 }
 
 export async function handleDrop(dt, lane, T) {
-  const raw = dt.getData('application/x-obslite');
+  const raw = dt.getData('application/x-reccut');
   if (raw) {
     const item = JSON.parse(raw);
     if (item.kind === 'media') {

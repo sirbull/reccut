@@ -432,7 +432,7 @@ export function ExportRoom({ active }) {
                 }}
               >
                 <FolderOpen size={14} />
-                <span>{s.dir || 'Movies/OBSlite/Exports'}</span>
+                <span>{s.dir || 'Movies/Reccut/Exports'}</span>
               </button>
             </Row>
           </Section>

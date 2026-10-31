@@ -757,13 +757,13 @@ function TimelineToolbar() {
       <div class="group">
         <div class="tool-group">
           {TOOLS.map((t) => (
-            <IconButton key={t.id} icon={t.icon} title={`${t.label} (${t.key})`} active={tool.value === t.id} onClick={() => (tool.value = t.id)} />
+            <IconButton key={t.id} icon={t.icon} data-tool={t.id} title={`${t.label} (${t.key})`} active={tool.value === t.id} onClick={() => (tool.value = t.id)} />
           ))}
         </div>
         <span class="sep" />
-        <IconButton icon={Magnet} title="Snapping (N)" active={snapping.value} onClick={() => (snapping.value = !snapping.value)} />
-        <IconButton icon={StretchHorizontal} title="Skimming (S)" active={skimming.value} onClick={() => (skimming.value = !skimming.value)} />
-        <IconButton icon={Headphones} title="Audio skimming (Shift S)" active={skimming.value && audioSkimming.value} disabled={!skimming.value} onClick={() => (audioSkimming.value = !audioSkimming.value)} />
+        <IconButton icon={Magnet} data-toggle="snapping" title="Snapping (N)" active={snapping.value} onClick={() => (snapping.value = !snapping.value)} />
+        <IconButton icon={StretchHorizontal} data-toggle="skimming" title="Skimming (S)" active={skimming.value} onClick={() => (skimming.value = !skimming.value)} />
+        <IconButton icon={Headphones} data-toggle="audioSkimming" title="Audio skimming (Shift S)" active={skimming.value && audioSkimming.value} disabled={!skimming.value} onClick={() => (audioSkimming.value = !audioSkimming.value)} />
       </div>
       <div class="tl-time">
         <span class="tc">{formatTimecode(timeSig.value, p.fps)}</span>
@@ -846,7 +846,7 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
   const expanded = clip.expanded && hasAudio && clip.type !== 'audio';
   const speed = speedOf(clip);
   const visual = isVisual(clip) && clip.type !== 'title';
-  const cls = ['tl-clip', `t-${clip.type}`, selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped', audioComponents(clip, media).length > 0 && audioComponents(clip, media).every((c) => c.off) && 'audio-off'].filter(Boolean).join(' ');
+  const cls = ['tl-clip', `t-${clip.type}`, selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped', media?.offline && 'offline', audioComponents(clip, media).length > 0 && audioComponents(clip, media).every((c) => c.off) && 'audio-off'].filter(Boolean).join(' ');
   const label = clip.type === 'title' || clip.type === 'caption' ? clip.props.text || (clip.type === 'caption' ? 'Caption' : 'Title') : clip.name || media?.name || clip.type;
   const narrow = w < 24;
   const thumbStream = media?.streams?.screen || media?.streams?.main || media?.streams?.camera;

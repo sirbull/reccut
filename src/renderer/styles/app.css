@@ -1,4 +1,4 @@
-/* OBSlite: mørkegrått og rolig, inspirert av Final Cut Pro. */
+/* Reccut: mørkegrått og rolig, inspirert av Final Cut Pro. */
 :root {
   --bg-0: #141416;
   --bg-1: #1c1c1e;
@@ -3269,4 +3269,72 @@ kbd.keycap {
 }
 .help-run {
   background: rgba(10, 132, 255, 0.18);
+}
+
+/* Søket (Ctrl mellomrom) */
+.palette {
+  width: min(720px, calc(100vw - 32px));
+}
+.palette-target {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.palette-hint {
+  padding: 6px 10px 8px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.palette-item .kind {
+  flex: none;
+  width: 74px;
+  padding: 1px 0;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-2);
+}
+.palette-item .kind.k-effect { background: rgba(191, 90, 242, 0.25); color: #e7c8ff; }
+.palette-item .kind.k-transition { background: rgba(255, 159, 10, 0.25); color: #ffdca8; }
+.palette-item .kind.k-title { background: rgba(106, 75, 176, 0.4); color: #ddd0ff; }
+.palette-item .kind.k-look { background: rgba(255, 55, 95, 0.22); color: #ffc4d0; }
+.palette-item .kind.k-setting { background: rgba(10, 132, 255, 0.25); color: #cfe5ff; }
+.palette-item .kind.k-media { background: rgba(48, 209, 88, 0.22); color: #c9f5d5; }
+.palette-item.active .kind {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+.palette-item .where {
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Markering av det søket åpnet eller endret */
+@keyframes console-flash {
+  0%, 60% { box-shadow: 0 0 0 2px var(--yellow), 0 0 18px rgba(247, 201, 72, 0.55); }
+  100% { box-shadow: 0 0 0 2px rgba(247, 201, 72, 0), 0 0 18px rgba(247, 201, 72, 0); }
+}
+.console-flash {
+  animation: console-flash 1.8s ease-out;
+  border-radius: 6px;
+}
+
+/* Media som mangler */
+.mbadge.offline {
+  background: #ff453a;
+  color: #fff;
+}
+.tl-clip.offline {
+  background-image: repeating-linear-gradient(135deg, rgba(255, 69, 58, 0.45) 0 6px, rgba(60, 20, 20, 0.6) 6px 12px);
+}
+.tl-clip.offline .clip-label .name::before {
+  content: 'Offline · ';
+  color: #ffb3ad;
+  font-weight: 700;
 }

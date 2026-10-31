@@ -1,5 +1,8 @@
 // Prosjekter: hvert prosjekt har sin egen mappe med prosjektfilen og undermapper for media.
-// Eldre prosjekter (bare en fil i Filmer/OBSlite/Projects) kan fortsatt åpnes.
+// Eldre prosjekter (bare en fil i en felles Projects-mappe, og prosjekter fra da appen het
+// OBSlite, med endelsen .obslite) kan fortsatt åpnes.
+const LEGACY_NAME = 'OBSlite';
+const EXTENSIONS = ['.reccut', '.obslite'];
 const { app, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -8,6 +11,11 @@ const SUBDIRS = { media: 'Media', recordings: 'Recordings', optimized: 'Optimize
 
 function legacyDir(base) {
   return path.join(base, 'Projects');
+}
+
+// Felles prosjektmapper: i Reccut-mappen og i den gamle OBSlite-mappen.
+function legacyDirs(base) {
+  return [legacyDir(base), path.join(path.dirname(base), LEGACY_NAME, 'Projects')];
 }
 
 function recentFile() {
@@ -43,14 +51,14 @@ async function create(location, name) {
   while (fs.existsSync(dir)) dir = path.join(location, `${safeName(name)} ${n++}`);
   await fs.promises.mkdir(dir, { recursive: true });
   for (const sub of Object.values(SUBDIRS)) await fs.promises.mkdir(path.join(dir, sub), { recursive: true });
-  const file = path.join(dir, `${path.basename(dir)}.obslite`);
+  const file = path.join(dir, `${path.basename(dir)}.reccut`);
   await touchRecent(file);
   return { file, dir, name: path.basename(dir) };
 }
 
 // Mappene et prosjekt bruker. Eldre prosjekter uten egen mappe bruker felles mapper i basismappen.
 async function folders(base, file) {
-  const own = file && !path.dirname(file).startsWith(legacyDir(base));
+  const own = file && !legacyDirs(base).some((d) => path.dirname(file).startsWith(d));
   const root = own ? path.dirname(file) : base;
   const out = { root, own };
   for (const [key, sub] of Object.entries(SUBDIRS)) {
@@ -68,15 +76,24 @@ async function info(file) {
 
 async function list(base) {
   const files = new Set((await readRecent()).filter((f) => fs.existsSync(f)));
-  const dir = legacyDir(base);
-  if (fs.existsSync(dir)) for (const f of await fs.promises.readdir(dir)) if (f.endsWith('.obslite')) files.add(path.join(dir, f));
+  for (const dir of legacyDirs(base)) {
+    if (fs.existsSync(dir)) for (const f of await fs.promises.readdir(dir)) if (EXTENSIONS.some((e) => f.endsWith(e))) files.add(path.join(dir, f));
+  }
   const out = [];
   for (const f of files) out.push(await info(f).catch(() => null));
   return out.filter(Boolean).sort((a, b) => b.modified - a.modified);
 }
 
+// Stier til bufferen (miniatyrbilder, lydbølger, kopier) i den gamle OBSlite-mappen pekes til den nye.
+function fixOldPaths(text) {
+  const oldData = path.join(app.getPath('appData'), LEGACY_NAME);
+  const newData = app.getPath('userData');
+  const esc = (p) => JSON.stringify(p).slice(1, -1);
+  return text.split(esc(oldData + path.sep)).join(esc(newData + path.sep));
+}
+
 async function load(file) {
-  const data = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+  const data = JSON.parse(fixOldPaths(await fs.promises.readFile(file, 'utf8')));
   await touchRecent(file);
   return data;
 }

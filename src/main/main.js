@@ -97,8 +97,29 @@ function send(channel, payload) {
 }
 
 function baseDir() {
-  return path.join(app.getPath('videos'), 'OBSlite');
+  return path.join(app.getPath('videos'), 'Reccut');
 }
+
+// Appen het tidligere OBSlite. Innstillinger, buffer og nylige prosjekter flyttes over første gang.
+function migrateFromOldName() {
+  try {
+    const oldData = path.join(app.getPath('appData'), 'OBSlite');
+    const newData = app.getPath('userData');
+    if (!fs.existsSync(oldData)) return;
+    // Electron kan ha laget den nye mappen allerede. Flytt alt som ikke finnes der ennå,
+    // men bare første gang (før den nye mappen har egne innstillinger).
+    if (fs.existsSync(path.join(newData, 'Local Storage')) || fs.existsSync(path.join(newData, 'recent-projects.json'))) return;
+    fs.mkdirSync(newData, { recursive: true });
+    for (const name of fs.readdirSync(oldData)) {
+      const to = path.join(newData, name);
+      if (!fs.existsSync(to)) fs.renameSync(path.join(oldData, name), to);
+    }
+    fs.rmSync(oldData, { recursive: true, force: true });
+  } catch (err) {
+    console.error('Could not move settings from OBSlite', err);
+  }
+}
+migrateFromOldName();
 
 function createWindow() {
   win = new BrowserWindow({
@@ -106,7 +127,7 @@ function createWindow() {
     height: 900,
     minWidth: 1100,
     minHeight: 680,
-    title: 'OBSlite',
+    title: 'Reccut',
     backgroundColor: '#1b1b1d',
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 14, y: 16 },
@@ -359,6 +380,8 @@ ipcMain.handle('media:reanalyze', async (_e, items) => {
 ipcMain.handle('media:reverse', (_e, m) => {
   media.scheduleReverse(m, notifyAnalyzed);
 });
+ipcMain.handle('media:offline', (_e, items) => items.filter((m) => media.isOffline(m)).map((m) => m.id));
+ipcMain.handle('media:relink', (_e, m, file) => media.relink(m, file, notifyAnalyzed));
 ipcMain.handle('media:optimize', (_e, items, outDir) => {
   for (const m of items) media.scheduleOptimize(m, outDir, notifyAnalyzed);
 });
@@ -367,7 +390,7 @@ ipcMain.handle('media:exists', (_e, file) => fs.existsSync(file));
 // Opptak i prosjektets opptaksmappe, og i den felles mappen fra eldre versjoner.
 ipcMain.handle('media:recordings', async (_e, projectDir) => {
   const out = [];
-  for (const dir of [projectDir, path.join(baseDir(), 'Recordings')]) {
+  for (const dir of [projectDir, path.join(baseDir(), 'Recordings'), path.join(path.dirname(baseDir()), 'OBSlite', 'Recordings')]) {
     if (!dir || !fs.existsSync(dir)) continue;
     for (const name of await fs.promises.readdir(dir)) {
       const full = path.join(dir, name);
@@ -438,7 +461,7 @@ ipcMain.handle('projects:folders', (_e, file) => projects.folders(baseDir(), fil
 ipcMain.handle('projects:forget', (_e, file) => projects.forget(file));
 ipcMain.handle('projects:trash', (_e, file) => projects.trash(baseDir(), file));
 ipcMain.handle('dialog:openProject', async () => {
-  const r = await dialog.showOpenDialog(win, { title: 'Open Project', defaultPath: baseDir(), properties: ['openFile'], filters: [{ name: 'OBSlite Project', extensions: ['obslite'] }] });
+  const r = await dialog.showOpenDialog(win, { title: 'Open Project', defaultPath: baseDir(), properties: ['openFile'], filters: [{ name: 'Reccut Project', extensions: ['reccut', 'obslite'] }] });
   return r.canceled ? null : r.filePaths[0];
 });
 
@@ -519,8 +542,10 @@ ipcMain.handle('export:start', (_e, payload) => {
     run: async (ctx) => {
       // Baklengs klipp trenger en baklengs kopi av kilden for å eksporteres raskt.
       const p = payload.project;
+      // Media som mangler, eksporteres som testkortet Media Offline.
+      for (const m of Object.values(p.media)) m.offline = media.isOffline(m);
       for (const c of Object.values(p.clips)) {
-        const m = c.reverse && p.media[c.mediaId];
+        const m = c.reverse && !p.media[c.mediaId]?.offline && p.media[c.mediaId];
         if (!m) continue;
         for (const [key, st] of Object.entries(m.streams)) {
           if (st.reversed && fs.existsSync(st.reversed)) continue;
@@ -529,7 +554,7 @@ ipcMain.handle('export:start', (_e, payload) => {
           notifyAnalyzed({ mediaId: m.id, stream: key, patch: { reversed: st.reversed } });
         }
       }
-      return jobs.runInWorker('export', { ...payload, ffmpeg: ff.getFfmpegPath(), tmpDir: path.join(os.tmpdir(), 'obslite-export') }, ctx);
+      return jobs.runInWorker('export', { ...payload, ffmpeg: ff.getFfmpegPath(), tmpDir: path.join(os.tmpdir(), 'reccut-export') }, ctx);
     },
   });
   done.finally(() => reservedOutputs.delete(payload.settings.output)).catch(() => {});

@@ -94,7 +94,7 @@ async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
   for (const c of Object.values(project.clips)) {
     if (c.lane === CAPTION_LANE || !c.mediaId) continue;
     const m = project.media[c.mediaId];
-    if (!clipHasAudio(c, m)) continue;
+    if (!m || m.offline || !clipHasAudio(c, m)) continue;
     if (c.start > b + PAD || c.start + c.dur < a - PAD) continue;
     // Lydkomponentene som er på (kameralyd, synket lyd, mikrofon og systemlyd).
     const keys = audioComponents(c, m).filter((x) => !x.off).map((x) => x.key);
@@ -297,7 +297,7 @@ function neededFrames(project, frame) {
   const out = [];
   const add = (clip, T) => {
     const m = project.media[clip.mediaId];
-    if (!m) return;
+    if (!m || m.offline) return;
     const s = sourceTime(clip, T);
     for (const [key, st] of Object.entries(m.streams)) {
       if (!st.hasVideo) continue;

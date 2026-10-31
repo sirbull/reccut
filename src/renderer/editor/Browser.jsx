@@ -47,7 +47,7 @@ export function Browser() {
     <div class="browser panel">
       <div class="panel-tabs">
         {TABS.map((t) => (
-          <button key={t.id} class={tab === t.id ? 'active' : ''} title={t.label} onClick={() => setTab(t.id)}>
+          <button key={t.id} data-tab={t.id} class={tab === t.id ? 'active' : ''} title={t.label} onClick={() => setTab(t.id)}>
             <t.icon size={15} />
             {tab === t.id && <span>{t.label}</span>}
           </button>
@@ -65,7 +65,7 @@ export function Browser() {
 }
 
 function dragData(e, item) {
-  e.dataTransfer.setData('application/x-obslite', JSON.stringify(item));
+  e.dataTransfer.setData('application/x-reccut', JSON.stringify(item));
   e.dataTransfer.effectAllowed = 'copy';
 }
 
@@ -81,6 +81,7 @@ function MediaBadges({ m }) {
   const optimized = streams.some((x) => x.optimized);
   return (
     <>
+      {m.offline && <span class="mbadge offline" title="The file is missing. Right click and choose Relink File.">OFFLINE</span>}
       {color?.hdr && <span class="mbadge hdr" title={`HDR (${color.hdr === 'pq' ? 'PQ' : 'HLG'}). Shown tone mapped to SDR.`}>HDR</span>}
       {!color?.hdr && color?.bits > 8 && <span class="mbadge" title={`${color.bits}-bit color`}>{color.bits}-bit</span>}
       {m.raw && <span class="mbadge" title="Camera RAW photo">RAW</span>}
@@ -185,6 +186,7 @@ function MediaCard({ m }) {
   return (
     <div
       class={`media-card${selected ? ' selected' : ''}`}
+      data-media={m.id}
       draggable
       onDragStart={(e) => dragData(e, { kind: 'media', id: m.id, ids: commands.browserPicked.value.includes(m.id) ? mediaOrder.filter((x) => commands.browserPicked.value.includes(x)) : [m.id] })}
       onClick={(e) => commands.pickMedia(e, m.id, mediaOrder)}
@@ -305,7 +307,7 @@ function FilmstripRow({ m }) {
   };
 
   return (
-    <div class={`film-row${selected ? ' selected' : ''}`} onContextMenu={(e) => mediaContextMenu(e, m, used)}>
+    <div class={`film-row${selected ? ' selected' : ''}`} data-media={m.id} onContextMenu={(e) => mediaContextMenu(e, m, used)}>
       <div
         class="film-head"
         draggable
@@ -388,7 +390,8 @@ async function mediaContextMenu(e, m, used) {
     { id: 'unsync', label: 'Remove Synchronized Audio', enabled: synced },
     { id: 'optimize', label: n > 1 ? `Optimize ${n} Clips` : 'Optimize Media', accelerator: 'Shift+CmdOrCtrl+O', enabled: hasVideo },
     { separator: true },
-    { id: 'reveal', label: isMac ? 'Reveal in Finder' : 'Show in Explorer' },
+    { id: 'relink', label: m.offline ? 'Relink Missing File…' : 'Relink File…', enabled: n === 1 },
+    { id: 'reveal', label: isMac ? 'Reveal in Finder' : 'Show in Explorer', enabled: !m.offline },
     { id: 'remove', label: n > 1 ? `Remove ${n} Clips from Project` : 'Remove from Project', enabled: !inUse },
   ]);
   if (['append', 'insert', 'connect', 'overwrite'].includes(id)) commands.addBrowserSelection(id);
@@ -396,6 +399,7 @@ async function mediaContextMenu(e, m, used) {
   else if (id === 'unsync') commands.removeSyncedAudio();
   else if (id === 'optimize') commands.optimizeMedia();
   else if (id === 'reveal') api.reveal(m.path);
+  else if (id === 'relink') commands.relinkDialog(m.id);
   else if (id === 'remove') {
     commit((p) => picked.forEach((x) => delete p.media[x.id]));
     commands.browserPicked.value = [];

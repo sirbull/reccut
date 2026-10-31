@@ -1,6 +1,6 @@
 {
-  "name": "obslite",
-  "productName": "OBSlite",
+  "name": "reccut",
+  "productName": "Reccut",
   "version": "0.2.0",
   "description": "Ta opp, rediger og eksporter opplæringsvideoer",
   "main": "src/main/main.js",
@@ -27,8 +27,8 @@
     "mediabunny": "^1.65.0"
   },
   "build": {
-    "appId": "no.sirbull.obslite",
-    "productName": "OBSlite",
+    "appId": "no.sirbull.reccut",
+    "productName": "Reccut",
     "files": [
       "build/**/*",
       "src/main/**/*",
@@ -48,10 +48,10 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSCameraUsageDescription": "OBSlite bruker kameraet for å vise deg i opptaket.",
-        "NSMicrophoneUsageDescription": "OBSlite bruker mikrofonen for å ta opp lyd.",
-        "NSScreenCaptureUsageDescription": "OBSlite tar opp skjermen din.",
-        "NSAppleEventsUsageDescription": "OBSlite viser tastetrykk i opptaket."
+        "NSCameraUsageDescription": "Reccut bruker kameraet for å vise deg i opptaket.",
+        "NSMicrophoneUsageDescription": "Reccut bruker mikrofonen for å ta opp lyd.",
+        "NSScreenCaptureUsageDescription": "Reccut tar opp skjermen din.",
+        "NSAppleEventsUsageDescription": "Reccut viser tastetrykk i opptaket."
       }
     },
     "win": {

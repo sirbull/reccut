@@ -153,7 +153,20 @@ export function NumberField({ value, onChange, onCommit, onStart, min = -Infinit
     );
   }
   return (
-    <div class={`num-field${disabled ? ' disabled' : ''}`} style={{ width }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+    <div
+      class={`num-field${disabled ? ' disabled' : ''}`}
+      style={{ width }}
+      tabIndex={disabled ? -1 : 0}
+      // Med tastaturet (Tab eller hurtigsøket) går feltet rett i skrivemodus.
+      onFocus={() => {
+        if (disabled || drag.current) return;
+        setText(display);
+        setEditing(true);
+      }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+    >
       {display}
       {unit && <span class="unit">{unit}</span>}
     </div>

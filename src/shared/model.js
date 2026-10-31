@@ -753,7 +753,7 @@ export function computeAudio(project, T) {
   for (const { clip, f, over } of factors.values()) {
     if (!clip.enabled || laneMuted(project, clip.lane) || (solo && !clip.solo)) continue;
     const media = project.media[clip.mediaId];
-    if (!media || !clipHasAudio(clip, media)) continue;
+    if (!media || media.offline || !clipHasAudio(clip, media)) continue;
     const [aw, bw] = audioWindow(clip);
     // Utenfor lydvinduet høres klippet bare under en overgang.
     if ((T < aw || T >= bw) && !over) continue;

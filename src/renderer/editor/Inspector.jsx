@@ -83,7 +83,7 @@ function ClipInspector({ clip }) {
     <div class="inspector panel">
       <div class="panel-tabs">
         {tabs.map((t) => (
-          <button key={t.id} class={tab === t.id ? 'active' : ''} onClick={() => (inspectorTab.value = t.id)}>
+          <button key={t.id} data-tab={t.id} class={tab === t.id ? 'active' : ''} onClick={() => (inspectorTab.value = t.id)}>
             <span>{t.label}</span>
           </button>
         ))}
@@ -134,7 +134,7 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
 
   return (
     <>
-      <div class="param">
+      <div class="param" data-prop={prop}>
         <span class="param-label" title={label}>
           {label}
         </span>
@@ -286,7 +286,7 @@ function EffectsTab({ clip }) {
       <Section title="Effects">
         {active.length === 0 && <p class="hint">No effects yet. Add one below, or drag one from the Effects browser.</p>}
         {active.map((fx) => (
-          <div key={fx.id} class="fx-item">
+          <div key={fx.id} class="fx-item" data-fx={fx.id}>
             <div class="fx-head">
               <b>{fx.label}</b>
               <IconButton icon={Trash2} size={13} title="Remove effect" onClick={() => remove(fx)} />
@@ -513,7 +513,7 @@ function ColorTab({ clip }) {
   return (
     <>
       <Section title="Looks">
-        <div class="looks">
+        <div class="looks" data-section="looks">
           {COLOR_LOOKS.map((l) => (
             <button
               key={l.id}
@@ -546,7 +546,7 @@ function ColorTab({ clip }) {
         <Param clip={clip} prop="tint" label="Tint" min={-100} max={100} scale={100} center={0} />
       </Section>
       <Section title="Color Wheels">
-        <div class="wheels">
+        <div class="wheels" data-section="wheels">
           <ColorWheel clip={clip} name="lift" label="Shadows" />
           <ColorWheel clip={clip} name="gamma" label="Midtones" />
           <ColorWheel clip={clip} name="gain" label="Highlights" />

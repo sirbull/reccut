@@ -1,6 +1,7 @@
 // Tegner ett bilde av prosjektet. Samme kode brukes i forhåndsvisning og eksport,
 // så det du ser i redigeringen er det som havner i filen.
 import { gpuGradeAvailable, gradeImage, gradeParams } from './grade.js';
+import { drawTestCard } from './testcard.js';
 import {
   DEFAULT_CAPTION_STYLE,
   FONTS,
@@ -258,6 +259,12 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1) {
   }
 
   const s = sourceTime(clip, T);
+  // Filen mangler: testkortet med filnavnet vises der klippet skulle vært.
+  if (media?.offline && (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording')) {
+    drawTestCard(ctx, W, H, { top: media.name, bottom: 'MEDIA OFFLINE', info: `${media.width || W} × ${media.height || H}${media.fps ? `  ${Math.round(media.fps)}p` : ''}` });
+    ctx.restore();
+    return;
+  }
   if (clip.type === 'video' || clip.type === 'image') {
     let src = getSource(clip, 'main', s);
     if (src) src = graded(clip, T, src);

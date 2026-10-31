@@ -38,6 +38,8 @@ contextBridge.exposeInMainWorld('api', {
   readWave: invoke('media:wave'),
   reverseMedia: invoke('media:reverse'),
   optimizeMedia: invoke('media:optimize'),
+  offlineMedia: invoke('media:offline'),
+  relinkMedia: invoke('media:relink'),
   exists: invoke('media:exists'),
   listRecordings: invoke('media:recordings'),
   readText: invoke('file:read'),

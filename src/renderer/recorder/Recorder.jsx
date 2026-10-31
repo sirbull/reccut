@@ -187,7 +187,7 @@ export function Recorder({ active }) {
                 <>
                   <p>
                     {isMac
-                      ? 'To show keystrokes and zoom the cursor while you hold a key, OBSlite needs Accessibility access.'
+                      ? 'To show keystrokes and zoom the cursor while you hold a key, Reccut needs Accessibility access.'
                       : 'The keyboard listener could not start.'}
                   </p>
                   <button class="btn secondary small" onClick={requestInput}>
@@ -201,7 +201,7 @@ export function Recorder({ active }) {
           )}
           <p class="hint">
             {inputReady ? <>Hold <b>{zoomLabel}</b> to zoom the cursor. </> : null}
-            Only shortcuts with Cmd, Ctrl or Alt are shown, never regular typing. OBSlite's own shortcuts are never shown.
+            Only shortcuts with Cmd, Ctrl or Alt are shown, never regular typing. Reccut's own shortcuts are never shown.
           </p>
         </Section>
 
@@ -212,7 +212,7 @@ export function Recorder({ active }) {
           <Row label="Render video automatically">
             <Toggle checked={s.autoRender} onChange={(v) => set({ autoRender: v })} />
           </Row>
-          <Row label={<><AppWindow size={14} /> Hide OBSlite from recording</>}>
+          <Row label={<><AppWindow size={14} /> Hide Reccut from recording</>}>
             <Toggle
               checked={s.hideFromCapture}
               onChange={(v) => {

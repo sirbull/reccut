@@ -1,4 +1,4 @@
-# Plan for OBSlite 0.2: opptak og redigering i én app
+# Plan for Reccut 0.2: opptak og redigering i én app
 
 Målet er én enkel app for opplæringsvideoer: ta opp, rediger og eksporter. Opptaksdelen er som før, men med systemlyd, tastetrykk og forstørret musepeker. Redigeringsdelen ligner Final Cut Pro, men i en enkel versjon.
 

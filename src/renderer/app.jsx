@@ -141,7 +141,7 @@ function TitleBar() {
     <header class={`titlebar${isMac ? ' mac' : ''}`}>
       <div class="brand">
         <span class="logo" />
-        OBSlite
+        Reccut
       </div>
       <div class="rooms">
         <button class={r === 'record' ? 'active' : ''} onClick={() => (room.value = 'record')} title={`Record (${isMac ? '⌘' : 'Ctrl+'}1)`}>
@@ -222,6 +222,18 @@ function isTyping() {
 }
 
 // Tastetrykk går gjennom kommandoregisteret. Taster i tekstfelt og åpne dialoger røres ikke.
+// Ctrl mellomrom åpner søket fra hvor som helst, også fra tekstfelt som ellers stopper tastene.
+function onKeyDownCapture(e) {
+  if (document.querySelector('.help-window') || document.querySelector('.palette')) return;
+  const any = commandForEvent(e, room.value);
+  if (!any?.anywhere) return;
+  e.preventDefault();
+  e.stopPropagation();
+  // Feltet som hadde fokus, slipper det, så det du skriver havner i søket.
+  if (isTyping()) document.activeElement.blur();
+  runCommand(any);
+}
+
 function onKeyDown(e) {
   if (isTyping() || document.querySelector('.modal-backdrop')) return;
   const cmd = commandForEvent(e, room.value);
@@ -262,7 +274,9 @@ function App() {
     });
     const offMenu = api.onMenu(handleMenu);
     window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDownCapture, true);
     return () => {
+      window.removeEventListener('keydown', onKeyDownCapture, true);
       offShortcut();
       offMenu();
       window.removeEventListener('keydown', onKeyDown);
@@ -294,12 +308,13 @@ function App() {
 }
 
 // Brukes av de automatiske testene.
-window.__obslite = {
+window.__reccut = {
   importPaths: (paths, placement) => import('./editor/store.js').then((m) => m.importPaths(paths, placement)),
   exportState: () => import('./export/state.js'),
   store: () => import('./editor/store.js'),
   commands: () => import('./editor/commands.js'),
   registry: () => import('./registry.js'),
+  model: () => import('../shared/model.js'),
   openRecording: async (dir) => {
     const m = await import('./editor/store.js');
     await m.addRecordingToProject(dir);

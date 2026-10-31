@@ -98,7 +98,7 @@ export async function useScreen() {
     console.error(err);
     notice.value =
       api.platform === 'darwin'
-        ? { kind: 'screen', text: 'OBSlite is not allowed to record the screen. Allow it in System Settings and restart the app.', action: 'Open Settings', onAction: () => api.openPermissionSettings('screen') }
+        ? { kind: 'screen', text: 'Reccut is not allowed to record the screen. Allow it in System Settings and restart the app.', action: 'Open Settings', onAction: () => api.openPermissionSettings('screen') }
         : { kind: 'screen', text: 'Could not start screen capture.' };
   }
   updateSize();

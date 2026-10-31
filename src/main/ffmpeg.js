@@ -120,7 +120,7 @@ function transcode(file, output, { color, duration, quality = 'optimized', audio
     const fast = quality === 'proxy';
     args.push('-c:v', 'libvpx-vp9', '-profile:v', '2', '-crf', fast ? '24' : '15', '-b:v', '0', '-g', '15', '-row-mt', '1', '-tile-columns', '2', '-deadline', fast ? 'realtime' : 'good', '-cpu-used', fast ? '8' : '4');
     args.push('-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709');
-    if (color?.hdr) args.push('-metadata:s:v:0', `obslite_tonemapped=${color.hdr}`);
+    if (color?.hdr) args.push('-metadata:s:v:0', `reccut_tonemapped=${color.hdr}`);
     if (audio) args.push('-c:a', 'libopus', '-b:a', '256k');
   } else {
     args.push('-c:v', 'libx264', '-preset', quality === 'proxy' ? 'veryfast' : 'medium', '-crf', quality === 'proxy' ? '18' : '12', '-g', '15', '-bf', '0', '-profile:v', 'high');

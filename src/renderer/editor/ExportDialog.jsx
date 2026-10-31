@@ -163,7 +163,7 @@ export function ExportDialog() {
               }}
             >
               <FolderOpen size={14} />
-              <span>{dir || 'Movies/OBSlite/Exports'}</span>
+              <span>{dir || 'Movies/Reccut/Exports'}</span>
             </button>
           </Row>
           {audioOnly ? (

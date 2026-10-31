@@ -1,4 +1,6 @@
-# OBSlite
+# Reccut
+
+Appen het tidligere OBSlite. Innstillinger, nylige prosjekter og prosjekter med endelsen .obslite flyttes over og åpnes som før.
 
 Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet er på engelsk. Appen er delt i tre faner, **Record**, **Edit** og **Export** (Cmd 1, 2 og 3), som kan brukes hver for seg: du kan redigere uten å ha tatt opp, og eksportere eller konvertere filer uten å ha redigert.
 
@@ -8,7 +10,7 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 * **Systemlyd** med én bryter
 * Kamerabildet som sirkel, kvadrat eller 16:9, i tre størrelser
 * Seks oppsett som byttes med hurtigtast under opptak: 1 kamera, 2 skjerm, 3 til 6 bilde i bilde i hvert hjørne
-* **Tastetrykk vises på skjermen** (kan slås av). Bare snarveier med Cmd, Ctrl eller Alt vises, aldri vanlig skriving. OBSlite sine egne snarveier vises ikke.
+* **Tastetrykk vises på skjermen** (kan slås av). Bare snarveier med Cmd, Ctrl eller Alt vises, aldri vanlig skriving. Reccut sine egne snarveier vises ikke.
 * **Forstørret musepeker:** hold inne en tast (standard høyre Cmd på Mac, høyre Ctrl på Windows), så vokser pekeren frem med en animasjon til du slipper
 * Fremheving av museklikk (valgfritt)
 * Skjerm og kamera lagres hver for seg, sammen med oppsett, peker og tastetrykk. Alt kan dermed endres i etterkant.
@@ -23,6 +25,7 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 * **Optimize Media** (Option Cmd O, også som valg ved import) gjør klippene om til et format som er lett å redigere: H.264 med kort GOP for 8-bit, og 10-bit VP9 for 10-bit og HDR. Det skjer i bakgrunnen med fremdrift øverst i vinduet.
 * **HDR** (PQ og HLG) gjenkjennes ved import og vises tonemappet til SDR, med 10 bit i arbeidskopien. Eksport i HDR støttes ikke ennå.
 * **RAW-bilder** (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 og flere) importeres med kameraets innebygde JPEG i full størrelse, med riktig orientering. Selve RAW-dataene fremkalles ikke, og RAW-video (BRAW, R3D, ProRes RAW) støttes ikke.
+* **Media Offline**: mangler en fil (flyttet, omdøpt eller på en disk som ikke er koblet til), vises et testkort i stil med det gamle NRK-kortet, med filnavnet øverst og MEDIA OFFLINE nederst. Kortet tegnes for prosjektets format, så sirkelen alltid er rund, og det brukes også i eksporten. Appen sjekker på nytt når vinduet får fokus, og **Relink File** (høyreklikk i biblioteket eller Option Cmd L) peker mediet til en ny fil uten at redigeringen går tapt.
 * Merker i biblioteket viser HDR, 10-bit, RAW, optimalisert media og synket lyd. Info-fanen viser hvilken fil som brukes til avspilling.
 
 ## Redigering
@@ -80,7 +83,7 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 ## Hjelp, søk og hurtigtaster
 
 * Alle verktøy og funksjoner har en hurtigtast, og alle står i menyene med tasten ved siden av. Menyene, tastene, søket og listen over hurtigtaster lages fra én liste i koden (`src/renderer/registry.js`), så de alltid stemmer med hverandre.
-* **Cmd K** (Ctrl K på Windows) åpner kommandosøket: skriv hva du vil gjøre, trykk Enter, så kjøres kommandoen eller verktøyet åpnes. På Mac har også Hjelp-menyen det vanlige søkefeltet som finner menyvalg.
+* **Ctrl mellomrom** åpner hurtigsøket, som FX Console: skriv navnet på en effekt, et verktøy, en overgang, en tittel, en look, en animasjon, en innstilling (for eksempel Exposure eller Volume), en kommando eller et medium, og trykk Enter. Effekter og looks legges på valgte klipp, innstillinger åpnes i inspektøren med tallfeltet klart, og det som ble endret eller åpnet, blinker kort så du ser hvor det er. Virker også mens du skriver i et felt. Cmd K (Ctrl K) og spørsmålstegnet øverst åpner det samme. På Mac har også Hjelp-menyen det vanlige søkefeltet som finner menyvalg.
 * **F1** åpner hjelpen med artikler og bilder for alle deler av appen, og et søk som finner både artikler og kommandoer. Knapper i artiklene kjører kommandoen de beskriver.
 * **Option Cmd K** viser alle hurtigtaster, gruppert etter meny.
 
@@ -121,7 +124,8 @@ Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konv
 | Shift Cmd F | Spill av i fullskjerm |
 | Shift Cmd A | Fjern alt utvalg |
 | Shift Cmd R | Vis prosjektmappen |
-| Cmd K, F1, Option Cmd K | Søk etter kommandoer, hjelp, alle hurtigtaster |
+| Ctrl mellomrom, F1, Option Cmd K | Hurtigsøk, hjelp, alle hurtigtaster |
+| Option Cmd L | Relink File (finn en fil som mangler) |
 | Cmd , | Preferences |
 | Cmd B, Shift Cmd B | Kutt valgte klipp ved spillhodet, kutt alle |
 | Delete, Shift Delete | Slett og lukk, slett og behold mellomrom |
@@ -148,7 +152,7 @@ Installasjonsfiler bygges av GitHub Actions: fanen **Actions**, arbeidsflyten **
 
 Appen er ikke kodesignert ennå:
 
-* **Mac:** Hvis macOS sier at appen er skadet, kjør `xattr -cr /Applications/OBSlite.app` i Terminal. Gi tilgang til kamera, mikrofon og skjermopptak. For tastetrykk og forstørret peker trengs også tilgang under Personvern og sikkerhet, Tilgjengelighet. Start appen på nytt etter at tilgang er gitt.
+* **Mac:** Hvis macOS sier at appen er skadet, kjør `xattr -cr /Applications/Reccut.app` i Terminal. Gi tilgang til kamera, mikrofon og skjermopptak. For tastetrykk og forstørret peker trengs også tilgang under Personvern og sikkerhet, Tilgjengelighet. Start appen på nytt etter at tilgang er gitt.
 * **Windows:** Velg **Mer informasjon** og **Kjør likevel** hvis SmartScreen advarer.
 
 ## Kjøre fra kildekoden

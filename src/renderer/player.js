@@ -112,7 +112,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     const frame = computeFrame(p, T, { captions: false });
     const addVisual = (clip, t) => {
       const m = p.media[clip.mediaId];
-      if (!m || m.kind === 'image') return;
+      if (!m || m.kind === 'image' || m.offline) return;
       const s = sourceTime(clip, t);
       const sp = instSpeed(clip, t - clip.start) * (clip.reverse ? -1 : 1);
       for (const [key, st] of Object.entries(m.streams)) {

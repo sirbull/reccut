@@ -62,7 +62,7 @@ export function NewProjectDialog() {
   };
   return (
     <Modal
-      title={required ? 'Welcome to OBSlite' : 'New Project'}
+      title={required ? 'Welcome to Reccut' : 'New Project'}
       width={660}
       onClose={required ? null : close}
       footer={

@@ -182,6 +182,12 @@ export function setProject(p, path = null) {
 export async function openProjectFile(path) {
   const p = await api.loadProject(path);
   setProject(p, path);
+  const offline = await checkOffline();
+  if (offline.length) {
+    import('../ui.jsx').then(({ toast }) =>
+      toast(`${offline.length} media file${offline.length > 1 ? 's are' : ' is'} missing and shown as Media Offline. Right click a clip in the browser and choose Relink File to find it.`, { kind: 'error', timeout: 10000 })
+    );
+  }
   // Finn analyser som mangler (for eksempel etter at bufferen er tømt).
   const missing = [];
   for (const m of Object.values(p.media)) {
@@ -272,6 +278,53 @@ api.onAnalyzed(({ mediaId, stream, patch }) => {
   waveVersion.value++;
   scheduleSave();
 });
+
+/* Media som mangler (Media Offline). Sjekkes når prosjektet åpnes og når vinduet får fokus,
+   så en disk som kobles til igjen blir oppdaget. Endringen lagres uten eget angresteg. */
+function patchMedia(fn) {
+  const apply = (p) => {
+    const media = fn(p.media);
+    return media === p.media ? p : { ...p, media };
+  };
+  project.value = apply(project.value);
+  for (let i = 0; i < undoStack.length; i++) undoStack[i] = apply(undoStack[i]);
+  for (let i = 0; i < redoStack.length; i++) redoStack[i] = apply(redoStack[i]);
+  if (transientBase) transientBase = apply(transientBase);
+}
+
+export async function checkOffline() {
+  const list = Object.values(project.value.media);
+  if (!list.length) return [];
+  const off = new Set(await api.offlineMedia(list));
+  const changed = list.some((m) => Boolean(m.offline) !== off.has(m.id));
+  if (changed) {
+    patchMedia((media) => {
+      const next = { ...media };
+      for (const m of Object.values(media)) {
+        if (Boolean(m.offline) === off.has(m.id)) continue;
+        next[m.id] = { ...m, offline: off.has(m.id) || undefined };
+      }
+      return next;
+    });
+  }
+  return [...off];
+}
+
+let focusTimer = null;
+window.addEventListener('focus', () => {
+  clearTimeout(focusTimer);
+  focusTimer = setTimeout(checkOffline, 400);
+});
+
+// Relink File: pek mediet til en ny fil. Klippene på tidslinjen beholdes.
+export async function relinkMedia(id, file) {
+  const m = project.value.media[id];
+  if (!m) return;
+  const fresh = withAnalysis(await api.relinkMedia(m, file));
+  commit((p) => {
+    p.media[id] = { ...fresh, offline: undefined };
+  });
+}
 
 const waveCache = new Map();
 export function getWave(path) {

@@ -375,9 +375,27 @@ function scheduleOptimize(media, outDir, notify) {
   });
 }
 
+// Et medium er offline når ingen av filene finnes: verken originalen, arbeidskopien eller optimalisert media.
+function isOffline(media) {
+  // Synket lyd fra en annen fil teller ikke: det er bildet og kameralyden som mangler.
+  const streams = Object.values(media.streams || {}).filter((st) => !st.syncedFrom);
+  if (!streams.length) return !fs.existsSync(media.path);
+  return streams.every((st) => ![st.optimized, st.proxy, st.path].some((p) => p && fs.existsSync(p)));
+}
+
+// Bytter filen et medium peker på (Relink File). Analyser og kopier lages på nytt.
+async function relink(media, file, notify) {
+  const { items, failed } = await importFiles([file], () => {});
+  if (failed.length || !items.length) throw new Error('The file could not be read.');
+  const fresh = items[0];
+  const next = { ...fresh, id: media.id, name: media.name === path.basename(media.path) ? fresh.name : media.name };
+  scheduleAnalysis(next, notify);
+  return next;
+}
+
 // Alle filendelser appen kjenner, for importdialogen.
 function extensions() {
   return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT, ...raw.RAW_EXT].map((e) => e.slice(1));
 }
 
-module.exports = { scheduleOptimize, reverseStream, scheduleReverse, extensions, importFiles, recordingMedia, kindOf, cacheRoot, newId };
+module.exports = { isOffline, relink, scheduleOptimize, reverseStream, scheduleReverse, extensions, importFiles, recordingMedia, kindOf, cacheRoot, newId };

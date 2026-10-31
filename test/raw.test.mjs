@@ -30,7 +30,7 @@ function fakeRaw(orientation = 6) {
 }
 
 test('henter den største innebygde JPEG-en og orienteringen fra en RAW-fil', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'obslite-raw-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reccut-raw-'));
   const file = path.join(dir, 'a.cr2');
   fs.writeFileSync(file, fakeRaw(6));
   const prev = await raw.extractPreview(file, path.join(dir, 'p.jpg'));
@@ -45,7 +45,7 @@ test('henter den største innebygde JPEG-en og orienteringen fra en RAW-fil', as
 });
 
 test('filer uten innebygd bilde gir null', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'obslite-raw-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reccut-raw-'));
   const file = path.join(dir, 'b.nef');
   fs.writeFileSync(file, Buffer.alloc(5000, 0x33));
   assert.equal(await raw.extractPreview(file, path.join(dir, 'p.jpg')), null);

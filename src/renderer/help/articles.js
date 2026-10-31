@@ -6,11 +6,11 @@ export const ARTICLES = [
   {
     id: 'welcome',
     section: 'Getting Started',
-    title: 'Welcome to OBSlite',
+    title: 'Welcome to Reccut',
     summary: 'Record your screen and camera, edit like in Final Cut Pro, and export to almost any format.',
     keywords: 'overview rooms start',
     body: `
-OBSlite has three rooms, shown at the top of the window. Switch between them with {{key:roomRecord}}, {{key:roomEdit}} and {{key:roomExport}}.
+Reccut has three rooms, shown at the top of the window. Switch between them with {{key:roomRecord}}, {{key:roomEdit}} and {{key:roomExport}}.
 
 - **Record** captures your screen, camera and microphone, with keystrokes and cursor zoom.
 - **Edit** is a magnetic timeline editor with the tools and shortcuts from Final Cut Pro.
@@ -35,9 +35,9 @@ Press {{key:findCommand}} and type what you want to do, for example "blade", "sy
     summary: 'Every project gets its own folder with all its files.',
     keywords: 'new open save location folder trash',
     body: `
-When you create a project, you give it a name and choose where it should be saved. OBSlite creates a folder with that name, containing:
+When you create a project, you give it a name and choose where it should be saved. Reccut creates a folder with that name, containing:
 
-- **the project file** (.obslite), saved automatically after every change
+- **the project file** (.reccut), saved automatically after every change
 - **Media**, for files you import with "Copy to project folder"
 - **Recordings**, for everything you record while the project is open
 - **Optimized Media**, for clips converted to an edit friendly format
@@ -54,21 +54,29 @@ The open project is shown at the top of the window. Click it to open another pro
   {
     id: 'search',
     section: 'Getting Started',
-    title: 'Searching for Commands and Help',
-    summary: 'Type what you want to do, and OBSlite does it.',
-    keywords: 'command palette find help menu',
+    title: 'Quick Search',
+    summary: 'Press Control Space, type the name of anything, and it is applied or opened.',
+    keywords: 'command palette find help menu console fx console effects tools',
     body: `
-Press {{key:findCommand}} or click the question mark at the top right. Start typing and the list shows matching commands, with their menu and shortcut, and matching help articles. Use the arrow keys and press Enter to run the command or open the article.
+Press {{key:findCommand}} anywhere in Reccut, even while you are typing in a field. A search window opens in the middle of the screen. Type a few letters of what you want and press Enter:
 
-![Command search. The shortcut for each command is shown on the right.](palette.jpg)
+- **Effects** are applied to the selected clips (or the clip under the playhead), and the effect is shown and highlighted in the inspector so you can adjust it right away.
+- **Transitions** are added at the selected edit, or the edit nearest the playhead.
+- **Titles** are added at the playhead.
+- **Looks** and **animations** are applied to the selected clips.
+- **Settings** such as Exposure, Scale or Volume open the right tab in the inspector, and the setting is highlighted with its number field ready to type in.
+- **Tools** are switched on and the tool button flashes.
+- **Commands** run, and **media** is found and highlighted in the browser.
+- **Help** articles open in the help window.
 
-On a Mac the Help menu also has a search field. Type a word and macOS points to the menu item, just like in other Mac apps.
+![Quick Search. The label on the left shows what kind of result it is, and commands show their shortcut.](palette.jpg)
 
-The help window ({{key:help}}) has the same search, plus articles with pictures. Buttons in the articles run the command they describe.
+The top right corner shows how many clips are selected, so you know what an effect will be applied to. Press {{key:findCommand}} again or Escape to close it. You can also open it with Cmd K (Ctrl K on Windows) or the question mark at the top right.
+
+On a Mac the Help menu also has a search field. Type a word and macOS points to the menu item, just like in other Mac apps. The help window ({{key:help}}) has its own search with articles and pictures.
 `,
-    see: ['shortcuts'],
+    see: ['shortcuts', 'effects'],
   },
-
   /* Opptak */
   {
     id: 'recording',
@@ -83,7 +91,7 @@ Choose a screen, a camera and a microphone in the Record room. Turn on system au
 
 - The layout buttons, or the global shortcuts shown on them, switch between camera full screen, screen only and the camera in a corner. They work even when another app is in front.
 - Choose the camera shape (circle, square or 16:9), size and mirroring.
-- **Show keystrokes** shows shortcuts you press, but never normal typing and never OBSlite's own shortcuts.
+- **Show keystrokes** shows shortcuts you press, but never normal typing and never Reccut's own shortcuts.
 - **Cursor zoom** zooms in on the mouse pointer while you hold the chosen key.
 - The recording is saved in the Recordings folder of the open project and added to its media. If the timeline is empty, it is also placed on the timeline.
 
@@ -158,10 +166,10 @@ You can also choose Create optimized media when you import.
     id: 'hdr',
     section: 'Media',
     title: 'HDR, 10-bit and RAW',
-    summary: 'How OBSlite handles HDR video, 10-bit clips and camera RAW photos.',
+    summary: 'How Reccut handles HDR video, 10-bit clips and camera RAW photos.',
     keywords: 'hdr pq hlg 10 bit raw dng cr2 nef arw tone mapping',
     body: `
-**HDR video** (PQ and HLG, for example from iPhones and mirrorless cameras) is detected when you import it, and marked HDR in the browser. OBSlite shows and exports it tone mapped to normal SDR, so it looks right on every screen, and keeps 10 bits in the working copy for color correction. Exporting in HDR is not supported yet.
+**HDR video** (PQ and HLG, for example from iPhones and mirrorless cameras) is detected when you import it, and marked HDR in the browser. Reccut shows and exports it tone mapped to normal SDR, so it looks right on every screen, and keeps 10 bits in the working copy for color correction. Exporting in HDR is not supported yet.
 
 **10-bit clips** keep their precision: optimized media stays 10-bit, and color correction is calculated in 16-bit floating point.
 
@@ -174,13 +182,34 @@ The Info tab in the inspector shows the bit depth, HDR format and which file is 
     see: ['color', 'optimize'],
   },
   {
+    id: 'offline',
+    section: 'Media',
+    title: 'Media Offline and Relinking',
+    summary: 'Missing files are shown as a test card with the file name.',
+    keywords: 'offline missing relink moved disconnected drive test card',
+    body: `
+If a file the project uses has been moved, renamed or is on a drive that is not connected, Reccut shows a test card instead of the picture, in the style of the classic television test card. The name of the missing file is at the top and MEDIA OFFLINE at the bottom. The card is drawn for the format of the project, so the circle stays round in 16:9, 4:3, square and vertical projects. Exports show the same card, so nothing is silently left out.
+
+![The Media Offline test card.](offline.jpg)
+
+- Missing media gets a red OFFLINE badge in the browser, and its clips are striped red on the timeline.
+- Reccut checks again when the project opens and every time you come back to the window, so a drive that is connected again is found automatically.
+- If optimized media or a playable copy still exists, the clip keeps playing from that.
+- To find a file yourself, right click the clip in the browser and choose Relink File ({{key:relink}}), then pick the file. The clips on the timeline keep all their edits.
+- Copy to project folder when you import, and the project keeps working even if the originals are moved.
+
+[[run:relink|Relink File]]
+`,
+    see: ['import', 'projects'],
+  },
+  {
     id: 'sync',
     section: 'Media',
     title: 'Synchronizing Audio',
     summary: 'Line up sound from an external recorder with your video automatically.',
     keywords: 'sync synchronize audio external recorder microphone merge auto sync waveform',
     body: `
-OBSlite compares the sound in your video clips with audio files from an external recorder or microphone, and finds where they match. It works on the loudness of the sound, so different microphones and levels do not matter.
+Reccut compares the sound in your video clips with audio files from an external recorder or microphone, and finds where they match. It works on the loudness of the sound, so different microphones and levels do not matter.
 
 ## In the browser: merge before you edit
 
@@ -565,5 +594,5 @@ Open Preferences with {{key:prefs}}.
 [[run:prefs|Open Preferences]]
 `,
   },
-  { id: 'shortcuts', section: 'Reference', title: 'Keyboard Shortcuts', summary: 'Every shortcut in OBSlite, grouped by menu.', keywords: 'keys keyboard hotkeys', body: '' },
+  { id: 'shortcuts', section: 'Reference', title: 'Keyboard Shortcuts', summary: 'Every shortcut in Reccut, grouped by menu.', keywords: 'keys keyboard hotkeys', body: '' },
 ];
