@@ -45,6 +45,7 @@ import {
   project,
   projectFolders,
   relinkMedia,
+  room,
   selectedComponent,
   selectedTransition,
   selection,
@@ -317,15 +318,15 @@ export function addTransition(type = 'dissolve') {
       if (p.primary[0]) best = p.primary[0];
       else return;
     }
-    commit((q) => setTransition(q, best, type, dur));
+    commit((q) => setTransition(q, best, type, dur, 'start', prefs.value.transitionAudio));
     selectedTransition.value = best;
     return;
   }
   commit((q) => {
     for (const id of ids) {
-      setTransition(q, id, type, dur);
+      setTransition(q, id, type, dur, 'start', prefs.value.transitionAudio);
       const next = q.primary[q.primary.indexOf(id) + 1];
-      if (next) setTransition(q, next, type, dur);
+      if (next) setTransition(q, next, type, dur, 'start', prefs.value.transitionAudio);
     }
   });
 }
@@ -476,6 +477,9 @@ export function setRange(which) {
   // I og O i biblioteket markerer i klippet under skummeren (eller ved bibliotekets spillhode).
   if (browserFocus.value && browserMark(which)) return;
   const T = getTime();
+  // I og O på samme sted fjerner området.
+  const other = project.value.range?.[which === 'in' ? 'out' : 'in'];
+  if (other != null && Math.abs(T - other) < frame() / 2) return clearRange();
   commit((p) => {
     const r = p.range || { in: 0, out: p.duration };
     if (which === 'in') r.in = Math.min(T, r.out - frame());
@@ -582,17 +586,23 @@ export function addVolumeKeyframe(clipId, T, prop = 'volume') {
 
 /* Media inn på tidslinjen */
 
-// Import (Cmd I): velg filer, deretter importvalg som i Final Cut Pro.
+// Import (Cmd I): importvinduet kommer først, og filene velges inne i det, som i Final Cut Pro.
+// Vinduet bor i Edit-rommet, så vi bytter dit (også fra +-knappen i tittellinjen).
 export const importOptions = signal(null); // { paths, placement }
-export async function importDialog(placement) {
-  const paths = await api.openMediaDialog();
-  if (paths.length) importOptions.value = { paths, placement };
+export function importDialog(placement) {
+  room.value = 'edit';
+  importOptions.value = { paths: [], placement };
+}
+
+export function addImportPaths(paths) {
+  const req = importOptions.value;
+  if (req) importOptions.value = { ...req, paths: [...new Set([...req.paths, ...paths])] };
 }
 
 export async function confirmImport(opts) {
   const req = importOptions.value;
   importOptions.value = null;
-  if (!req) return;
+  if (!req?.paths.length) return;
   const items = await importPaths(req.paths, req.placement, opts);
   if (opts.sync && items.length > 1) syncMediaAudio(items.map((m) => m.id));
 }
@@ -1072,7 +1082,7 @@ export async function handleDrop(dt, lane, T, options = {}) {
     } else if (item.kind === 'effect') {
       addEffect(item.id, target.id);
     } else if (item.kind === 'transition') {
-      commit((q) => setTransition(q, target.id, item.id, target.dur, target.edge));
+      commit((q) => setTransition(q, target.id, item.id, target.dur, target.edge, prefs.value.transitionAudio));
       selection.value = [];
       selectedTransition.value = transitionSelection(target.id, target.edge);
     }

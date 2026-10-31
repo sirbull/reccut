@@ -1,4 +1,5 @@
 // Lese og skrive SRT-undertekster.
+import { CAPTION_LANE, workPath } from './model.js';
 
 function ts(t) {
   const ms = Math.max(0, Math.round(t * 1000));
@@ -44,4 +45,53 @@ export function parseSrt(text) {
     out.push({ start, end, text: lines.slice(idx + 1).join('\n').replace(/<[^>]+>/g, '') });
   }
   return out;
+}
+
+// Lyden på tidslinjen som skal transkriberes, med tider på tidslinjen.
+export function speechSources(p) {
+  const sources = [];
+  for (const c of Object.values(p.clips)) {
+    if (!c.enabled || c.lane === CAPTION_LANE || !c.mediaId) continue;
+    const m = p.media[c.mediaId];
+    let stream = null;
+    if (c.type === 'recording') stream = m.streams.camera?.hasAudio ? m.streams.camera : m.streams.screen?.hasAudio ? m.streams.screen : null;
+    else if (m.streams.main?.hasAudio) stream = m.streams.main;
+    if (!stream) continue;
+    const off = stream.offset || 0;
+    sources.push({ path: workPath(stream), in: Math.max(0, c.in - off), dur: c.dur, start: c.start + Math.max(0, off - c.in) });
+  }
+  return sources;
+}
+
+// Vanlige regler for undertekster (som hos Netflix og NRK): lesetid, minste og største varighet,
+// et lite opphold mellom tekstene og høyst to linjer à 42 tegn.
+export const CAPTION_RULES = { minDur: 1, maxDur: 7, maxCps: 17, lineChars: 42, lines: 2 };
+
+// Justerer tidene innenfor reglene og rapporterer det som må skrives om (for lang eller for rask tekst).
+// En kort tekst forlenges inn i stillheten etter seg, aldri over neste tekst.
+export function fitCaptions(items, { fps = 30, maxCps = CAPTION_RULES.maxCps } = {}) {
+  const { minDur, maxDur, lineChars, lines } = CAPTION_RULES;
+  const gap = Math.max(2 / fps, 0.08);
+  const out = items.map((c) => ({ start: c.start, end: c.end, text: c.text.trim() })).sort((a, b) => a.start - b.start);
+  const warnings = [];
+  out.forEach((c, i) => {
+    const next = out[i + 1];
+    const limit = next ? next.start - gap : Infinity;
+    const chars = c.text.replace(/\n/g, '').length;
+    const need = Math.min(maxDur, Math.max(minDur, chars / maxCps));
+    if (c.end - c.start < need) c.end = Math.min(c.start + need, limit);
+    if (c.end > limit) c.end = limit;
+    c.end = Math.max(c.end, c.start + 0.3);
+    c.start = Math.round(c.start * 1000) / 1000;
+    c.end = Math.round(c.end * 1000) / 1000;
+    const dur = c.end - c.start;
+    const problem = [];
+    if (next && c.end > next.start - gap + 1e-6) problem.push('starts almost together with the next caption: merge them');
+    if (chars / dur > maxCps + 0.05)
+      problem.push(`too fast to read (${(chars / dur).toFixed(1)} characters/s): shorten to about ${Math.floor(dur * maxCps)} characters or merge`);
+    if (chars > lineChars * lines) problem.push(`too long (${chars} characters, at most ${lineChars * lines}): shorten or split`);
+    if (dur > maxDur + 0.05) problem.push(`on screen ${dur.toFixed(1)} s, at most ${maxDur}: split it`);
+    if (problem.length) warnings.push({ index: i, start: c.start, text: c.text, problem: problem.join('; ') });
+  });
+  return { items: out, warnings };
 }

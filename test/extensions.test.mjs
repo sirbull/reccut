@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { createExtensionHost, validatePlugin, validateAI } = require('../src/main/extensions.js');
+const { createExtensionHost, validatePlugin, validateAI, toAnthropic, toCompatible, fromCompatible } = require('../src/main/extensions.js');
 const storage = {
   isEncryptionAvailable: () => true,
   encryptString: (s) => Buffer.from(`encrypted:${s}`),
@@ -48,21 +48,24 @@ test('AI endpoints reject insecure remote connections and embedded credentials',
   ])
     assert.throws(() => validateAI({ ...config, endpoint }));
   assert.equal(validateAI({ ...config, endpoint: 'http://localhost:11434/v1' }).endpoint, 'http://localhost:11434/v1');
+  assert.equal(validateAI({ ...config, endpoint: 'http://192.168.1.20:1234/v1' }).endpoint, 'http://192.168.1.20:1234/v1');
+  assert.throws(() => validateAI({ ...config, endpoint: 'http://8.8.8.8/v1' }));
 });
-test('chat sends the requested model, text metadata and no redirects', async (t) => {
+const ask = (text = 'Hi') => ({ system: 'sys', messages: [{ role: 'user', content: text }], tools: [] });
+test('requests send the requested model and no redirects, and keys stay private', async (t) => {
   let sent;
   const { host } = setup(t, {
     fetchImpl: async (url, options) => {
       sent = { url, ...options };
       return {
         ok: true,
-        json: async () => ({ choices: [{ message: { content: '{"reply":"Done", "actions":[]}' } }] }),
+        json: async () => ({ choices: [{ message: { content: 'Done' } }] }),
       };
     },
   });
   host.saveAI(config);
-  const reply = await host.chat({ messages: [{ role: 'user', content: 'Key this' }], context: { clips: [] } });
-  assert.ok(reply.includes('Done'));
+  const reply = await host.complete(ask('Key this'));
+  assert.deepEqual(reply, { text: 'Done', toolCalls: [] });
   assert.equal(sent.redirect, 'error');
   assert.equal(JSON.parse(sent.body).model, 'test-model');
   assert.equal(sent.headers.Authorization, `Bearer ${config.apiKey}`);
@@ -77,7 +80,7 @@ test('Anthropic requests use Messages schema and keys can be removed', async (t)
     },
   });
   host.saveAI({ ...config, provider: 'anthropic' });
-  assert.equal(await host.chat({ messages: [{ role: 'user', content: 'Hi' }], context: {} }), 'Hello');
+  assert.equal((await host.complete(ask())).text, 'Hello');
   const body = JSON.parse(sent.body);
   assert.ok(sent.url.endsWith('/messages'));
   assert.equal(body.messages[0].role, 'user');
@@ -90,9 +93,59 @@ test('provider error bodies never expose credentials in UI errors', async (t) =>
   const { host } = setup(t, { fetchImpl: async () => ({ ok: false, status: 401, text: async () => config.apiKey }) });
   host.saveAI(config);
   await assert.rejects(
-    () => host.chat({ messages: [{ role: 'user', content: 'Hi' }], context: {} }),
+    () => host.complete(ask()),
     (e) => e.message.includes('401') && !e.message.includes(config.apiKey),
   );
+});
+const toolRun = {
+  system: 'sys',
+  tools: [{ name: 'preview_frames', description: 'Look', parameters: { type: 'object', properties: {} } }],
+  messages: [
+    { role: 'user', content: 'Check it' },
+    { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'preview_frames', args: { times: [1] } }] },
+    { role: 'tool', id: 'c1', name: 'preview_frames', content: '{"frames":[]}', image: 'data:image/jpeg;base64,AAAA' },
+  ],
+};
+test('attached reference images go with the user message for both formats', () => {
+  const run = { system: 's', tools: [], messages: [{ role: 'user', content: 'Match this', images: ['data:image/png;base64,QUJD'] }] };
+  assert.deepEqual(toAnthropic(run, 'm').messages[0].content[0], { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'QUJD' } });
+  assert.equal(toCompatible(run, 'm', 'https://api.openai.com/v1').messages[1].content[1].image_url.url, 'data:image/png;base64,QUJD');
+});
+test('requests reject images that are not inline JPEG or PNG', async (t) => {
+  const { host } = setup(t, { fetchImpl: async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'x' } }] }) }) });
+  host.saveAI(config);
+  await assert.rejects(() => host.complete({ system: 's', tools: [], messages: [{ role: 'user', content: 'x', images: ['file:///etc/passwd'] }] }), /history/);
+});
+test('tool calls and preview images map to the Anthropic Messages format', () => {
+  const body = toAnthropic(toolRun, 'm');
+  assert.equal(body.tools[0].input_schema.type, 'object');
+  assert.deepEqual(body.messages[1].content, [{ type: 'tool_use', id: 'c1', name: 'preview_frames', input: { times: [1] } }]);
+  const result = body.messages[2].content[0];
+  assert.equal(result.type, 'tool_result');
+  assert.equal(result.content[1].source.data, 'AAAA');
+});
+test('tool calls map to Chat Completions, images follow the tool results and bad JSON is flagged', () => {
+  const body = toCompatible(toolRun, 'm', 'http://localhost:11434/v1');
+  assert.equal(body.messages[0].role, 'system');
+  assert.equal(body.messages[2].tool_calls[0].function.arguments, '{"times":[1]}');
+  assert.equal(body.messages[3].tool_call_id, 'c1');
+  assert.equal(body.messages[4].content[1].image_url.url, 'data:image/jpeg;base64,AAAA');
+  assert.equal(body.max_tokens, 8192);
+  const parsed = fromCompatible({ choices: [{ message: { content: null, tool_calls: [{ function: { name: 'x', arguments: '{oops' } }] } }] });
+  assert.deepEqual(parsed.toolCalls, [{ id: 'call_0', name: 'x', args: null }]);
+});
+test('local servers need no key and list their models', async (t) => {
+  let sent;
+  const { host } = setup(t, {
+    fetchImpl: async (url, options) => {
+      sent = { url, ...options };
+      return { ok: true, json: async () => ({ data: [{ id: 'qwen3' }, { id: 'llama3.2' }] }) };
+    },
+  });
+  assert.deepEqual(await host.listModels({ provider: 'compatible', endpoint: 'http://localhost:11434/v1' }), ['llama3.2', 'qwen3']);
+  assert.equal(sent.url, 'http://localhost:11434/v1/models');
+  assert.equal(sent.headers.Authorization, undefined);
+  await assert.rejects(() => host.listModels({ provider: 'compatible', endpoint: 'https://api.example.com/v1' }), /API key/);
 });
 test('processor manifests validate executable, argument placeholders and output format', () => {
   const good = {

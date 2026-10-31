@@ -29,8 +29,9 @@ const { createPipPreview } = require('./pip');
 const updates = require('./updates');
 const { InputTracker, ZOOM_KEYS } = require('./input');
 
-const { createExtensionHost } = require('./extensions');
-const extensions = createExtensionHost({ dir: path.join(app.getPath('userData'), 'extensions'), safeStorage });
+const { createExtensionHost, readDocument } = require('./extensions');
+const { renderGraphic } = require('./graphics');
+const extensions = createExtensionHost({ dir: path.join(app.getPath('userData'), 'extensions'), safeStorage, ffmpegPath: ff.getFfmpegPath() });
 
 const isMac = process.platform === 'darwin';
 
@@ -369,7 +370,7 @@ ipcMain.handle('updates:download', (_e, asset) => {
 ipcMain.handle('app:version', () => app.getVersion());
 // Bare nettadresser til GitHub åpnes i nettleseren.
 ipcMain.handle('shell:openExternal', (_e, url) => {
-  if (/^https:\/\/github\.com\//.test(String(url))) return shell.openExternal(url);
+  if (/^https:\/\/(github\.com|aistudio\.google\.com|console\.anthropic\.com|platform\.openai\.com|console\.higgsfield\.ai|ollama\.com|lmstudio\.ai|openrouter\.ai|console\.mistral\.ai|console\.groq\.com|www\.python\.org)\//.test(String(url))) return shell.openExternal(url);
 });
 ipcMain.handle('history:list', (_e, file) => projects.historyList(file));
 ipcMain.handle('history:load', (_e, snap, file) => projects.historyLoad(snap, file));
@@ -601,6 +602,25 @@ ipcMain.handle('media:analyzeMotion', (_e, m) => {
   media.scheduleMotion(m, notifyAnalyzed);
 });
 ipcMain.handle('media:details', (_e, file) => ff.details(file));
+// Sceneskift (nytt vindu, ny side, kameraklipp) for AI-agenten. Bildet skaleres ned først, så
+// også lange skjermopptak går raskt. Resultatet er [[sekund, styrke 0 til 1], ...].
+ipcMain.handle('media:scenes', (_e, file, duration) => {
+  const { done } = jobs.add({
+    kind: 'analyze',
+    title: 'Finding scene changes',
+    queue: 'light',
+    run: async (ctx) => {
+      const job = ff.run(
+        ['-hwaccel', 'auto', '-i', file, '-an', '-sn', '-vf', "fps=4,scale=160:-2,select='gte(scene\\,0.04)',metadata=print:file=-", '-f', 'null', '-'],
+        { onProgress: (t) => ctx.progress(Math.min(0.99, t / Math.max(duration || 1, 1))) }
+      );
+      ctx.setCancel(job.kill);
+      const out = (await job.promise).toString();
+      return [...out.matchAll(/pts_time:([\d.]+)\s+lavfi\.scene_score=([\d.]+)/g)].map((m) => [Number(m[1]), Math.round(Number(m[2]) * 100) / 100]);
+    },
+  });
+  return done;
+});
 ipcMain.handle('media:offline', (_e, items) => items.filter((m) => media.isOffline(m)).map((m) => m.id));
 ipcMain.handle('media:relink', (_e, m, file) => media.relink(m, file, notifyAnalyzed));
 ipcMain.handle('media:optimize', (_e, items, outDir) => {
@@ -809,7 +829,7 @@ ipcMain.handle('transcribe:start', (_e, payload) => {
       return jobs.runInWorker('transcribe', { ...payload, audio }, ctx);
     },
   });
-  done.then((segments) => send('transcribe:done', { id, segments, payload }), (err) => send('transcribe:error', { id, error: String(err.message || err) }));
+  done.then((result) => send('transcribe:done', { id, ...result, payload }), (err) => send('transcribe:error', { id, error: String(err.message || err), payload: { agent: payload.agent } }));
   return id;
 });
 
@@ -924,7 +944,21 @@ function extensionHandler(channel, handler) {
 }
 extensionHandler('ai:config', () => extensions.aiConfig());
 extensionHandler('ai:save', (config) => extensions.saveAI(config));
-extensionHandler('ai:chat', (request) => extensions.chat(request));
+extensionHandler('ai:complete', (request) => extensions.complete(request));
+extensionHandler('ai:models', (config) => extensions.listModels(config));
+extensionHandler('ai:readDocument', (file) => readDocument(String(file)));
+extensionHandler('plugins:draft', (raw) => extensions.draftProcessor(raw));
+extensionHandler('gen:config', () => extensions.genConfig());
+extensionHandler('gen:save', (raw) => extensions.saveGen(raw));
+extensionHandler('gen:estimate', (req) => extensions.estimateVideo(req));
+extensionHandler('gen:video', (req) => {
+  const { done } = jobs.add({ kind: 'generate', title: 'Generating video', queue: 'light', run: (ctx) => extensions.generateVideo(req, ctx, path.join(baseDir(), 'Generated')) });
+  return done;
+});
+extensionHandler('gfx:render', (req) => {
+  const { done } = jobs.add({ kind: 'graphic', title: `Rendering ${String(req?.name || 'graphic').slice(0, 40)}`, queue: 'heavy', run: (ctx) => renderGraphic(req, ctx, path.join(baseDir(), 'Generated')) });
+  return done;
+});
 extensionHandler('plugins:list', () => extensions.listPlugins());
 extensionHandler('plugins:install', (manifest) => extensions.installPlugin(manifest));
 extensionHandler('plugins:remove', (id) => extensions.removePlugin(id));

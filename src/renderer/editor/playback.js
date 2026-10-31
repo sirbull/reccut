@@ -43,7 +43,7 @@ const player = createPlayer({
   setTime: (T, opts) => sourceProject.value ? setSourceTime(T, opts) : setTime(T, opts),
 });
 
-export const { attachCanvas, resizeCanvas, start, stopLoop, getRate, invalidate, scrubAudio } = player;
+export const { attachCanvas, resizeCanvas, start, stopLoop, getRate, invalidate, scrubAudio, snapshot } = player;
 
 function preparePlayback() {
   const preview = activeSkim();

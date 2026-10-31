@@ -48,3 +48,13 @@ test('caption time changes update duration live and can be cancelled', () => {
   assert.equal(s.project.value.clips[id].dur, 3);
   assert.equal(s.project.value.duration, 5);
 });
+
+test('an empty video track goes away when its last clip leaves it', () => {
+  const { store: s } = setup();
+  s.commit(p => { p.tracks = { video: 2, audio: 1 }; });
+  assert.equal(s.project.value.tracks.video, 2, 'a track added with + Video stays until clips change');
+  const other = s.makeCaptionClip(5, 'B');
+  s.commit(p => { p.clips[other.id] = { ...other, lane: 2 }; });
+  s.commit(p => { p.clips[other.id].lane = 1; });
+  assert.equal(s.project.value.tracks.video, 1);
+});

@@ -1,15 +1,34 @@
 import { useEffect, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { Button, Modal, Row, Section, Select, toast } from './ui.jsx';
-import { project, selection, timeSig, commit } from './editor/store.js';
-import { aiContext, applyAIActions, parseAIReply, validateAIActions } from '../shared/aiEdits.js';
+import { Button, Modal, Row, Section, Select, Toggle, toast } from './ui.jsx';
+import { canUndo, project, undo } from './editor/store.js';
+import { runAgent } from './agent.js';
+import { fileUrl } from './player.js';
 export const aiChatOpen = signal(false);
 const api = window.api;
+// Ready-made connections. All but Anthropic use the OpenAI-compatible Chat Completions API with tool calls.
+const PRESETS = [
+  { id: 'openai', label: 'OpenAI', endpoint: 'https://api.openai.com/v1' },
+  { id: 'anthropic', label: 'Anthropic Claude', endpoint: 'https://api.anthropic.com/v1', provider: 'anthropic' },
+  { id: 'gemini', label: 'Google Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  { id: 'mistral', label: 'Mistral', endpoint: 'https://api.mistral.ai/v1' },
+  { id: 'openrouter', label: 'OpenRouter (many providers)', endpoint: 'https://openrouter.ai/api/v1' },
+  { id: 'groq', label: 'Groq', endpoint: 'https://api.groq.com/openai/v1' },
+  { id: 'xai', label: 'xAI Grok', endpoint: 'https://api.x.ai/v1' },
+  { id: 'deepseek', label: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1' },
+  { id: 'ollama', label: 'Ollama (local)', endpoint: 'http://localhost:11434/v1', local: true },
+  { id: 'lmstudio', label: 'LM Studio (local)', endpoint: 'http://localhost:1234/v1', local: true },
+  { id: 'llamacpp', label: 'llama.cpp server (local)', endpoint: 'http://localhost:8080/v1', local: true },
+  { id: 'custom', label: 'Other server or gateway' },
+];
+const presetOf = (c) =>
+  PRESETS.find((p) => p.endpoint === c.endpoint && (p.provider || 'compatible') === c.provider) || PRESETS.at(-1);
 
 export function ExtensionsPane() {
   const [config, setConfig] = useState(null),
     [apiKey, setKey] = useState(''),
     [plugins, setPlugins] = useState([]),
+    [models, setModels] = useState([]),
     [candidate, setCandidate] = useState(null),
     [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -49,45 +68,91 @@ export function ExtensionsPane() {
     <>
       <Section title="AI assistant" collapsible={false}>
         <p class="hint">
-          Use your own API key. Requests are billed by your provider. The chat sends your messages and text metadata
-          about the timeline, including clip names and caption text. Video, audio and local file paths are not uploaded.
+          Use a cloud provider with your own API key, or a local model server. The agent sends your messages and what it
+          reads from the project, such as clip names, timings and caption text, and rendered preview frames when the
+          model can see images. Media files and audio are not uploaded. Cloud providers bill you for usage.
         </p>
         {config && (
           <>
-            <Row label="API format" stacked>
+            <Row label="Provider" stacked>
               <Select
-                value={config.provider}
-                options={[
-                  { value: 'compatible', label: 'OpenAI-compatible (OpenAI, local models, gateways)' },
-                  { value: 'anthropic', label: 'Anthropic Messages' },
-                ]}
-                onChange={(provider) => {
+                value={presetOf(config).id}
+                options={PRESETS.map((p) => ({ value: p.id, label: p.label }))}
+                onChange={(id) => {
+                  const p = PRESETS.find((x) => x.id === id);
                   setConfig({
                     ...config,
-                    provider,
+                    provider: p.provider || 'compatible',
+                    endpoint: p.endpoint || (presetOf(config).id === 'custom' ? config.endpoint : 'http://localhost:8000/v1'),
                     hasKey: false,
-                    endpoint: provider === 'anthropic' ? 'https://api.anthropic.com/v1' : 'https://api.openai.com/v1',
                     model: '',
                   });
+                  setModels([]);
                   setKey('');
                 }}
               />
             </Row>
-            <Row label="API base URL" stacked>
-              <input
-                class="text-input"
-                value={config.endpoint}
-                placeholder="https://api.example.com/v1"
-                onInput={(e) => setConfig({ ...config, endpoint: e.currentTarget.value })}
-              />
-            </Row>
+            {presetOf(config).id === 'custom' && (
+              <>
+                <Row label="API format" stacked>
+                  <Select
+                    value={config.provider}
+                    options={[
+                      { value: 'compatible', label: 'OpenAI-compatible (vLLM, Jan, LocalAI, LiteLLM, Azure, gateways)' },
+                      { value: 'anthropic', label: 'Anthropic Messages' },
+                    ]}
+                    onChange={(provider) => setConfig({ ...config, provider, hasKey: false })}
+                  />
+                </Row>
+                <Row label="API base URL" stacked>
+                  <input
+                    class="text-input"
+                    value={config.endpoint}
+                    placeholder="https://api.example.com/v1"
+                    onInput={(e) => setConfig({ ...config, endpoint: e.currentTarget.value })}
+                  />
+                </Row>
+              </>
+            )}
+            {presetOf(config).local && (
+              <p class="hint">
+                Start the server first and load a model that supports tool calling. Nothing leaves your computer. To use
+                a server on another machine, choose Other server and enter its local network address.
+              </p>
+            )}
             <Row label="Model ID" stacked>
-              <input
-                class="text-input"
-                value={config.model}
-                placeholder="Exact model ID from your provider"
-                onInput={(e) => setConfig({ ...config, model: e.currentTarget.value })}
-              />
+              <div class="extension-actions">
+                <input
+                  class="text-input"
+                  style="flex:1"
+                  list="ai-models"
+                  value={config.model}
+                  placeholder="Exact model ID from your provider"
+                  onInput={(e) => setConfig({ ...config, model: e.currentTarget.value })}
+                />
+                <datalist id="ai-models">
+                  {models.map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+                <Button
+                  disabled={busy}
+                  onClick={async () => {
+                    try {
+                      const list = await api.aiModels({ provider: config.provider, endpoint: config.endpoint, apiKey });
+                      setModels(list);
+                      toast(list.length ? `Found ${list.length} models. Pick one in the Model ID field.` : 'The server listed no models.');
+                    } catch (e) {
+                      toast(e.message, { kind: 'error' });
+                    }
+                  }}
+                >
+                  Fetch models
+                </Button>
+              </div>
+            </Row>
+            <Row label="Model can see images" hint="Lets the agent look at rendered frames. Turn off for text-only models.">
+              <Toggle checked={config.vision} onChange={(vision) => setConfig({ ...config, vision })} />
             </Row>
             <Row label="API key" stacked>
               <input
@@ -98,7 +163,7 @@ export function ExtensionsPane() {
                 placeholder={
                   config.hasKey
                     ? 'Key saved · leave blank to keep it'
-                    : 'Paste your API key (optional for local models)'
+                    : 'Paste your API key (not needed for local servers)'
                 }
                 onInput={(e) => setKey(e.currentTarget.value)}
               />
@@ -186,116 +251,143 @@ export function ExtensionsPane() {
     </>
   );
 }
+const TOOL_LABELS = {
+  get_timeline: 'Read the timeline',
+  list_media: 'Read the media library',
+  preview_frames: 'Looked at the result',
+  search_help: 'Read the manual',
+};
+// Attached images are scaled down and sent as JPEG, within what every provider accepts.
+async function imageUrl(blob) {
+  const bmp = await createImageBitmap(blob),
+    k = Math.min(1, 1568 / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(bmp.width * k);
+  cv.height = Math.round(bmp.height * k);
+  cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+  return cv.toDataURL('image/jpeg', 0.85);
+}
 export function AIChat() {
   const [messages, setMessages] = useState([]),
     [input, setInput] = useState(''),
-    [busy, setBusy] = useState(false),
-    [proposal, setProposal] = useState(null),
+    [images, setImages] = useState([]),
+    [busy, setBusy] = useState(null),
+    [run, setRun] = useState(null),
     [error, setError] = useState('');
   const send = async () => {
     if (!input.trim() || busy) return;
-    const user = { role: 'user', content: input.trim() },
-      history = [...messages, user].slice(-20),
-      snapshot = project.value;
+    const history = [...messages, { role: 'user', content: input.trim(), ...(images.length ? { images } : {}) }],
+      controller = new AbortController(),
+      before = project.value;
     setMessages(history);
     setInput('');
-    setBusy(true);
+    setImages([]);
+    setBusy(controller);
     setError('');
-    setProposal(null);
+    setRun(null);
     try {
-      const raw = await api.aiChat({
-        messages: history.map(({ role, content }) => ({ role, content })),
-        context: aiContext(snapshot, selection.value, timeSig.value),
-      });
-      const parsed = parseAIReply(raw);
-      setMessages([...history, { role: 'assistant', content: parsed.reply }]);
-      if (parsed.actions.length) {
-        const actions = validateAIActions(snapshot, parsed.actions);
-        setProposal({ actions, snapshot });
-      }
+      setMessages(await runAgent(history, { signal: controller.signal, onUpdate: setMessages }));
     } catch (e) {
       setError(e.message);
     } finally {
-      setBusy(false);
+      setBusy(null);
+      if (project.value !== before) setRun({ before, after: project.value });
     }
+  };
+  const attach = async (blobs) => {
+    try {
+      const urls = await Promise.all(blobs.filter((b) => b.type.startsWith('image/')).map(imageUrl));
+      setImages((list) => [...list, ...urls].slice(0, 4));
+    } catch {
+      toast('Could not read that image.', { kind: 'error' });
+    }
+  };
+  const pick = async () => {
+    const file = await api.openFileDialog({ title: 'Attach Image', filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] }] });
+    if (file) attach([await (await fetch(fileUrl(file))).blob()].map((b) => (b.type ? b : new Blob([b], { type: 'image/*' }))));
+  };
+  // Undo the agent's steps one by one, so redo still works. Only while nothing else has changed.
+  const revert = () => {
+    for (let i = 0; i < 500 && project.value !== run.before && canUndo(); i++) undo();
+    setRun(null);
+    toast('Reverted the changes from that request.');
   };
   return (
     <Modal
-      title="AI editing assistant"
-      width={720}
-      onClose={() => (aiChatOpen.value = false)}
-      footer={<Button onClick={() => (aiChatOpen.value = false)}>Close</Button>}
+      title="AI editing agent"
+      width={760}
+      onClose={() => (busy ? busy.abort() : (aiChatOpen.value = false))}
+      footer={
+        <>
+          {run && project.value === run.after && <Button onClick={revert}>Undo this request</Button>}
+          <Button onClick={() => (aiChatOpen.value = false)}>Close</Button>
+        </>
+      }
     >
       <p class="hint">
-        Your messages and timeline text are sent to your configured provider. The assistant cannot see or hear your
-        footage. Changes are proposed below and applied as one undo step.
+        Describe the edit you want. The agent reads the project, edits it with the same tools you use and checks the
+        result. Every change is an undo step. Configure the model in Settings → AI & Plugins.
       </p>
       <div class="ai-messages" aria-live="polite">
         {messages.length ? (
-          messages.map((m, i) => (
-            <div class={`ai-message ${m.role}`} key={i}>
-              <b>{m.role === 'user' ? 'You' : 'Assistant'}</b>
-              <p>{m.content}</p>
-            </div>
-          ))
+          messages.map((m, i) =>
+            m.role === 'tool' ? (
+              <div class={`ai-step${m.error ? ' failed' : ''}`} key={i}>
+                {m.error ? '✕' : '✓'} {TOOL_LABELS[m.name] || m.name.replaceAll('_', ' ')}
+                {m.error && <small>{m.content}</small>}
+                {m.image && <img src={m.image} alt="Rendered preview the agent looked at" />}
+              </div>
+            ) : m.content.trim() ? (
+              <div class={`ai-message ${m.role}`} key={i}>
+                <b>{m.role === 'user' ? 'You' : 'Agent'}</b>
+                <p>{m.content}</p>
+                {m.images?.map((src, j) => (
+                  <img class="ai-attachment" key={j} src={src} alt="Attached image" />
+                ))}
+              </div>
+            ) : null,
+          )
         ) : (
           <p class="hint">
-            Try “Add a green screen key to the selected clip” or “Fade the audio out over two seconds”. Configure your
-            provider in Settings → AI & Plugins.
+            Try “Subtitle this video in Finnish”, “Adjust colour and exposure on every clip so they look good and
+            match”, “Make the clips look like this image” with an image attached, or “Make a 45 second cut and add a
+            title”.
           </p>
         )}
-        {busy && <p class="hint">Waiting for your model…</p>}
+        {busy && <p class="hint">Working…</p>}
       </div>
       {error && (
         <p class="warn" role="alert">
           {error}
         </p>
       )}
-      {proposal && (
-        <div class="ai-proposal">
-          <b>Proposed changes</b>
-          <ul>
-            {proposal.actions.map((a, i) => (
-              <li key={i}>
-                {project.value.clips[a.clipId]?.name || a.clipId}:{' '}
-                {a.type === 'rename'
-                  ? `Rename to “${a.name}”`
-                  : a.type === 'addEffect'
-                    ? `Add ${a.effect}`
-                    : `${a.property} → ${a.value}`}
-              </li>
-            ))}
-          </ul>
-          {project.value !== proposal.snapshot ? (
-            <p class="warn">The project changed. Send a new request for an updated proposal.</p>
-          ) : (
-            <Button
-              variant="primary"
-              onClick={() => {
-                try {
-                  if (project.value !== proposal.snapshot)
-                    throw new Error('The project changed. Request an updated proposal.');
-                  commit((p) => applyAIActions(p, proposal.actions));
-                  setProposal(null);
-                  toast('Applied AI edits. Undo restores the previous state.', { kind: 'success' });
-                } catch (e) {
-                  setError(e.message);
-                }
-              }}
-            >
-              Apply {proposal.actions.length} change{proposal.actions.length === 1 ? '' : 's'}
-            </Button>
-          )}
-          <Button onClick={() => setProposal(null)}>Dismiss</Button>
+      {images.length > 0 && (
+        <div class="ai-attachments">
+          {images.map((src, i) => (
+            <button key={i} title="Remove image" onClick={() => setImages(images.filter((_, j) => j !== i))}>
+              <img src={src} alt={`Attachment ${i + 1}`} />
+            </button>
+          ))}
         </div>
       )}
-      <div class="ai-compose">
+      <div
+        class="ai-compose"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          attach([...e.dataTransfer.files]);
+        }}
+      >
+        <Button onClick={pick} disabled={images.length >= 4} title="Attach a reference image (or paste or drop one)">
+          Image…
+        </Button>
         <textarea
+          onPaste={(e) => e.clipboardData.files.length && attach([...e.clipboardData.files])}
           class="text-input"
           rows={3}
           value={input}
           maxLength={20000}
-          placeholder="Ask for an edit or advice…"
+          placeholder="Describe an edit… (Cmd/Ctrl Enter sends)"
           onInput={(e) => setInput(e.currentTarget.value)}
           onKeyDown={(e) => {
             e.stopPropagation();
@@ -305,9 +397,13 @@ export function AIChat() {
             }
           }}
         />
-        <Button disabled={busy || !input.trim()} variant="primary" onClick={send}>
-          Send
-        </Button>
+        {busy ? (
+          <Button onClick={() => busy.abort()}>Stop</Button>
+        ) : (
+          <Button disabled={!input.trim()} variant="primary" onClick={send}>
+            Send
+          </Button>
+        )}
       </div>
     </Modal>
   );

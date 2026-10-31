@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { computeAudio, dbToGain, kfTime, makeClip, newProject, setKeyframe, setKeyframeEase, valueAt } from '../src/shared/model.js';
-import { shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from '../src/renderer/editor/volume.js';
+import { fadePath, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from '../src/renderer/editor/volume.js';
 import { prefs, setPrefs } from '../src/renderer/prefs.js';
 import { setKeyframe as setEditorKeyframe } from '../src/renderer/editor/keyframes.js';
 
@@ -43,6 +43,19 @@ test('point edits and segment edits preserve explicit interpolation and clamp bo
   shiftVolume(c, 'volume', -72, [1]);
   assert.equal(c.kf.volume[1][1], -60);
   assert.equal(c.kf.volume[2][1], 0);
+});
+
+test('sideways keyframe drag stays between its neighbours and inside the clip', () => {
+  const { c } = audio();
+  for (const [t, v] of [[6, 0], [8, -10], [10, 0]]) setKeyframe(c, 'volume', t, v);
+  moveVolumeKeyframe(c, 'volume', 1, 9, 0.1);
+  assert.deepEqual(c.kf.volume[1], [9, -10, 'easeInOut']);
+  moveVolumeKeyframe(c, 'volume', 1, 20, 0.1);
+  assert.equal(c.kf.volume[1][0], 9.9);
+  moveVolumeKeyframe(c, 'volume', 0, 0, 0.1);
+  assert.equal(c.kf.volume[0][0], 5, 'not before the clip in point');
+  moveVolumeKeyframe(c, 'volume', 2, 99, 0.1);
+  assert.equal(c.kf.volume[2][0], 13, 'not after the clip end');
 });
 
 test('constant, single-point, trimmed and extended envelopes reach both ends', () => {
@@ -122,4 +135,18 @@ test('recording components keep independent volume and computed audio gains', ()
   assert.ok(Math.abs(gains.camera - dbToGain(-1.5)) < 1e-12);
   assert.ok(Math.abs(gains.screen - dbToGain(-6)) < 1e-12);
   assert.match(volumePath(c, 'sysVolume', 800, 76, 100), /^M0 20 H800$/);
+});
+
+test('fade curves fall from the volume line to silence at the clip edge', () => {
+  const media = { id: 'audio', kind: 'audio', duration: 30, streams: { main: { path: '/audio.wav', hasAudio: true } } };
+  const c = makeClip('audio', { media, start: 10, dur: 10, lane: -1 });
+  c.props.volume = -6;
+  const pts = (d) => d.split(/[ML]/).filter(Boolean).map((s) => s.trim().split(' ').map(Number));
+  const fin = pts(fadePath(c, 'volume', 'in', 2, 100, 40, 10));
+  assert.deepEqual(fin[0], [0, volumeY(-60, 40)], 'starts silent at the left edge');
+  assert.deepEqual(fin.at(-1), [20, volumeY(-6, 40)], 'meets the volume line at the handle');
+  const fout = pts(fadePath(c, 'volume', 'out', 2, 100, 40, 10));
+  assert.deepEqual(fout[0], [100, volumeY(-60, 40)], 'ends silent at the right edge');
+  assert.deepEqual(fout.at(-1), [80, volumeY(-6, 40)]);
+  assert.equal(fadePath(c, 'volume', 'in', 0, 100, 40, 10), '');
 });

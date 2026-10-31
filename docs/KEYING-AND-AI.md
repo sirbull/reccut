@@ -37,17 +37,66 @@ Det er foreløpig **ingen native OFX-/Adobe-host eller ferdig CorridorKey-adapte
 
 Kontroller versjonen du bruker mot [CorridorKeys offisielle dokumentasjon](https://help.corridorkey.com/docs/getting-started/), [runtime-prosjektets CLI-dokumentasjon](https://github.com/alexandremendoncaalvaro/CorridorKey-Runtime#cli-usage) og [modellprosjektet](https://github.com/nikopueringer/CorridorKey2.0). Disse har forskjellige inndata- og utdataopplegg. Eksempelmanifesten er et adapterformat, ikke en bekreftelse på at en bestemt CorridorKey-versjon er testet med Reccut.
 
-## AI-chat med egen API-nøkkel
+## Redigeringsagenten
 
-Åpne **Settings → AI & Plugins**, velg OpenAI-compatible eller Anthropic Messages, og skriv API-baseadresse, nøyaktig modell-ID og egen nøkkel. Lokale OpenAI-kompatible servere kan bruke HTTP på localhost uten nøkkel. Andre endepunkter krever HTTPS og nøkkel. Lagre og åpne **AI Chat** øverst i programmet.
+### Modeller og leverandører
 
-Nøkler krypteres med operativsystemets safeStorage og lagres separat fra prosjektet. Hvis sikker lagring ikke finnes, beholdes nøkkelen bare i minnet til appen avsluttes. Nøkler lagres ikke i localStorage, prosjektfilen eller en prosjektpakke. Bytte av leverandør eller endepunkt fjerner tidligere nøkkel.
+Under **Settings → AI & Plugins** velger du OpenAI, Anthropic Claude, Google Gemini, Mistral, OpenRouter, Groq, xAI eller DeepSeek. Du kan også velge en lokal server: Ollama, LM Studio eller llama.cpp. **Other server or gateway** tar alle OpenAI- eller Anthropic-kompatible adresser, for eksempel vLLM, Jan, LocalAI, LiteLLM eller en maskin i det lokale nettet. **Fetch models** henter modell-ID-ene fra serveren. Modellen må støtte verktøykall. **Model can see images** slås av for modeller uten bildeinndata.
 
-Chatten sender meldingene og tekstmetadata om opptil 100 klipp, med valgte klipp først. Navn, tidsplassering, enkelte egenskaper og underteksttekst kan bli sendt. Videofiler, lydfiler, bakgrunnsreferanser og lokale filstier lastes ikke opp. Chatten kan derfor ikke vurdere bilde- eller lydkvaliteten i materialet. Leverandørens vanlige API-priser gjelder.
+Alle unntatt Anthropic bruker Chat Completions-protokollen. HTTP er bare tillatt mot denne maskinen og private nettverksadresser. Andre adresser krever HTTPS. Lokale servere trenger ingen nøkkel. Nøkler krypteres med safeStorage og ligger bare i hovedprosessen, aldri i prosjektet eller i grensesnittet.
 
-Modellen kan foreslå navn, eksponering, kontrast, metning, temperatur, opacity, volum, blur, fades og nye stack-effekter. Forslag valideres mot tillatte operasjoner og vises før **Apply**. Hele forslaget brukes som ett angresteg. Ugyldige eller foreldede forslag brukes ikke. Modellen kan ikke kjøre kode, starte prosessorer eller endre filer. Dette er en første versjon av redigeringsassistenten, ikke en multimodal redigeringsagent.
+### Slik virker den
 
-API-protokollene bygger på [OpenAI Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) og [Anthropic Messages](https://platform.claude.com/docs/en/api/messages). Nettverksdelen er testet med simulerte svar; faktisk API-bruk krever brukerens nøkkel og modelltilgang.
+Agenten er en løkke: modellen får et verktøyregister, kaller verktøy, får svarene og fortsetter til den svarer uten verktøykall, men høyst 40 steg.
+
+- **Verktøyregisteret** ligger i [src/shared/aiEdits.js](../src/shared/aiEdits.js). Hvert verktøy har navn, beskrivelse, JSON-skjema og koden som gjør endringen. Det er altså én kilde for dokumentasjon, validering og handling. Redigeringen bruker de samme funksjonene som tidslinjen (ops.js), og hvert verktøykall blir ett angresteg.
+- **Lese:** `get_timeline`, `list_media`.
+- **Redigere:** `add_media_to_timeline`, `split_clips`, `delete_clips`, `trim_clip`, `move_clip`, `add_title`, `add_captions`, `set_clip_properties` (mange klipp i ett angresteg, med alle fargekontroller og fargehjulene), `add_video_effect`, `add_transition`.
+- **Kjøretid** ([src/renderer/agent.js](../src/renderer/agent.js)):
+  - `transcribe_speech` kjører Whisper lokalt på lyden på tidslinjen og gir tale med tidskoder uten å endre undertekstene. Resultatet gjenbrukes til lyden endres.
+  - `analyze_look` måler lysstyrke, svart- og hvitpunkt, klipping, metning og fargestikk i kildebildene til hvert klipp, og i vedlagte referansebilder.
+  - `preview_frames` rendrer tidslinjen med samme motor som eksporten og måler det ferdig korrigerte bildet. Bildet sendes også til modellen når den kan se bilder.
+  - `search_help` søker i hjelpeartiklene, og `show_help` åpner en artikkel for brukeren.
+  - `find_commands` og `run_command` gir tilgang til alle kommandoene i appen, fra samme register som menyene, hurtigtastene og Find Command ([src/renderer/registry.js](../src/renderer/registry.js)). Nye kommandoer blir dermed automatisk tilgjengelige for agenten, med meny, hurtigtast og beskrivelse.
+  - `select` velger klipp og flytter spillhodet, slik brukeren gjør før en kommando.
+  - `get_settings` og `change_settings` leser og endrer innstillingene, opptaksinnstillingene og hurtigtastene.
+- **Alle egenskaper:** `get_clip` viser alt i inspektøren. `set_clip_properties` og `set_project_settings` godtar alle enkle verdier som finnes fra før, med samme type (`checkPatch`). Nye egenskaper i inspektøren blir derfor tilgjengelige uten egen kode. Kjente verdier har i tillegg faste grenser.
+  - `import_media` importerer filer brukeren har oppgitt.
+- **Håndboken** er systeminstruksjonen i agent.js. Den forklarer den magnetiske tidslinjen, forskjellen på kildetid og tidslinjetid, spor, undertekster, opptak og lydnivåer, og gir en arbeidsflyt for automatisk redigering. Detaljer slås opp med `search_help`, slik at hjelpen og agenten ikke sier forskjellige ting.
+- **Hovedprosessen** ([src/main/extensions.js](../src/main/extensions.js)) oversetter den nøytrale meldingshistorikken til Anthropic Messages eller Chat Completions, med verktøy og bilder. Chat Completions tar bare imot bilder i brukermeldinger, så de legges etter verktøysvarene.
+
+Agenten redigerer uten å spørre ved hvert kutt. **Undo this request** angrer alle endringene fra siste forespørsel, så lenge prosjektet ikke er endret etterpå. **Stop** avbryter mellom to steg.
+
+### Råmateriale: talking head og skjermopptak
+
+Agenten jobber som en redaktør med en assistent som har logget materialet: først tekst og tall, bilder bare der det trengs.
+
+- **Tale:** Whisper kjører med ordtider (modellene `whisper-*_timestamped`). Pauser måles fra lydnivået ([src/shared/speech.js](../src/shared/speech.js)). Whisper strekker ofte siste ord inn i en pause, så ordkantene flyttes til pausene. Undertekstene fra «Generate captions» bruker de samme ordtidene og blir dermed også mer presise. `transcribe_speech` kan transkribere ett medieklipp i kildetid før det ligger på tidslinjen.
+- **Skjerm:** `inspect_media` gir sceneskift (ffmpeg, nedskalert til 160 px og 4 bilder per sekund, så også lange opptak går raskt), hendelsesloggen fra Reccut-opptak (klikk, hurtigtaster og zoom, aldri vanlig skriving) og et oversiktsark med bilder og tidskoder. Agenten ser først på hele filen og deretter på kortere utsnitt.
+- **Bygging:** `build_sequence` legger hele planen i ett angresteg. Gode tagninger legges i hovedsporet. Skjermklipp kobles til det segmentet der de forklares, med forskyvning og eventuell økt hastighet. Titler plasseres på samme måte. Kutt som havner i en målt pause, får beholde opptil 0,15 sekunder stillhet, slik at overgangene høres naturlige ut.
+- **Egne titler:** `create_title_template` lager animerte maler i det samme formatet som de innebygde (.reccut-title). Formatbeskrivelsen og et eksempel hentes fra koden. Malene lagres i prosjektet og vises i Titles-biblioteket.
+
+### Teksting, farge og stil
+
+- **Teksting og oversettelse:** Agenten transkriberer, oversetter og forkorter, og erstatter undertekstsporet med `add_captions` og `replace`. Reglene ligger i koden (`fitCaptions` i [src/shared/srt.js](../src/shared/srt.js)), ikke bare i instruksjonene:
+  - minst 1 sekund og høyst 7 sekunder på skjermen
+  - høyst 17 tegn per sekund
+  - to linjer à 42 tegn
+  - minst to bilder mellom undertekstene, og ingen overlapp
+
+  Korte tekster forlenges inn i stillheten etter seg. Tekster som bryter reglene, sendes tilbake som advarsler, og agenten skriver dem om. Modellen gjør det den er god på (omformulere), og koden gjør regningen.
+- **Farge og eksponering:** Agenten måler først, retter så feil (eksponering, klipping, fargestikk), lager stil etterpå, og avstemmer klipp fra samme scene. Den kontrollerer resultatet med målingene fra `preview_frames`. Det virker derfor også med modeller som ikke ser bilder.
+- **Referansebilde:** Bilder legges ved med **Image…**, ved å lime inn eller ved å dra dem inn. De sendes med meldingen, og `analyze_look` måler dem, slik at agenten kan flytte tallene for hvert klipp mot referansen.
+
+### Begrensninger og neste steg
+
+- Ordtidene fra Whisper er gode, men ikke helt presise. Kuttene legges derfor i målte pauser når det går.
+- Agenten kan ikke lage programtillegg med kode. Titler er data og trygge. Kjørbare prosessorer må installeres av brukeren.
+- Agenten kan ikke generere voiceover, bilder eller video ennå. Dette passer inn som egne verktøy som lager en fil og importerer den.
+- Den kan ikke sladde ansikter automatisk. Det krever ansiktsgjenkjenning og sporing.
+- Den kan ikke eksportere eller pakke prosjektet.
+- Det finnes ingen MCP-server ennå.
+- Agenten er testet med simulerte modellsvar i Node og Electron. Målingene er testet på ekte dekodede videobilder. Ordtider og pauser er testet med Whisper-modellen i Node på syntetisk tale. Den er ikke testet mot en ekte leverandør, og transkripsjonsarbeideren og `preview_frames` er ikke kjørt i den ferdige appen.
 
 ## Prosjektpakking
 

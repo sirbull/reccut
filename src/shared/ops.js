@@ -401,13 +401,15 @@ export function moveClip(project, id, { start, lane, primaryIndex }) {
   updateDuration(project);
 }
 
-export function setTransition(project, id, type, dur = 1, edge = 'start') {
+export function setTransition(project, id, type, dur = 1, edge = 'start', audio) {
   const c = project.clips[id];
   if (!c || c.lane !== 0) return;
   const idx = project.primary.indexOf(id);
   const prev = edge === 'start' && idx > 0 ? project.clips[project.primary[idx - 1]] : null;
   const maxDur = Math.min(c.dur, prev ? prev.dur : c.dur, 4);
-  c[edge === 'end' ? 'transitionOut' : 'transition'] = { type, dur: round(Math.min(maxDur, Math.max(0.1, dur))) };
+  const key = edge === 'end' ? 'transitionOut' : 'transition';
+  c[key] = { ...c[key], type, dur: round(Math.min(maxDur, Math.max(0.1, dur))) };
+  if (audio !== undefined) c[key].audio = audio;
 }
 
 export function removeTransition(project, id, edge = 'start') {

@@ -19,7 +19,8 @@ const api = window.api;
 
 // Ferdige undertekster fra Whisper legges inn i undertekstsporet.
 api.onTranscribeDone(({ segments, payload }) => {
-  if (payload.projectId !== project.value.id) return;
+  // The AI agent reads its own transcriptions; they do not replace the captions.
+  if (payload.projectId !== project.value.id || payload.agent) return;
   if (!segments.length) {
     toast('No speech was found to caption.');
     return;
@@ -33,8 +34,8 @@ api.onTranscribeDone(({ segments, payload }) => {
   });
   toast(`Added ${segments.length} captions. Read through them and fix any mistakes in the Captions tab.`, { kind: 'success', timeout: 9000 });
 });
-api.onTranscribeError(({ error }) => {
-  if (error !== 'Canceled') toast(`Auto captions failed: ${error}`, { kind: 'error', timeout: 10000 });
+api.onTranscribeError(({ error, payload }) => {
+  if (error !== 'Canceled' && !payload?.agent) toast(`Auto captions failed: ${error}`, { kind: 'error', timeout: 10000 });
 });
 
 export function Editor({ active }) {
@@ -171,57 +172,81 @@ function LayerImportDialog() {
   );
 }
 
-// Importvalg: kopier til prosjektmappen eller la filene ligge, optimaliser og synk lyd.
+// Importvinduet: velg filer (eller slipp dem her), kopier til prosjektmappen eller la dem ligge, optimaliser og synk lyd.
 function ImportOptionsDialog() {
   const { paths } = commands.importOptions.value;
   const p = prefs.value;
   const [sync, setSync] = useState(false);
   const close = () => (commands.importOptions.value = null);
   const go = () => commands.confirmImport({ copy: p.importCopy, optimize: p.importOptimize, sync });
-  const names = paths.map((x) => x.split(/[\\/]/).pop());
+  const choose = async () => commands.addImportPaths(await api.openMediaDialog());
+  const remove = (x) => (commands.importOptions.value = { ...commands.importOptions.value, paths: paths.filter((y) => y !== x) });
+  const name = (x) => x.split(/[\\/]/).pop();
+  const onDrop = (e) => {
+    e.preventDefault();
+    commands.addImportPaths([...e.dataTransfer.files].map((f) => api.pathForFile(f)).filter(Boolean));
+  };
   return (
     <Modal
-      title={`Import ${paths.length === 1 ? names[0] : `${paths.length} Files`}`}
+      title={paths.length === 1 ? `Import ${name(paths[0])}` : paths.length ? `Import ${paths.length} Files` : 'Import Media'}
       width={500}
       onClose={close}
       footer={
         <>
           <Button onClick={close}>Cancel</Button>
-          <Button variant="primary" onClick={go}>
+          <Button variant="primary" disabled={!paths.length} onClick={go}>
             Import
           </Button>
         </>
       }
     >
-      <Section title="Files" collapsible={false}>
-        <Segmented
-          value={p.importCopy ? 'copy' : 'keep'}
-          onChange={(v) => setPrefs({ importCopy: v === 'copy' })}
-          options={[
-            { value: 'copy', label: 'Copy to project folder' },
-            { value: 'keep', label: 'Leave files in place' },
-          ]}
-        />
-        <p class="hint">
-          {p.importCopy
-            ? 'The files are copied into the Media folder of the project, so the project keeps working if the originals are moved or the drive is disconnected.'
-            : 'The project refers to the files where they are now. This saves disk space, but the project needs the files to stay in the same place.'}
-        </p>
-      </Section>
-      <Section title="Transcoding" collapsible={false}>
-        <Row label="Create optimized media">
-          <Toggle checked={p.importOptimize} onChange={(v) => setPrefs({ importOptimize: v })} />
-        </Row>
-        <p class="hint">Converts the clips to a high quality format that is smooth to edit. 10-bit and HDR clips keep their 10 bits. Runs in the background.</p>
-      </Section>
-      {paths.length > 1 && (
-        <Section title="Audio" collapsible={false}>
-          <Row label="Synchronize audio files with video">
-            <Toggle checked={sync} onChange={setSync} />
-          </Row>
-          <p class="hint">Finds audio files that match the sound of the video clips, and adds them to the clips as an extra audio track. The camera audio is switched off but kept.</p>
+      <div onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()} onDrop={onDrop}>
+        <Section title="Files" collapsible={false}>
+          {paths.length > 0 && (
+            <div class="layer-list">
+              {paths.map((x) => (
+                <div key={x} class="layer-row on" title={x}>
+                  <span class="layer-name">{name(x)}</span>
+                  <button class="link" onClick={() => remove(x)}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <Button onClick={choose}>{paths.length ? 'Add Files…' : 'Choose Files…'}</Button>
+          <p class="hint">Or drag files from Finder into this window.</p>
         </Section>
-      )}
+        <Section title="Location" collapsible={false}>
+          <Segmented
+            value={p.importCopy ? 'copy' : 'keep'}
+            onChange={(v) => setPrefs({ importCopy: v === 'copy' })}
+            options={[
+              { value: 'copy', label: 'Copy to project folder' },
+              { value: 'keep', label: 'Leave files in place' },
+            ]}
+          />
+          <p class="hint">
+            {p.importCopy
+              ? 'The files are copied into the Media folder of the project, so the project keeps working if the originals are moved or the drive is disconnected.'
+              : 'The project refers to the files where they are now. This saves disk space, but the project needs the files to stay in the same place.'}
+          </p>
+        </Section>
+        <Section title="Transcoding" collapsible={false}>
+          <Row label="Create optimized media">
+            <Toggle checked={p.importOptimize} onChange={(v) => setPrefs({ importOptimize: v })} />
+          </Row>
+          <p class="hint">Converts the clips to a high quality format that is smooth to edit. 10-bit and HDR clips keep their 10 bits. Runs in the background.</p>
+        </Section>
+        {paths.length > 1 && (
+          <Section title="Audio" collapsible={false}>
+            <Row label="Synchronize audio files with video">
+              <Toggle checked={sync} onChange={setSync} />
+            </Row>
+            <p class="hint">Finds audio files that match the sound of the video clips, and adds them to the clips as an extra audio track. The camera audio is switched off but kept.</p>
+          </Section>
+        )}
+      </div>
     </Modal>
   );
 }

@@ -1,6 +1,7 @@
 // Automatisk teksting med Whisper (Transformers.js). Kjører lokalt i et skjult vindu.
 // Modellen lastes ned første gang og ligger deretter i hurtigbufferen.
 import { env, pipeline } from '@huggingface/transformers';
+import { alignWords, findPauses, groupWords } from '../shared/speech.js';
 
 env.allowLocalModels = false;
 env.backends.onnx.wasm.wasmPaths = new URL('./ort/', location.href).href;
@@ -21,7 +22,8 @@ env.customCache = {
   },
 };
 
-const MODELS = { base: 'onnx-community/whisper-base', small: 'onnx-community/whisper-small' };
+// Variantene med ordtider (cross-attention), så tekst og klipp kan legges presist.
+const MODELS = { base: 'onnx-community/whisper-base_timestamped', small: 'onnx-community/whisper-small_timestamped' };
 const RATE = 16000;
 const WINDOW = 30;
 let cached = { key: null, pipe: null };
@@ -54,31 +56,6 @@ async function getPipe(model, onProgress) {
   return pipe;
 }
 
-// Deler lange setninger slik at hver undertekst blir lett å lese.
-function splitSegment(seg, maxChars = 84) {
-  const text = seg.text.replace(/\s+/g, ' ').trim();
-  if (!text) return [];
-  if (text.length <= maxChars) return [{ ...seg, text }];
-  const words = text.split(' ');
-  const parts = [];
-  let cur = '';
-  for (const w of words) {
-    if ((cur + ' ' + w).trim().length > maxChars && cur) {
-      parts.push(cur);
-      cur = w;
-    } else cur = (cur + ' ' + w).trim();
-  }
-  if (cur) parts.push(cur);
-  const total = text.length;
-  let t = seg.start;
-  return parts.map((p) => {
-    const d = ((seg.end - seg.start) * p.length) / total;
-    const out = { start: t, end: t + d, text: p };
-    t += d;
-    return out;
-  });
-}
-
 function isSilent(buf) {
   let sum = 0;
   for (let i = 0; i < buf.length; i += 16) sum += buf[i] * buf[i];
@@ -93,26 +70,29 @@ window.worker.onJob(async ({ jobId, payload }) => {
   try {
     report(0.1, 'Loading speech model');
     const asr = await getPipe(model, (p) => report(0.1 + p * 0.2, 'Downloading speech model'));
-    const segments = [];
+    const words = [];
     const windows = Math.ceil(audio.length / (RATE * WINDOW));
+    const length = audio.length / RATE;
     for (let i = 0; i < windows; i++) {
       if (canceled.has(jobId)) throw new Error('Canceled');
       const offset = i * WINDOW;
       const chunk = audio.subarray(i * RATE * WINDOW, Math.min(audio.length, (i + 1) * RATE * WINDOW));
       if (chunk.length < RATE * 0.5 || isSilent(chunk)) continue;
       const out = await asr(chunk, {
-        return_timestamps: true,
+        return_timestamps: 'word',
         language: language === 'auto' ? undefined : language,
         task: 'transcribe',
       });
-      for (const c of out.chunks || [{ timestamp: [0, chunk.length / RATE], text: out.text }]) {
+      for (const c of out.chunks || []) {
         const start = offset + (c.timestamp[0] ?? 0);
-        const end = offset + (c.timestamp[1] ?? Math.min(WINDOW, (c.timestamp[0] ?? 0) + 3));
-        segments.push(...splitSegment({ start, end: Math.max(end, start + 0.6), text: c.text }));
+        const end = Math.min(length, offset + (c.timestamp[1] ?? (c.timestamp[0] ?? 0) + 0.3));
+        if (c.text.trim()) words.push({ start, end: Math.max(end, start + 0.05), text: c.text.trim() });
       }
       report(0.3 + ((i + 1) / windows) * 0.7, 'Recognizing speech');
     }
-    window.worker.done(jobId, segments);
+    const pauses = findPauses(audio, RATE);
+    const aligned = alignWords(words, pauses);
+    window.worker.done(jobId, { segments: groupWords(aligned), words: aligned, pauses });
   } catch (err) {
     console.error(err);
     const msg = String(err?.message || err);

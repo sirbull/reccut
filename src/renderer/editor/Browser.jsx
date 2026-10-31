@@ -22,9 +22,9 @@ import {
   Wand2,
 } from 'lucide-preact';
 import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { CAPTION_LANE, EFFECTS, REDACT_MODES, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject, workPath } from '../../shared/model.js';
+import { CAPTION_LANE, EFFECTS, REDACT_MODES, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
-import { parseSrt, toSrt, toVtt } from '../../shared/srt.js';
+import { parseSrt, speechSources, toSrt, toVtt } from '../../shared/srt.js';
 import { addMediaRecords, usedMedia, projectFolders, audioSkimming, commit, getWave, importPaths, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
 import { fileUrl, mediaPreviewProject, openSource, scrubAudio, seek } from './playback.js';
 import * as commands from './commands.js';
@@ -357,9 +357,10 @@ function FilmstripRow({ m, span, height }) {
     const d = drag.current;
     drag.current = null;
     if (!d) return;
-    // Et klikk uten å dra flytter bibliotekets spillhode og fjerner området.
+    // Et klikk uten å dra flytter bibliotekets spillhode og velger hele klippet, som i Final Cut Pro,
+    // så det kan dras rett til tidslinjen uten In og Out.
     if (!d.moved && !d.edge) {
-      commands.browserRange.value = null;
+      commands.browserRange.value = { mediaId: m.id, in: 0, out: dur };
       openSource(m.id, d.t);
     }
     const r = wrapRef.current?.getBoundingClientRect();
@@ -429,6 +430,7 @@ function FilmstripRow({ m, span, height }) {
                     if (!e.target.dataset?.edge) {
                       e.stopPropagation();
                       commands.pickMedia(e, m.id, mediaOrder);
+                      openSource(m.id, timeAtPoint(e.clientX, e.clientY));
                     }
                   }}
                   onDragStart={(e) => {
@@ -912,18 +914,7 @@ function CaptionsTab() {
   const maxLines = p.captionStyle?.maxLines || 3;
 
   const generate = async () => {
-    const sources = [];
-    for (const c of Object.values(p.clips)) {
-      if (!c.enabled || c.lane === CAPTION_LANE || !c.mediaId) continue;
-      const m = p.media[c.mediaId];
-      let stream = null;
-      if (c.type === 'recording') stream = m.streams.camera?.hasAudio ? m.streams.camera : m.streams.screen?.hasAudio ? m.streams.screen : null;
-      else if (m.streams.main?.hasAudio) stream = m.streams.main;
-      if (!stream) continue;
-      const off = stream.offset || 0;
-      const inT = Math.max(0, c.in - off);
-      sources.push({ path: workPath(stream), in: inT, dur: c.dur, start: c.start + Math.max(0, off - c.in) });
-    }
+    const sources = speechSources(p);
     if (!sources.length) return toast('There is no audio on the timeline to transcribe.');
     if (caps.length && !confirm('Replace the existing captions with new ones?')) return;
     localStorage.setItem('captionLang', lang);

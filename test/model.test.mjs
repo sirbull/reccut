@@ -88,6 +88,19 @@ test('overgang gir to lag og krysstoner lyden', () => {
   assert.ok(Math.abs(audio[1].gain - Math.SQRT1_2) < 1e-9);
 });
 
+test('overgang uten lyd: bildet toner, lyden kuttes hardt', () => {
+  const p = setup();
+  const [a, b] = p.primary;
+  setTransition(p, b, 'dissolve', 1, 'start', false);
+  setTransition(p, b, 'dip', 2);
+  assert.equal(p.clips[b].transition.audio, false, 'beholdes når typen endres');
+  assert.ok(computeFrame(p, 9.5).layers[0].transition);
+  const before = computeAudio(p, 9.5);
+  assert.deepEqual(before.map((x) => [x.clip.id, x.gain]), [[a, 1]]);
+  const after = computeAudio(p, 10.5);
+  assert.deepEqual(after.map((x) => [x.clip.id, x.gain]), [[b, 1]]);
+});
+
 test('volum i dB og toning påvirker lyden', () => {
   const p = setup();
   const c = p.clips[p.primary[0]];

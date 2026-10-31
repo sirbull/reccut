@@ -156,6 +156,8 @@ function EditingPane() {
             }}
           />
         </Row>
+        {toggle('transitionAudio', 'Video transitions also crossfade the audio')}
+        <p class="hint">Applies to new transitions. Change it for one transition in the inspector.</p>
         {toggle('playheadAfterEdit', 'Move the playhead to the end of added clips')}
         <p class="hint">After Append, Insert, Connect and Overwrite (E, W, Q and D) the playhead jumps to the end of the new clip, ready for the next one.</p>
       </Section>

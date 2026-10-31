@@ -784,12 +784,12 @@ export function primaryAt(project, T) {
       const [a, b] = transitionWindow(c, Boolean(prev), prev);
       if (T >= a && T < b) {
         const p = clamp((T - a) / (b - a), 0, 1);
-        return { transition: { type: c.transition.type, p }, a: prev, b: c };
+        return { transition: { type: c.transition.type, p, audio: c.transition.audio !== false }, a: prev, b: c };
       }
     }
     if (c.transitionOut) {
       const [a, b] = transitionWindow(c, false, null, 'end');
-      if (T >= a && T < b) return { transition: { type: c.transitionOut.type, p: clamp((T - a) / (b - a), 0, 1) }, a: c, b: null };
+      if (T >= a && T < b) return { transition: { type: c.transitionOut.type, p: clamp((T - a) / (b - a), 0, 1), audio: c.transitionOut.audio !== false }, a: c, b: null };
     }
   }
   for (let i = Math.max(0, lo - 1); i <= Math.min(list.length - 1, lo + 1); i++) {
@@ -892,9 +892,13 @@ export function computeAudio(project, T) {
 
   if (!laneMuted(project, 0)) {
     const p = primaryAt(project, T);
-    if (p?.transition) {
+    if (p?.transition?.audio) {
       if (p.a) set(p.a, fadeOutGain(p.transition.p), true);
       if (p.b) set(p.b, fadeInGain(p.transition.p), true);
+    } else if (p?.transition) {
+      // Overgangen gjelder bare bildet: lyden kuttes hardt ved kuttet.
+      const c = [p.a, p.b].find((c) => c && T >= c.start && T < c.start + c.dur);
+      if (c) set(c, 1);
     } else if (p?.clip) set(p.clip, 1);
   }
   for (const c of near) {

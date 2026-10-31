@@ -1789,6 +1789,9 @@ function TransitionInspector({ clip, edge = 'start' }) {
           <Row label="Duration">
             <NumberField value={t.dur} min={0.1} max={4} step={0.05} precision={2} unit="s" onStart={beginTransient} onChange={(v) => updateTransient((q) => setTransition(q, clip.id, t.type, v, edge))} onCommit={() => endTransient(true)} />
           </Row>
+          <Row label="Crossfade audio">
+            <Toggle checked={t.audio !== false} onChange={(v) => commit((q) => (q.clips[clip.id][edge === 'end' ? 'transitionOut' : 'transition'].audio = v))} />
+          </Row>
           <p class="hint">Drag the transition handles on the timeline to change its duration. Press Delete to remove it. Transitions at a cut use extra frames before and after when available.</p>
         </Section>
       </div>

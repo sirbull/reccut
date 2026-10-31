@@ -68,7 +68,7 @@ app
       fs.copyFileSync(path.join(__dirname, '../build/audiofx-worklet.js'), path.join(dir, 'audiofx-worklet.js'));
       fs.writeFileSync(
         path.join(dir, 'mock.js'),
-        `window.api = new Proxy({ platform: 'darwin', listTasks: async()=>[], saveProject: async()=>'/verification.reccut', pluginsList: async()=>[], aiConfig: async()=>({provider:'compatible',endpoint:'https://api.openai.com/v1',model:'user-model',hasKey:true,encryptedStorage:true}), aiChat: async()=>JSON.stringify({reply:'I propose reducing opacity on the selected clip.',actions:[{type:'setProperty',clipId:'subject',property:'opacity',value:0.5}]}) }, {get: (obj,key)=>obj[key] || (String(key).startsWith('on')?()=>()=>{}:async()=>null)});`,
+        `window.api = new Proxy({ platform: 'darwin', listTasks: async()=>[], saveProject: async()=>'/verification.reccut', pluginsList: async()=>[], aiConfig: async()=>({provider:'compatible',endpoint:'https://api.openai.com/v1',model:'user-model',hasKey:true,encryptedStorage:true}), aiComplete: async(r)=>r.messages.some(m=>m.role==='tool')?{text:'Reduced the opacity.',toolCalls:[]}:{text:'',toolCalls:[{id:'c1',name:'set_clip_properties',args:{edits:[{clipId:'subject',properties:{opacity:0.5}}]}}]} }, {get: (obj,key)=>obj[key] || (String(key).startsWith('on')?()=>()=>{}:async()=>null)});`,
       );
       fs.writeFileSync(
         path.join(dir, 'ui.html'),
@@ -93,7 +93,7 @@ app
         sourceFile,
       ]);
       await ui.webContents.executeJavaScript(`window.sourceFile = ${JSON.stringify(sourceFile)}`);
-      for (const name of ['verifyUI', 'verifySource', 'showSettings', 'verifyChat', 'verifyProcessor']) {
+      for (const name of ['verifyUI', 'verifySource', 'showSettings', 'verifyChat', 'verifyLook', 'verifyCommands', 'verifyFootage', 'verifyProcessor']) {
         const result = await ui.webContents.executeJavaScript(
           `uiVerification.${name}().catch(error=>({error:error.message,stack:error.stack}))`,
         );

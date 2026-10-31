@@ -129,6 +129,22 @@ function withDuration(p) {
   return end === p.duration ? p : { ...p, duration: end };
 }
 
+// Tomme spor forsvinner når klippene endres, også spor lagt til med + Video og + Audio.
+// ponytail: et nytt tomt spor lever til neste klippendring; det ekstra slippsporet dekker resten.
+function pruneTracks(prev, p) {
+  if (!p.tracks || prev.clips === p.clips) return p;
+  let lo = -1, hi = 1;
+  for (const id in p.clips) {
+    const l = p.clips[id].lane;
+    if (l === CAPTION_LANE) continue;
+    if (l > hi) hi = l;
+    if (l < lo) lo = l;
+  }
+  const video = Math.min(p.tracks.video || 1, hi);
+  const audio = Math.min(p.tracks.audio || 1, -lo);
+  return video === p.tracks.video && audio === p.tracks.audio ? p : { ...p, tracks: { video, audio } };
+}
+
 // Medier som er brukt på tidslinjen (til merket i biblioteket).
 export const usedMedia = computed(() => {
   const set = new Set();
@@ -139,11 +155,11 @@ export const usedMedia = computed(() => {
 export function commit(mutator) {
   const prev = project.value;
   let result;
-  const next = withDuration(
+  const next = pruneTracks(prev, withDuration(
     produce(prev, (d) => {
       result = mutator(d);
     })
-  );
+  ));
   pushUndo(prev);
   project.value = next;
   pruneSelection();
@@ -164,6 +180,7 @@ export function updateTransient(mutator) {
 export function endTransient(keep = true) {
   if (!transientBase) return;
   if (keep && project.value !== transientBase) {
+    project.value = pruneTracks(transientBase, project.value);
     pushUndo(transientBase);
     scheduleSave();
   } else if (!keep) project.value = transientBase;

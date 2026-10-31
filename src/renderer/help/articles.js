@@ -234,6 +234,8 @@ Interlaced video (from TV and older cameras) is deinterlaced, video with transpa
 
 ![Import options.](import.jpg)
 
+The import window opens first. Click **Choose Files…** or drag files into the window, then pick how they are imported:
+
 - **Copy to project folder** copies the files into the Media folder of the project. The project keeps working if the originals are moved or a drive is disconnected.
 - **Leave files in place** refers to the files where they are, which saves disk space.
 - **Create optimized media** converts the clips to an edit friendly format in the background.
@@ -261,13 +263,13 @@ The browser shows every clip as a filmstrip with its waveform, like in Final Cut
 - Skim to where the range should start and press {{key:setIn}}. Skim to the end and press {{key:setOut}}. A yellow frame shows the range, and the name bar shows its start, end and length.
 - You can also drag across the filmstrip to select a range, and drag the yellow edges to adjust it.
 - {{key:rangeClip}} marks the whole clip, and {{key:clearRange}} removes the range.
-- A click in the filmstrip places the white browser playhead. I and O use it when the pointer is not over a clip.
+- A click in the filmstrip selects the whole clip and places the white browser playhead. I and O use the playhead when the pointer is not over a clip.
 
 ## Put it in the timeline
 
 - {{key:append}} appends the range to the end of the storyline.
 - {{key:insert}} inserts it at the playhead, {{key:connect}} connects it above the storyline and {{key:overwrite}} overwrites from the playhead.
-- Or drag the yellow range (or the clip name for the whole clip) down to the timeline.
+- Or drag the yellow range down to the timeline. To use the whole clip, click it and drag it, no In or Out needed.
 
 ## Row length and height
 
@@ -567,7 +569,7 @@ Ungroup ({{key:ungroup}}) separates them again.
     summary: 'Mark a part of the timeline with I and O.',
     keywords: 'range in out mark selection',
     body: `
-Set the start of a range with {{key:setIn}} and the end with {{key:setOut}}, or drag with the Range tool ({{key:tool:range}}). {{key:rangeClip}} marks the clip under the playhead. Playback and export can use the range. Clear it with {{key:clearRange}}.
+Set the start of a range with {{key:setIn}} and the end with {{key:setOut}}, or drag with the Range tool ({{key:tool:range}}). {{key:rangeClip}} marks the clip under the playhead. Playback and export can use the range. Clear it with {{key:clearRange}}, or press {{key:setIn}} and {{key:setOut}} at the same spot.
 
 When you work in the browser, the same keys mark a range in the clip under the pointer instead. See The Browser.
 `,
@@ -664,6 +666,8 @@ The same correction is used in the viewer and in exports. How it works: Reccut f
     keywords: 'transition dissolve crossfade wipe push fade',
     body: `
 Add Cross Dissolve ({{key:addTransition}}) adds a dissolve at the selected edit. More transitions are in the Transitions browser ({{key:browser:transitions}}); hold the pointer over one to preview it, and drag it to an edit.
+
+A transition covers only the picture part of the clips, so you can still drag the audio fade handles below it. By default it also crossfades the audio. Turn that off for one transition in the inspector (Crossfade audio), or for new transitions in Preferences > Editing; the audio then cuts at the edit.
 
 Select two audio clips that touch and press {{key:addTransition}} to add an audio crossfade. The default length is set in Preferences.
 `,
@@ -851,15 +855,29 @@ On recordings, choose Camera or Screen before adding an effect. Preview and expo
   {
     id: 'ai-plugins',
     section: 'Reference',
-    title: 'AI Chat and External Processors',
-    summary: 'Use your own model API key or connect a local video processor.',
-    keywords: 'ai chat model api key openai anthropic local plugins corridorkey ofx processor',
+    title: 'AI Editing Agent and External Processors',
+    summary: 'Let an AI model edit for you, with a cloud provider or a local model, or connect a local video processor.',
+    keywords: 'ai chat agent model api key openai anthropic claude gemini mistral openrouter ollama lm studio llama local plugins corridorkey ofx processor',
     body: `
-Open **Settings → AI & Plugins** to configure an OpenAI-compatible or Anthropic Messages API, its base URL, model ID and your own API key. Keys use encrypted operating system storage when available, otherwise session memory only. Changing the endpoint or provider removes the previous key.
+Open **Settings → AI & Plugins** and choose a provider: OpenAI, Anthropic Claude, Google Gemini, Mistral, OpenRouter, Groq, xAI, DeepSeek, or a local server such as Ollama, LM Studio or llama.cpp. **Other server or gateway** takes any OpenAI-compatible or Anthropic-compatible address, also on your local network. Choose **Fetch models** to pick an exact model ID. The model must support tool calling. Turn off **Model can see images** for text-only models.
 
-**AI Chat** at the top of the app sends your messages and timeline text metadata to that provider. Clip names and captions may be included. Video, audio and local file paths are not uploaded. The assistant cannot see or hear the footage. Provider API charges apply.
+Cloud providers need your own API key and bill you for usage. Keys use encrypted operating system storage when available, otherwise session memory only. Changing the provider or address removes the previous key. Local servers need no key, and nothing leaves your computer.
 
-The assistant can propose supported property changes, names and stack effects. Review the list and choose Apply to make the changes as one undo step. If the project changes while a request is running, request an updated proposal. The assistant cannot execute code, run plugins or modify files.
+## The editing agent
+
+Open **AI Chat** at the top of the app and describe the result you want. The agent reads the timeline and library, places and cuts clips, trims, moves and deletes, adds titles, captions and transitions, sets volume, fades, colour and stack effects, imports files you name, and looks up this manual. It renders frames from the timeline to check its work.
+
+- **Subtitles and translation:** "Subtitle this video in Finnish." The agent transcribes the speech with the local speech model, translates and condenses it, and replaces the captions in one step. Reccut fits the timing to common subtitle rules: at least one second on screen, no more than 17 characters per second, two lines of 42 characters, a short gap between captions and no overlaps. The agent rewrites captions that break the rules. Read through the result before you publish it.
+- **Colour and exposure:** "Adjust colour and exposure on every clip so they look good." The agent measures brightness, clipping, saturation and colour cast in each clip, corrects them with the colour controls and wheels, and makes clips from the same scene match.
+- **Edit raw footage:** "Make a tutorial from my talking head and the screen recordings." The agent transcribes each clip with word times, finds pauses from the audio level, keeps the best take of each sentence, finds what happens in long screen recordings from scene changes, clicks, shortcuts and contact sheets, and builds the whole edit in one step with the screen parts timed to the narration. Cuts are placed between words with a short natural pause.
+- **Your own titles:** describe a lower third, callout or end card and the agent designs an animated title template for it, adds it to the Titles library and places it.
+- **Anything in the menus:** the agent can find and run every command in Reccut, select clips, move the playhead, change any inspector property, the project format and caption style, Settings, recording settings and keyboard shortcuts.
+- **Help:** ask "where do I change the frame rate?" or "how do I stabilize a clip?" and the agent answers with the menu and shortcut, and can open the panel or help article for you. It does not change anything when you only ask.
+- **Match a style:** attach an image with **Image…**, by pasting or by dropping it on the message field, and ask the agent to make the clips look like it.
+
+Each change is an undo step, and **Undo this request** reverts everything the agent did in its last request. **Stop** ends a request between steps.
+
+The agent cannot yet create voice-over, images or video clips, or export. What is sent to the provider: your messages and attached images, what the agent reads from the project (clip names, timings, captions, the transcript and look measurements) and, if the model can see images, rendered frames. Media files, audio and local paths are not uploaded. The speech model runs on your computer and is downloaded the first time.
 
 **External video processors** install from a Reccut JSON manifest pointing to a trusted local executable. On a video clip, open Effects → External processing to process the full source and apply the result to that clip. The source timing must be preserved; original audio and media remain available. Cancel through Background tasks.
 

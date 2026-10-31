@@ -13,6 +13,7 @@ export function previewResolutionScale(quality = prefs.value.viewerQuality) {
 
 const DEFAULTS = {
   transitionDur: 1,
+  transitionAudio: true,
   audioCrossfadeDur: 1,
   stillDur: 4,
   titleDur: 4,

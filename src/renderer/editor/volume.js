@@ -1,4 +1,4 @@
-import { clamp, kfRate, kfTime } from '../../shared/model.js';
+import { clamp, kfEnd, kfRate, kfTime, valueAt } from '../../shared/model.js';
 
 export const clampDb = (db) => Math.round(clamp(db, -60, 12) * 10) / 10;
 export const volumeY = (db, h) => 2 + (12 - clamp(db, -60, 12)) / 72 * Math.max(1, h - 4);
@@ -28,6 +28,15 @@ export function shiftVolume(clip, prop, delta, indices) {
   for (const i of indices) list[i][1] = clampDb(list[i][1] + shift);
 }
 
+// Dra et punkt sidelengs: det holder seg mellom naboene, så rekkefølgen og indeksen ikke endres.
+export function moveVolumeKeyframe(clip, prop, index, to, step) {
+  const list = clip.kf?.[prop];
+  if (!list?.[index]) return;
+  const lo = index > 0 ? list[index - 1][0] + step : clip.in;
+  const hi = index < list.length - 1 ? list[index + 1][0] - step : kfEnd(clip);
+  list[index][0] = clamp(to, lo, Math.max(lo, hi));
+}
+
 // Eksakte Bézier-kurver for de samme easing-funksjonene som avspilling og eksport.
 // Linjen forlenges til begge klippkantene, også når alle punktene ligger utenfor utsnittet.
 export function volumePath(clip, prop, w, h, z, lead = 0) {
@@ -52,4 +61,19 @@ export function volumePath(clip, prop, w, h, z, lead = 0) {
     } else path += ` L${b} ${y1}`;
   }
   return path + ` H${Math.max(w, x(list.at(-1)[0]))}`;
+}
+
+// Fade som i Final Cut: linjen faller fra volumet ved håndtaket til stille ved klippkanten.
+// Lineær forsterkning som i avspillingen, vist i dB, så kurven bøyer seg slik den høres.
+export function fadePath(clip, prop, which, len, w, h, z, lead = 0) {
+  const fw = Math.min(len * z, w);
+  if (fw <= 0) return '';
+  let d = '';
+  for (let k = 0; k <= 24; k++) {
+    const p = k / 24;
+    const px = which === 'in' ? p * fw : w - p * fw;
+    const db = (valueAt(clip, prop, clip.start + px / z - lead) ?? 0) + 20 * Math.log10(Math.max(p, 1e-4));
+    d += `${k ? ' L' : 'M'}${px} ${volumeY(db, h)}`;
+  }
+  return d;
 }

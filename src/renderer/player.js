@@ -516,7 +516,8 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     dirty = true;
   }
 
-  return { attachCanvas, resizeCanvas, start, stopLoop, play, pause, toggle, getRate, shuttle, seek, scrubAudio, invalidate: () => (dirty = true), dispose };
+  // snapshot: the viewer canvas once the current time is fully drawn, for AI previews.
+  return { attachCanvas, resizeCanvas, start, stopLoop, play, pause, toggle, getRate, shuttle, seek, scrubAudio, invalidate: () => (dirty = true), snapshot: () => (!dirty && canvas) || null, dispose };
 
   function dispose() {
     stopLoop();
