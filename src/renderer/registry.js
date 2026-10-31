@@ -155,6 +155,7 @@ export const COMMANDS = [
   { id: 'reverse', label: 'Reverse Clip', menu: 'Clip', submenu: 'Retime', keys: 'Alt+R', run: () => commands.toggleReverse(), help: 'speed', keywords: 'backwards' },
   ...RAMP_PRESETS.map((r, i) => ({ id: `ramp:${r.id}`, label: `Speed Ramp: ${r.label}`, menuLabel: r.label, menu: 'Clip', submenu: 'Speed Ramp', keys: i < 6 ? `Shift+Alt+${i + 1}` : undefined, run: () => commands.applyRamp(r.id), help: 'speed' })),
   { id: 'ramp:none', label: 'Remove Speed Ramp', menuLabel: 'Remove Ramp', menu: 'Clip', submenu: 'Speed Ramp', keys: 'Shift+Alt+0', run: () => commands.applyRamp(null), help: 'speed' },
+  { id: 'stabilize', label: 'Stabilize Clip', menu: 'Clip', group: 'stab', keys: 'Shift+Alt+S', run: () => commands.stabilizeSelected(), help: 'stabilize', keywords: 'stabilization shake shaky handheld smooth tripod steady', desc: 'Analyze the camera motion and smooth it out. Adjust it in the Video tab.' },
   { id: 'freeze', label: 'Add Freeze Frame', menu: 'Clip', submenu: 'Retime', keys: 'Alt+F', run: commands.addFreezeFrame, help: 'speed' },
   { id: 'lift', label: 'Lift from Storyline', menu: 'Clip', group: 'story', keys: 'Alt+CmdOrCtrl+Up', run: commands.liftSelected, help: 'timeline' },
   { id: 'overwriteDown', label: 'Overwrite to Storyline', menu: 'Clip', group: 'story', keys: 'Alt+CmdOrCtrl+Down', run: commands.overwriteSelectedToPrimary, help: 'timeline' },

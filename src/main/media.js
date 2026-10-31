@@ -6,6 +6,7 @@ const path = require('path');
 const ff = require('./ffmpeg');
 const jobs = require('./jobs');
 const raw = require('./raw');
+const motion = require('./motion');
 
 const VIDEO_EXT = new Set(['.mp4', '.m4v', '.mov', '.qt', '.webm', '.mkv', '.avi', '.divx', '.mts', '.m2ts', '.ts', '.wmv', '.asf', '.flv', '.f4v', '.mpg', '.mpeg', '.m2v', '.vob', '.mod', '.3gp', '.3g2', '.mxf', '.ogv', '.dv', '.y4m', '.rm', '.rmvb']);
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a', '.m4b', '.aac', '.flac', '.ogg', '.oga', '.opus', '.weba', '.aif', '.aiff', '.aifc', '.wma', '.caf', '.mka', '.ac3', '.eac3', '.dts', '.amr', '.ape', '.wv', '.au', '.mp2']);
@@ -393,9 +394,37 @@ async function relink(media, file, notify) {
   return next;
 }
 
+// Bevegelsesanalyse for stabilisering. Resultatet lagres i bufferen og gjenbrukes.
+const motionJobs = new Map();
+function scheduleMotion(media, notify) {
+  const st = media.streams.main;
+  if (!st?.hasVideo) return null;
+  if (motionJobs.has(media.id)) return motionJobs.get(media.id);
+  const job = jobs.add({
+    kind: 'analyze',
+    title: `Analyzing motion in ${media.name}`,
+    queue: 'light',
+    run: async (ctx) => {
+      const dir = await cacheDirFor(st.path);
+      const out = path.join(dir, 'motion.json');
+      if (!fs.existsSync(out)) {
+        ctx.progress(0, 'Analyzing camera motion');
+        const source = [st.optimized, st.proxy, st.path].find((p) => p && fs.existsSync(p));
+        const data = await motion.analyze(ff.getFfmpegPath(), source, { fps: st.fps || media.fps, duration: st.duration || media.duration, onProgress: (p) => ctx.progress(p, 'Analyzing camera motion'), isCanceled: ctx.isCanceled });
+        await fs.promises.writeFile(out, JSON.stringify(data));
+      }
+      notify({ mediaId: media.id, stream: 'main', patch: { motion: out } });
+      return out;
+    },
+  });
+  motionJobs.set(media.id, job);
+  job.done.finally(() => motionJobs.delete(media.id)).catch(() => {});
+  return job;
+}
+
 // Alle filendelser appen kjenner, for importdialogen.
 function extensions() {
   return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT, ...raw.RAW_EXT, '.psb', '.reccut-title'].map((e) => e.slice(1));
 }
 
-module.exports = { isOffline, relink, scheduleOptimize, reverseStream, scheduleReverse, extensions, importFiles, recordingMedia, kindOf, cacheRoot, newId };
+module.exports = { scheduleMotion, isOffline, relink, scheduleOptimize, reverseStream, scheduleReverse, extensions, importFiles, recordingMedia, kindOf, cacheRoot, newId };

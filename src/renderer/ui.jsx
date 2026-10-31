@@ -59,10 +59,10 @@ export function Row({ label, children, hint, stacked }) {
   );
 }
 
-export function Section({ title, children, actions, open: initialOpen = true, collapsible = true }) {
+export function Section({ title, children, actions, open: initialOpen = true, collapsible = true, ...rest }) {
   const [open, setOpen] = useState(initialOpen);
   return (
-    <section class={`section${open ? '' : ' closed'}`}>
+    <section class={`section${open ? '' : ' closed'}`} {...rest}>
       <header onClick={() => collapsible && setOpen(!open)}>
         <h3>{title}</h3>
         <div class="section-actions" onClick={(e) => e.stopPropagation()}>

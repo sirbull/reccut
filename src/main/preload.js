@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('api', {
   optimizeMedia: invoke('media:optimize'),
   offlineMedia: invoke('media:offline'),
   mediaDetails: invoke('media:details'),
+  analyzeMotion: invoke('media:analyzeMotion'),
   saveTemplateKit: invoke('kit:save'),
   psdLayers: invoke('layers:psd'),
   psdExtract: invoke('layers:psdExtract'),

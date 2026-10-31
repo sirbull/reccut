@@ -31,9 +31,10 @@ import {
 import { setClipDuration, setSpeed, setTransition } from '../../shared/ops.js';
 import { GRADE_PROPS } from '../../shared/grade.js';
 import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { beginTransient, commit, endTransient, getWave, project, selectedClips, selectedTransition, timeSig, updateTransient, waveVersion } from './store.js';
+import { beginTransient, commit, endTransient, getWave, motionVersion, project, selectedClips, selectedTransition, tasks, timeSig, updateTransient, waveVersion } from './store.js';
 import { seek } from './playback.js';
-import { inspectorTab, newProjectOpen, toggleComponent } from './commands.js';
+import { inspectorTab, newProjectOpen, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
+import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { Button, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
 
 export function Inspector() {
@@ -261,6 +262,7 @@ function VideoTab({ clip }) {
         <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
         <p class="hint">Tip: drag the clip directly in the viewer to move it.</p>
       </Section>
+      {clip.type === 'video' && <StabilizeSection clip={clip} />}
       {(clip.type === 'video' || clip.type === 'image') && (
         <Section title="Crop">
           <Param clip={clip} prop="cropL" label="Left" min={0} max={49} scale={100} unit="%" />
@@ -275,6 +277,84 @@ function VideoTab({ clip }) {
         <PlainNumber clip={clip} prop="vFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
       </Section>
     </>
+  );
+}
+
+// Stabilisering som i Final Cut Pro: analysen skjer i bakgrunnen, og resultatet kan justeres.
+function StabilizeSection({ clip }) {
+  motionVersion.value;
+  const p = project.value;
+  const media = p.media[clip.mediaId];
+  const path = media?.streams?.main?.motion;
+  const pr = { ...STAB_DEFAULTS, ...clip.props };
+  const job = tasks.value.find((t) => t.title === `Analyzing motion in ${media?.name}` && (t.state === 'running' || t.state === 'queued'));
+  const data = path ? getMotion(path) : null;
+  const info = data && pr.stabilize ? stabilizeAt(clip, path, clip.in) : null;
+  const live = (patch) => updateTransient((q) => Object.assign(q.clips[clip.id].props, patch));
+  const slider = (key, label) => (
+    <Row label={label}>
+      <Slider value={pr[key]} min={0} max={1} step={0.01} disabled={!pr.stabilize || info?.method === 'tripod'} onStart={beginTransient} onInput={(v) => live({ [key]: v })} onCommit={() => endTransient(true)} />
+      <span class="value narrow">{Math.round(pr[key] * 100)} %</span>
+    </Row>
+  );
+  return (
+    <Section title="Stabilization" data-section="stabilize">
+      <Row label="Stabilize">
+        <Toggle checked={Boolean(clip.props.stabilize)} onChange={(v) => stabilizeSelected(v)} />
+      </Row>
+      {clip.props.stabilize && (
+        <>
+          {job ? (
+            <p class="hint">Analyzing camera motion: {Math.round((job.progress || 0) * 100)} %</p>
+          ) : !path ? (
+            <p class="hint">Waiting for the analysis.</p>
+          ) : null}
+          <Row label="Method">
+            <Segmented
+              value={pr.stabMethod}
+              onChange={(v) => setProp(clip, { stabMethod: v })}
+              options={[
+                { value: 'auto', label: 'Automatic' },
+                { value: 'smooth', label: 'Smooth' },
+                { value: 'tripod', label: 'Tripod' },
+              ]}
+            />
+          </Row>
+          {pr.stabMethod === 'auto' && info && <p class="hint">Automatic uses {info.method === 'tripod' ? 'Tripod, because the camera hardly moves' : 'Smooth, because the camera moves'}.</p>}
+          {slider('stabX', 'Smooth X')}
+          {slider('stabY', 'Smooth Y')}
+          {slider('stabRot', 'Smooth rotation')}
+          <Row label="Zoom">
+            <Segmented
+              value={pr.stabZoom > 0 ? 'manual' : 'auto'}
+              onChange={(v) => setProp(clip, { stabZoom: v === 'auto' ? 0 : Math.max(0.01, (info?.auto || 1.1) - 1) })}
+              options={[
+                { value: 'auto', label: 'Auto' },
+                { value: 'manual', label: 'Manual' },
+              ]}
+            />
+          </Row>
+          {pr.stabZoom > 0 ? (
+            <Row label="Amount">
+              <Slider value={pr.stabZoom} min={0.01} max={0.6} step={0.005} onStart={beginTransient} onInput={(v) => live({ stabZoom: v })} onCommit={() => endTransient(true)} />
+              <span class="value narrow">{Math.round((1 + pr.stabZoom) * 100)} %</span>
+            </Row>
+          ) : (
+            info && (
+              <Row label="Auto zoom">
+                <span class="value">{Math.round(info.auto * 100)} %</span>
+              </Row>
+            )
+          )}
+          <p class="hint">Higher values give smoother movement but need more zoom to hide the edges. Tripod removes all camera movement. Turn a slider to 0 to leave that direction as it is. With manual zoom, black edges can show when the correction is large.</p>
+          {path && !job && (
+            <Button variant="ghost" class="small" onClick={() => reanalyzeMotion(clip.id)}>
+              Analyze Again
+            </Button>
+          )}
+        </>
+      )}
+    </Section>
   );
 }
 

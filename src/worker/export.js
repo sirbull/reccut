@@ -1,5 +1,6 @@
 // Eksport i et skjult vindu. Hvert bilde tegnes med samme kode som forhåndsvisningen,
 // kodes med WebCodecs (maskinvare) eller FFmpeg, og lyden mikses med nøkkelbilder.
+import { setMotion } from '../shared/stabilize.js';
 import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOutputFormat, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, WebMOutputFormat, canEncodeVideo } from 'mediabunny';
 import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sourceTime, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
@@ -499,6 +500,11 @@ async function runExport(jobId, payload) {
   fs.mkdirSync(tmp, { recursive: true });
   fs.mkdirSync(path.dirname(settings.output), { recursive: true });
   const ctx = { project, ffmpegBin, tmp };
+  // Bevegelsesanalyser for stabiliserte klipp.
+  for (const c of Object.values(project.clips)) {
+    const p = c.props?.stabilize && project.media[c.mediaId]?.streams?.main?.motion;
+    if (p && fs.existsSync(p)) setMotion(p, JSON.parse(fs.readFileSync(p, 'utf8')));
+  }
   const a = settings.range ? settings.range.in : 0;
   const b = settings.range ? settings.range.out : project.duration;
   if (b - a <= 0) throw new Error('The timeline is empty.');

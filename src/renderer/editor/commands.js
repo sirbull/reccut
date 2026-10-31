@@ -2,6 +2,7 @@
 import { signal } from '@preact/signals';
 import { CAPTION_LANE, EFFECTS, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
 import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates.js';
+import { STAB_DEFAULTS } from '../../shared/stabilize.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
 import {
   adjacentAudioPairs,
@@ -656,6 +657,38 @@ export async function relinkDialog(id) {
   } catch (err) {
     toast(`Could not relink: ${err.message}`, { kind: 'error' });
   }
+}
+
+/* Stabilisering: analyserer kamerabevegelsen i bakgrunnen og glatter den ut. */
+export function stabilizeSelected(on = null) {
+  const p = project.value;
+  let ids = selection.value.filter((id) => p.clips[id]?.type === 'video');
+  if (!ids.length) ids = targetClipsAtPlayhead().filter((id) => p.clips[id]?.type === 'video');
+  if (!ids.length) return toast('Select a video clip to stabilize it.');
+  const value = on ?? !ids.every((id) => p.clips[id].props.stabilize);
+  commit((q) => {
+    for (const id of ids) {
+      const c = q.clips[id];
+      c.props.stabilize = value;
+      for (const [k, v] of Object.entries(STAB_DEFAULTS)) if (c.props[k] === undefined) c.props[k] = v;
+    }
+  });
+  if (!value) return;
+  const need = [...new Set(ids.map((id) => p.clips[id].mediaId))].map((mid) => p.media[mid]).filter((m) => m && !m.streams.main?.motion);
+  for (const m of need) api.analyzeMotion(m);
+  inspectorTab.value = 'video';
+  if (need.length) toast(`Analyzing the camera motion in ${need.length === 1 ? need[0].name : `${need.length} clips`}. The clip is stabilized as soon as it is done.`, { timeout: 5000 });
+}
+
+export function reanalyzeMotion(clipId) {
+  const p = project.value;
+  const m = p.media[p.clips[clipId]?.mediaId];
+  if (!m) return;
+  commit((q) => {
+    const st = q.media[m.id].streams.main;
+    if (st) delete st.motion;
+  });
+  api.analyzeMotion({ ...m, streams: { ...m.streams, main: { ...m.streams.main, motion: undefined } } });
 }
 
 /* Titelmaler (.reccut-title): import av egne maler og nedlasting av malpakken for After Effects. */

@@ -10,6 +10,7 @@ import {
 } from '../../shared/model.js';
 import { addMediaClip, autoFormat } from '../../shared/ops.js';
 import { templateDefaults } from '../../shared/titletemplates.js';
+import { hasMotion, setMotion } from '../../shared/stabilize.js';
 import { prefs } from '../prefs.js';
 
 const api = window.api;
@@ -325,6 +326,22 @@ export async function relinkMedia(id, file) {
   commit((p) => {
     p.media[id] = { ...fresh, offline: undefined };
   });
+}
+
+// Bevegelsesanalyser for stabilisering (se shared/stabilize.js).
+export const motionVersion = signal(0);
+const motionLoading = new Set();
+export function loadMotion(path) {
+  if (!path || hasMotion(path) || motionLoading.has(path)) return;
+  motionLoading.add(path);
+  api
+    .readText(path)
+    .then((t) => {
+      setMotion(path, JSON.parse(t));
+      motionVersion.value++;
+    })
+    .catch(() => {})
+    .finally(() => motionLoading.delete(path));
 }
 
 const waveCache = new Map();

@@ -433,6 +433,9 @@ ipcMain.handle('file:writeBinary', async (_e, file, data) => {
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   await fs.promises.writeFile(file, Buffer.from(data));
 });
+ipcMain.handle('media:analyzeMotion', (_e, m) => {
+  media.scheduleMotion(m, notifyAnalyzed);
+});
 ipcMain.handle('media:details', (_e, file) => ff.details(file));
 ipcMain.handle('media:offline', (_e, items) => items.filter((m) => media.isOffline(m)).map((m) => m.id));
 ipcMain.handle('media:relink', (_e, m, file) => media.relink(m, file, notifyAnalyzed));

@@ -3,6 +3,7 @@
 import { gpuGradeAvailable, gradeImage, gradeParams } from './grade.js';
 import { drawTestCard } from './testcard.js';
 import { drawTemplate, findTemplate } from './titletemplates.js';
+import { stabilizeAt } from './stabilize.js';
 import {
   DEFAULT_CAPTION_STYLE,
   FONTS,
@@ -280,9 +281,24 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1) {
       const img = src.img;
       const nw = img.videoWidth || img.displayWidth || img.naturalWidth || img.width || src.w;
       const nh = img.videoHeight || img.displayHeight || img.naturalHeight || img.height || src.h;
+      // Stabilisering: bildet flyttes, roteres og zoomes innenfor sin egen ramme.
+      const stab = clip.type === 'video' ? stabilizeAt(clip, media?.streams?.main?.motion, s) : null;
       drawWithEffects(ctx, clip, T, r, H, () => {
         ctx.filter = colorFilter(clip, T, H);
-        if (cl || cr || ct || cb) ctx.drawImage(img, cl * nw, ct * nh, nw * (1 - cl - cr), nh * (1 - ct - cb), r.x, r.y, r.w, r.h);
+        if (stab) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(r.x, r.y, r.w, r.h);
+          ctx.clip();
+          const mx = full.x + full.w / 2;
+          const my = full.y + full.h / 2;
+          ctx.translate(mx, my);
+          ctx.scale(stab.zoom, stab.zoom);
+          ctx.rotate(stab.a);
+          ctx.translate(stab.x * full.w - mx, stab.y * full.w - my);
+          ctx.drawImage(img, full.x, full.y, full.w, full.h);
+          ctx.restore();
+        } else if (cl || cr || ct || cb) ctx.drawImage(img, cl * nw, ct * nh, nw * (1 - cl - cr), nh * (1 - ct - cb), r.x, r.y, r.w, r.h);
         else ctx.drawImage(img, r.x, r.y, r.w, r.h);
       });
     }

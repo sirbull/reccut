@@ -174,6 +174,7 @@ function itemsFor() {
   for (const [tab, prop, label, kw] of PARAMS) {
     out.push({ kind: 'Setting', id: `param:${prop}`, label, sub: `Inspector › ${tab[0].toUpperCase() + tab.slice(1)}`, keywords: kw, run: () => showInspectorParam(tab, `[data-prop="${prop}"]`) });
   }
+  out.push({ kind: 'Setting', id: 'param:stabilize', label: 'Stabilization', sub: 'Inspector › Video', keywords: 'stabilize shake shaky smooth tripod', run: () => showInspectorParam('video', '[data-section="stabilize"]') });
   out.push({ kind: 'Setting', id: 'param:wheels', label: 'Color Wheels', sub: 'Inspector › Color', keywords: 'lift gamma gain shadows midtones highlights grade', run: () => showInspectorParam('color', '[data-section="wheels"]') });
   out.push({ kind: 'Setting', id: 'param:components', label: 'Audio Components', sub: 'Inspector › Audio', keywords: 'audio tracks camera microphone synced switch off', run: () => showInspectorParam('audio', '.insp-body') });
   for (const m of Object.values(project.value.media)) {

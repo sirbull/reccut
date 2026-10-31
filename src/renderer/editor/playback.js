@@ -3,7 +3,7 @@
 import { effect } from '@preact/signals';
 import { primaryAt } from '../../shared/model.js';
 import { createPlayer, fileUrl } from '../player.js';
-import { getTime, playing, project, setTime, skim } from './store.js';
+import { getTime, loadMotion, motionVersion, playing, project, setTime, skim } from './store.js';
 
 export { fileUrl };
 
@@ -44,7 +44,18 @@ export function seek(T) {
 effect(() => {
   project.value;
   skim.value;
+  motionVersion.value;
   player.invalidate();
+});
+
+// Analysene for stabiliserte klipp lastes når de trengs.
+effect(() => {
+  const p = project.value;
+  for (const c of Object.values(p.clips)) {
+    if (!c.props?.stabilize) continue;
+    const path = p.media[c.mediaId]?.streams?.main?.motion;
+    if (path) loadMotion(path);
+  }
 });
 
 export function currentClipAtPlayhead() {

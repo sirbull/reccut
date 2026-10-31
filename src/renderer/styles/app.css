@@ -3465,3 +3465,4 @@ kbd.keycap {
   color: var(--text-3);
 }
 .palette-item .kind.k-lower { background: rgba(106, 75, 176, 0.4); color: #ddd0ff; }
+.row .value.narrow { min-width: 42px; text-align: right; }
