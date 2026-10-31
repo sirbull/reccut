@@ -40,6 +40,18 @@ export const projectFolders = signal(null);
 // Første oppstart uten prosjekt: brukeren må lage eller åpne et prosjekt først.
 export const needsProject = signal(false);
 
+// Medier som en bakgrunnsjobb arbeider med (analyse, optimalisering, baklengs kopi), med fremdrift.
+export const busyMedia = computed(() => {
+  const out = new Map();
+  for (const t of tasks.value) {
+    if (!t.mediaId || (t.state !== 'running' && t.state !== 'queued')) continue;
+    const prev = out.get(t.mediaId);
+    const next = { progress: t.state === 'running' ? t.progress || 0 : 0, title: t.stage || t.title, queued: t.state === 'queued' };
+    if (!prev || (prev.queued && !next.queued)) out.set(t.mediaId, next);
+  }
+  return out;
+});
+
 export const selectedClips = computed(() => selection.value.map((id) => project.value.clips[id]).filter(Boolean));
 
 /* Spillhodet oppdateres 60 ganger i sekundet uten å tegne hele grensesnittet på nytt. */

@@ -1,6 +1,6 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
-import { CAPTION_LANE, EFFECTS, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
+import { CAPTION_LANE, CLIP_COLORS, EFFECTS, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
 import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates.js';
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
@@ -664,6 +664,20 @@ export async function relinkDialog(id) {
   }
 }
 
+/* Fargekoder: marker ett eller flere klipp og velg en farge. null fjerner fargen. */
+export function setClipColor(color, ids = null) {
+  const p = project.value;
+  ids = (ids || selection.value).filter((id) => p.clips[id]);
+  if (!ids.length) ids = targetClipsAtPlayhead();
+  if (!ids.length) return toast('Select one or more clips to color them.');
+  commit((q) => {
+    for (const id of ids) {
+      if (color) q.clips[id].colorLabel = color;
+      else delete q.clips[id].colorLabel;
+    }
+  });
+}
+
 /* Stabilisering: analyserer kamerabevegelsen i bakgrunnen og glatter den ut. */
 export function stabilizeSelected(on = null) {
   const p = project.value;
@@ -858,7 +872,20 @@ export async function clipContextMenu(clipId, T) {
   if (c.mediaId) items.push({ id: 'reveal', label: k('Reveal in Finder', 'Show in Explorer') }, { separator: true });
   items.push({ id: 'delete', label: c.lane === 0 ? 'Delete' : 'Delete', accelerator: 'Backspace' });
   if (c.lane === 0) items.push({ id: 'deleteGap', label: 'Delete and Leave Gap', accelerator: 'Shift+Backspace' });
+  // Fargekode for alle valgte klipp. Haken viser fargen alle de valgte har.
+  const sel = selection.value.includes(clipId) ? selection.value : [clipId];
+  const colors = new Set(sel.map((cid) => project.value.clips[cid]?.colorLabel || ''));
+  const same = colors.size === 1 ? [...colors][0] : null;
+  items.splice(items.findIndex((it) => it.separator) + 1, 0, {
+    label: sel.length > 1 ? `Color ${sel.length} Clips` : 'Color',
+    submenu: [
+      ...CLIP_COLORS.map((c, i) => ({ id: `color:${c.id}`, label: c.label, checked: same === c.id, accelerator: isMac ? `Ctrl+Alt+${i + 1}` : `Ctrl+Shift+Alt+${i + 1}` })),
+      { separator: true },
+      { id: 'color:none', label: 'No Color', enabled: [...colors].some(Boolean), accelerator: isMac ? 'Ctrl+Alt+0' : 'Ctrl+Shift+Alt+0' },
+    ],
+  }, { separator: true });
   const id = await api.popupMenu(items);
+  if (id?.startsWith('color:')) return setClipColor(id === 'color:none' ? null : id.slice(6), sel);
   if (id?.startsWith('speed:')) return setSpeedSelected(Number(id.slice(6)));
   if (id?.startsWith('ramp:')) return applyRamp(id === 'ramp:none' ? null : id.slice(5));
   if (id === 'reverse') return toggleReverse();

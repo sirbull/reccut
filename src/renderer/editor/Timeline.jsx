@@ -45,6 +45,7 @@ import {
   audioComponents,
   primaryComponent,
   titleText,
+  CLIP_COLORS,
 } from '../../shared/model.js';
 import { groupLead, groupMembers, moveClip, positionMove, positionTrim, rollEdit, slideClip, slipClip, splitClip, trimClip } from '../../shared/ops.js';
 import {
@@ -68,6 +69,7 @@ import {
   updateTransient,
   waveVersion,
   selectedComponent,
+  busyMedia,
 } from './store.js';
 import { fileUrl, scrubAudio, seek } from './playback.js';
 import { IconButton } from '../ui.jsx';
@@ -847,7 +849,9 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
   const expanded = clip.expanded && hasAudio && clip.type !== 'audio';
   const speed = speedOf(clip);
   const visual = isVisual(clip) && clip.type !== 'title';
-  const cls = ['tl-clip', `t-${clip.type}`, selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped', media?.offline && 'offline', audioComponents(clip, media).length > 0 && audioComponents(clip, media).every((c) => c.off) && 'audio-off'].filter(Boolean).join(' ');
+  const busy = media ? busyMedia.value.get(media.id) : null;
+  const colorTag = CLIP_COLORS.find((c) => c.id === clip.colorLabel);
+  const cls = ['tl-clip', `t-${clip.type}`, busy && 'busy', colorTag && 'labeled', selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped', media?.offline && 'offline', audioComponents(clip, media).length > 0 && audioComponents(clip, media).every((c) => c.off) && 'audio-off'].filter(Boolean).join(' ');
   const label = clip.type === 'title' ? titleText(clip) : clip.type === 'caption' ? clip.props.text || 'Caption' : clip.name || media?.name || clip.type;
   const narrow = w < 24;
   const thumbStream = media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
@@ -859,7 +863,7 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
   const showStrip = visual && stripH > 12 && thumbStream?.thumbs;
 
   return (
-    <div class={cls} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y, height: boxH }}>
+    <div class={cls} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y, height: boxH, ...(colorTag ? { '--label': colorTag.color } : {}) }} title={busy ? `${busy.title}${busy.queued ? ' (waiting)' : ` ${Math.round(busy.progress * 100)} %`}` : undefined}>
       {!narrow && (
         <div class="clip-label" data-hit="clip" data-clip={clip.id}>
           {clip.type === 'recording' && <span class="badge">REC</span>}
@@ -881,6 +885,12 @@ const Clip = memo(function Clip({ clip, row, media, selected, z }) {
       )}
       {selected && <Keyframes clip={clip} z={z} />}
       {hasAudio && !expanded && !narrow && row.kind !== 'caption' && <FadeHandles clip={clip} z={z} h={waveH} />}
+      {busy && (
+        // Klippet analyseres: turkise striper som beveger seg, og en fremdriftslinje nederst.
+        <div class="tl-busy" aria-label="Working">
+          <div class="tl-busy-bar" style={{ width: `${Math.max(3, busy.progress * 100)}%` }} />
+        </div>
+      )}
       <div class="edge start" data-hit="edge" data-edge="start" data-clip={clip.id} />
       <div class="edge end" data-hit="edge" data-edge="end" data-clip={clip.id} />
     </div>

@@ -4,6 +4,7 @@ import { signal } from '@preact/signals';
 import { Captions, ChevronLeft, ChevronRight, Diamond, Film, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
 import {
   audioComponents,
+  CLIP_COLORS,
   componentVolumeProp,
   ANIMATION_PRESETS,
   RAMP_PRESETS,
@@ -96,7 +97,7 @@ function ClipInspector({ clip }) {
         ))}
       </div>
       <div class="insp-head">
-        <span class={`type-dot t-${clip.type}`} />
+        <span class={`type-dot t-${clip.type}`} style={clip.colorLabel ? { background: CLIP_COLORS.find((c) => c.id === clip.colorLabel)?.color } : undefined} />
         <b title={title}>{title}</b>
         <Toggle checked={clip.enabled} onChange={(v) => commit((q) => (q.clips[clip.id].enabled = v))} />
       </div>

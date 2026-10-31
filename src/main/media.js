@@ -189,6 +189,7 @@ function scheduleAnalysis(media, notify) {
   for (const [key, stream] of Object.entries(media.streams)) {
     jobs.add({
       kind: 'analyze',
+      mediaId: media.id,
       title: `Analyzing ${media.name}${Object.keys(media.streams).length > 1 ? ` (${key})` : ''}`,
       queue: 'light',
       run: async (ctx) => {
@@ -215,7 +216,11 @@ function scheduleAnalysis(media, notify) {
           const thumbDir = path.join(dir, 'thumbs');
           let thumbs;
           const metaFile = path.join(thumbDir, 'meta.json');
-          if (fs.existsSync(metaFile)) thumbs = JSON.parse(await fs.promises.readFile(metaFile, 'utf8'));
+          if (fs.existsSync(metaFile)) {
+            thumbs = JSON.parse(await fs.promises.readFile(metaFile, 'utf8'));
+            // Bufferen kan ha blitt flyttet (for eksempel fra OBSlite til Reccut): bruk mappen den ligger i nå.
+            thumbs.files = thumbs.files.map((f) => path.join(thumbDir, path.basename(f)));
+          }
           else {
             thumbs = await ff.thumbnails(source, thumbDir, stream.duration, (p) => ctx.progress(0.7 + p * 0.2));
             await fs.promises.writeFile(metaFile, JSON.stringify(thumbs));
@@ -327,6 +332,7 @@ function reverseStream(stream, ctx, share = [0, 1]) {
 function scheduleReverse(media, notify) {
   return jobs.add({
     kind: 'analyze',
+    mediaId: media.id,
     title: `Reversing ${media.name}`,
     queue: 'light',
     run: async (ctx) => {
@@ -348,6 +354,7 @@ function scheduleOptimize(media, outDir, notify) {
   if (media.kind === 'image' || !keys.length) return null;
   return jobs.add({
     kind: 'optimize',
+    mediaId: media.id,
     title: `Optimizing ${media.name}`,
     queue: 'optimize',
     run: async (ctx) => {
@@ -402,6 +409,7 @@ function scheduleMotion(media, notify) {
   if (motionJobs.has(media.id)) return motionJobs.get(media.id);
   const job = jobs.add({
     kind: 'analyze',
+    mediaId: media.id,
     title: `Analyzing motion in ${media.name}`,
     queue: 'light',
     run: async (ctx) => {

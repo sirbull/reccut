@@ -12,7 +12,7 @@ function snapshot() {
   return [...tasks.values()]
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 30)
-    .map(({ id, kind, title, progress, state, error, result, stage }) => ({ id, kind, title, progress, state, error, result, stage }));
+    .map(({ id, kind, title, progress, state, error, result, stage, mediaId }) => ({ id, kind, title, progress, state, error, result, stage, mediaId }));
 }
 
 let broadcastTimer = null;
@@ -41,9 +41,10 @@ function update(id, patch) {
 // Optimalisering har sin egen kø, så den ikke stopper eksport og analyse.
 const queues = { light: { limit: 2, running: 0, items: [] }, heavy: { limit: 1, running: 0, items: [] }, optimize: { limit: 1, running: 0, items: [] } };
 
-function add({ kind, title, queue = 'light', run, silent = false }) {
+// mediaId: mediet jobben arbeider med, så klippene kan vise at de analyseres.
+function add({ kind, title, queue = 'light', run, silent = false, mediaId = null }) {
   const id = nextId++;
-  const task = { id, kind, title, progress: 0, state: 'queued', createdAt: Date.now(), silent };
+  const task = { id, kind, title, progress: 0, state: 'queued', createdAt: Date.now(), silent, mediaId };
   tasks.set(id, task);
   let resolveDone, rejectDone;
   const done = new Promise((res, rej) => {

@@ -43,6 +43,19 @@ export const TITLE_TEMPLATES = [
 export const TEMPLATE_TITLES = BUILTIN_TEMPLATES.map((t) => ({ id: t.id, label: t.name, category: t.category, props: { template: t.id, ...templateDefaults(t) } }));
 TITLE_TEMPLATES.push(...TEMPLATE_TITLES);
 
+// Fargekoder for klipp. Turkis er holdt av til klipp som analyseres, så den finnes ikke her.
+export const CLIP_COLORS = [
+  { id: 'red', label: 'Red', color: '#ff453a' },
+  { id: 'orange', label: 'Orange', color: '#ff9f0a' },
+  { id: 'yellow', label: 'Yellow', color: '#ffd60a' },
+  { id: 'green', label: 'Green', color: '#30d158' },
+  { id: 'blue', label: 'Blue', color: '#0a84ff' },
+  { id: 'purple', label: 'Purple', color: '#bf5af2' },
+  { id: 'pink', label: 'Pink', color: '#ff6fae' },
+  { id: 'brown', label: 'Brown', color: '#a2845e' },
+  { id: 'gray', label: 'Gray', color: '#98989d' },
+];
+
 export const FONTS = {
   sans: 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
   serif: 'Georgia, "Times New Roman", serif',

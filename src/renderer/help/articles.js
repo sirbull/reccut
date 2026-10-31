@@ -371,6 +371,27 @@ It works the same for audio components: expand the audio ({{key:expandAudio}}), 
     see: ['audio', 'sync'],
   },
   {
+    id: 'colors',
+    section: 'Editing',
+    title: 'Color Coding Clips',
+    summary: 'Give clips a color to keep track of them, and see which clips are being analyzed.',
+    keywords: 'color label tag code mark clips busy analyzing working turquoise',
+    body: `
+Select one or more clips, right click and choose a color under **Color**: Red, Orange, Yellow, Green, Blue, Purple, Pink, Brown or Gray. No Color removes it. The clip and its name bar take the color, so you can see at a glance which clips belong together, for example interviews in one color and B-roll in another.
+
+![Clips with color codes.](clip-colors.jpg)
+
+Each color also has a shortcut, {{key:color:red}} to {{key:color:gray}} in the order above, and {{key:color:none}} removes the color. They are in the Clip menu under Color too.
+
+## Clips that are being analyzed
+
+While Reccut works on a clip in the background, for example analyzing motion for stabilization, creating optimized media or a reversed copy, the clip gets moving **turquoise stripes** and a progress bar along the bottom. Hold the pointer over it to see what is happening. Turquoise is never used as a color code, so a working clip always stands out. The stripes disappear when the work is done.
+
+![A clip being analyzed for stabilization.](clip-busy.jpg)
+`,
+    see: ['stabilize', 'optimize'],
+  },
+  {
     id: 'grouping',
     section: 'Editing',
     title: 'Grouping Clips',

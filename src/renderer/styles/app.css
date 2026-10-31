@@ -3676,3 +3676,47 @@ kbd.keycap {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Fargekodede klipp: klippet og navnelinjen får fargen */
+.tl-clip.labeled {
+  background: color-mix(in srgb, var(--label) 50%, #1a1a1c);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--label) 80%, #fff 0%), 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.tl-clip.labeled .clip-label {
+  background: color-mix(in srgb, var(--label) 72%, #000);
+}
+.tl-clip.labeled.selected {
+  box-shadow: inset 0 0 0 2px var(--yellow), inset 0 0 0 4px color-mix(in srgb, var(--label) 80%, #000), 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* Klipp som analyseres: turkise striper som beveger seg. Turkis brukes ikke som fargekode. */
+@keyframes tl-busy-stripes {
+  from { background-position: 0 0; }
+  to { background-position: 28px 0; }
+}
+@keyframes tl-busy-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
+}
+.tl-clip.busy {
+  box-shadow: inset 0 0 0 1.5px #19e3ff, 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.tl-busy {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: repeating-linear-gradient(-45deg, rgba(25, 227, 255, 0.34) 0 7px, rgba(25, 227, 255, 0.08) 7px 14px);
+  background-size: 28px 100%;
+  animation: tl-busy-stripes 0.9s linear infinite, tl-busy-pulse 1.8s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+.tl-busy-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: #19e3ff;
+  box-shadow: 0 0 6px #19e3ff;
+  transition: width 0.3s ease;
+}
