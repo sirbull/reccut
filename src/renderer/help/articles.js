@@ -644,6 +644,33 @@ Add Caption ({{key:addCaption}}) adds a caption at the playhead. The Captions ta
     see: ['export'],
   },
   {
+    id: 'masks',
+    section: 'Editing',
+    title: 'Masks',
+    summary: 'Show only part of a clip, with shapes you can animate.',
+    keywords: 'mask masking shape matte cut out rotoscope roto freeform bezier ellipse rectangle spotlight vignette feather invert animate keyframe',
+    body: `
+A mask decides which part of a clip is visible. Use it to cut out a person, frame a detail, make a spotlight, blend two clips, or hide part of the picture.
+
+- Select a video, image, recording or title clip and choose **Add Rectangle Mask** ({{key:mask:rect}}), **Add Ellipse Mask** ({{key:mask:ellipse}}) or **Add Freeform Mask** in the Edit menu, or use the buttons in the **Masks** tab of the inspector.
+- Click **Edit in Viewer** to show the shape in the viewer. Drag it to move it, and drag the handles to resize it. Hold Option (Alt) to resize from the center.
+- **Freeform** masks have points: drag a point to move it, double click the outline to add a point, and Option (Alt) click a point to remove it. Turn on **Smooth curve** for soft curves through the points.
+
+## Settings
+
+- **Mode**: Add shows what is inside the shape, Subtract cuts the shape out, and Intersect keeps only where it overlaps the masks above it. Several masks can be combined.
+- **Invert** turns the mask inside out.
+- **Feather** gives the mask a soft edge. **Opacity** lets some of the hidden part show through.
+
+## Animate a mask
+
+Position, size, rotation, feather and opacity have their own keyframe buttons. For a freeform mask, the keyframe button next to **Shape** saves all the points at the playhead. Move the playhead, drag the points to the new shape, and Reccut moves every point smoothly between the keyframes, like rotoscoping. Points you add or remove are added or removed in every keyframe, so the animation keeps working.
+
+The mask follows the clip when you move, scale or rotate it, and it looks the same in the viewer and in the exported file.
+`,
+    see: ['keyframes', 'redact'],
+  },
+  {
     id: 'redact',
     section: 'Editing',
     title: 'Redacting Passwords and Faces',
@@ -663,11 +690,13 @@ Use a redaction to hide something in the picture, such as a password, an email a
 - **Solid** covers the area with a color. This is the safest for passwords, because nothing of the original is left.
 - **Frosted** combines blur and blocks, like frosted glass.
 
-In the Redact tab of the inspector you can choose the shape (rectangle, rounded or ellipse), the amount, a soft edge, rotation and **Redact outside**, which hides everything except the area.
+In the Redact tab of the inspector you can choose the shape (rectangle, rounded, ellipse or **Freeform**), the amount, a soft edge, rotation and **Redact outside**, which hides everything except the area.
 
 ## Follow something that moves
 
 Position, size and rotation can have keyframes. Go to where the object starts, click the keyframe button next to Position and Size, move the playhead and drag the box to the new place. Reccut moves the box smoothly between the keyframes.
+
+With **Freeform** you can follow any shape: drag the points in the viewer, double click the outline to add a point and Option (Alt) click a point to remove it. Click the keyframe button next to **Shape** to animate the points, so the redaction can change shape over time. See Masks.
 
 Redactions work the same in the viewer and in the exported file.
 `,

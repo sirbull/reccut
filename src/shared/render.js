@@ -4,6 +4,7 @@ import { gpuGradeAvailable, gradeImage, gradeParams } from './grade.js';
 import { drawTestCard } from './testcard.js';
 import { drawTemplate, findTemplate } from './titletemplates.js';
 import { stabilizeAt } from './stabilize.js';
+import { maskList, paintMask, shapeAt, shapeCorners, shapePath } from './shapes.js';
 import {
   DEFAULT_CAPTION_STYLE,
   FONTS,
@@ -241,12 +242,13 @@ function containRect(sw, sh, W, H) {
   return { x: (W - w) / 2, y: (H - h) / 2, w, h };
 }
 
-export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1) {
+export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmasked = false) {
   const W = project.width;
   const H = project.height;
   const alpha = visualOpacity(clip, T) * alphaMul;
   if (alpha <= 0.001) return;
   if (clip.type === 'redact') return drawRedact(ctx, clip, T, W, H, alpha);
+  if (!unmasked && clip.type !== 'caption' && maskList(clip).length) return drawMasked(ctx, project, clip, T, getSource, alphaMul);
   const media = project.media[clip.mediaId];
 
   ctx.save();
@@ -319,30 +321,17 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1) {
 /* Sladding. Leser det som allerede er tegnet under (alle lag), gjør området ugjenkjennelig
    i et eget lerret og legger det over igjen. Myk kant lages med en uskarp maske. */
 
-// Formen i prosjektets koordinater: midtpunkt, størrelse og rotasjon.
+// Sladdens form i bildet (sladding ligger alltid i bildets rom).
 export function redactShape(clip, T, W, H) {
-  return {
-    cx: W / 2 + (valueAt(clip, 'x', T) || 0),
-    cy: H / 2 + (valueAt(clip, 'y', T) || 0),
-    w: Math.max(4, valueAt(clip, 'w', T) ?? W * 0.25),
-    h: Math.max(4, valueAt(clip, 'h', T) ?? H * 0.1),
-    rot: ((valueAt(clip, 'rotation', T) || 0) * Math.PI) / 180,
-  };
+  return shapeAt(clip, '', clip.props.shape || 'rect', T, W, H);
 }
 
 export function redactPath(clip, T, W, H) {
-  const { cx, cy, w, h, rot } = redactShape(clip, T, W, H);
-  const local = new Path2D();
-  const shape = clip.props.shape || 'rect';
-  if (shape === 'ellipse') local.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
-  else if (shape === 'rounded' && local.roundRect) local.roundRect(-w / 2, -h / 2, w, h, Math.min(w, h) * 0.22);
-  else local.rect(-w / 2, -h / 2, w, h);
-  const path = new Path2D();
-  path.addPath(local, new DOMMatrix().translate(cx, cy).rotate((rot * 180) / Math.PI));
-  return { path, cx, cy, w, h, rot };
+  const g = redactShape(clip, T, W, H);
+  return { path: shapePath(g, clip.props.smooth === true), ...g };
 }
 
-const scratch = [null, null];
+const scratch = [null, null, null, null];
 function scratchCanvas(i, w, h) {
   let c = scratch[i];
   if (!c) {
@@ -367,22 +356,20 @@ function drawRedact(ctx, clip, T, W, H, alpha) {
   const mode = pr.mode || 'pixelate';
   const m = ctx.getTransform();
   const k = Math.hypot(m.a, m.b) || 1;
-  const { path, cx, cy, w, h, rot } = redactPath(clip, T, W, H);
+  const geom = redactPath(clip, T, W, H);
+  const { path } = geom;
   const devPath = new Path2D();
   devPath.addPath(path, m);
   const feather = Math.max(0, valueAt(clip, 'feather', T) || 0) * k;
   // Området som må behandles, i lerretets piksler.
   let pts;
   if (pr.invert) pts = [[0, 0], [W, 0], [0, H], [W, H]];
-  else {
-    const c = Math.cos(rot);
-    const sn = Math.sin(rot);
-    pts = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([u, v]) => [cx + (u * w * c) / 2 - (v * h * sn) / 2, cy + (u * w * sn) / 2 + (v * h * c) / 2]);
-  }
+  else pts = shapeCorners(geom);
   const dev = pts.map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]);
   const cw = ctx.canvas.width;
   const ch = ctx.canvas.height;
-  const pad = pr.invert ? 0 : feather * 2;
+  // Myke kurver i en fri form kan gå litt utenfor punktene.
+  const pad = pr.invert ? 0 : feather * 2 + (geom.shape === 'path' ? 40 * k : 0);
   const bx = Math.max(0, Math.floor(Math.min(...dev.map((d) => d[0])) - pad));
   const by = Math.max(0, Math.floor(Math.min(...dev.map((d) => d[1])) - pad));
   const bx2 = Math.min(cw, Math.ceil(Math.max(...dev.map((d) => d[0])) + pad));
@@ -440,6 +427,28 @@ function drawRedact(ctx, clip, T, W, H, alpha) {
   ctx.globalCompositeOperation = 'source-over';
   ctx.filter = 'none';
   ctx.drawImage(P, 0, 0, bw, bh, bx, by, bw, bh);
+  ctx.restore();
+}
+
+// Klipp med masker tegnes i et eget lag, og masken bestemmer hva som blir synlig.
+function drawMasked(ctx, project, clip, T, getSource, alphaMul) {
+  const cw = ctx.canvas.width;
+  const ch = ctx.canvas.height;
+  const base = ctx.getTransform();
+  const { c: L, g: lg } = scratchCanvas(2, cw, ch);
+  lg.setTransform(base);
+  drawClip(lg, project, clip, T, getSource, alphaMul, true);
+  const { c: M, g: mg } = scratchCanvas(3, cw, ch);
+  paintMask(mg, clip, T, project.width, project.height, base, cw, ch);
+  lg.setTransform(1, 0, 0, 1, 0, 0);
+  lg.globalCompositeOperation = 'destination-in';
+  lg.drawImage(M, 0, 0, cw, ch, 0, 0, cw, ch);
+  lg.globalCompositeOperation = 'source-over';
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.filter = 'none';
+  ctx.drawImage(L, 0, 0, cw, ch, 0, 0, cw, ch);
   ctx.restore();
 }
 

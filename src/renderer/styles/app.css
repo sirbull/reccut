@@ -2351,28 +2351,7 @@ input[type='color'].color::-webkit-color-swatch {
 .viewer-box canvas.movable { cursor: move; }
 .viewer-box canvas.drawable { cursor: crosshair; }
 .viewer-box { position: relative; }
-/* Sladdeboksen i bildet */
-.redact-box {
-  position: absolute;
-  box-sizing: border-box;
-  border: 1.5px solid var(--yellow);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
-  cursor: move;
-  touch-action: none;
-  z-index: 3;
-}
-.redact-box.ellipse { border-radius: 50%; }
-.redact-box.rounded { border-radius: 10px; }
-.redact-handle {
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  margin: -5px 0 0 -5px;
-  border-radius: 2px;
-  background: #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
-  touch-action: none;
-}
+
 
 /* Nøkkelbilder, animasjon og effekter i inspektøren */
 .ease-row {
@@ -3953,4 +3932,44 @@ kbd.keycap {
   font-weight: 600;
   z-index: 3;
   pointer-events: none;
+}
+
+/* Formredigering i visningen (sladding og masker) */
+.shape-editor {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 3;
+}
+.shape-editor .shape-fill {
+  fill: rgba(247, 201, 72, 0.06);
+  stroke: var(--yellow);
+  pointer-events: all;
+  cursor: move;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}
+.shape-editor .shape-edge {
+  fill: none;
+  stroke: transparent;
+  pointer-events: stroke;
+  cursor: move;
+}
+.shape-editor .shape-handle {
+  fill: #fff;
+  stroke: rgba(0, 0, 0, 0.75);
+  pointer-events: all;
+}
+.shape-editor .shape-handle.point {
+  cursor: grab;
+}
+.mask-add {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.mask-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
 }

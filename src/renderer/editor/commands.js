@@ -3,6 +3,7 @@ import { signal } from '@preact/signals';
 import { CAPTION_LANE, CLIP_COLORS, EFFECTS, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
 import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates.js';
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
+import { addMask, canMask, removeMask } from '../../shared/shapes.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
 import {
   adjacentAudioPairs,
@@ -79,6 +80,30 @@ export function addTitle(style = 'center', T = getTime()) {
   commit((p) => placeFree(p, clip, T, 1));
   selection.value = [clip.id];
   inspectorTab.value = 'text';
+}
+
+// Masker: formen som er valgt for redigering i visningen ({ clipId, id }).
+export const selectedMask = signal(null);
+
+export function addMaskToSelected(shape = 'rect') {
+  const p = project.value;
+  const ids = selection.value.filter((id) => canMask(p.clips[id]));
+  if (!ids.length) {
+    toast('Select a video, image, recording or title clip first.');
+    return;
+  }
+  let made = null;
+  commit((q) => {
+    for (const id of ids) made = { clipId: id, id: addMask(q.clips[id], shape, q.width, q.height) };
+  });
+  selection.value = [made.clipId];
+  selectedMask.value = made;
+  inspectorTab.value = 'masks';
+}
+
+export function deleteMask(clipId, id) {
+  commit((q) => q.clips[clipId] && removeMask(q.clips[clipId], id));
+  if (selectedMask.value?.id === id) selectedMask.value = null;
 }
 
 // Sladding (Redact): legges over alt annet der spillhodet står, eller over området (I og O).

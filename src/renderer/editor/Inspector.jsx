@@ -1,7 +1,7 @@
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { Captions, ChevronLeft, ChevronRight, Diamond, EyeOff, Film, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
+import { Captions, ChevronLeft, ChevronRight, Circle, Diamond, EyeOff, Film, PenTool, RectangleHorizontal, SquareDashed, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
 import {
   audioComponents,
   CLIP_COLORS,
@@ -37,8 +37,9 @@ import { GRADE_PROPS } from '../../shared/grade.js';
 import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
 import { beginTransient, commit, endTransient, getWave, motionVersion, project, selectedClips, selectedTransition, tasks, timeSig, updateTransient, waveVersion } from './store.js';
 import { seek } from './playback.js';
-import { inspectorTab, newProjectOpen, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
+import { addMaskToSelected, deleteMask, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
+import { MASK_MODES, MASK_SHAPES, canMask, defaultPoints, ellipsePoints, maskKey, maskList, setMaskShape } from '../../shared/shapes.js';
 import { Button, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
 
 export function Inspector() {
@@ -77,6 +78,7 @@ function tabsFor(clip, media) {
   if (isVisual(clip) && clip.type !== 'gap' && clip.type !== 'redact') tabs.push({ id: 'video', label: 'Video', icon: Film });
   if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording') tabs.push({ id: 'color', label: 'Color', icon: Palette });
   if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title') tabs.push({ id: 'effects', label: 'Effects', icon: Wand2 });
+  if (canMask(clip)) tabs.push({ id: 'masks', label: 'Masks', icon: SquareDashed });
   if (clipHasAudio(clip, media)) tabs.push({ id: 'audio', label: 'Audio', icon: Volume2 });
   if (['video', 'recording', 'audio'].includes(clip.type)) tabs.push({ id: 'speed', label: clip.speed === 0 ? 'Freeze' : 'Speed', icon: Gauge });
   tabs.push({ id: 'info', label: 'Info', icon: Info });
@@ -111,6 +113,7 @@ function ClipInspector({ clip }) {
         {tab === 'recording' && <RecordingTab clip={clip} media={media} />}
         {tab === 'video' && <VideoTab clip={clip} />}
         {tab === 'redact' && <RedactTab clip={clip} />}
+        {tab === 'masks' && <MasksTab clip={clip} />}
         {tab === 'effects' && <EffectsTab clip={clip} />}
         {tab === 'audio' && <AudioTab clip={clip} />}
         {tab === 'color' && <ColorTab clip={clip} />}
@@ -128,7 +131,7 @@ function setValue(c, prop, v, T) {
   else c.props[prop] = v;
 }
 
-export function Param({ clip, prop, label, min, max, step = 1, unit = '', precision = 0, scale = 1, slider = true, center, keyframes = true }) {
+export function Param({ clip, prop, label, min, max, step = 1, unit = '', precision = 0, scale = 1, slider = true, center, keyframes = true, def }) {
   const T = timeSig.value;
   const inside = T >= clip.start && T <= clip.start + clip.dur;
   const Tc = Math.min(Math.max(T, clip.start), clip.start + clip.dur);
@@ -143,7 +146,8 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
   const prev = list.filter(([t]) => t < s - 1e-3).at(-1);
   const next = list.find(([t]) => t > s + 1e-3);
   const goto = (t) => seek(clip.start + (t - clip.in));
-  const isDefault = !list.length && raw === (defaultProps(clip.type)[prop] ?? 0);
+  const fallback = def ?? defaultProps(clip.type)[prop] ?? 0;
+  const isDefault = !list.length && raw === fallback;
 
   return (
     <>
@@ -188,7 +192,7 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
             commit((q) => {
               const c = q.clips[id];
               delete c.kf[prop];
-              c.props[prop] = defaultProps(c.type)[prop] ?? 0;
+              c.props[prop] = fallback;
             })
           }
         />
@@ -311,19 +315,142 @@ function RedactTab({ clip }) {
         <Param clip={clip} prop="opacity" label="Opacity" min={0} max={100} scale={100} unit="%" />
       </Section>
       <Section title="Shape">
-        <Segmented value={pr.shape || 'rect'} onChange={(v) => set({ shape: v })} options={REDACT_SHAPES.map((s) => ({ value: s.id, label: s.label }))} />
+        <Segmented
+          value={pr.shape || 'rect'}
+          onChange={(v) =>
+            commit((q) => {
+              const c = q.clips[clip.id];
+              // Fri form starter som formen slik den er nå, så den ikke hopper.
+              if (v === 'path' && !c.props.points) c.props.points = c.props.shape === 'ellipse' ? ellipsePoints(c.props.w, c.props.h) : defaultPoints(c.props.w, c.props.h);
+              c.props.shape = v;
+            })
+          }
+          options={REDACT_SHAPES.map((s) => ({ value: s.id, label: s.label }))}
+        />
+        {pr.shape === 'path' && (
+          <>
+            <Row label="Smooth curve">
+              <Toggle checked={pr.smooth === true} onChange={(v) => set({ smooth: v })} />
+            </Row>
+            <ShapeKeyframe clip={clip} prop="points" />
+          </>
+        )}
         <Param clip={clip} prop="x" label="Position X" min={-p.width} max={p.width} unit="px" slider={false} />
         <Param clip={clip} prop="y" label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} />
-        <Param clip={clip} prop="w" label="Width" min={8} max={p.width * 1.5} unit="px" />
-        <Param clip={clip} prop="h" label="Height" min={8} max={p.height * 1.5} unit="px" />
+        {pr.shape !== 'path' && <Param clip={clip} prop="w" label="Width" min={8} max={p.width * 1.5} unit="px" />}
+        {pr.shape !== 'path' && <Param clip={clip} prop="h" label="Height" min={8} max={p.height * 1.5} unit="px" />}
         <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
         <Param clip={clip} prop="feather" label="Soft edge" min={0} max={200} unit="px" />
+        {pr.shape === 'path' && <p class="hint">Drag the points in the viewer. Double click the outline to add a point, and Option (Alt) click a point to remove it.</p>}
         <p class="hint">Drag the box in the viewer to move it, and drag its corners and edges to resize it. Add keyframes to make it follow something that moves.</p>
       </Section>
       <Section title="Fade">
         <PlainNumber clip={clip} prop="vFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
         <PlainNumber clip={clip} prop="vFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
       </Section>
+    </>
+  );
+}
+
+// Nøkkelbilde for punktene i en fri form: hele formen lagres ved spillhodet, og formen glir
+// mellom nøkkelbildene. Så lenge det finnes nøkkelbilder, lager endringer i visningen nye.
+function ShapeKeyframe({ clip, prop }) {
+  const T = timeSig.value;
+  const inside = T >= clip.start && T <= clip.start + clip.dur;
+  const Tc = Math.min(Math.max(T, clip.start), clip.start + clip.dur);
+  const s = sourceTime(clip, Tc);
+  const list = clip.kf?.[prop] || [];
+  const atKf = keyframeIndexAt(clip, prop, s) >= 0;
+  const prev = list.filter(([t]) => t < s - 1e-3).at(-1);
+  const next = list.find(([t]) => t > s + 1e-3);
+  const goto = (t) => seek(clip.start + (t - clip.in));
+  return (
+    <div class="param" data-prop={prop}>
+      <span class="param-label">Shape</span>
+      <span class="hint" style={{ margin: 0 }}>{list.length ? `${list.length} keyframe${list.length > 1 ? 's' : ''}` : 'Not animated'}</span>
+      <span />
+      <div class="kf-ctl">
+        <IconButton icon={ChevronLeft} size={12} title="Previous shape keyframe" disabled={!prev} onClick={() => prev && goto(prev[0])} />
+        <button
+          class={`kf-btn${atKf ? ' on' : list.length ? ' has' : ''}`}
+          disabled={!inside}
+          title={atKf ? 'Remove shape keyframe' : 'Add a shape keyframe at the playhead'}
+          onClick={() =>
+            commit((q) => {
+              const c = q.clips[clip.id];
+              if (atKf) removeKeyframe(c, prop, s);
+              else setKeyframe(c, prop, s, [...(valueAt(c, prop, Tc) || [])]);
+            })
+          }
+        >
+          <Diamond size={11} />
+        </button>
+        <IconButton icon={ChevronRight} size={12} title="Next shape keyframe" disabled={!next} onClick={() => next && goto(next[0])} />
+      </div>
+      <span />
+    </div>
+  );
+}
+
+// Masker: formene bestemmer hva av klippet som vises. Flere masker kan legges sammen,
+// trekkes fra hverandre eller snittes. Alle mål, og punktene i en fri form, kan animeres.
+function MasksTab({ clip }) {
+  const p = project.value;
+  const masks = maskList(clip);
+  const sel = selectedMask.value?.clipId === clip.id ? selectedMask.value.id : null;
+  const T = timeSig.value;
+  const setMask = (id, patch) => commit((q) => Object.assign(q.clips[clip.id].props.masks.find((m) => m.id === id), patch));
+  return (
+    <>
+      <Section title="Add Mask">
+        <div class="mask-add">
+          <Button class="small" icon={RectangleHorizontal} onClick={() => addMaskToSelected('rect')}>
+            Rectangle
+          </Button>
+          <Button class="small" icon={Circle} onClick={() => addMaskToSelected('ellipse')}>
+            Ellipse
+          </Button>
+          <Button class="small" icon={PenTool} onClick={() => addMaskToSelected('path')}>
+            Freeform
+          </Button>
+        </div>
+        {!masks.length && <p class="hint">A mask shows only what is inside a shape. Use it to cut out a person, frame a detail, make a spotlight or hide part of the picture. Shapes can be animated with keyframes.</p>}
+      </Section>
+      {masks.map((m, i) => {
+        const key = (prop) => maskKey(m.id, prop);
+        const open = sel === m.id;
+        return (
+          <Section key={m.id} title={m.name || `Mask ${i + 1}`} data-mask={m.id}>
+            <div class="mask-head">
+              <Button class="small" variant={open ? 'primary' : 'secondary'} onClick={() => (selectedMask.value = open ? null : { clipId: clip.id, id: m.id })}>
+                {open ? 'Done Editing' : 'Edit in Viewer'}
+              </Button>
+              <IconButton icon={Trash2} title="Delete mask" onClick={() => deleteMask(clip.id, m.id)} />
+            </div>
+            <Segmented value={m.shape} onChange={(v) => commit((q) => setMaskShape(q.clips[clip.id], m.id, v, T, p.width, p.height))} options={MASK_SHAPES.map((s) => ({ value: s.id, label: s.label }))} />
+            <Row label="Mode">
+              <Select value={i === 0 && m.mode === 'intersect' ? 'add' : m.mode} onChange={(v) => setMask(m.id, { mode: v })} options={MASK_MODES.filter((x) => i > 0 || x.id !== 'intersect').map((x) => ({ value: x.id, label: x.label, title: x.desc }))} />
+            </Row>
+            <Row label="Invert">
+              <Toggle checked={Boolean(m.invert)} onChange={(v) => setMask(m.id, { invert: v })} />
+            </Row>
+            {m.shape === 'path' && (
+              <Row label="Smooth curve">
+                <Toggle checked={Boolean(m.smooth)} onChange={(v) => setMask(m.id, { smooth: v })} />
+              </Row>
+            )}
+            {m.shape === 'path' && <ShapeKeyframe clip={clip} prop={key('points')} />}
+            <Param clip={clip} prop={key('x')} label="Position X" min={-p.width} max={p.width} unit="px" slider={false} def={0} />
+            <Param clip={clip} prop={key('y')} label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} def={0} />
+            {m.shape !== 'path' && <Param clip={clip} prop={key('w')} label="Width" min={8} max={p.width * 2} unit="px" def={Math.round(p.width * 0.5)} />}
+            {m.shape !== 'path' && <Param clip={clip} prop={key('h')} label="Height" min={8} max={p.height * 2} unit="px" def={Math.round(p.height * 0.5)} />}
+            <Param clip={clip} prop={key('rotation')} label="Rotation" min={-180} max={180} unit="°" center={0} def={0} />
+            <Param clip={clip} prop={key('feather')} label="Feather" min={0} max={300} unit="px" def={0} />
+            <Param clip={clip} prop={key('opacity')} label="Opacity" min={0} max={100} scale={100} unit="%" def={1} />
+          </Section>
+        );
+      })}
+      {masks.length > 0 && <p class="hint">Click Edit in Viewer, then drag the shape or its handles in the viewer. For a freeform mask, drag the points, double click the outline to add a point and Option (Alt) click a point to remove it. Add keyframes to animate the shape.</p>}
     </>
   );
 }

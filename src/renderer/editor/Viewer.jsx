@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Maximize2, Settings2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-preact';
 import { formatTimecode, isVisual, setKeyframe, sourceTime, valueAt } from '../../shared/model.js';
-import { captionLayout, redactShape, wrapText } from '../../shared/render.js';
-import { beginTransient, endTransient, getTime, playing, project, selectedClips, selectedTransition, selection, timeSig, updateTransient } from './store.js';
+import { captionLayout, wrapText } from '../../shared/render.js';
+import { clipMatrix, maskList, shapeAt } from '../../shared/shapes.js';
+import { beginTransient, commit, endTransient, getTime, playing, project, selectedClips, selectedTransition, selection, timeSig, updateTransient } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
 import { IconButton } from '../ui.jsx';
@@ -20,10 +21,12 @@ export function Viewer() {
   // Dra valgt klipp, tittel eller undertekst direkte i bildet.
   const sel = selectedClips.value.length === 1 ? selectedClips.value[0] : null;
   const draggable = sel && (sel.type === 'caption' || (isVisual(sel) && sel.type !== 'gap'));
+  const sm = commands.selectedMask.value;
+  const editMask = sel && sm?.clipId === sel.id ? maskList(sel).find((m) => m.id === sm.id) : null;
   const onCanvasDown = (e) => {
     if (!draggable || e.button !== 0) return;
     // Sladding: dra utenfor boksen for å tegne et nytt område.
-    if (sel.type === 'redact') return drawRedactBox(e, sel, canvasRef.current, p);
+    if (sel.type === 'redact') return sel.props.shape === 'path' ? undefined : drawRedactBox(e, sel, canvasRef.current, p);
     e.preventDefault();
     const canvas = canvasRef.current;
     const k = p.width / canvas.getBoundingClientRect().width;
@@ -103,7 +106,8 @@ export function Viewer() {
       </div>
       <div class="viewer-box" ref={boxRef} onDblClick={() => wrapRef.current.requestFullscreen?.()}>
         <canvas ref={canvasRef} class={draggable ? (sel.type === 'redact' ? 'drawable' : 'movable') : ''} onPointerDown={onCanvasDown} />
-        {sel?.type === 'redact' && <RedactOverlay clip={sel} canvasRef={canvasRef} />}
+        {sel?.type === 'redact' && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} label="Redaction. Drag to move, drag the handles to resize." />}
+        {editMask && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
       </div>
       <div class="transport">
         <div class="tc big">{formatTimecode(timeSig.value, p.fps)}</div>
@@ -171,13 +175,41 @@ function drawRedactBox(e, clip, canvas, p) {
   canvas.addEventListener('pointerup', up);
 }
 
+/* Formredigering i bildet, felles for sladding og masker. Tegnes som SVG i bildets koordinater.
+   Rektangel og ellipse: dra for å flytte, dra håndtakene for å endre størrelse (Alt fra midten).
+   Fri form: dra punktene, dobbeltklikk på kanten for et nytt punkt, Alt klikk for å fjerne et. */
+
 const HANDLES = [
   [-1, -1], [0, -1], [1, -1],
   [-1, 0], [1, 0],
   [-1, 1], [0, 1], [1, 1],
 ];
 
-function RedactOverlay({ clip, canvasRef }) {
+// Punktlister i alle nøkkelbilder endres likt, så formen kan animeres videre.
+function editPointLists(c, prop, fn) {
+  if (Array.isArray(c.props[prop])) c.props[prop] = fn([...c.props[prop]]);
+  for (const k of c.kf?.[prop] || []) k[1] = fn([...k[1]]);
+}
+
+function outlinePoints(g) {
+  if (g.shape === 'path') return g.pts;
+  const n = g.shape === 'ellipse' ? 48 : 4;
+  const c = Math.cos(g.rot);
+  const s = Math.sin(g.rot);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    let u;
+    let v;
+    if (g.shape === 'ellipse') {
+      const a = (i / n) * Math.PI * 2;
+      [u, v] = [(Math.cos(a) * g.w) / 2, (Math.sin(a) * g.h) / 2];
+    } else [u, v] = [[-1, -1], [1, -1], [1, 1], [-1, 1]][i].map((q, j) => (q * (j ? g.h : g.w)) / 2);
+    out.push([g.cx + u * c - v * s, g.cy + u * s + v * c]);
+  }
+  return out;
+}
+
+export function ShapeEditor({ clip, prefix, shape, smooth, canvasRef, label }) {
   const p = project.value;
   const T = timeSig.value;
   const [box, setBox] = useState(null);
@@ -190,50 +222,79 @@ function RedactOverlay({ clip, canvasRef }) {
     return () => ro.disconnect();
   }, []);
   if (!box || T < clip.start || T > clip.start + clip.dur) return null;
-  const k = box.width / p.width;
+  const W = p.width;
+  const H = p.height;
+  const k = box.width / W;
   const Tc = clipTime(clip);
-  const s = redactShape(clip, Tc, p.width, p.height);
+  const M = clipMatrix(clip, Tc, W, H);
+  const inv = M.inverse();
+  const g = shapeAt(clip, prefix, shape, Tc, W, H);
+  const toView = ([x, y]) => {
+    const q = M.transformPoint(new DOMPoint(x, y));
+    return [q.x, q.y];
+  };
+  const outline = outlinePoints(g).map(toView);
+  const r = 5.5 / k;
+  // Skjermpunkt til klippets rom.
+  const toClip = (ev, svg) => {
+    const b = svg.getBoundingClientRect();
+    const q = inv.transformPoint(new DOMPoint(((ev.clientX - b.left) / b.width) * W, ((ev.clientY - b.top) / b.height) * H));
+    return [q.x, q.y];
+  };
+  const ptsKey = prefix + 'points';
+  const localOf = ([x, y], cx, cy, rot) => {
+    const c = Math.cos(-rot);
+    const s = Math.sin(-rot);
+    return [Math.round((x - cx) * c - (y - cy) * s), Math.round((x - cx) * s + (y - cy) * c)];
+  };
 
-  const start = (e, hx, hy) => {
+  const drag = (e, kind, a, b) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
+    const svg = e.currentTarget.ownerSVGElement || e.currentTarget;
     const el = e.currentTarget;
+    // Alt klikk på et punkt i en fri form fjerner punktet.
+    if (kind === 'point' && e.altKey) {
+      if (g.pts.length <= 3) return;
+      commit((q) => editPointLists(q.clips[clip.id], ptsKey, (arr) => (arr.splice(a * 2, 2), arr)));
+      return;
+    }
     el.setPointerCapture(e.pointerId);
-    const s0 = redactShape(clip, Tc, p.width, p.height);
-    const cos = Math.cos(s0.rot);
-    const sin = Math.sin(s0.rot);
-    const x0 = e.clientX;
-    const y0 = e.clientY;
+    const start = toClip(e, svg);
+    const g0 = g;
+    const c0 = Math.cos(g0.rot);
+    const s0 = Math.sin(g0.rot);
     beginTransient();
     const move = (ev) => {
-      const dx = (ev.clientX - x0) / k;
-      const dy = (ev.clientY - y0) / k;
-      let { cx, cy, w, h } = s0;
-      if (!hx && !hy) {
-        cx += dx;
-        cy += dy;
-      } else {
-        // Mål bevegelsen langs boksens egne akser, så det virker også når den er rotert.
-        const du = dx * cos + dy * sin;
-        const dv = -dx * sin + dy * cos;
-        const nw = hx ? Math.max(8, w + hx * du) : w;
-        const nh = hy ? Math.max(8, h + hy * dv) : h;
-        // Motsatt kant blir stående (Alt endrer fra midten).
-        const sx = ev.altKey ? 0 : (hx * (nw - w)) / 2;
-        const sy = ev.altKey ? 0 : (hy * (nh - h)) / 2;
-        cx += sx * cos - sy * sin;
-        cy += sx * sin + sy * cos;
-        w = ev.altKey && hx ? Math.max(8, w + 2 * hx * du) : nw;
-        h = ev.altKey && hy ? Math.max(8, h + 2 * hy * dv) : nh;
-      }
+      const now = toClip(ev, svg);
+      const dx = now[0] - start[0];
+      const dy = now[1] - start[1];
       updateTransient((q) => {
         const c = q.clips[clip.id];
-        putValue(c, 'x', Math.round(cx - p.width / 2), Tc);
-        putValue(c, 'y', Math.round(cy - p.height / 2), Tc);
-        if (hx || hy) {
-          putValue(c, 'w', Math.round(w), Tc);
-          putValue(c, 'h', Math.round(h), Tc);
+        if (kind === 'move') {
+          putValue(c, prefix + 'x', Math.round(g0.cx + dx - W / 2), Tc);
+          putValue(c, prefix + 'y', Math.round(g0.cy + dy - H / 2), Tc);
+        } else if (kind === 'point') {
+          const flat = [...(valueAt(c, ptsKey, Tc) || [])];
+          const [u, v] = localOf(now, g0.cx, g0.cy, g0.rot);
+          flat[a * 2] = u;
+          flat[a * 2 + 1] = v;
+          putValue(c, ptsKey, flat, Tc);
+        } else {
+          const hx = a;
+          const hy = b;
+          const du = dx * c0 + dy * s0;
+          const dv = -dx * s0 + dy * c0;
+          const alt = ev.altKey;
+          const w = hx ? Math.max(8, g0.w + (alt ? 2 : 1) * hx * du) : g0.w;
+          const h = hy ? Math.max(8, g0.h + (alt ? 2 : 1) * hy * dv) : g0.h;
+          const sx = alt ? 0 : (hx * (w - g0.w)) / 2;
+          const sy = alt ? 0 : (hy * (h - g0.h)) / 2;
+          putValue(c, prefix + 'x', Math.round(g0.cx + sx * c0 - sy * s0 - W / 2), Tc);
+          putValue(c, prefix + 'y', Math.round(g0.cy + sx * s0 + sy * c0 - H / 2), Tc);
+          putValue(c, prefix + 'w', Math.round(w), Tc);
+          putValue(c, prefix + 'h', Math.round(h), Tc);
         }
       });
     };
@@ -248,22 +309,72 @@ function RedactOverlay({ clip, canvasRef }) {
     el.addEventListener('pointercancel', up);
   };
 
+  // Dobbeltklikk på kanten av en fri form: nytt punkt på nærmeste kant.
+  const addPoint = (e) => {
+    if (shape !== 'path') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const svg = e.currentTarget.ownerSVGElement || e.currentTarget;
+    const [px, py] = toClip(e, svg);
+    const pts = g.pts;
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const [ax, ay] = pts[i];
+      const [bx, by] = pts[(i + 1) % pts.length];
+      const L = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+      const t = Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / L));
+      const d = (ax + t * (bx - ax) - px) ** 2 + (ay + t * (by - ay) - py) ** 2;
+      if (d < bestD) [bestD, best] = [d, i];
+    }
+    const [u, v] = localOf([px, py], g.cx, g.cy, g.rot);
+    commit((q) => {
+      const c = q.clips[clip.id];
+      // Alle nøkkelbilder får punktet midt mellom naboene, så formen ikke endres der.
+      editPointLists(c, ptsKey, (arr) => {
+        const n = arr.length / 2;
+        const j = (best + 1) % n;
+        arr.splice((best + 1) * 2, 0, (arr[best * 2] + arr[j * 2]) / 2, (arr[best * 2 + 1] + arr[j * 2 + 1]) / 2);
+        return arr;
+      });
+      // Ved spillhodet havner punktet der du klikket.
+      const flat = [...(valueAt(c, ptsKey, Tc) || [])];
+      flat[(best + 1) * 2] = u;
+      flat[(best + 1) * 2 + 1] = v;
+      putValue(c, ptsKey, flat, Tc);
+    });
+  };
+
+  const handles = shape === 'path' ? g.pts.map(toView) : HANDLES.map(([hx, hy]) => toView([g.cx + (hx * g.w * Math.cos(g.rot)) / 2 - (hy * g.h * Math.sin(g.rot)) / 2, g.cy + (hx * g.w * Math.sin(g.rot)) / 2 + (hy * g.h * Math.cos(g.rot)) / 2]));
+  const d = smooth && shape === 'path' && outline.length > 2 ? smoothD(outline) : `M${outline.map((q) => q.join(',')).join('L')}Z`;
   return (
-    <div
-      class={`redact-box ${clip.props.shape || 'rect'}`}
-      title="Drag to move. Drag a corner or edge to resize, hold Option (Alt) to resize from the center. Drag outside the box to draw a new area."
-      style={{
-        left: box.left + (s.cx - s.w / 2) * k,
-        top: box.top + (s.cy - s.h / 2) * k,
-        width: s.w * k,
-        height: s.h * k,
-        transform: s.rot ? `rotate(${s.rot}rad)` : undefined,
-      }}
-      onPointerDown={(e) => start(e, 0, 0)}
-    >
-      {HANDLES.map(([hx, hy]) => (
-        <span key={`${hx}${hy}`} class="redact-handle" data-h={`${hx},${hy}`} style={{ left: `${(hx + 1) * 50}%`, top: `${(hy + 1) * 50}%`, cursor: hx && hy ? (hx === hy ? 'nwse-resize' : 'nesw-resize') : hx ? 'ew-resize' : 'ns-resize' }} onPointerDown={(e) => start(e, hx, hy)} />
-      ))}
-    </div>
+    <svg class="shape-editor" style={{ left: box.left, top: box.top, width: box.width, height: box.height }} viewBox={`0 0 ${W} ${H}`}>
+      <path d={d} class="shape-fill" style={{ strokeWidth: 1.5 / k }} onPointerDown={(e) => drag(e, 'move')} onDblClick={addPoint}>
+        <title>{label}</title>
+      </path>
+      <path d={d} class="shape-edge" style={{ strokeWidth: 10 / k }} onDblClick={addPoint} onPointerDown={(e) => drag(e, 'move')} />
+      {handles.map(([x, y], i) =>
+        shape === 'path' ? (
+          <circle key={i} cx={x} cy={y} r={r} class="shape-handle point" style={{ strokeWidth: 1 / k }} onPointerDown={(e) => drag(e, 'point', i)}>
+            <title>Drag to move. Option (Alt) click to remove.</title>
+          </circle>
+        ) : (
+          <rect key={i} x={x - r} y={y - r} width={r * 2} height={r * 2} class="shape-handle" style={{ strokeWidth: 1 / k, cursor: HANDLES[i][0] && HANDLES[i][1] ? (HANDLES[i][0] === HANDLES[i][1] ? 'nwse-resize' : 'nesw-resize') : HANDLES[i][0] ? 'ew-resize' : 'ns-resize' }} onPointerDown={(e) => drag(e, 'size', HANDLES[i][0], HANDLES[i][1])} />
+        )
+      )}
+    </svg>
   );
+}
+
+function smoothD(pts) {
+  const n = pts.length;
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n];
+    const p1 = pts[i];
+    const p2 = pts[(i + 1) % n];
+    const p3 = pts[(i + 2) % n];
+    d += `C${p1[0] + (p2[0] - p0[0]) / 6},${p1[1] + (p2[1] - p0[1]) / 6} ${p2[0] - (p3[0] - p1[0]) / 6},${p2[1] - (p3[1] - p1[1]) / 6} ${p2[0]},${p2[1]}`;
+  }
+  return d + 'Z';
 }

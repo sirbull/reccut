@@ -223,6 +223,7 @@ export const REDACT_SHAPES = [
   { id: 'rect', label: 'Rectangle' },
   { id: 'rounded', label: 'Rounded' },
   { id: 'ellipse', label: 'Ellipse' },
+  { id: 'path', label: 'Freeform' },
 ];
 export function redactLabel(clip) {
   const m = REDACT_MODES.find((x) => x.id === clip.props?.mode);
@@ -469,6 +470,8 @@ export function valueAt(clip, prop, T) {
   if (!list || !list.length) return clip.props[prop];
   if (prop === 'layout') return stepValue(list, sourceTime(clip, T));
   const s = kfTime(clip, T);
+  // Lister med tall (punktene i en fri form) glir punkt for punkt når de er like lange.
+  if (Array.isArray(list[0][1])) return arrayValue(list, s);
   if (typeof list[0][1] !== 'number') return stepValue(list, s);
   if (s <= list[0][0]) return list[0][1];
   const last = list[list.length - 1];
@@ -484,6 +487,19 @@ export function valueAt(clip, prop, T) {
   const [t1, v1] = list[hi];
   const k = t1 === t0 ? 0 : (s - t0) / (t1 - t0);
   return v0 + (v1 - v0) * (EASE_FN[ease] || EASE_FN.linear)(k);
+}
+
+function arrayValue(list, s) {
+  if (s <= list[0][0]) return list[0][1];
+  const last = list[list.length - 1];
+  if (s >= last[0]) return last[1];
+  let i = 0;
+  while (i < list.length - 2 && list[i + 1][0] <= s) i++;
+  const [t0, a, ease] = list[i];
+  const [t1, b] = list[i + 1];
+  if (!Array.isArray(b) || a.length !== b.length) return a;
+  const k = (EASE_FN[ease] || EASE_FN.linear)(t1 === t0 ? 0 : (s - t0) / (t1 - t0));
+  return a.map((v, j) => v + (b[j] - v) * k);
 }
 
 function stepValue(list, s) {
