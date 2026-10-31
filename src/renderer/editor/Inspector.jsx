@@ -1,5 +1,5 @@
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
-import { useState } from 'preact/hooks';
+import { useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { ChevronLeft, ChevronRight, Diamond, Plus, RotateCcw, Sparkles, Trash2 } from 'lucide-preact';
 import {
@@ -26,6 +26,7 @@ import {
   valueAt,
 } from '../../shared/model.js';
 import { setClipDuration, setSpeed, setTransition } from '../../shared/ops.js';
+import { GRADE_PROPS } from '../../shared/grade.js';
 import { beginTransient, commit, endTransient, project, selectedClips, selectedTransition, timeSig, updateTransient } from './store.js';
 import { seek } from './playback.js';
 import { inspectorTab, newProjectOpen, toggleComponent } from './commands.js';
@@ -533,13 +534,88 @@ function ColorTab({ clip }) {
           ))}
         </div>
       </Section>
-      <Section title="Adjust">
+      <Section title="Light">
         <Param clip={clip} prop="exposure" label="Exposure" min={-100} max={100} scale={100} center={0} />
         <Param clip={clip} prop="contrast" label="Contrast" min={-100} max={100} scale={100} center={0} />
+        <Param clip={clip} prop="highlights" label="Highlights" min={-100} max={100} scale={100} center={0} />
+        <Param clip={clip} prop="shadows" label="Shadows" min={-100} max={100} scale={100} center={0} />
+      </Section>
+      <Section title="Color">
         <Param clip={clip} prop="saturation" label="Saturation" min={-100} max={100} scale={100} center={0} />
         <Param clip={clip} prop="temperature" label="Temperature" min={-100} max={100} scale={100} center={0} />
+        <Param clip={clip} prop="tint" label="Tint" min={-100} max={100} scale={100} center={0} />
+      </Section>
+      <Section title="Color Wheels">
+        <div class="wheels">
+          <ColorWheel clip={clip} name="lift" label="Shadows" />
+          <ColorWheel clip={clip} name="gamma" label="Midtones" />
+          <ColorWheel clip={clip} name="gain" label="Highlights" />
+        </div>
+        <p class="hint">Drag the dot to tint an area, and the slider below to make it lighter or darker. Double click a wheel to reset it. The correction is calculated in 16-bit floating point, so 10-bit clips keep their smooth gradients.</p>
+        <Button
+          variant="secondary"
+          icon={RotateCcw}
+          onClick={() =>
+            commit((q) => {
+              const c = q.clips[clip.id];
+              for (const k of Object.keys(GRADE_PROPS)) {
+                c.props[k] = 0;
+                delete c.kf[k];
+              }
+            })
+          }
+        >
+          Reset Color
+        </Button>
       </Section>
     </>
+  );
+}
+
+// Fargehjul: punktet gir fargen (x og y), skyveknappen lysstyrken for området.
+function ColorWheel({ clip, name, label }) {
+  const ref = useRef(null);
+  const x = clip.props[`${name}X`] || 0;
+  const y = clip.props[`${name}Y`] || 0;
+  const set = (patch) => updateTransient((q) => Object.assign(q.clips[clip.id].props, patch));
+  const fromEvent = (e) => {
+    const r = ref.current.getBoundingClientRect();
+    let nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+    let ny = -(((e.clientY - r.top) / r.height) * 2 - 1);
+    const d = Math.hypot(nx, ny);
+    if (d > 1) {
+      nx /= d;
+      ny /= d;
+    }
+    // Finjustering: punktet flyttes mindre enn musen.
+    return { [`${name}X`]: Math.round(nx * 0.6 * 1000) / 1000, [`${name}Y`]: Math.round(ny * 0.6 * 1000) / 1000 };
+  };
+  const onDown = (e) => {
+    e.preventDefault();
+    beginTransient();
+    set(fromEvent(e));
+    const move = (ev) => set(fromEvent(ev));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      endTransient(true);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const reset = () =>
+    commit((q) => {
+      const c = q.clips[clip.id];
+      for (const k of ['X', 'Y', 'L']) c.props[`${name}${k}`] = 0;
+    });
+  return (
+    <div class="wheel-wrap">
+      <div class="wheel" ref={ref} onPointerDown={onDown} onDblClick={reset} title={`${label}: drag to tint, double click to reset`}>
+        <span class="puck" style={{ left: `${50 + (x / 0.6) * 50}%`, top: `${50 - (y / 0.6) * 50}%` }} />
+      </div>
+      <span class="wheel-label">{label}</span>
+      <Slider value={clip.props[`${name}L`] || 0} min={-1} max={1} step={0.01} center={0} onInput={(v) => set({ [`${name}L`]: v })} onStart={beginTransient} onCommit={() => endTransient(true)} />
+    </div>
   );
 }
 

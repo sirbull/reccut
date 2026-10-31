@@ -1,5 +1,6 @@
 // Tegner ett bilde av prosjektet. Samme kode brukes i forhåndsvisning og eksport,
 // så det du ser i redigeringen er det som havner i filen.
+import { gpuGradeAvailable, gradeImage, gradeParams } from './grade.js';
 import {
   DEFAULT_CAPTION_STYLE,
   FONTS,
@@ -140,10 +141,19 @@ function zoomAround(ctx, W, H, s) {
   ctx.translate(-W / 2, -H / 2);
 }
 
+// Fargekorrigering på skjermkortet når det finnes. Uten WebGL2 brukes enkle 2D-filtre.
+function graded(clip, T, src) {
+  const g = gradeParams(clip, T);
+  if (!g) return src;
+  const cv = gradeImage(src.img, src.w, src.h, g);
+  return cv ? { img: cv, w: src.w, h: src.h } : src;
+}
+
 function colorFilter(clip, T, H = 1080) {
-  const ex = valueAt(clip, 'exposure', T) || 0;
-  const co = valueAt(clip, 'contrast', T) || 0;
-  const sa = valueAt(clip, 'saturation', T) || 0;
+  const gpu = gpuGradeAvailable();
+  const ex = gpu ? 0 : valueAt(clip, 'exposure', T) || 0;
+  const co = gpu ? 0 : valueAt(clip, 'contrast', T) || 0;
+  const sa = gpu ? 0 : valueAt(clip, 'saturation', T) || 0;
   const parts = [];
   if (ex || co || sa) parts.push(`brightness(${(1 + ex).toFixed(3)}) contrast(${(1 + co).toFixed(3)}) saturate(${Math.max(0, 1 + sa).toFixed(3)})`);
   const blur = valueAt(clip, 'blur', T) || 0;
@@ -186,7 +196,7 @@ function drawWithEffects(ctx, clip, T, r, H, draw) {
   }
   draw();
   ctx.filter = 'none';
-  applyTemperature(ctx, clip, T, r);
+  if (!gpuGradeAvailable()) applyTemperature(ctx, clip, T, r);
   if (vignette > 0) {
     const g = ctx.createRadialGradient(r.x + r.w / 2, r.y + r.h / 2, Math.min(r.w, r.h) * 0.3, r.x + r.w / 2, r.y + r.h / 2, Math.hypot(r.w, r.h) * 0.55);
     g.addColorStop(0, 'rgba(0,0,0,0)');
@@ -249,7 +259,8 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1) {
 
   const s = sourceTime(clip, T);
   if (clip.type === 'video' || clip.type === 'image') {
-    const src = getSource(clip, 'main', s);
+    let src = getSource(clip, 'main', s);
+    if (src) src = graded(clip, T, src);
     if (src) {
       const r = containRect(src.w, src.h, W, H);
       drawWithEffects(ctx, clip, T, r, H, () => {
@@ -272,7 +283,8 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
   let screenRect = { x: 0, y: 0, w: W, h: H };
   const screen = media.streams.screen;
   if (screen) {
-    const src = getSource(clip, 'screen', s - (screen.offset || 0));
+    let src = getSource(clip, 'screen', s - (screen.offset || 0));
+    if (src) src = graded(clip, T, src);
     if (src) {
       const r = (screenRect = containRect(src.w, src.h, W, H));
       drawWithEffects(ctx, clip, T, r, H, () => {
@@ -295,7 +307,8 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
   const showCamera = valueAt(clip, 'showCamera', T) !== false;
   if (camera?.hasVideo && showCamera) {
     const rect = screen ? cameraRectAt(clip, s, W, H) : { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
-    const src = rect.a > 0.01 ? getSource(clip, 'camera', s - (camera.offset || 0)) : null;
+    let src = rect.a > 0.01 ? getSource(clip, 'camera', s - (camera.offset || 0)) : null;
+    if (src) src = graded(clip, T, src);
     if (src) {
       ctx.save();
       ctx.globalAlpha *= rect.a;
