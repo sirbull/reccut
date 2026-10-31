@@ -3973,3 +3973,118 @@ kbd.keycap {
   justify-content: space-between;
   margin-bottom: 8px;
 }
+
+/* Lydeffekter i biblioteket */
+.afx-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+}
+.afx-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 8px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  background: var(--bg-2, rgba(255, 255, 255, 0.03));
+  color: var(--text);
+  text-align: left;
+  cursor: grab;
+}
+.afx-card:hover {
+  border-color: var(--accent, #0a84ff);
+}
+.afx-card b {
+  font-size: 12px;
+  font-weight: 600;
+}
+.afx-card span {
+  font-size: 10.5px;
+  color: var(--text-3);
+  line-height: 1.3;
+}
+
+/* Lydeffekter i inspektøren */
+.afx-add {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.afx-item {
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  padding: 6px 8px 8px;
+  margin-bottom: 8px;
+}
+.afx-item.off {
+  opacity: 0.55;
+}
+.afx-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.afx-head b {
+  flex: 1;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.eq-curve {
+  display: block;
+  width: 100%;
+  height: 70px;
+  margin: 4px 0 6px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.eq-bands {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 2px;
+}
+.eq-bands label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 9.5px;
+  color: var(--text-3);
+}
+.eq-bands input[type='range'] {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 18px;
+  height: 92px;
+  margin: 0;
+  accent-color: var(--yellow);
+}
+
+/* Paste Attributes */
+.attr-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 10px 0 14px;
+}
+.attr-col h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+.attr-col label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.attr-row {
+  padding: 3px 0 3px 18px;
+  font-size: 12.5px;
+}
+.attr-row.disabled {
+  color: var(--text-3);
+}

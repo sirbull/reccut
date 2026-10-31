@@ -1,6 +1,7 @@
 // Redigeringsrommet: bibliotek, visning og inspektør øverst, tidslinje nederst.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { CAPTION_LANE, formatTimecode } from '../../shared/model.js';
+import { ATTRIBUTE_GROUPS } from '../../shared/attributes.js';
 import { Browser } from './Browser.jsx';
 import { Viewer } from './Viewer.jsx';
 import { Inspector } from './Inspector.jsx';
@@ -70,6 +71,7 @@ export function Editor({ active }) {
       <Timeline />
       {commands.exportOpen.value && <ExportDialog />}
       {commands.syncDialog.value && <SyncDialog />}
+      {commands.attributesDialog.value && <AttributesDialog />}
       {commands.importOptions.value && <ImportOptionsDialog />}
       {layerImport.value && <LayerImportDialog key={layerImport.value.file} />}
     </div>
@@ -215,6 +217,90 @@ function ImportOptionsDialog() {
 }
 
 // Lydklippet passer under flere videoklipp: synk med det første, eller del opp og legg en bit under hvert.
+// Paste Attributes og Remove Attributes, som i Final Cut Pro: kryss av for det som skal med.
+// Valgene huskes til neste gang.
+function AttributesDialog() {
+  const d = commands.attributesDialog.value;
+  const paste = d.mode === 'paste';
+  const close = () => (commands.attributesDialog.value = null);
+  const remembered = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(`attrs:${d.mode}`) || 'null');
+    } catch {
+      return null;
+    }
+  })();
+  const [checked, setChecked] = useState(() => new Set(d.available.filter((id) => !remembered || remembered.includes(id))));
+  const [stretch, setStretch] = useState(() => localStorage.getItem('attrs:stretch') === '1');
+  const toggle = (id, v) => {
+    const n = new Set(checked);
+    v ? n.add(id) : n.delete(id);
+    setChecked(n);
+  };
+  const ok = () => {
+    try {
+      localStorage.setItem(`attrs:${d.mode}`, JSON.stringify([...checked]));
+      localStorage.setItem('attrs:stretch', stretch ? '1' : '0');
+    } catch {}
+    commands.confirmAttributes([...checked], stretch);
+  };
+  const groups = (kind) => ATTRIBUTE_GROUPS.filter((g) => g.kind === kind);
+  const setAll = (kind, on) => {
+    const n = new Set(checked);
+    for (const g of groups(kind)) if (d.available.includes(g.id)) on ? n.add(g.id) : n.delete(g.id);
+    setChecked(n);
+  };
+  const column = (kind, title) => (
+    <div class="attr-col">
+      <h4>
+        <label>
+          <input type="checkbox" checked={groups(kind).filter((g) => d.available.includes(g.id)).every((g) => checked.has(g.id))} onChange={(e) => setAll(kind, e.currentTarget.checked)} />
+          {title}
+        </label>
+      </h4>
+      {groups(kind).map((g) => (
+        <label key={g.id} class={`attr-row${d.available.includes(g.id) ? '' : ' disabled'}`} title={g.desc}>
+          <input type="checkbox" disabled={!d.available.includes(g.id)} checked={checked.has(g.id)} onChange={(e) => toggle(g.id, e.currentTarget.checked)} />
+          {g.label}
+        </label>
+      ))}
+    </div>
+  );
+  return (
+    <Modal
+      title={paste ? 'Paste Attributes' : 'Remove Attributes'}
+      width={460}
+      onClose={close}
+      footer={
+        <>
+          <Button onClick={close}>Cancel</Button>
+          <Button variant="primary" disabled={!checked.size} onClick={ok}>
+            {paste ? 'Paste' : 'Remove'}
+          </Button>
+        </>
+      }
+    >
+      <p class="sync-lead">{paste ? `Choose what to paste from ${d.source} into the selected clips. Attributes that were not changed on the copied clip are greyed out.` : 'Choose what to remove from the selected clips. They go back to their standard settings.'}</p>
+      <div class="attr-cols">
+        {column('video', 'Video Attributes')}
+        {column('audio', 'Audio Attributes')}
+      </div>
+      {paste && (
+        <Row label="Keyframes">
+          <Segmented
+            value={stretch ? 'stretch' : 'maintain'}
+            onChange={(v) => setStretch(v === 'stretch')}
+            options={[
+              { value: 'maintain', label: 'Maintain Timing' },
+              { value: 'stretch', label: 'Stretch to Fit' },
+            ]}
+          />
+        </Row>
+      )}
+    </Modal>
+  );
+}
+
 function SyncDialog() {
   const { jobs } = commands.syncDialog.value;
   const p = project.value;

@@ -15,6 +15,7 @@ import {
   Rows3,
   Search,
   Sparkles,
+  AudioLines,
   Trash2,
   Type,
   Video,
@@ -30,6 +31,7 @@ import * as commands from './commands.js';
 import { CaptionStyleEditor } from './Inspector.jsx';
 import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
 import { prefs } from '../prefs.js';
+import { AUDIO_EFFECTS, AUDIO_FX_CATEGORIES, AUDIO_PRESETS } from '../../shared/audiofx.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -39,6 +41,7 @@ const TABS = [
   { id: 'titles', label: 'Titles', icon: Type },
   { id: 'transitions', label: 'Transitions', icon: Blend },
   { id: 'effects', label: 'Effects', icon: Wand2 },
+  { id: 'audio', label: 'Audio Effects', icon: AudioLines },
   { id: 'captions', label: 'Captions', icon: Captions },
 ];
 
@@ -60,6 +63,7 @@ export function Browser() {
         {tab === 'titles' && <TitlesTab />}
         {tab === 'transitions' && <TransitionsTab />}
         {tab === 'effects' && <EffectsTab />}
+        {tab === 'audio' && <AudioFxTab />}
         {tab === 'captions' && <CaptionsTab />}
       </div>
     </div>
@@ -797,6 +801,57 @@ function EffectsTab() {
         ))}
       </div>
       <p class="hint small">Effect amounts can be keyframed in the Effects tab of the inspector.</p>
+    </>
+  );
+}
+
+/* Lydeffekter: maler (ferdige kjeder) og enkelteffekter, sortert etter bruk. */
+
+function AudioFxTab() {
+  const [q, setQ] = useState('');
+  const match = (x) => !q || `${x.label} ${x.desc} ${x.category}`.toLowerCase().includes(q.toLowerCase());
+  const presetCats = ['Repair', 'Space', 'Creative', 'Lo-fi'];
+  const card = (kind, id, item) => (
+    <button
+      key={`${kind}${id}`}
+      class="afx-card"
+      data-afx={id}
+      draggable
+      onDragStart={(e) => dragData(e, { kind, id })}
+      onClick={() => (kind === 'apreset' ? commands.applyAudioPreset(id) : commands.addAudioEffect(id))}
+      title={`${item.desc} Click to add to the selected clips, or drag onto a clip.`}
+    >
+      <b>{item.label}</b>
+      <span>{item.desc}</span>
+    </button>
+  );
+  return (
+    <>
+      <div class="search">
+        <Search size={13} />
+        <input placeholder="Search audio effects" value={q} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.stopPropagation()} />
+      </div>
+      {presetCats.map((cat) => {
+        const list = AUDIO_PRESETS.filter((x) => x.category === cat && match(x));
+        if (!list.length) return null;
+        return (
+          <div key={`p${cat}`}>
+            <div class="sub-head">{cat === 'Repair' ? 'Fix and Enhance' : cat} Templates</div>
+            <div class="afx-grid">{list.map((x) => card('apreset', x.id, x))}</div>
+          </div>
+        );
+      })}
+      {AUDIO_FX_CATEGORIES.map((cat) => {
+        const list = Object.entries(AUDIO_EFFECTS).filter(([, x]) => x.category === cat && match(x));
+        if (!list.length) return null;
+        return (
+          <div key={`e${cat}`}>
+            <div class="sub-head">{cat} Effects</div>
+            <div class="afx-grid">{list.map(([id, x]) => card('afx', id, x))}</div>
+          </div>
+        );
+      })}
+      <p class="hint small">Templates add a ready made chain of effects that you can adjust in the Audio tab of the inspector. Effects are heard right away when you play.</p>
     </>
   );
 }

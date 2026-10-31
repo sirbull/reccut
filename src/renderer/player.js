@@ -3,6 +3,7 @@
 // Redigeringen og eksportfanen har hver sin spiller.
 import { computeAudio, computeFrame, instSpeed, sourceTime, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
+import { activeEffects } from '../shared/audiofx.js';
 import { prefs } from './prefs.js';
 
 const PRELOAD = 1.5;
@@ -11,6 +12,29 @@ const KEEP = 6;
 export const fileUrl = (p) => `media://file/${encodeURIComponent(p)}`;
 
 const audioCtx = new AudioContext({ latencyHint: 'interactive' });
+
+// Lydeffektene lastes én gang. Til de er klare, spilles lyden uten effekter.
+let fxReady = false;
+audioCtx.audioWorklet
+  .addModule('audiofx-worklet.js')
+  .then(() => (fxReady = true))
+  .catch((err) => console.warn('Lydeffektene kunne ikke lastes', err));
+
+// Kobler effektkjeden til klippet inn mellom kilden og volumet, og sender nye innstillinger.
+function applyFx(entry, clip) {
+  if (!entry.srcNode) return;
+  const list = activeEffects(clip);
+  const key = JSON.stringify(list);
+  if (key === entry.fxKey) return;
+  if (list.length && !entry.fx) {
+    if (!fxReady) return;
+    entry.fx = new AudioWorkletNode(audioCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
+    entry.srcNode.disconnect();
+    entry.srcNode.connect(entry.fx).connect(entry.gain);
+  }
+  entry.fxKey = key;
+  entry.fx?.port.postMessage(list);
+}
 
 /**
  * getProject: gir prosjektet som skal spilles.
@@ -60,13 +84,14 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       el.addEventListener('seeked', () => (dirty = true));
       el.addEventListener('loadeddata', () => (dirty = true));
       let gain = null;
+      let srcNode = null;
       if (stream.hasAudio) {
-        const src = audioCtx.createMediaElementSource(el);
+        srcNode = audioCtx.createMediaElementSource(el);
         gain = audioCtx.createGain();
         gain.gain.value = 0;
-        src.connect(gain).connect(master);
+        srcNode.connect(gain).connect(master);
       } else el.muted = true;
-      entry = { el, gain, path: stream.path, rev: stream.rev, D: stream.D, lastUsed: performance.now(), target: 0 };
+      entry = { el, gain, srcNode, fx: null, fxKey: '[]', path: stream.path, rev: stream.rev, D: stream.D, lastUsed: performance.now(), target: 0 };
       pool.set(id, entry);
     }
     entry.lastUsed = performance.now();
@@ -78,6 +103,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     entry.el.removeAttribute('src');
     entry.el.load();
     entry.gain?.disconnect();
+    entry.fx?.disconnect();
     pool.delete(id);
   }
 
@@ -145,6 +171,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       seen.add(id);
       const entry = getEl(n.clip, n.key);
       if (!entry) continue;
+      if (entry.gain) applyFx(entry, n.clip);
       const el = entry.el;
       const dur = el.duration || Infinity;
       // I en baklengs kopi er tiden speilet.

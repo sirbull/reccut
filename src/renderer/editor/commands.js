@@ -4,6 +4,8 @@ import { CAPTION_LANE, CLIP_COLORS, EFFECTS, audioComponents, RAMP_PRESETS, clip
 import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates.js';
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
 import { addMask, canMask, removeMask } from '../../shared/shapes.js';
+import { AUDIO_EFFECTS, AUDIO_PRESETS, makeEffect, presetEffects } from '../../shared/audiofx.js';
+import { ALL_GROUPS, groupsWithContent, pasteAttributes, removeAttributes } from '../../shared/attributes.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
 import {
   adjacentAudioPairs,
@@ -328,6 +330,101 @@ export function paste() {
     ids = pasteClips(p, items, getTime());
   });
   selection.value = ids;
+}
+
+/* Lim inn effekter og egenskaper (Paste Effects og Paste Attributes, som i Final Cut Pro) */
+
+// Dialogen for Paste Attributes og Remove Attributes: { mode: 'paste' | 'remove', available }.
+export const attributesDialog = signal(null);
+
+function attributeSource() {
+  const src = clipboard?.[0];
+  if (!src) toast('Copy a clip first (Cmd C), then select the clips to paste into.');
+  return src || null;
+}
+
+function attributeTargets() {
+  const ids = selection.value.filter((id) => project.value.clips[id] && project.value.clips[id].type !== 'gap' && project.value.clips[id].type !== 'caption');
+  if (!ids.length) toast('Select the clips you want to change.');
+  return ids;
+}
+
+export function pasteEffects() {
+  const src = attributeSource();
+  const ids = src ? attributeTargets() : [];
+  if (!ids.length) return;
+  let n = 0;
+  commit((q) => {
+    for (const id of ids) n += pasteAttributes(src, q.clips[id], ALL_GROUPS, { stretch: false }) ? 1 : 0;
+  });
+  toast(n ? `Effects pasted into ${n} clip${n > 1 ? 's' : ''}.` : 'Nothing to paste into the selected clips.', { timeout: 2500 });
+}
+
+export function openPasteAttributes() {
+  const src = attributeSource();
+  if (!src || !attributeTargets().length) return;
+  attributesDialog.value = { mode: 'paste', available: groupsWithContent(src), source: src.name || src.type };
+}
+
+export function openRemoveAttributes() {
+  if (!attributeTargets().length) return;
+  attributesDialog.value = { mode: 'remove', available: ALL_GROUPS };
+}
+
+export function confirmAttributes(groups, stretch) {
+  const d = attributesDialog.value;
+  attributesDialog.value = null;
+  if (!d || !groups.length) return;
+  const ids = attributeTargets();
+  const src = d.mode === 'paste' ? clipboard?.[0] : null;
+  commit((q) => {
+    for (const id of ids) {
+      if (d.mode === 'paste' && src) pasteAttributes(src, q.clips[id], groups, { stretch });
+      else removeAttributes(q.clips[id], groups);
+    }
+  });
+}
+
+export function removeEffects() {
+  const ids = attributeTargets();
+  if (!ids.length) return;
+  commit((q) => ids.forEach((id) => removeAttributes(q.clips[id], ['effects', 'afx', 'masks'])));
+}
+
+/* Lydeffekter */
+
+function audioTargets(clipId) {
+  const p = project.value;
+  const ok = (c) => c && clipHasAudio(c, p.media[c.mediaId]);
+  const ids = clipId ? [clipId].filter((id) => ok(p.clips[id])) : selection.value.filter((id) => ok(p.clips[id]));
+  if (!ids.length) toast('Select a clip with sound first, or drag the effect onto a clip.');
+  return ids;
+}
+
+export function addAudioEffect(type, clipId = null) {
+  if (!AUDIO_EFFECTS[type]) return;
+  const ids = audioTargets(clipId);
+  if (!ids.length) return;
+  commit((q) => ids.forEach((id) => (q.clips[id].props.afx = [...(q.clips[id].props.afx || []), makeEffect(type)])));
+  selection.value = ids;
+  inspectorTab.value = 'audio';
+}
+
+export function applyAudioPreset(presetId, clipId = null) {
+  const pr = AUDIO_PRESETS.find((x) => x.id === presetId);
+  if (!pr) return;
+  const ids = audioTargets(clipId);
+  if (!ids.length) return;
+  commit((q) => ids.forEach((id) => (q.clips[id].props.afx = [...(q.clips[id].props.afx || []), ...presetEffects(presetId)])));
+  selection.value = ids;
+  inspectorTab.value = 'audio';
+  toast(`${pr.label} added to ${ids.length} clip${ids.length > 1 ? 's' : ''}.`, { timeout: 2000 });
+}
+
+function hitAudioClipAt(lane, T) {
+  const p = project.value;
+  const c = Object.values(p.clips).find((x) => x.lane === lane && T >= x.start && T < x.start + x.dur && clipHasAudio(x, p.media[x.mediaId]));
+  return c?.id || null;
 }
 
 export function addMarker() {
@@ -924,6 +1021,11 @@ export async function handleDrop(dt, lane, T) {
         }
       });
       if (added.length) selection.value = added;
+    } else if (item.kind === 'afx' || item.kind === 'apreset') {
+      const target = hitAudioClipAt(lane, T);
+      if (!target) return toast('Drop the audio effect onto a clip with sound.');
+      if (item.kind === 'afx') addAudioEffect(item.id, target);
+      else applyAudioPreset(item.id, target);
     } else if (item.kind === 'redact') {
       addRedact(item.id, T, lane > 0 && lane !== CAPTION_LANE ? lane : null);
     } else if (item.kind === 'title') {
@@ -1003,6 +1105,17 @@ export async function clipContextMenu(clipId, T) {
   if (c.lane === 0 && c.type !== 'gap') items.push({ id: 'lift', label: 'Lift from Storyline', accelerator: isMac ? 'Alt+Cmd+Up' : 'Ctrl+Alt+Up' });
   if (c.lane > 0 && c.lane !== CAPTION_LANE && isVisual(c)) items.push({ id: 'overwriteDown', label: 'Overwrite to Storyline', accelerator: isMac ? 'Alt+Cmd+Down' : 'Ctrl+Alt+Down' });
   items.push({ separator: true });
+  // Effekter og egenskaper fra et kopiert klipp, som i Final Cut Pro.
+  if (c.type !== 'gap' && c.type !== 'caption') {
+    items.push(
+      { id: 'copy', label: 'Copy', accelerator: 'CmdOrCtrl+C' },
+      { id: 'pasteEffects', label: 'Paste Effects', accelerator: 'Alt+CmdOrCtrl+V', enabled: Boolean(clipboard?.length) },
+      { id: 'pasteAttributes', label: 'Paste Attributes…', accelerator: 'Shift+CmdOrCtrl+V', enabled: Boolean(clipboard?.length) },
+      { id: 'removeEffects', label: 'Remove Effects', accelerator: 'Alt+CmdOrCtrl+X' },
+      { id: 'removeAttributes', label: 'Remove Attributes…', accelerator: 'Shift+CmdOrCtrl+X' },
+      { separator: true }
+    );
+  }
   if (c.mediaId) items.push({ id: 'reveal', label: k('Reveal in Finder', 'Show in Explorer') }, { separator: true });
   items.push({ id: 'delete', label: c.lane === 0 ? 'Delete' : 'Delete', accelerator: 'Backspace' });
   if (c.lane === 0) items.push({ id: 'deleteGap', label: 'Delete and Leave Gap', accelerator: 'Shift+Backspace' });
@@ -1025,6 +1138,21 @@ export async function clipContextMenu(clipId, T) {
   if (id === 'reverse') return toggleReverse();
   if (id?.startsWith('comp:')) return toggleComponent(clipId, id.slice(5));
   switch (id) {
+    case 'copy':
+      copySelection();
+      break;
+    case 'pasteEffects':
+      pasteEffects();
+      break;
+    case 'pasteAttributes':
+      openPasteAttributes();
+      break;
+    case 'removeEffects':
+      removeEffects();
+      break;
+    case 'removeAttributes':
+      openRemoveAttributes();
+      break;
     case 'freeze':
       seek(Math.min(Math.max(T, c.start), c.start + c.dur - 1e-3));
       addFreezeFrame();

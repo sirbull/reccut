@@ -758,6 +758,59 @@ Most values in the inspector, including position, scale, opacity, color, effects
 
   /* Lyd */
   {
+    id: 'audio-effects',
+    section: 'Audio',
+    title: 'Audio Effects and Repair',
+    summary: 'Clean up voices, remove noise and hum, equalize, and add reverb, distortion and lo-fi effects.',
+    keywords: 'audio effects repair fix enhance noise reduction hum removal de-esser equalizer eq compressor limiter reverb echo distortion lo-fi bitcrusher telephone radio robot underwater templates presets',
+    body: `
+Open the **Audio Effects** browser ({{key:browser:audio}}). Click an effect or a template to add it to the selected clips, or drag it onto a clip. The effects are heard right away when you play, and the export sounds exactly the same.
+
+## Templates
+
+Templates are ready made chains of effects that you can adjust afterwards.
+
+- **Fix and Enhance**: Voice Clean Up ({{key:audio:cleanup}}), Podcast Voice, Reduce Noise, Remove Hum (50 or 60 Hz), Remove Rumble, Even Out Levels, Broadcast Loud and Quiet Pauses.
+- **Space**: Small Room, Concert Hall, Cathedral, Canyon Echo, Slapback and Far Away.
+- **Creative and Lo-fi**: Telephone, Walkie-Talkie, Old Radio, Megaphone, Lo-fi Tape, Vinyl Record, 8-bit, Distorted, Blown Speaker, Robot, Alien, Underwater, Dreamy, Jet Flanger and Pulse.
+
+## Effects
+
+- **Repair**: High Pass (rumble and wind), Hum Removal, Noise Reduction, Noise Gate, De-esser and Auto Level.
+- **EQ**: a 10 band Equalizer with a curve and presets such as Voice Boost, Podcast, Bass Boost and Clear Up Muddy, Low Pass and Band Pass.
+- **Dynamics**: Compressor, Limiter, Gain, and Pan and Width.
+- **Space**: Reverb and Echo (with ping pong).
+- **Creative and Lo-fi**: Distortion (Warm, Hard or Fuzz), Bitcrusher, Lo-fi Tape (wobble, hiss, crackle), Chorus, Flanger, Tremolo and Robot.
+
+## Adjust the effects
+
+The effects on a clip are listed under **Audio Effects** in the Audio tab of the inspector ({{key:inspector:audio}}). They work from top to bottom. Switch an effect on or off to compare, move it up or down, or remove it. You can also add effects and templates from the two menus at the top.
+
+**Noise Reduction** learns the steady background noise in the pauses, so it works best on speech. It takes a second to learn when the clip starts. A constant tone or hum is treated as noise, so for those use Hum Removal or the Equalizer instead.
+
+To use the same effects on other clips, see Copying Effects Between Clips.
+`,
+    see: ['audio', 'paste-attributes'],
+  },
+  {
+    id: 'paste-attributes',
+    section: 'Editing',
+    title: 'Copying Effects Between Clips',
+    summary: 'Paste Effects and Paste Attributes, like in Final Cut Pro.',
+    keywords: 'copy paste effects attributes same look settings apply to other clips remove effects',
+    body: `
+Select the clip that has the effects you want and copy it ({{key:copy}}). Then select one or more other clips and:
+
+- **Paste Effects** ({{key:pasteEffects}}) pastes everything: video effects, color, transform, crop, masks, stabilization, volume and audio effects.
+- **Paste Attributes** ({{key:pasteAttributes}}) opens a window where you tick exactly what to paste, divided into video and audio attributes. Attributes that were not changed on the copied clip are greyed out. Your choices are remembered.
+
+Keyframes come along. **Maintain Timing** keeps them at the same time from the start of the clip, and **Stretch to Fit** stretches them to the length of the clip you paste into.
+
+A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:removeEffects}}) to remove effects, audio effects and masks, or **Remove Attributes** ({{key:removeAttributes}}) to choose what to reset. All of these are also in the Edit menu and when you right click a clip.
+`,
+    see: ['effects', 'audio-effects'],
+  },
+  {
     id: 'audio',
     section: 'Audio',
     title: 'Audio Editing',

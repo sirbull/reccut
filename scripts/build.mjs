@@ -29,6 +29,8 @@ const builds = [
     platform: 'browser',
     external: ['fs', 'path', 'os', 'child_process', 'electron'],
   },
+  // Lydeffektene i avspillingen (AudioWorklet).
+  { ...common, entryPoints: [path.join(root, 'src/renderer/audiofx-worklet.js')], outfile: path.join(out, 'audiofx-worklet.js'), format: 'iife', platform: 'browser' },
   { ...common, entryPoints: [path.join(root, 'src/worker/transcribe.js')], outfile: path.join(out, 'transcribe.js'), format: 'esm', platform: 'browser' },
 ];
 

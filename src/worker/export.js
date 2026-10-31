@@ -6,6 +6,7 @@ import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame
 import { drawFrame } from '../shared/render.js';
 import { AUDIO_FORMATS, QUALITIES, VIDEO_FORMATS, audioKbps, outputGeometry, videoBitrate } from '../shared/formats.js';
 import { toSrt, toVtt } from '../shared/srt.js';
+import { activeEffects, createChain } from '../shared/audiofx.js';
 
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
@@ -87,6 +88,53 @@ function tempoFilter(speed, preservePitch) {
   return parts.join(',');
 }
 
+// Kjører effektkjeden over en rå stereofil (f32, sammenflettet) i biter på ett sekund.
+// Forsinkelsen i kjeden (støyfjerningen) trekkes fra, så lyden står på samme sted som før.
+function applyEffectsToFile(file, afx, check) {
+  const chain = createChain(RATE);
+  chain.update(afx);
+  if (chain.empty) return;
+  const lat = chain.latency;
+  const total = Math.floor(fs.statSync(file).size / 8);
+  const inFd = fs.openSync(file, 'r');
+  const outFile = `${file}.fx`;
+  const outFd = fs.openSync(outFile, 'w');
+  const CH = RATE;
+  const inBuf = Buffer.alloc(CH * 8);
+  const L = new Float32Array(CH);
+  const R = new Float32Array(CH);
+  const out = new Float32Array(CH * 2);
+  let read = 0;
+  let skipped = 0;
+  while (read < total + lat) {
+    check();
+    const n = Math.min(CH, total + lat - read);
+    const avail = Math.max(0, Math.min(n, total - read));
+    if (avail) fs.readSync(inFd, inBuf, 0, avail * 8, read * 8);
+    const f = new Float32Array(inBuf.buffer, inBuf.byteOffset, CH * 2);
+    for (let i = 0; i < n; i++) {
+      L[i] = i < avail ? f[i * 2] : 0;
+      R[i] = i < avail ? f[i * 2 + 1] : 0;
+    }
+    chain.process(L, R, n);
+    let start = 0;
+    if (skipped < lat) {
+      start = Math.min(lat - skipped, n);
+      skipped += start;
+    }
+    let k = 0;
+    for (let i = start; i < n; i++) {
+      out[k++] = L[i];
+      out[k++] = R[i];
+    }
+    if (k) fs.writeSync(outFd, Buffer.from(out.buffer, 0, k * 4));
+    read += n;
+  }
+  fs.closeSync(inFd);
+  fs.closeSync(outFd);
+  fs.renameSync(outFile, file);
+}
+
 // Dekoder hver lydkilde til en rå fil, og mikser så blokk for blokk med riktig volum.
 async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
   const { project, ffmpegBin, tmp } = ctx;
@@ -113,7 +161,7 @@ async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
       const from = Math.max(0, Math.min(s0, s1) - info.offset);
       const to = Math.max(s0, s1) - info.offset;
       if (to <= from) continue;
-      pairs.set(`${c.id}:${key}`, { path: info.path, from, to, speed: generic ? 1 : speed, generic, tempo: generic ? null : tempoFilter(speed, c.props.preservePitch), file: path.join(tmp, `a_${pairs.size}.f32`) });
+      pairs.set(`${c.id}:${key}`, { path: info.path, from, to, speed: generic ? 1 : speed, generic, tempo: generic ? null : tempoFilter(speed, c.props.preservePitch), afx: activeEffects(c), file: path.join(tmp, `a_${pairs.size}.f32`) });
     }
   }
 
@@ -125,6 +173,8 @@ async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
     args.push('-f', 'f32le', pair.file);
     const job = ffmpeg(ffmpegBin, args);
     await job.done.catch(() => fs.writeFileSync(pair.file, Buffer.alloc(0)));
+    // Lydeffektene på klippet, med samme kode som i avspillingen.
+    if (pair.afx.length) applyEffectsToFile(pair.file, pair.afx, () => checkCancel(jobId));
     pair.fd = fs.openSync(pair.file, 'r');
     pair.frames = fs.statSync(pair.file).size / 8;
     pair.cache = null;
