@@ -220,6 +220,7 @@ export const REDACT_MODES = [
   { id: 'frosted', label: 'Frosted', desc: 'Blur and pixelate together, like frosted glass.' },
 ];
 export const REDACT_SHAPES = [
+  { id: 'full', label: 'Whole Frame' },
   { id: 'rect', label: 'Rectangle' },
   { id: 'rounded', label: 'Rounded' },
   { id: 'ellipse', label: 'Ellipse' },

@@ -37,7 +37,7 @@ import { GRADE_PROPS } from '../../shared/grade.js';
 import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
 import { beginTransient, commit, endTransient, getWave, motionVersion, project, selectedClips, selectedTransition, tasks, timeSig, updateTransient, waveVersion } from './store.js';
 import { seek } from './playback.js';
-import { addMaskToSelected, deleteMask, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
+import { addMaskToSelected, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { MASK_MODES, MASK_SHAPES, canMask, defaultPoints, ellipsePoints, maskKey, maskList, setMaskShape } from '../../shared/shapes.js';
@@ -310,9 +310,11 @@ function RedactTab({ clip }) {
         ) : (
           <Param clip={clip} prop="amount" label="Amount" min={0} max={100} scale={100} unit="%" keyframes={false} />
         )}
-        <Row label="Redact outside">
-          <Toggle checked={Boolean(pr.invert)} onChange={(v) => set({ invert: v })} />
-        </Row>
+        {pr.shape !== 'full' && (
+          <Row label="Redact outside">
+            <Toggle checked={Boolean(pr.invert)} onChange={(v) => set({ invert: v })} />
+          </Row>
+        )}
         <Param clip={clip} prop="opacity" label="Opacity" min={0} max={100} scale={100} unit="%" />
       </Section>
       <Section title="Shape">
@@ -336,14 +338,15 @@ function RedactTab({ clip }) {
             <ShapeKeyframe clip={clip} prop="points" />
           </>
         )}
-        <Param clip={clip} prop="x" label="Position X" min={-p.width} max={p.width} unit="px" slider={false} />
-        <Param clip={clip} prop="y" label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} />
-        {pr.shape !== 'path' && <Param clip={clip} prop="w" label="Width" min={8} max={p.width * 1.5} unit="px" />}
-        {pr.shape !== 'path' && <Param clip={clip} prop="h" label="Height" min={8} max={p.height * 1.5} unit="px" />}
-        <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
-        <Param clip={clip} prop="feather" label="Soft edge" min={0} max={200} unit="px" />
+        {pr.shape === 'full' && <p class="hint">The effect covers the whole picture. Use the Masks tab to draw where it works, with the pen or with shapes that you can animate.</p>}
+        {pr.shape !== 'full' && <Param clip={clip} prop="x" label="Position X" min={-p.width} max={p.width} unit="px" slider={false} />}
+        {pr.shape !== 'full' && <Param clip={clip} prop="y" label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} />}
+        {pr.shape !== 'path' && pr.shape !== 'full' && <Param clip={clip} prop="w" label="Width" min={8} max={p.width * 1.5} unit="px" />}
+        {pr.shape !== 'path' && pr.shape !== 'full' && <Param clip={clip} prop="h" label="Height" min={8} max={p.height * 1.5} unit="px" />}
+        {pr.shape !== 'full' && <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />}
+        {pr.shape !== 'full' && <Param clip={clip} prop="feather" label="Soft edge" min={0} max={200} unit="px" />}
         {pr.shape === 'path' && <p class="hint">Drag the points in the viewer. Double click the outline to add a point, and Option (Alt) click a point to remove it.</p>}
-        <p class="hint">Drag the box in the viewer to move it, and drag its corners and edges to resize it. Add keyframes to make it follow something that moves.</p>
+        {pr.shape !== 'full' && <p class="hint">Drag the box in the viewer to move it, and drag its corners and edges to resize it. Add keyframes to make it follow something that moves.</p>}
       </Section>
       <Section title="Fade">
         <PlainNumber clip={clip} prop="vFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
@@ -557,7 +560,12 @@ function MasksTab({ clip }) {
           <Button class="small" icon={PenTool} onClick={() => addMaskToSelected('path')}>
             Freeform
           </Button>
+          <Button class="small" variant={penMode.value?.clipId === clip.id ? 'primary' : 'secondary'} icon={PenTool} onClick={() => (penMode.value ? (penMode.value = null) : startPen(clip.id))}>
+            {penMode.value?.clipId === clip.id ? 'Drawing…' : 'Draw with Pen'}
+          </Button>
         </div>
+        {penMode.value?.clipId === clip.id && <p class="hint">Click in the viewer to place points. Drag while clicking for a smooth curve. Click the first point, double click or press Return to close the shape. Backspace removes the last point, Escape cancels.</p>}
+        {clip.type === 'redact' && clip.props.shape === 'full' && !masks.length && <p class="hint">This effect covers the whole picture. Draw a mask with the pen to choose where it works.</p>}
         {!masks.length && <p class="hint">A mask shows only what is inside a shape. Use it to cut out a person, frame a detail, make a spotlight or hide part of the picture. Shapes can be animated with keyframes.</p>}
       </Section>
       {masks.map((m, i) => {
@@ -590,6 +598,7 @@ function MasksTab({ clip }) {
             {m.shape !== 'path' && <Param clip={clip} prop={key('h')} label="Height" min={8} max={p.height * 2} unit="px" def={Math.round(p.height * 0.5)} />}
             <Param clip={clip} prop={key('rotation')} label="Rotation" min={-180} max={180} unit="°" center={0} def={0} />
             <Param clip={clip} prop={key('feather')} label="Feather" min={0} max={300} unit="px" def={0} />
+            <Param clip={clip} prop={key('expand')} label="Expansion" min={-300} max={300} unit="px" center={0} def={0} />
             <Param clip={clip} prop={key('opacity')} label="Opacity" min={0} max={100} scale={100} unit="%" def={1} />
           </Section>
         );

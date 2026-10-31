@@ -22,11 +22,12 @@ export function Viewer() {
   const sel = selectedClips.value.length === 1 ? selectedClips.value[0] : null;
   const draggable = sel && (sel.type === 'caption' || (isVisual(sel) && sel.type !== 'gap'));
   const sm = commands.selectedMask.value;
+  const pen = commands.penMode.value;
   const editMask = sel && sm?.clipId === sel.id ? maskList(sel).find((m) => m.id === sm.id) : null;
   const onCanvasDown = (e) => {
     if (!draggable || e.button !== 0) return;
     // Sladding: dra utenfor boksen for å tegne et nytt område.
-    if (sel.type === 'redact') return sel.props.shape === 'path' ? undefined : drawRedactBox(e, sel, canvasRef.current, p);
+    if (sel.type === 'redact') return sel.props.shape === 'path' || sel.props.shape === 'full' ? undefined : drawRedactBox(e, sel, canvasRef.current, p);
     e.preventDefault();
     const canvas = canvasRef.current;
     const k = p.width / canvas.getBoundingClientRect().width;
@@ -106,8 +107,9 @@ export function Viewer() {
       </div>
       <div class="viewer-box" ref={boxRef} onDblClick={() => wrapRef.current.requestFullscreen?.()}>
         <canvas ref={canvasRef} class={draggable ? (sel.type === 'redact' ? 'drawable' : 'movable') : ''} onPointerDown={onCanvasDown} />
-        {sel?.type === 'redact' && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} label="Redaction. Drag to move, drag the handles to resize." />}
-        {editMask && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
+        {pen && sel?.id === pen.clipId && <PenOverlay clip={sel} canvasRef={canvasRef} />}
+        {sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} label="Redaction. Drag to move, drag the handles to resize." />}
+        {editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
       </div>
       <div class="transport">
         <div class="tc big">{formatTimecode(timeSig.value, p.fps)}</div>
@@ -377,4 +379,108 @@ function smoothD(pts) {
     d += `C${p1[0] + (p2[0] - p0[0]) / 6},${p1[1] + (p2[1] - p0[1]) / 6} ${p2[0] - (p3[0] - p1[0]) / 6},${p2[1] - (p3[1] - p1[1]) / 6} ${p2[0]},${p2[1]}`;
   }
   return d + 'Z';
+}
+
+/* Pennen: klikk for punkter, dra mens du klikker for myke kurver. Lukk ved å klikke på det
+   første punktet, dobbeltklikke eller trykke Retur. Rettetasten fjerner siste punkt, Escape avbryter. */
+function PenOverlay({ clip, canvasRef }) {
+  const p = project.value;
+  const W = p.width;
+  const H = p.height;
+  const [box, setBox] = useState(null);
+  const [pts, setPts] = useState([]);
+  const [hover, setHover] = useState(null);
+  const [smooth, setSmooth] = useState(false);
+  const down = useRef(null);
+  const ptsRef = useRef(pts);
+  ptsRef.current = pts;
+  const smoothRef = useRef(smooth);
+  smoothRef.current = smooth;
+  useEffect(() => {
+    const cv = canvasRef.current;
+    const measure = () => setBox({ left: cv.offsetLeft, top: cv.offsetTop, width: cv.offsetWidth, height: cv.offsetHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(cv);
+    // Tastene fanges før hurtigtastene, så Retur, Escape og rettetasten bare virker på pennen.
+    const onKey = (e) => {
+      if (!['Enter', 'Escape', 'Backspace', 'Delete'].includes(e.key)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.key === 'Escape') commands.penMode.value = null;
+      else if (e.key === 'Enter') finish();
+      else setPts((list) => list.slice(0, -1));
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, []);
+  if (!box) return null;
+  const k = box.width / W;
+  const M = clipMatrix(clip, clipTime(clip), W, H);
+  const inv = M.inverse();
+  const toClip = (ev, svg) => {
+    const b = svg.getBoundingClientRect();
+    const q = inv.transformPoint(new DOMPoint(((ev.clientX - b.left) / b.width) * W, ((ev.clientY - b.top) / b.height) * H));
+    return [q.x, q.y];
+  };
+  const view = ([x, y]) => {
+    const q = M.transformPoint(new DOMPoint(x, y));
+    return [q.x, q.y];
+  };
+  function finish() {
+    // Dobbeltklikk legger inn to like punkter; de slås sammen.
+    const list = ptsRef.current.filter((q, i, a) => i === 0 || Math.hypot(q[0] - a[i - 1][0], q[1] - a[i - 1][1]) > 2);
+    if (list.length < 3) {
+      commands.penMode.value = null;
+      return;
+    }
+    commands.finishPen(list, smoothRef.current);
+  }
+  const onDown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const svg = e.currentTarget;
+    const q = toClip(e, svg);
+    if (pts.length >= 3) {
+      const [fx, fy] = view(pts[0]);
+      const [hx, hy] = view(q);
+      if (Math.hypot(fx - hx, fy - hy) * k < 9) return finish();
+    }
+    down.current = { x: e.clientX, y: e.clientY };
+    setPts([...pts, q]);
+  };
+  const onMove = (e) => {
+    setHover(toClip(e, e.currentTarget));
+    if (down.current && Math.hypot(e.clientX - down.current.x, e.clientY - down.current.y) > 4) setSmooth(true);
+  };
+  const vp = pts.map(view);
+  const hv = hover ? view(hover) : null;
+  const d = vp.length ? `M${vp.map((q) => q.join(',')).join('L')}${hv ? `L${hv.join(',')}` : ''}` : '';
+  return (
+    <svg
+      class="pen-overlay"
+      style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+      viewBox={`0 0 ${W} ${H}`}
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={() => (down.current = null)}
+      onDblClick={(e) => {
+        e.preventDefault();
+        finish();
+      }}
+    >
+      {d && <path d={d} class="pen-line" style={{ strokeWidth: 1.5 / k }} />}
+      {vp.length >= 3 && <path d={`M${vp.map((q) => q.join(',')).join('L')}Z`} class="pen-fill" />}
+      {vp.map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r={(i === 0 && vp.length >= 3 ? 7 : 4.5) / k} class={`pen-point${i === 0 ? ' first' : ''}`} style={{ strokeWidth: 1 / k }} />
+      ))}
+      <text x={8 / k} y={20 / k} class="pen-hint" style={{ fontSize: `${12 / k}px` }}>
+        {pts.length < 3 ? 'Click to place points' : 'Click the first point or press Return to close'}
+        {smooth ? ' (smooth)' : ''}
+      </text>
+    </svg>
+  );
 }

@@ -65,6 +65,8 @@ export const projectsOpen = signal(false);
 export const inspectorTab = signal(null);
 export const newProjectOpen = signal(false);
 export const prefsOpen = signal(false);
+export const saveAsOpen = signal(false);
+export const packageOpen = signal(false);
 // Valg når et lydklipp passer under flere videoklipp: { audioId, matches }.
 export const syncDialog = signal(null);
 
@@ -110,7 +112,7 @@ export function deleteMask(clipId, id) {
 
 // Sladding (Redact): legges over alt annet der spillhodet står, eller over området (I og O).
 // Lengden følger området, ellers klippet under spillhodet, ellers 5 sekunder.
-export function addRedact(mode = 'pixelate', T = getTime(), laneHint = null) {
+export function addRedact(mode = 'pixelate', T = getTime(), laneHint = null, extra = {}) {
   const p = project.value;
   let start = T;
   let dur = 5;
@@ -125,11 +127,52 @@ export function addRedact(mode = 'pixelate', T = getTime(), laneHint = null) {
   const lane = laneHint && laneHint > 0 && laneHint !== CAPTION_LANE ? laneHint : Math.max(0, ...busy.map((c) => c.lane)) + 1;
   const W = p.width;
   const H = p.height;
-  const clip = makeClip('redact', { start, dur, lane, props: { mode, w: Math.round(W * 0.3), h: Math.round(H * 0.12) } });
+  const clip = makeClip('redact', { start, dur, lane, props: { mode, w: Math.round(W * 0.3), h: Math.round(H * 0.12), ...extra } });
   commit((q) => placeFree(q, clip, start, lane));
   selection.value = [clip.id];
-  inspectorTab.value = 'redact';
+  inspectorTab.value = extra.shape === 'full' ? 'masks' : 'redact';
   return clip.id;
+}
+
+// Effekter som dekker hele bildet (Blur, Pixelate og så videre), som et justeringslag.
+// Tegn en maske med pennen for å begrense hvor effekten virker.
+export function addFrameEffect(mode = 'blur', T = getTime(), laneHint = null) {
+  const id = addRedact(mode, T, laneHint, { shape: 'full', name: null });
+  return id;
+}
+
+/* Pennen: tegn en fri maske punkt for punkt i visningen, som i Premiere Pro. */
+export const penMode = signal(null); // { clipId }
+
+export function startPen(clipId = null) {
+  const id = clipId || selection.value.find((x) => canMask(project.value.clips[x]));
+  if (!id) {
+    toast('Select a clip or an effect first, then draw the mask with the pen.');
+    return;
+  }
+  selection.value = [id];
+  selectedMask.value = null;
+  penMode.value = { clipId: id };
+  inspectorTab.value = 'masks';
+}
+
+// Pennen er ferdig: punktene (i klippets rom) blir en ny fri maske.
+export function finishPen(points, smooth) {
+  const pm = penMode.value;
+  penMode.value = null;
+  if (!pm || points.length < 3) return;
+  let made = null;
+  commit((q) => {
+    const c = q.clips[pm.clipId];
+    if (!c) return;
+    const id = addMask(c, 'path', q.width, q.height);
+    const cx = q.width / 2;
+    const cy = q.height / 2;
+    c.props[`mask.${id}.points`] = points.flatMap(([x, y]) => [Math.round(x - cx), Math.round(y - cy)]);
+    c.props.masks.find((m) => m.id === id).smooth = smooth;
+    made = { clipId: pm.clipId, id };
+  });
+  if (made) selectedMask.value = made;
 }
 
 // Effekt fra effektbiblioteket: legges på valgte klipp, eller klippet den slippes på.
@@ -1028,6 +1071,8 @@ export async function handleDrop(dt, lane, T) {
       else applyAudioPreset(item.id, target);
     } else if (item.kind === 'redact') {
       addRedact(item.id, T, lane > 0 && lane !== CAPTION_LANE ? lane : null);
+    } else if (item.kind === 'frameFx') {
+      addFrameEffect(item.id, T, lane > 0 && lane !== CAPTION_LANE ? lane : null);
     } else if (item.kind === 'title') {
       addTitle(item.id, T);
     } else if (item.kind === 'effect') {

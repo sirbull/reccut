@@ -778,9 +778,37 @@ function redactFrameAt(mode) {
   return redactFrames.get(mode);
 }
 
+// Effekter som dekker hele bildet, med en maske tegnet med pennen i forhåndsvisningen.
+const frameFxFrames = new Map();
+function frameFxFrameAt(mode) {
+  if (!frameFxFrames.has(mode)) {
+    frameFxFrames.set(mode, (t) => {
+      const bg = imageClip('login', 0, 2);
+      const r = { id: 'r', type: 'redact', lane: 1, start: 0, in: 0, dur: 2, enabled: true, kf: {}, props: { ...defaultProps('redact'), mode, shape: 'full', amount: 0.2 + 0.3 * Math.min(1, t) } };
+      return { project: { ...PREVIEW_PROJECT }, frame: { layers: [{ clip: bg, T: t }, { clip: r, T: t }], captions: [] } };
+    });
+  }
+  return frameFxFrames.get(mode);
+}
+const FRAME_FX = [
+  { id: 'blur', label: 'Blur', desc: 'Blurs the whole picture.' },
+  { id: 'pixelate', label: 'Pixelate', desc: 'Pixelates the whole picture.' },
+  { id: 'frosted', label: 'Frosted Glass', desc: 'Blur and blocks together.' },
+];
+
 function EffectsTab() {
   return (
     <>
+      <div class="sub-head">Whole Frame</div>
+      <div class="card-grid">
+        {FRAME_FX.map((m) => (
+          <button key={m.id} class="gen-card" data-framefx={m.id} draggable onDragStart={(e) => dragData(e, { kind: 'frameFx', id: m.id })} onClick={() => commands.addFrameEffect(m.id)} title={`${m.desc} It covers everything below it. Draw a mask with the pen to limit where it works.`}>
+            <MiniPreview frameAt={frameFxFrameAt(m.id)} duration={1} still={1} label={m.label} />
+            <span>{m.label}</span>
+          </button>
+        ))}
+      </div>
+      <p class="hint small">Covers the whole picture, like an adjustment layer. Draw a mask with the pen ({window.api.platform === 'darwin' ? 'Option Cmd M' : 'Ctrl Alt M'}) to choose where it works, and animate the mask with keyframes.</p>
       <div class="sub-head">Redact</div>
       <div class="card-grid">
         {REDACT_MODES.map((m) => (

@@ -13,6 +13,12 @@ contextBridge.exposeInMainWorld('api', {
   pathForFile: (file) => webUtils.getPathForFile(file),
 
   listScreens: invoke('screens:list'),
+  saveProjectAs: invoke('projects:saveAs'),
+  packageSizes: invoke('package:sizes'),
+  packageProject: invoke('package:start'),
+  onPackageDone: on('package:done'),
+  onOpenProject: on('project:open'),
+  pendingOpen: invoke('project:pendingOpen'),
   selectScreen: invoke('screens:select'),
   setCaptureArea: invoke('screens:area'),
   selectArea: invoke('area:select'),

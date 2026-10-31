@@ -92,8 +92,40 @@ function fixOldPaths(text) {
   return text.split(esc(oldData + path.sep)).join(esc(newData + path.sep));
 }
 
+// Hver mediefil lagres også med en sti i forhold til prosjektfilen. Er prosjektmappen flyttet
+// eller kopiert (for eksempel en pakket mappe på en annen maskin), finnes filene likevel.
+const LINK_FIELDS = ['path', 'proxy', 'optimized', 'reversed', 'motion', 'wave'];
+
+function addRelative(project, dir) {
+  for (const m of Object.values(project.media || {})) {
+    if (m.path) m.rel = path.relative(dir, m.path);
+    for (const st of Object.values(m.streams || {})) {
+      st.rel = {};
+      for (const f of LINK_FIELDS) if (typeof st[f] === 'string') st.rel[f] = path.relative(dir, st[f]);
+    }
+  }
+}
+
+function resolveRelative(project, dir) {
+  const fix = (abs, rel) => {
+    if (!rel || (abs && fs.existsSync(abs))) return abs;
+    const cand = path.resolve(dir, rel.split(/[\\/]/).join(path.sep));
+    return fs.existsSync(cand) ? cand : abs;
+  };
+  for (const m of Object.values(project.media || {})) {
+    m.path = fix(m.path, m.rel);
+    for (const st of Object.values(m.streams || {})) {
+      for (const f of LINK_FIELDS) if (st.rel?.[f]) st[f] = fix(st[f], st.rel[f]);
+      // Buffer som mangler (tømt buffer eller ny maskin), fjernes så den lages på nytt.
+      for (const f of ['proxy', 'optimized', 'reversed', 'motion', 'wave']) if (typeof st[f] === 'string' && !fs.existsSync(st[f])) delete st[f];
+      if (st.thumbs?.files?.length && !fs.existsSync(st.thumbs.files[0])) delete st.thumbs;
+    }
+  }
+}
+
 async function load(file) {
   const data = JSON.parse(fixOldPaths(await fs.promises.readFile(file, 'utf8')));
+  resolveRelative(data, path.dirname(file));
   await touchRecent(file);
   return data;
 }
@@ -102,9 +134,19 @@ async function load(file) {
 async function save(base, project, file) {
   if (!file) file = (await create(path.join(base), project.name)).file;
   const tmp = file + '.tmp';
-  await fs.promises.writeFile(tmp, JSON.stringify(project));
+  const data = JSON.parse(JSON.stringify(project));
+  addRelative(data, path.dirname(file));
+  await fs.promises.writeFile(tmp, JSON.stringify(data));
   await fs.promises.rename(tmp, file);
   return file;
+}
+
+// Lagre som: en ny prosjektmappe med nytt navn og sted. Media blir der de er.
+async function saveAs(project, location, name) {
+  const created = await create(location, name);
+  const p = { ...project, name: created.name };
+  await save(null, p, created.file);
+  return { file: created.file, name: created.name };
 }
 
 async function forget(file) {
@@ -118,4 +160,4 @@ async function trash(base, file) {
   await shell.trashItem(f.own ? f.root : file).catch(() => fs.promises.unlink(file).catch(() => {}));
 }
 
-module.exports = { list, load, save, create, folders, forget, trash, touchRecent };
+module.exports = { list, load, save, saveAs, create, folders, forget, trash, touchRecent };

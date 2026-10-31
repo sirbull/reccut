@@ -113,9 +113,9 @@ export function maskList(clip) {
   return Array.isArray(clip.props?.masks) ? clip.props.masks : [];
 }
 
-// Klipp som kan ha masker: alt som tegnes, unntatt sladding (den har sin egen form) og mellomrom.
+// Klipp som kan ha masker: alt som tegnes, også sladde- og effektklipp, men ikke mellomrom.
 export function canMask(clip) {
-  return ['video', 'image', 'recording', 'title'].includes(clip?.type);
+  return ['video', 'image', 'recording', 'title', 'redact'].includes(clip?.type);
 }
 
 // Ny maske midt i bildet. Gir id-en.
@@ -133,6 +133,7 @@ export function addMask(clip, shape, W, H) {
     [maskKey(id, 'h')]: h,
     [maskKey(id, 'rotation')]: 0,
     [maskKey(id, 'feather')]: 0,
+    [maskKey(id, 'expand')]: 0,
     [maskKey(id, 'opacity')]: 1,
   });
   if (shape === 'path') clip.props[maskKey(id, 'points')] = defaultPoints(w, h);
@@ -168,9 +169,21 @@ export function ellipsePoints(w, h, n = 8) {
   return out;
 }
 
+// Et eget lerret for hver maske, så utvidelse og invertering kan gjøres før de settes sammen.
+let tmpCanvas = null;
+function tempCanvas(w, h) {
+  if (!tmpCanvas) tmpCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
+  if (tmpCanvas.width < w || tmpCanvas.height < h) {
+    tmpCanvas.width = Math.max(tmpCanvas.width, w);
+    tmpCanvas.height = Math.max(tmpCanvas.height, h);
+  }
+  return tmpCanvas;
+}
+
 /**
  * Lager masken i et lerret (alfakanal) i lerretets piksler. base er transformen til lerretet
- * (forhåndsvisningens skala eller eksportens matrise). Gir false om ingen maske er aktiv.
+ * (forhåndsvisningens skala eller eksportens matrise). Hver maske kan utvides eller krympes
+ * (expand), få myk kant (feather), gjennomsiktighet og inverteres. Gir false om ingen maske finnes.
  */
 export function paintMask(g, clip, T, W, H, base, cw, ch) {
   const masks = maskList(clip);
@@ -178,25 +191,50 @@ export function paintMask(g, clip, T, W, H, base, cw, ch) {
   const M = base.multiply(clipMatrix(clip, T, W, H));
   const k = Math.hypot(M.a, M.b) || 1;
   g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = 1;
+  g.filter = 'none';
+  g.globalCompositeOperation = 'source-over';
   g.clearRect(0, 0, cw, ch);
   // Starter masken med å trekke fra, vises først alt.
   if (masks[0].mode === 'subtract') {
     g.fillStyle = '#000';
     g.fillRect(0, 0, cw, ch);
   }
+  const tc = tempCanvas(cw, ch);
+  const t = tc.getContext('2d');
   for (const [i, m] of masks.entries()) {
     const pre = `mask.${m.id}.`;
     const geom = shapeAt(clip, pre, m.shape, T, W, H);
     const path = new Path2D();
     path.addPath(shapePath(geom, m.smooth), M);
-    if (m.invert) path.rect(-cw, -ch, cw * 3, ch * 3);
     const feather = Math.max(0, valueAt(clip, pre + 'feather', T) || 0) * k;
+    const expand = (valueAt(clip, pre + 'expand', T) || 0) * k;
     const opacity = Math.max(0, Math.min(1, valueAt(clip, pre + 'opacity', T) ?? 1));
+    // Formen alene, utvidet eller krympet med en rund kant.
+    t.setTransform(1, 0, 0, 1, 0, 0);
+    t.globalAlpha = 1;
+    t.filter = 'none';
+    t.globalCompositeOperation = 'source-over';
+    t.clearRect(0, 0, cw, ch);
+    t.fillStyle = '#000';
+    t.strokeStyle = '#000';
+    t.lineJoin = 'round';
+    t.fill(path);
+    if (Math.abs(expand) > 0.25) {
+      t.lineWidth = Math.abs(expand) * 2;
+      if (expand < 0) t.globalCompositeOperation = 'destination-out';
+      t.stroke(path);
+      t.globalCompositeOperation = 'source-over';
+    }
+    if (m.invert) {
+      t.globalCompositeOperation = 'xor';
+      t.fillRect(0, 0, cw, ch);
+      t.globalCompositeOperation = 'source-over';
+    }
     g.filter = feather > 0.5 ? `blur(${(feather / 2).toFixed(1)}px)` : 'none';
     g.globalAlpha = opacity;
     g.globalCompositeOperation = m.mode === 'subtract' ? 'destination-out' : m.mode === 'intersect' && i > 0 ? 'destination-in' : 'source-over';
-    g.fillStyle = '#000';
-    g.fill(path, m.invert ? 'evenodd' : 'nonzero');
+    g.drawImage(tc, 0, 0, cw, ch, 0, 0, cw, ch);
   }
   g.filter = 'none';
   g.globalAlpha = 1;

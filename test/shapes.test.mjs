@@ -42,3 +42,32 @@ test('masker legges til, byttes til fri form og fjernes med nøkkelbilder', () =
   assert.ok(!Object.keys(c.props).some((k) => k.startsWith('mask.')));
   assert.ok(!Object.keys(c.kf).some((k) => k.startsWith('mask.')));
 });
+
+import { mediaFiles, reduceProject } from '../src/shared/package.js';
+import { newProject } from '../src/shared/model.js';
+
+test('pakking fjerner det som er slått av og ikke brukt, uten å flytte redigeringen', () => {
+  const p = newProject('Arkiv');
+  const media = (id, extra = {}) => ({ id, name: id, kind: 'video', path: `/f/${id}.mp4`, duration: 10, streams: { main: { path: `/f/${id}.mp4`, hasVideo: true, hasAudio: true, proxy: `/cache/${id}.mp4` } }, ...extra });
+  p.media = { a: media('a'), b: media('b'), unused: media('unused') };
+  p.media.a.streams.ext = { path: '/f/ext.wav', hasAudio: true, syncedFrom: 'x', label: 'Recorder' };
+  const c1 = makeClip('video', { media: p.media.a, start: 0, dur: 4 });
+  const c2 = makeClip('video', { media: p.media.b, start: 4, dur: 3 });
+  const c3 = makeClip('video', { media: p.media.a, start: 7, dur: 2 });
+  c2.enabled = false;
+  c1.props.audioOff = { ext: true };
+  c3.props.audioOff = { ext: true };
+  for (const c of [c1, c2, c3]) p.clips[c.id] = c;
+  p.primary = [c1.id, c2.id, c3.id];
+  const { project, removed } = reduceProject(p, { removeDisabled: true, removeUnused: true, removeOffAudio: true });
+  assert.equal(project.clips[c2.id].type, 'gap');
+  assert.equal(project.clips[c3.id].start, 7, 'ingenting flytter seg');
+  assert.deepEqual(Object.keys(project.media).sort(), ['a']);
+  assert.equal(project.media.a.streams.ext, undefined);
+  assert.equal(removed.clips.length, 1);
+  assert.deepEqual(removed.media.sort(), ['b', 'unused']);
+  // Originalen er urørt.
+  assert.ok(p.media.unused && p.clips[c2.id].type === 'video');
+  const files = mediaFiles(project);
+  assert.deepEqual(files[0].sources.map((s) => s.path), ['/f/a.mp4']);
+});

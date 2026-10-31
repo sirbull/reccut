@@ -213,6 +213,17 @@ export async function openProjectFile(path) {
   if (missing.length) api.reanalyze(missing);
 }
 
+// Lagre som: ny prosjektmappe med nytt navn og sted. Det nye prosjektet blir det åpne.
+export async function saveProjectAs(location, name) {
+  await saveNow();
+  const r = await api.saveProjectAs({ project: { ...project.value, modified: Date.now() }, location, name });
+  const p = await api.loadProject(r.file);
+  const keepUndo = [...undoStack];
+  setProject(p, r.file);
+  undoStack.push(...keepUndo);
+  return r;
+}
+
 // Nytt prosjekt: lager en egen mappe med navnet på valgt plassering.
 export async function newProjectNamed(name, template = null, location = null) {
   if (saveState.value !== 'saved') await saveNow();
@@ -244,7 +255,23 @@ function defaultName() {
   return `Project ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}.${p(d.getMinutes())}`;
 }
 
+// Prosjekt åpnet fra Finder eller Utforsker.
+async function openFromOS(file) {
+  if (saveState.value !== 'saved') await saveNow();
+  await openProjectFile(file);
+}
+api.onOpenProject?.((file) => openFromOS(file).catch((err) => console.error(err)));
+
 export async function loadInitialProject() {
+  const pending = await api.pendingOpen?.();
+  if (pending && (await api.exists(pending))) {
+    try {
+      await openProjectFile(pending);
+      return;
+    } catch (err) {
+      console.error(err);
+    }
+  }
   const last = localStorage.getItem('lastProject');
   if (prefs.value.reopenLast && last && (await api.exists(last))) {
     try {

@@ -29,6 +29,38 @@ Press {{key:findCommand}} and type what you want to do, for example "blade", "sy
     see: ['projects', 'search', 'shortcuts'],
   },
   {
+    id: 'package',
+    section: 'Getting Started',
+    title: 'Packaging a Project for Archiving',
+    summary: 'Copy the project and every file it uses into one folder, like Collect Files in After Effects.',
+    keywords: 'package collect files archive reduce consolidate backup hand over move project media folder',
+    body: `
+**Package Project** ({{key:package}}) in the File menu copies the project file and all the files it uses into one new folder. The folder then holds everything needed to open the project later, on any computer, which is good for archiving and for handing a project over to someone else. Your open project is not changed.
+
+Before packaging, you can tidy up, like Reduce Project in After Effects:
+
+- **Remove unused media**: media in the browser that is not used on the timeline is left out.
+- **Remove disabled clips**: clips that are switched off are removed. In the storyline they become gaps, so the edit does not move.
+- **Remove switched off audio**: synced audio that is switched off in every clip is left out.
+- **Remove clips on hidden tracks**.
+- **Include optimized media**: larger, but smooth to edit right away.
+
+The window shows how many files and how much space the package needs, and warns about files that are missing. The packaging runs in the background with progress at the top of the window, and it checks that there is enough free space and that every copy is complete.
+
+The package folder contains:
+
+- the project file (.reccut)
+- **Footage**, with every video, audio and image file
+- **Recordings**, with your screen and camera recordings
+- **Package Report.txt**, listing what was copied, what was removed and anything that was missing
+
+Thumbnails, waveforms and proxies are not included. They are made again automatically when the package is opened. The paths in the package are relative, so the folder can be moved or renamed.
+
+[[run:package|Package Project]]
+`,
+    see: ['projects', 'offline'],
+  },
+  {
     id: 'projects',
     section: 'Getting Started',
     title: 'Projects and Folders',
@@ -45,11 +77,21 @@ When you create a project, you give it a name and choose where it should be save
 
 ![New Project: name, location and format.](newproject.jpg)
 
-The open project is shown at the top of the window. Click it to open another project. The Projects window lists recent projects; use Open Other to open a project file from anywhere, and the ⋯ button to reveal a project, remove it from the list or move it to the Trash.
+The open project is shown at the top of the window. Click it to open another project. The Projects window lists recent projects; use Open Other to open a project file from anywhere, and the ⋯ button to reveal a project, remove it from the list or move it to the Trash. You can also double click a .reccut file in Finder or Explorer to open it.
 
-[[run:newProject|New Project]] [[run:openProject|Open Project]] [[run:revealProject|Reveal Project Folder]]
+## Save As
+
+**Save As** ({{key:saveAs}}) saves the project under a new name and location, in a new project folder. The media files stay where they are, and you continue working in the new project.
+
+## Moving a project
+
+The project file remembers where each file is, both as a full path and relative to the project file. If you move or copy the whole project folder, for example to another disk or computer, Reccut finds the files again. Thumbnails, waveforms and proxies are made again if they are missing.
+
+To collect everything into one folder for archiving, use Package Project.
+
+[[run:newProject|New Project]] [[run:openProject|Open Project]] [[run:saveAs|Save As]] [[run:package|Package Project]] [[run:revealProject|Reveal Project Folder]]
 `,
-    see: ['import', 'recording'],
+    see: ['package', 'import', 'recording'],
   },
   {
     id: 'search',
@@ -648,19 +690,23 @@ Add Caption ({{key:addCaption}}) adds a caption at the playhead. The Captions ta
     section: 'Editing',
     title: 'Masks',
     summary: 'Show only part of a clip, with shapes you can animate.',
-    keywords: 'mask masking shape matte cut out rotoscope roto freeform bezier ellipse rectangle spotlight vignette feather invert animate keyframe',
+    keywords: 'mask masking shape matte cut out rotoscope roto freeform bezier ellipse rectangle spotlight vignette feather expansion invert animate keyframe pen tool draw',
     body: `
-A mask decides which part of a clip is visible. Use it to cut out a person, frame a detail, make a spotlight, blend two clips, or hide part of the picture.
+A mask decides which part of a clip is visible. On a Blur, Pixelate or other effect clip, the mask decides where the effect works. Use it to cut out a person, frame a detail, make a spotlight, blend two clips, or hide part of the picture.
 
 - Select a video, image, recording or title clip and choose **Add Rectangle Mask** ({{key:mask:rect}}), **Add Ellipse Mask** ({{key:mask:ellipse}}) or **Add Freeform Mask** in the Edit menu, or use the buttons in the **Masks** tab of the inspector.
 - Click **Edit in Viewer** to show the shape in the viewer. Drag it to move it, and drag the handles to resize it. Hold Option (Alt) to resize from the center.
 - **Freeform** masks have points: drag a point to move it, double click the outline to add a point, and Option (Alt) click a point to remove it. Turn on **Smooth curve** for soft curves through the points.
 
+## Draw with the pen
+
+Choose **Draw with Pen** in the Masks tab, or **Draw Mask with Pen** ({{key:mask:pen}}), like the pen tool in Premiere Pro. Click in the viewer to place points. Drag a little while you click to make the shape smooth. Click the first point, double click or press Return to close the shape. Backspace removes the last point and Escape cancels. The shape becomes a freeform mask that you can adjust and animate.
+
 ## Settings
 
 - **Mode**: Add shows what is inside the shape, Subtract cuts the shape out, and Intersect keeps only where it overlaps the masks above it. Several masks can be combined.
 - **Invert** turns the mask inside out.
-- **Feather** gives the mask a soft edge. **Opacity** lets some of the hidden part show through.
+- **Feather** gives the mask a soft edge, from slightly soft to a wide fade. **Expansion** makes the mask bigger or smaller around its edge, without moving the points. **Opacity** lets some of the hidden part show through.
 
 ## Animate a mask
 
@@ -682,6 +728,10 @@ Use a redaction to hide something in the picture, such as a password, an email a
 - Choose **Add Pixelate** ({{key:redact:pixelate}}) or **Add Blur** ({{key:redact:blur}}) in the Edit menu, or drag Pixelate, Blur, Solid or Frosted from the **Redact** section of the Effects browser ({{key:browser:effects}}) to the timeline.
 - It is placed above everything at the playhead. If a range is marked ({{key:setIn}} and {{key:setOut}}), it covers the range; otherwise it lasts to the end of the clip below.
 - Drag the box in the viewer to move it, and drag its corners and edges to resize it. Hold Option (Alt) to resize from the center. Drag outside the box to draw a new area.
+
+## Effects for the whole frame
+
+For full manual control, use **Blur**, **Pixelate** or **Frosted Glass** from the **Whole Frame** section of the Effects browser, or Add Blur Effect and Add Pixelate Effect in the Edit menu. The effect covers the whole picture, like an adjustment layer in Premiere Pro. Then draw a mask with the pen ({{key:mask:pen}}) in the Masks tab to choose where it works. Several masks can be combined, each with feather, expansion and keyframes, so the shape can follow and change with what you hide. You can also set the shape of any redaction to Whole Frame.
 
 ## Styles
 

@@ -22,6 +22,7 @@ const media = require('./media');
 const projects = require('./projects');
 const psd = require('./psd');
 const area = require('./area');
+const packager = require('./packager');
 const { InputTracker, ZOOM_KEYS } = require('./input');
 
 const isMac = process.platform === 'darwin';
@@ -522,6 +523,13 @@ ipcMain.handle('menu:popup', (e, items) => {
 ipcMain.handle('projects:list', () => projects.list(baseDir()));
 ipcMain.handle('projects:load', (_e, file) => projects.load(file));
 ipcMain.handle('projects:save', (_e, project, file) => projects.save(baseDir(), project, file));
+ipcMain.handle('projects:saveAs', (_e, { project, location, name }) => projects.saveAs(project, location, name));
+ipcMain.handle('package:sizes', (_e, paths) => packager.sizes(paths));
+ipcMain.handle('package:start', (_e, payload) => {
+  const { id, done } = jobs.add({ kind: 'package', title: `Packaging ${payload.name}`, queue: 'heavy', run: (ctx) => packager.packageProject(payload, ctx) });
+  done.then((r) => send('package:done', { id, ...r })).catch((err) => send('package:done', { id, error: err.message }));
+  return id;
+});
 ipcMain.handle('projects:create', (_e, { location, name }) => projects.create(location || baseDir(), name));
 ipcMain.handle('projects:folders', (_e, file) => projects.folders(baseDir(), file));
 ipcMain.handle('projects:forget', (_e, file) => projects.forget(file));
@@ -682,6 +690,32 @@ ipcMain.handle('modelcache:put', async (_e, key, data) => {
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   await fs.promises.writeFile(file + '.tmp', Buffer.from(data));
   await fs.promises.rename(file + '.tmp', file);
+});
+
+// Prosjektfiler som åpnes fra Finder eller Utforsker (dobbeltklikk på en .reccut-fil).
+let pendingOpen = process.argv.find((a) => a.endsWith('.reccut')) || null;
+function openProjectFromOS(file) {
+  if (!file || !file.endsWith('.reccut')) return;
+  if (win && !win.webContents.isLoading()) send('project:open', file);
+  else pendingOpen = file;
+}
+// Bare én Reccut om gangen: åpnes en prosjektfil mens appen kjører, åpnes den i vinduet.
+if (!app.requestSingleInstanceLock()) app.quit();
+app.on('second-instance', (_e, argv) => {
+  openProjectFromOS(argv.find((a) => a.endsWith('.reccut')));
+  if (win) {
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  }
+});
+app.on('open-file', (e, file) => {
+  e.preventDefault();
+  openProjectFromOS(file);
+});
+ipcMain.handle('project:pendingOpen', () => {
+  const f = pendingOpen;
+  pendingOpen = null;
+  return f;
 });
 
 app.whenReady().then(() => {

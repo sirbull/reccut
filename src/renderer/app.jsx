@@ -42,7 +42,7 @@ import { startExport } from './editor/ExportDialog.jsx';
 import { ExportRoom } from './export/ExportRoom.jsx';
 import { formatDuration } from '../shared/model.js';
 import { IconButton, Toasts, toast } from './ui.jsx';
-import { NewProjectDialog, ProjectsDialog } from './ProjectDialogs.jsx';
+import { NewProjectDialog, PackageDialog, ProjectsDialog, SaveAsDialog } from './ProjectDialogs.jsx';
 import { CommandPalette, HelpCenter } from './help/Help.jsx';
 import { SettingsWindow } from './Settings.jsx';
 import { helpOpen, paletteOpen } from './registry.js';
@@ -311,6 +311,8 @@ function App() {
       </main>
       {(commands.newProjectOpen.value || needsProject.value) && <NewProjectDialog />}
       {commands.projectsOpen.value && !needsProject.value && <ProjectsDialog />}
+      {commands.saveAsOpen.value && <SaveAsDialog />}
+      {commands.packageOpen.value && <PackageDialog />}
       {commands.prefsOpen.value && <SettingsWindow />}
       {helpOpen.value && <HelpCenter />}
       {paletteOpen.value && <CommandPalette />}

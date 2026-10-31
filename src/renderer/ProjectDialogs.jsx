@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'preact/hooks';
 import { FilePlus2, FolderOpen, FolderSearch, MoreHorizontal } from 'lucide-preact';
 import { PROJECT_TEMPLATES, formatDuration } from '../shared/model.js';
-import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, projectPath, saveNow } from './editor/store.js';
+import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, saveNow, saveProjectAs } from './editor/store.js';
+import { mediaFiles, reduceProject } from '../shared/package.js';
 import * as commands from './editor/commands.js';
 import { Button, IconButton, Modal, Row, toast } from './ui.jsx';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
+const fmtBytes = (b) => (b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(0, Math.round(b / 1e3))} kB`);
 
 export async function openProjectWithDialog() {
   const file = await api.openProjectDialog();
@@ -195,6 +197,176 @@ export function ProjectsDialog() {
           </div>
         ))}
       </div>
+    </Modal>
+  );
+}
+
+/* Lagre som: nytt navn og ny plassering. Media blir der de er. */
+
+export function SaveAsDialog() {
+  const [name, setName] = useState(`${project.value.name} copy`);
+  const [location, chooseLocation] = useLocation();
+  const [busy, setBusy] = useState(false);
+  const close = () => (commands.saveAsOpen.value = false);
+  const save = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await saveProjectAs(location, name.trim() || project.value.name);
+      close();
+      toast(`Saved as ${r.name}. You are now working in the new project.`, { kind: 'success', timeout: 5000, actions: [{ label: isMac ? 'Reveal in Finder' : 'Show in Folder', onClick: () => api.reveal(r.file) }] });
+    } catch (err) {
+      toast(`Could not save the project: ${err.message}`, { kind: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="Save Project As"
+      width={520}
+      onClose={close}
+      footer={
+        <>
+          <Button onClick={close}>Cancel</Button>
+          <Button variant="primary" disabled={busy} onClick={save}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <Row label="Name" stacked>
+        <input class="text-input" value={name} autoFocus onInput={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && save()} />
+      </Row>
+      <Row label="Location" stacked>
+        <button class="path-btn" title={location} onClick={chooseLocation}>
+          <FolderOpen size={14} />
+          <span>{location}</span>
+        </button>
+      </Row>
+      <p class="hint">A new project folder with its own .reccut project file is created. The media files stay where they are. To copy everything into one folder for archiving, use Package Project instead.</p>
+    </Modal>
+  );
+}
+
+/* Pakk prosjektet for arkiv, som Collect Files i After Effects. */
+
+api.onPackageDone?.((r) => {
+  if (r.error) {
+    if (r.error !== 'Canceled') toast(`Packaging failed: ${r.error}`, { kind: 'error', timeout: 10000 });
+    return;
+  }
+  toast(`Project packaged: ${r.copied} files and folders, ${fmtBytes(r.bytes)}.${r.missing ? ` ${r.missing} missing files are listed in the report.` : ''}`, {
+    kind: r.missing ? 'error' : 'success',
+    timeout: 12000,
+    actions: [
+      { label: isMac ? 'Reveal in Finder' : 'Show in Folder', onClick: () => api.reveal(r.file) },
+      { label: 'Open Package', onClick: () => saveNow().then(() => openProjectFile(r.file)) },
+    ],
+  });
+});
+
+
+export function PackageDialog() {
+  const saved = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('packageOpts') || '{}');
+    } catch {
+      return {};
+    }
+  })();
+  const [opts, setOpts] = useState({ removeUnused: true, removeDisabled: true, removeOffAudio: true, removeHidden: false, includeOptimized: false, ...saved });
+  const [name, setName] = useState(`${project.value.name} (Archive)`);
+  const [dest, setDest] = useState(localStorage.getItem('packageDest') || '');
+  const [sizes, setSizes] = useState(null);
+  const close = () => (commands.packageOpen.value = false);
+  useEffect(() => {
+    if (!dest) api.baseDir().then(setDest);
+  }, []);
+  const { project: reduced, removed } = reduceProject(project.value, opts);
+  const files = mediaFiles(reduced, opts);
+  const paths = files.flatMap((f) => (f.dir ? [f.dir] : f.sources.map((s) => s.path)));
+  const key = paths.join('|');
+  useEffect(() => {
+    let alive = true;
+    setSizes(null);
+    api.packageSizes(paths).then((s) => alive && setSizes(s));
+    return () => (alive = false);
+  }, [key]);
+  const total = sizes ? Object.values(sizes).reduce((a, b) => a + Math.max(0, b), 0) : null;
+  const missing = sizes ? Object.entries(sizes).filter(([, v]) => v < 0).map(([k]) => k) : [];
+  const set = (patch) => {
+    const n = { ...opts, ...patch };
+    setOpts(n);
+    try {
+      localStorage.setItem('packageOpts', JSON.stringify(n));
+    } catch {}
+  };
+  const chooseDest = async () => {
+    const d = await api.chooseDir(dest);
+    if (d) {
+      setDest(d);
+      localStorage.setItem('packageDest', d);
+    }
+  };
+  const start = async () => {
+    await saveNow();
+    await api.packageProject({ project: reduced, files, dest, name: name.trim() || project.value.name, removed });
+    close();
+    toast('Packaging started. Follow the progress at the top of the window.', { timeout: 4000 });
+  };
+  const check = (k, label, hint) => (
+    <label class="pkg-opt" title={hint}>
+      <input type="checkbox" checked={Boolean(opts[k])} onChange={(e) => set({ [k]: e.currentTarget.checked })} />
+      <span>
+        <b>{label}</b>
+        <small>{hint}</small>
+      </span>
+    </label>
+  );
+  return (
+    <Modal
+      title="Package Project"
+      width={560}
+      onClose={close}
+      footer={
+        <>
+          <Button onClick={close}>Cancel</Button>
+          <Button variant="primary" disabled={!dest || sizes === null} onClick={start}>
+            Package
+          </Button>
+        </>
+      }
+    >
+      <p class="lead">Copies the project file and every file it uses into one folder, so the folder holds everything needed to open the project later, on any computer. Good for archiving and for handing a project over. Your open project is not changed.</p>
+      <Row label="Name" stacked>
+        <input class="text-input" value={name} onInput={(e) => setName(e.currentTarget.value)} />
+      </Row>
+      <Row label="Save in" stacked>
+        <button class="path-btn" title={dest} onClick={chooseDest}>
+          <FolderOpen size={14} />
+          <span>{dest}</span>
+        </button>
+      </Row>
+      <div class="pkg-opts">
+        {check('removeUnused', 'Remove unused media', 'Media in the browser that is not used on the timeline is left out.')}
+        {check('removeDisabled', 'Remove disabled clips', 'Clips that are switched off are removed. In the storyline they become gaps, so nothing moves.')}
+        {check('removeOffAudio', 'Remove switched off audio', 'Synced audio that is switched off in every clip is left out.')}
+        {check('removeHidden', 'Remove clips on hidden tracks', 'Clips on tracks you have hidden are removed.')}
+        {check('includeOptimized', 'Include optimized media', 'Larger, but the project is smooth to edit right away. Otherwise it can be optimized again later.')}
+      </div>
+      <div class="pkg-summary">
+        <div>
+          <b>{files.length}</b> media, <b>{paths.length}</b> files and folders, <b>{total === null ? '…' : fmtBytes(total)}</b>
+        </div>
+        <div class="muted">
+          Removed: {removed.media.length} unused media, {removed.clips.length} clips, {removed.streams.length} audio tracks
+        </div>
+        {missing.length > 0 && <div class="warn">{missing.length} file{missing.length > 1 ? 's are' : ' is'} missing and cannot be copied. They are listed in the report.</div>}
+      </div>
+      <p class="hint">
+        The folder gets the project file, a Footage folder, a Recordings folder and a Package Report.txt. Thumbnails, waveforms and proxies are made again automatically when the project is opened.
+      </p>
     </Modal>
   );
 }

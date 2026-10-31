@@ -327,6 +327,12 @@ export function redactShape(clip, T, W, H) {
 }
 
 export function redactPath(clip, T, W, H) {
+  // Hele bildet: effekten dekker alt, og masker bestemmer hvor den virker.
+  if (clip.props.shape === 'full') {
+    const path = new Path2D();
+    path.rect(0, 0, W, H);
+    return { path, shape: 'full', cx: W / 2, cy: H / 2, w: W, h: H, rot: 0, pts: null };
+  }
   const g = redactShape(clip, T, W, H);
   return { path: shapePath(g, clip.props.smooth === true), ...g };
 }
@@ -363,7 +369,7 @@ function drawRedact(ctx, clip, T, W, H, alpha) {
   const feather = Math.max(0, valueAt(clip, 'feather', T) || 0) * k;
   // Området som må behandles, i lerretets piksler.
   let pts;
-  if (pr.invert) pts = [[0, 0], [W, 0], [0, H], [W, H]];
+  if (pr.invert || geom.shape === 'full') pts = [[0, 0], [W, 0], [0, H], [W, H]];
   else pts = shapeCorners(geom);
   const dev = pts.map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]);
   const cw = ctx.canvas.width;
@@ -417,10 +423,18 @@ function drawRedact(ctx, clip, T, W, H, alpha) {
   g.globalCompositeOperation = pr.invert ? 'destination-out' : 'destination-in';
   if (feather > 0.5) g.filter = `blur(${(feather / 2).toFixed(1)}px)`;
   g.fillStyle = '#000';
-  g.fill(devPath);
+  if (geom.shape !== 'full') g.fill(devPath);
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.filter = 'none';
   g.globalCompositeOperation = 'source-over';
+  // Masker på effekten (tegnet med pennen eller som former): bare der virker den.
+  if (maskList(clip).length) {
+    const { c: Mk, g: mg } = scratchCanvas(2, cw, ch);
+    paintMask(mg, clip, T, W, H, m, cw, ch);
+    g.globalCompositeOperation = 'destination-in';
+    g.drawImage(Mk, bx, by, bw, bh, 0, 0, bw, bh);
+    g.globalCompositeOperation = 'source-over';
+  }
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = alpha;
