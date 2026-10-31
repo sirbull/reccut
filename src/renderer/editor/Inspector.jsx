@@ -920,6 +920,34 @@ function CaptionTab({ clip }) {
   );
 }
 
+// Farge og arbeidsfiler: bitdybde, HDR, RAW og optimalisert media.
+function MediaColorRows({ media }) {
+  const st = Object.values(media.streams).find((x) => x.hasVideo);
+  const color = st?.color;
+  const working = st?.optimized ? 'Optimized media' : st?.proxy && media.kind !== 'image' ? (color?.hdr ? 'Tone mapped copy' : 'Playable copy') : 'Original';
+  return (
+    <>
+      {color && (
+        <Row label="Color">
+          <span class="value">
+            {color.bits}-bit{color.hdr ? `, HDR ${color.hdr === 'pq' ? 'PQ' : 'HLG'}, shown tone mapped` : color.primaries === 'bt2020' ? ', Rec. 2020' : ', SDR'}
+          </span>
+        </Row>
+      )}
+      {media.raw && (
+        <Row label="RAW">
+          <span class="value">Embedded full size camera preview</span>
+        </Row>
+      )}
+      {st && media.kind !== 'image' && (
+        <Row label="Playback uses">
+          <span class="value">{working}</span>
+        </Row>
+      )}
+    </>
+  );
+}
+
 function InfoTab({ clip, media }) {
   return (
     <Section title="Info">
@@ -947,6 +975,7 @@ function InfoTab({ clip, media }) {
               </span>
             </Row>
           )}
+          <MediaColorRows media={media} />
         </>
       )}
       <Row label="Lane">

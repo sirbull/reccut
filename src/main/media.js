@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const ff = require('./ffmpeg');
 const jobs = require('./jobs');
+const raw = require('./raw');
 
 const VIDEO_EXT = new Set(['.mp4', '.m4v', '.mov', '.qt', '.webm', '.mkv', '.avi', '.divx', '.mts', '.m2ts', '.ts', '.wmv', '.asf', '.flv', '.f4v', '.mpg', '.mpeg', '.m2v', '.vob', '.mod', '.3gp', '.3g2', '.mxf', '.ogv', '.dv', '.y4m', '.rm', '.rmvb']);
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a', '.m4b', '.aac', '.flac', '.ogg', '.oga', '.opus', '.weba', '.aif', '.aiff', '.aifc', '.wma', '.caf', '.mka', '.ac3', '.eac3', '.dts', '.amr', '.ape', '.wv', '.au', '.mp2']);
@@ -86,6 +87,12 @@ async function importFiles(files, notify) {
   const failed = [];
   for (const file of files) {
     let kind = kindOf(file);
+    if (raw.RAW_EXT.has(path.extname(file).toLowerCase())) {
+      const media = await importRaw(file, notify).catch((err) => (console.error('RAW import failed', file, err), null));
+      if (media) result.push(media);
+      else failed.push(path.basename(file));
+      continue;
+    }
     try {
       const info = await ff.probe(file);
       const readable = info.hasVideo || info.hasAudio || (kind === 'image' && info.width > 0);
@@ -128,6 +135,34 @@ async function importFiles(files, notify) {
     }
   }
   return { items: result, failed };
+}
+
+// RAW-bilde: kameraets innebygde JPEG hentes ut og rettes opp etter orienteringen i filen.
+// DNG uten forhåndsvisning prøves med FFmpeg.
+async function importRaw(file, notify) {
+  const dir = await cacheDirFor(file);
+  const out = path.join(dir, 'raw.jpg');
+  let width;
+  let height;
+  if (!fs.existsSync(out)) {
+    const tmp = path.join(dir, 'raw-preview.jpg');
+    const prev = await raw.extractPreview(file, tmp);
+    if (prev) {
+      const rotate = { 3: 'transpose=1,transpose=1', 6: 'transpose=1', 8: 'transpose=2' }[prev.orientation];
+      if (rotate) {
+        await ff.run(['-i', tmp, '-vf', rotate, '-q:v', '2', out]).promise;
+        await fs.promises.unlink(tmp).catch(() => {});
+      } else await fs.promises.rename(tmp, out);
+    } else if (path.extname(file).toLowerCase() === '.dng') {
+      await ff.run(['-i', file, '-frames:v', '1', '-q:v', '2', out]).promise;
+    } else return null;
+  }
+  const info = await ff.probe(out);
+  width = info.width;
+  height = info.height;
+  if (!width) return null;
+  const stream = { path: file, proxy: out, offset: 0, duration: 0, hasVideo: true, hasAudio: false, width, height, fps: 0, needsProxy: false };
+  return makeMedia(file, 'image', { main: stream }, notify, { raw: true });
 }
 
 async function makeMedia(file, kind, streams, notify, extra = {}) {
@@ -342,7 +377,7 @@ function scheduleOptimize(media, outDir, notify) {
 
 // Alle filendelser appen kjenner, for importdialogen.
 function extensions() {
-  return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT].map((e) => e.slice(1));
+  return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT, ...raw.RAW_EXT].map((e) => e.slice(1));
 }
 
 module.exports = { scheduleOptimize, reverseStream, scheduleReverse, extensions, importFiles, recordingMedia, kindOf, cacheRoot, newId };
