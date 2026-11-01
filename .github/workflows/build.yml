@@ -26,11 +26,11 @@ jobs:
       # Ingen kodesignering foreløpig.
       CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
 
       - run: npm ci
@@ -60,7 +60,7 @@ jobs:
           node scripts/fetch-ffmpeg.mjs mac-x64
           npx electron-builder --mac --x64 --publish never
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Reccut-${{ matrix.name }}
           path: |
@@ -71,7 +71,7 @@ jobs:
 
       - name: Legg ved i release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*.dmg
