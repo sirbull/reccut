@@ -6,9 +6,9 @@ import { Browser } from './Browser.jsx';
 import { Viewer } from './Viewer.jsx';
 import { Inspector } from './Inspector.jsx';
 import { Timeline } from './Timeline.jsx';
-import { ExportDialog } from './ExportDialog.jsx';
 import { ImportBrowser } from './ImportBrowser.jsx';
-import { audioSkimming, commit, makeCaptionClip, project, skimming, snapping } from './store.js';
+import { audioSkimming, commit, makeCaptionClip, needsProject, project, skimming, snapping } from './store.js';
+import { droppedPaths, hasFiles } from '../fileDrop.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
 import { cancelLayerImport, finish as finishLayers, layerImport } from './layers.js';
@@ -102,10 +102,9 @@ export function Editor({ active }) {
       </div>
       <div class="divider" onPointerDown={onDividerDown} />
       <Timeline />
-      {commands.exportOpen.value && <ExportDialog />}
       {commands.syncDialog.value && <SyncDialog />}
       {commands.attributesDialog.value && <AttributesDialog />}
-      {commands.importOptions.value && <ImportOptionsDialog />}
+      {commands.importOptions.value && !needsProject.value && <ImportOptionsDialog />}
       {layerImport.value && <LayerImportDialog key={layerImport.value.file} />}
     </div>
   );
@@ -202,11 +201,13 @@ function ImportOptionsDialog() {
   const [sequence, setSequence] = useState(false);
   const [fps, setFps] = useState(project.value.fps || 30);
   const close = () => (commands.importOptions.value = null);
-  const go = () => commands.confirmImport({ copy: p.importCopy, optimize: p.importOptimize, sync, sequenceFps: sequence ? fps : null });
+  const go = () => commands.confirmImport({ copy: p.importCopy, optimize: p.importOptimize, sync, sequenceFps: sequence ? fps : null })
+    .catch((err) => toast(`Could not import the files: ${err.message}`, { kind: 'error' }));
   const setPaths = (next) => (commands.importOptions.value = { ...commands.importOptions.value, paths: next });
   const onDrop = (e) => {
+    if (!hasFiles(e.dataTransfer)) return;
     e.preventDefault();
-    commands.addImportPaths([...e.dataTransfer.files].map((f) => api.pathForFile(f)).filter(Boolean));
+    commands.addImportPaths(droppedPaths(e.dataTransfer, api.pathForFile));
   };
   return (
     <Modal

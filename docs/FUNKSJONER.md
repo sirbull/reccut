@@ -102,7 +102,7 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 
 ## Eksport
 
-Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konvertere dem uten å gå via redigering. Flere filer kan konverteres med samme innstillinger på én gang.
+Eksportfanen tar enten prosjektet eller filer du importerer direkte, for å konvertere dem uten å gå via redigering. Flere filer kan konverteres med samme innstillinger på én gang. **Export Project** i redigeringen (Cmd/Ctrl E) åpner prosjektet i eksportfanen med MP4/H.264, høy kvalitet og sekvensens oppløsning og bildefrekvens. Et markert område på tidslinjen følger med. Juster innstillingene og trykk **Export Project** i eksportfanen for å starte jobben.
 
 * Forhåndsinnstillinger (Standard, YouTube og web, Minst fil, Apple-enheter, Master, GIF, Bare lyd), og alle verdier kan overstyres
 * Størrelse: original, 4K, 1440p, 1080p, 720p, 480p eller egen bredde og høyde, med lås for sideforhold

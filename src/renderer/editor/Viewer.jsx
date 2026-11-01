@@ -39,7 +39,7 @@ export function Viewer() {
 
   // Dra valgt klipp, tittel eller undertekst direkte i bildet.
   const sel = !source && !skim.value?.project && selectedClips.value.length === 1 ? selectedClips.value[0] : null;
-  const draggable = sel && (sel.type === 'caption' || (isVisual(sel) && sel.type !== 'gap'));
+  const draggable = sel && (sel.type === 'caption' || (isVisual(sel) && sel.type !== 'gap' && sel.type !== 'adjustment'));
   const sm = commands.selectedMask.value;
   const pen = commands.penMode.value;
   const editMask = sel && sm?.clipId === sel.id ? maskList(sel).find((m) => m.id === sm.id) : null;

@@ -26,7 +26,8 @@ import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
 import { renameSequence, sequenceList, timelines, CAPTION_LANE, EFFECTS, REDACT_MODES, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { parseSrt, speechSources, toSrt, toVtt } from '../../shared/srt.js';
-import { addMediaRecords, switchSequence, usedMedia, projectFolders, audioSkimming, commit, endPreview, getWave, importPaths, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
+import { addMediaRecords, switchSequence, usedMedia, projectFolders, audioSkimming, commit, endPreview, getWave, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
+import { droppedPaths, hasFiles } from '../fileDrop.js';
 import { fileUrl, mediaPreviewProject, openSource, scrubAudio, seek } from './playback.js';
 import * as commands from './commands.js';
 import { FILM_LOOKS } from '../../shared/filmLooks.js';
@@ -35,6 +36,7 @@ import { CaptionStyleEditor } from './Inspector.jsx';
 import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
 import { prefs } from '../prefs.js';
 import { AUDIO_EFFECTS, AUDIO_FX_CATEGORIES, AUDIO_PRESETS } from '../../shared/audiofx.js';
+import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../../shared/videoEffects.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -155,12 +157,14 @@ function MediaTab() {
           setOver(true);
         }
       }}
-      onDragLeave={() => setOver(false)}
-      onDrop={async (e) => {
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setOver(false);
+      }}
+      onDrop={(e) => {
+        if (!hasFiles(e.dataTransfer)) return;
         e.preventDefault();
         setOver(false);
-        const files = [...e.dataTransfer.files].map((f) => api.pathForFile(f)).filter(Boolean);
-        await importPaths(files);
+        commands.importDroppedFiles(droppedPaths(e.dataTransfer, api.pathForFile));
       }}
     >
       <div class="tab-actions">
@@ -835,7 +839,9 @@ function effectFrameAt(fx) {
   if (!fxFrames.has(fx.id)) {
     fxFrames.set(fx.id, (t) => {
       const k = Math.min(1, t / 1);
-      const props = { [fx.prop]: fx.def * (0.15 + 0.85 * k), fx: [fx.id] };
+      const props = BROWSER_VIDEO_EFFECTS.some((e) => e.type === fx.id)
+        ? { vfx: [makeVideoEffect(fx.id)] }
+        : { [fx.prop]: fx.def * (0.15 + 0.85 * k), fx: [fx.id] };
       const framed = ['radius', 'shadow', 'border'].includes(fx.id);
       if (framed) props.scale = 0.72;
       const clip = imageClip('scene', 0, 2, props);
@@ -887,6 +893,42 @@ const FRAME_FX = [
 function EffectsTab() {
   return (
     <>
+      <div class="sub-head">Adjustment layers</div>
+      <div class="card-grid">
+        <button class="gen-card" data-adjustment="empty" draggable
+          onDragStart={(e) => dragData(e, { kind: 'adjustment', id: 'empty' })}
+          onClick={() => commands.addAdjustmentLayer()} title="Add an empty layer above the picture. Apply effects, color and masks; trim it to cover several clips.">
+          <div class="adjustment-preview"><span>ADJ</span><small>Effects · Color · Masks</small></div>
+          <span>Adjustment layer</span>
+        </button>
+      </div>
+      <p class="hint small">Affects all video tracks below it. Trim or extend the layer across clips, then add Color, Effects or Masks in the inspector. Video → Layer strength blends the result.</p>
+      <div class="sub-head">Color fills</div>
+      <div class="card-grid" onPointerLeave={endPreview}>
+        {BROWSER_VIDEO_EFFECTS.filter((fx) => fx.category === 'Color fills').map((fx) => (
+          <button key={fx.type} class="gen-card" data-fillfx={fx.type} draggable
+            onDragStart={(e) => dragData(e, { kind: 'effect', id: fx.type })}
+            onPointerEnter={() => commands.previewEffect(fx.type)} onClick={() => commands.addEffect(fx.type)}
+            title="Click to add to selected clips, or drag onto a video, image or recording clip. Adjust colors in the Effects inspector.">
+            <MiniPreview frameAt={effectFrameAt({ id: fx.type })} duration={1} still={1} label={fx.label} />
+            <span>{fx.label}</span>
+          </button>
+        ))}
+      </div>
+      <div class="sub-head">Stylize</div>
+      <div class="card-grid" onPointerLeave={endPreview}>
+        {BROWSER_VIDEO_EFFECTS.filter((fx) => fx.category === 'Stylize').map((fx) => (
+          <button key={fx.type} class="gen-card" data-stylize={fx.type} draggable
+            onDragStart={(e) => dragData(e, { kind: 'effect', id: fx.type })}
+            onPointerEnter={() => commands.previewEffect(fx.type)}
+            onClick={() => selection.value.some((id) => ['video', 'image', 'recording', 'adjustment'].includes(project.value.clips[id]?.type))
+              ? commands.addEffect(fx.type) : commands.addAdjustmentLayer(fx.type)}
+            title="Apply to selected clips or an adjustment layer. With no eligible selection, creates an adjustment layer. Drag onto a clip, or onto an empty video track for a new layer.">
+            <MiniPreview frameAt={effectFrameAt({ id: fx.type })} duration={2} still={0.5} label={fx.label} />
+            <span>{fx.label}</span>
+          </button>
+        ))}
+      </div>
       <div class="sub-head">Whole Frame</div>
       <div class="card-grid">
         {FRAME_FX.map((m) => (

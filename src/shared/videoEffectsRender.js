@@ -1,4 +1,6 @@
 import { activeVideoEffects, effectParams, keyPixels, rgb } from './videoEffects.js';
+import { renderGradient } from './gradientRender.js';
+import { isStylizeEffect, renderStylize } from './stylizeRender.js';
 const makeCanvas = () =>
   typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
 const surfaces = [];
@@ -33,17 +35,31 @@ in vec2 uv; out vec4 outColor;
 uniform sampler2D image, referenceImage;
 uniform int kind, mode, radius, invertKey;
 uniform vec3 keyColor;
-uniform float similarity, softness, despill, blackPoint, whitePoint;
+uniform float similarity, softness, despill, blackPoint, whitePoint, matteGamma, detail, shadows, shadowRange, edgeColor;
 uniform vec2 texel;
 vec2 chroma(vec3 c){return vec2(dot(c,vec3(-0.168736,-0.331264,0.5)),dot(c,vec3(0.5,-0.418688,-0.081312)));}
 void main(){
  vec4 c=texture(image,uv);
+ float shadowWeight=0.0;
  if(mode==0){
   float d=kind==0?length(chroma(c.rgb)-chroma(keyColor)):kind==1?dot(c.rgb,vec3(0.2126,0.7152,0.0722)):length(c.rgb-texture(referenceImage,uv).rgb)/sqrt(3.0);
   float a=smoothstep(similarity,similarity+max(0.0001,softness),d);
+  if(kind==0){
+   int channel=keyColor.r>=keyColor.g&&keyColor.r>=keyColor.b?0:keyColor.g>=keyColor.b?1:2;
+   float excess=channel==0?c.r-max(c.g,c.b):channel==1?c.g-max(c.r,c.b):c.b-max(c.r,c.g);
+   float keyExcess=channel==0?keyColor.r-max(keyColor.g,keyColor.b):channel==1?keyColor.g-max(keyColor.r,keyColor.b):keyColor.b-max(keyColor.r,keyColor.g);
+   a=max(a,(keyExcess>0.001?clamp(1.0-max(0.0,excess)/keyExcess,0.0,1.0):0.0)*detail);
+   float brightness=max(c.r,max(c.g,c.b)), screenBrightness=max(keyColor.r,max(keyColor.g,keyColor.b));
+   float hueDistance=length(c.rgb/max(0.001,brightness)-keyColor/max(0.001,screenBrightness))/sqrt(3.0);
+   float affinity=1.0-smoothstep(shadowRange,shadowRange+0.1,hueDistance);
+   shadowWeight=affinity*shadows;
+   a=mix(a,clamp(1.0-brightness/max(0.001,screenBrightness),0.0,1.0),shadowWeight);
+  }
   a=clamp((a-blackPoint)/max(0.001,whitePoint-blackPoint),0.0,1.0);
+  a=pow(a,1.0/max(0.1,matteGamma));
   if(invertKey==1)a=1.0-a;
   if(kind==0){
+   c.rgb=mix(c.rgb,clamp((c.rgb-(1.0-a)*keyColor)/max(0.01,a),0.0,1.0),max(edgeColor,shadowWeight));
    if(keyColor.g>=keyColor.r&&keyColor.g>=keyColor.b)c.g-=max(0.0,c.g-max(c.r,c.b))*despill;
    else if(keyColor.r>=keyColor.b)c.r-=max(0.0,c.r-max(c.g,c.b))*despill;
    else c.b-=max(0.0,c.b-max(c.r,c.g))*despill;
@@ -120,6 +136,11 @@ function setup() {
         'blackPoint',
         'whitePoint',
         'texel',
+        'matteGamma',
+        'detail',
+        'shadows',
+        'shadowRange',
+        'edgeColor',
       ].map((n) => [n, gl.getUniformLocation(program, n)]),
     );
     gpu = { gl, canvas, textures, u: uniforms };
@@ -156,6 +177,11 @@ function gpuKey(img, w, h, effect, ref) {
     despill: p.despill || 0,
     blackPoint: p.black,
     whitePoint: p.white,
+    matteGamma: p.gamma,
+    detail: p.detail || 0,
+    shadows: p.shadows || 0,
+    shadowRange: p.shadowRange ?? 0.25,
+    edgeColor: p.edgeColor || 0,
   }))
     gl.uniform1f(u[name], value);
   gl.uniform1i(u.invertKey, p.invert ? 1 : 0);
@@ -191,12 +217,13 @@ function scaledEffect(effect, scale) {
   if (scale === 1) return effect;
   const p = effectParams(effect);
   if (effect.type === 'blur') p.amount *= scale;
+  if (effect.type === 'glow') p.radius *= scale;
   if (p.choke) p.choke *= scale;
   if (p.feather) p.feather *= scale;
   return { ...effect, p };
 }
 
-export function applyVideoEffects(src, clip, target = 'main') {
+export function applyVideoEffects(src, clip, target = 'main', time = 0) {
   const effects = activeVideoEffects(clip, target);
   if (!effects.length) return src;
   const w = Math.max(1, Math.round(src.w)),
@@ -209,7 +236,42 @@ export function applyVideoEffects(src, clip, target = 'main') {
     if (effect.type === 'difference' && !ref) continue;
     const cv = surface(0, w, h),
       ctx = cv.getContext('2d', { willReadFrequently: true });
-    if (['chroma', 'luma', 'difference'].includes(effect.type)) {
+    if (isStylizeEffect(effect.type)) {
+      if (effect.type !== 'vhs' && !(p.amount > 0) && !(effect.type === 'filmGrain' && (p.dust || p.scratches || p.weave || p.flicker))) continue;
+      const result = renderStylize(img, w, h, effect.type, p, time, src.pixelScale ?? 1);
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(result, 0, 0, w, h);
+    } else if (effect.type === 'glow') {
+      if (!(p.amount > 0)) continue;
+      const copy = surface(1, w, h), cc = copy.getContext('2d');
+      cc.clearRect(0, 0, w, h);
+      cc.drawImage(img, 0, 0, w, h);
+      ctx.clearRect(0, 0, w, h);
+      ctx.save();
+      ctx.drawImage(copy, 0, 0);
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.amount));
+      ctx.filter = `blur(${Math.max(0, Math.min(400, p.radius))}px)`;
+      ctx.drawImage(copy, 0, 0);
+      ctx.restore();
+    } else if (effect.type === 'solid' || effect.type === 'gradient') {
+      if (!(p.amount > 0)) continue;
+      const copy = surface(1, w, h), cc = copy.getContext('2d');
+      cc.clearRect(0, 0, w, h);
+      cc.drawImage(img, 0, 0, w, h);
+      ctx.clearRect(0, 0, w, h);
+      ctx.save();
+      if (p.preserveAlpha) {
+        ctx.drawImage(copy, 0, 0);
+        ctx.globalCompositeOperation = 'source-atop';
+      } else if (p.amount < 1) ctx.drawImage(copy, 0, 0);
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.amount));
+      if (effect.type === 'solid') {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(0, 0, w, h);
+      } else ctx.drawImage(renderGradient(p, w, h), 0, 0);
+      ctx.restore();
+    } else if (['chroma', 'luma', 'difference'].includes(effect.type)) {
       const keyed = gpuKey(img, w, h, effect, ref);
       if (keyed) {
         img = keyed;
@@ -252,5 +314,5 @@ export function applyVideoEffects(src, clip, target = 'main') {
     }
     img = cv;
   }
-  return { img, w, h };
+  return { ...src, img, w, h };
 }

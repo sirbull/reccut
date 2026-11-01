@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import { ArrowDown, ArrowUp, Copy, Trash2 } from 'lucide-preact';
+import { ArrowDown, ArrowUp, Copy } from 'lucide-preact';
 import {
   VIDEO_EFFECTS,
   effectParams,
@@ -10,12 +10,14 @@ import {
 import { beginTransient, commit, endTransient, updateTransient, project } from './store.js';
 import { readClipFrame, readClipFrames, encodeReference } from './sourceFrame.js';
 import { Button, IconButton, NumberField, Row, Section, Select, Toggle, toast } from '../ui.jsx';
+import { RemoveEffectButton } from './RemoveEffectButton.jsx';
+import { GradientEditor } from './GradientEditor.jsx';
 
 export function VideoEffects({ clip }) {
   const [busy, setBusy] = useState(false),
     [target, setTarget] = useState(clip.type === 'recording' ? 'camera' : 'main');
   const streams = project.value.media[clip.mediaId]?.streams || {};
-  const targets = ['camera', 'screen'].filter((key) => streams[key]?.hasVideo);
+  const targets = ['camera', 'screen'].filter((key) => streams[key]?.hasVideo && (!clip.recordingPart || clip.recordingPart === key));
   const effectTarget =
     clip.type === 'recording' ? (targets.includes(target) ? target : targets[0] || 'screen') : 'main';
   const list = clip.props.vfx || [];
@@ -25,6 +27,10 @@ export function VideoEffects({ clip }) {
       if (pr) fn(pr);
     });
   const patch = (id, values) => edit((pr) => Object.assign(pr.vfx.find((e) => e.id === id).p, values));
+  const patchLive = (id, values) => updateTransient((q) => {
+    const effect = q.clips[clip.id]?.props.vfx?.find((e) => e.id === id);
+    if (effect) Object.assign(effect.p, values);
+  });
   const add = async (type, auto = false) => {
     const e = makeVideoEffect(type);
     e.target = effectTarget;
@@ -94,9 +100,10 @@ export function VideoEffects({ clip }) {
       </Row>
     );
   };
-  if (!['video', 'image', 'recording'].includes(clip.type)) return null;
+  const adjustment = clip.type === 'adjustment';
+  if (!['video', 'image', 'recording', 'adjustment'].includes(clip.type)) return null;
   return (
-    <Section title="Keying & effect stack" data-section="vfx">
+    <Section title={adjustment ? 'Adjustment effect stack' : 'Keying & effect stack'} data-section="vfx">
       {clip.type === 'recording' && (
         <Row label="Add effects to">
           <Select
@@ -106,6 +113,7 @@ export function VideoEffects({ clip }) {
           />
         </Row>
       )}
+      {!adjustment && <>
       <Button disabled={busy} variant="secondary" onClick={() => add('chroma', true)}>
         Remove solid background
       </Button>
@@ -122,13 +130,19 @@ export function VideoEffects({ clip }) {
         Samples the border of the source frame at the playhead. Effects run from top to bottom, before color correction
         and the clip effects below. Add the same effect more than once.
       </p>
+      </>}
+      {adjustment && <p class="hint">Effects run from top to bottom on the combined picture below this layer, before its Color settings. Reduce Layer strength in Video to blend the whole look. Add a mask to limit where it applies.</p>}
       {list.map((e, i) => {
         const def = VIDEO_EFFECTS.find((d) => d.type === e.type);
-        if (!def) return <p class="hint">Unavailable effect: {e.type}</p>;
+        if (!def) return <div key={e.id} class="afx-item"><div class="afx-head">
+          <b>Unavailable effect: {e.type}</b>
+          <RemoveEffectButton label={e.type} adjusted={true}
+            onRemove={() => edit((pr) => (pr.vfx = pr.vfx.filter((x) => x.id !== e.id)))} />
+        </div></div>;
         const p = effectParams(e),
           keyer = ['chroma', 'luma', 'difference'].includes(e.type);
         return (
-          <div key={e.id} class={`afx-item${e.on === false ? ' off' : ''}`} data-vfx={e.type}>
+          <div key={e.id} class={`afx-item vfx-item${e.on === false ? ' off' : ''}`} data-vfx={e.type}>
             <div class="afx-head">
               <Toggle
                 checked={e.on !== false}
@@ -164,13 +178,27 @@ export function VideoEffects({ clip }) {
                   })
                 }
               />
-              <IconButton
-                icon={Trash2}
-                size={12}
-                title="Remove effect"
-                onClick={() => edit((pr) => (pr.vfx = pr.vfx.filter((x) => x.id !== e.id)))}
+              <RemoveEffectButton
+                label={def.label}
+                adjusted={Object.entries(e.p || {}).some(([key, value]) => JSON.stringify(value) !== JSON.stringify(def.defaults[key]))}
+                onRemove={() => edit((pr) => (pr.vfx = pr.vfx.filter((x) => x.id !== e.id)))}
               />
             </div>
+            {e.type === 'solid' && <Row label="Color">
+              <input type="color" class="color" value={p.color} aria-label="Solid color"
+                onInput={(ev) => patchLive(e.id, { color: ev.currentTarget.value })}
+                onChangeCapture={() => endTransient(true)} onBlur={() => endTransient(true)}
+                onKeyDown={(ev) => ev.stopPropagation()} />
+              <span class="gradient-hex">{p.color.toUpperCase()}</span>
+            </Row>}
+            {e.type === 'gradient' && <GradientEditor key={`${clip.id}:${e.id}`} params={p}
+              aspect={(() => {
+                const stream = streams[e.target || 'main'];
+                return stream?.width > 0 && stream?.height > 0 ? stream.width / stream.height : project.value.width / project.value.height;
+              })()}
+              onChange={(values) => patch(e.id, values)} onStart={beginTransient}
+              onInput={(values) => patchLive(e.id, values)}
+              onCommit={() => endTransient(true)} onCancel={() => endTransient(false)} />}
             {e.type === 'chroma' && (
               <Row label="Screen color">
                 <input
@@ -179,9 +207,9 @@ export function VideoEffects({ clip }) {
                   value={p.color}
                   onChange={(ev) => patch(e.id, { color: ev.currentTarget.value })}
                 />
-                <Button class="small" disabled={busy} onClick={() => sample(e)}>
+                {!adjustment && <Button class="small" disabled={busy} onClick={() => sample(e)}>
                   Auto sample
-                </Button>
+                </Button>}
               </Row>
             )}
             {e.type === 'difference' && (
@@ -195,15 +223,41 @@ export function VideoEffects({ clip }) {
                 </p>
               </>
             )}
-            {keyer ? (
+            {def.controls ? <>
+              {def.presets && <Row label="Preset"><Select value="" options={[
+                { value: '', label: 'Choose a look…' }, ...def.presets.map((preset) => ({ value: preset.id, label: preset.label })),
+              ]} onChange={(id) => { const preset = def.presets.find((x) => x.id === id); if (preset) patch(e.id, structuredClone(preset.p)); }} /></Row>}
+              {def.controls.map(([key, label, min, max, step]) => typeof p[key] === 'boolean'
+                ? <Row label={label}><Toggle checked={p[key]} onChange={(v) => patch(e.id, { [key]: v })} /></Row>
+                : number(e, key, label, min, max, step))}
+              {def.advancedControls && <details class="vfx-advanced"><summary>Advanced</summary>
+                {def.advancedControls.map(([key, label, min, max, step]) => number(e, key, label, min, max, step))}
+              </details>}
+              {e.type === 'filmGrain' && <p class="hint">Organic grain follows the image’s light and shade. Use Advanced for dust, scratches and gate weave.</p>}
+              {e.type === 'chromatic' && <p class="hint">Lens fringing grows toward the edges and leaves the lens center clear. Use RGB split for a uniform channel offset.</p>}
+              {['noise', 'glitch', 'vhs', 'filmGrain'].includes(e.type) && <p class="hint">Animation follows the timeline. Speed 0 freezes the pattern; Seed changes it.</p>}
+            </> : ['solid', 'gradient'].includes(e.type) ? <>
+              {number(e, 'amount', 'Strength', 0, 1)}
+              <Row label="Preserve source alpha"><Toggle checked={p.preserveAlpha}
+                onChange={(v) => patch(e.id, { preserveAlpha: v })} /></Row>
+            </> : keyer ? (
               <>
                 {number(e, 'similarity', e.type === 'luma' ? 'Black threshold' : 'Tolerance', 0, 1)}
                 {number(e, 'softness', 'Softness', 0.001, 1)}
                 <details class="vfx-advanced">
                   <summary>Advanced</summary>
-                  {e.type === 'chroma' && number(e, 'despill', 'Remove color spill', 0, 1)}
+                  {e.type === 'chroma' && <>
+                    {number(e, 'detail', 'Recover fine detail', 0, 1)}
+                    <p class="hint">Restore translucent hair and fine edges. Raise gradually to avoid restoring dark background patches.</p>
+                    {number(e, 'shadows', 'Preserve source shadows', 0, 1)}
+                    {p.shadows > 0 && number(e, 'shadowRange', 'Shadow color range', 0, 0.8)}
+                    <p class="hint">Retain shadows using an unshadowed Screen color sample. Adjust Shadow color range if needed.</p>
+                    {number(e, 'edgeColor', 'Recover edge color', 0, 1)}
+                    {number(e, 'despill', 'Remove color spill', 0, 1)}
+                  </>}
                   {number(e, 'black', 'Matte black', 0, Math.max(0, p.white - 0.01))}
                   {number(e, 'white', 'Matte white', Math.min(1, p.black + 0.01), 1)}
+                  {number(e, 'gamma', 'Matte gamma', 0.1, 4)}
                   {number(e, 'choke', 'Shrink / expand edge', -8, 8, 1)}
                   {number(e, 'feather', 'Edge feather (px)', 0, 8, 1)}
                   <Row label="Invert matte">
@@ -241,14 +295,14 @@ export function VideoEffects({ clip }) {
         value=""
         options={[
           { value: '', label: 'Add stack effect…' },
-          ...VIDEO_EFFECTS.map((d) => ({ value: d.type, label: d.label })),
+          ...VIDEO_EFFECTS.filter((d) => !adjustment || d.type !== 'difference').map((d) => ({ value: d.type, label: d.label })),
         ]}
         onChange={(v) => v && add(v)}
       />
-      <p class="hint">
+      {!adjustment && <p class="hint">
         For complex moving backgrounds, use an external AI processor below. Reference keying does not identify people or
         reconstruct hidden detail.
-      </p>
+      </p>}
     </Section>
   );
 }

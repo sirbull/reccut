@@ -1,6 +1,7 @@
 // Shared by the hover preview and the drop command so both choose the same target.
 import { CAPTION_LANE, clipHasAudio, hasFreeTransitions, isVisual, primaryAt, round, transitionWindow } from './model.js';
 import { Immer } from 'immer';
+import { BROWSER_VIDEO_EFFECTS } from './videoEffects.js';
 import { addMediaClip, autoFormat, mediaClip, replaceClip } from './ops.js';
 
 const previewProject = new Immer({ autoFreeze: false });
@@ -89,10 +90,16 @@ export function libraryDropTarget(project, item, lane, T, { transitionDur = 1, t
   if (['effect', 'afx', 'apreset'].includes(item.kind)) {
     if (project.lanes?.[lane]?.locked) return null;
     const audio = item.kind !== 'effect';
-    const c = Object.values(project.clips).find((c) => c.lane === lane && T >= c.start && T < c.start + c.dur && (audio ? clipHasAudio(c, project.media[c.mediaId]) : ['video', 'image', 'recording', 'title'].includes(c.type)));
-    return c ? { kind: 'effect', id: c.id, a: c.start, b: c.start + c.dur, lane, label: item.label } : null;
+    const visualTypes = BROWSER_VIDEO_EFFECTS.some((e) => e.type === item.id) ? ['video', 'image', 'recording', 'adjustment'] : ['video', 'image', 'recording', 'title', 'adjustment'];
+    const c = Object.values(project.clips).find((c) => c.lane === lane && T >= c.start && T < c.start + c.dur && (audio ? clipHasAudio(c, project.media[c.mediaId]) : visualTypes.includes(c.type)));
+    if (c) return { kind: 'effect', id: c.id, a: c.start, b: c.start + c.dur, lane, label: item.label };
+    if (item.kind === 'effect' && lane >= 0 && lane !== CAPTION_LANE && BROWSER_VIDEO_EFFECTS.some((e) => e.type === item.id && e.category === 'Stylize')) {
+      const plan = frameEffectPlacement(project, T, lane > 0 ? lane : null);
+      if (!project.lanes?.[plan.lane]?.locked) return { kind: 'layer', a: plan.start, b: plan.start + plan.dur, lane: plan.lane, label: item.label };
+    }
+    return null;
   }
-  if (item.kind === 'frameFx' || item.kind === 'redact') {
+  if (item.kind === 'frameFx' || item.kind === 'redact' || item.kind === 'adjustment') {
     const plan = frameEffectPlacement(project, T, lane > 0 && lane !== CAPTION_LANE ? lane : null);
     if (project.lanes?.[plan.lane]?.locked) return null;
     return { kind: 'layer', a: plan.start, b: plan.start + plan.dur, lane: plan.lane, label: item.label };

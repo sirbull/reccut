@@ -17,6 +17,7 @@
     "dist:win": "node scripts/fetch-ffmpeg.mjs win-x64 && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --win --publish never",
     "test": "node --test test/*.test.mjs",
     "test:render": "electron scripts/verify-effects.cjs",
+    "test:analog": "electron scripts/verify-analog.cjs",
     "test:colors": "electron scripts/verify-colors.cjs",
     "test:scopes": "node scripts/verify-scopes.cjs",
     "test:help": "node scripts/build.mjs && node --test test/help-*.test.mjs && node scripts/verify-help.cjs",
@@ -46,6 +47,7 @@
       "build/**/*",
       "src/main/**/*",
       "src/shared/pluginTerms.json",
+      "src/shared/recordingFormats.cjs",
       "package.json"
     ],
     "directories": {

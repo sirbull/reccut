@@ -46,3 +46,22 @@ test('explicit hide choice after migration is preserved, and visibility changes 
     assert.equal(stored().captureVisibilityVersion, 1);
   }
 ));
+
+test('invalid recording formats default safely and new choices persist', () => withSettings(
+  { videoFormat: 'invalid', audioFormat: 'invalid', captureVisibilityVersion: 1 },
+  ({ settings, saveSettings }, _protection, stored) => {
+    assert.equal(settings.value.videoFormat, 'mp4');
+    assert.equal(settings.value.audioFormat, 'auto');
+    saveSettings({ videoFormat: 'mkv', audioFormat: 'flac' });
+    assert.equal(stored().videoFormat, 'mkv');
+    assert.equal(stored().audioFormat, 'flac');
+  }
+));
+
+test('saved audio-only format survives loading with a video container that cannot embed it', () => withSettings(
+  { videoFormat: 'webm-vp9', audioFormat: 'pcm', captureVisibilityVersion: 1 },
+  ({ settings }) => {
+    assert.equal(settings.value.videoFormat, 'webm-vp9');
+    assert.equal(settings.value.audioFormat, 'pcm');
+  }
+));

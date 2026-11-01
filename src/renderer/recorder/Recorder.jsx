@@ -23,6 +23,7 @@ import { project, projectFolders } from '../editor/store.js';
 import * as editorCommands from '../editor/commands.js';
 import { GainControl, MicrophoneMixer } from './MicrophoneMixer.jsx';
 import { meterDb } from './mixer.js';
+import { RECORDING_VIDEO_FORMATS, recordingAudioChoice, recordingAudioOptions } from '../../shared/recordingFormats.cjs';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -81,6 +82,9 @@ export function Recorder({ active }) {
   const zoomKeys = input?.zoomKeys || [];
   const zoomLabel = zoomKeys.find((k) => k.value === s.zoomKey)?.label || 'tasten';
   const inputReady = input?.started;
+  const hasVideo = Boolean(s.screenId || s.cameraId);
+  const embedsAudio = Boolean((s.screenId && s.systemAudio) || (s.cameraId && s.micId));
+  const formatsDisabled = recording || engine.finishing.value;
 
   return (
     <div class="recorder">
@@ -276,6 +280,13 @@ export function Recorder({ active }) {
         </Section>
 
         <Section title="Recording">
+          <Row label="Video format" stacked>
+            <Select value={s.videoFormat} disabled={formatsDisabled || !hasVideo} options={RECORDING_VIDEO_FORMATS} onChange={(v) => set({ videoFormat: v, audioFormat: recordingAudioChoice(v, s.audioFormat, embedsAudio) })} />
+          </Row>
+          <Row label="Audio format" stacked>
+            <Select value={recordingAudioChoice(s.videoFormat, s.audioFormat, embedsAudio)} disabled={formatsDisabled} options={recordingAudioOptions(s.videoFormat, embedsAudio)} onChange={(v) => set({ audioFormat: v })} />
+          </Row>
+          <p class="hint">{embedsAudio ? 'Audio choices match the video container. Microphone audio without a camera is saved separately.' : 'Microphone audio is saved as a separate file in the selected audio format.'} Files are finalized when you stop; this can take a moment.</p>
           <Row label="Hide Reccut while recording">
             <Toggle checked={s.minimizeOnRecord} onChange={(v) => set({ minimizeOnRecord: v })} />
           </Row>

@@ -1,11 +1,12 @@
 // Tegner ett bilde av prosjektet. Samme kode brukes i forhåndsvisning og eksport,
 // så det du ser i redigeringen er det som havner i filen.
 import { gpuGradeAvailable, gradeImage, gradeParams } from './grade.js';
+import { shadowStyle } from './shadow.js';
 import { applyVideoEffects } from './videoEffectsRender.js';
 import { drawTestCard } from './testcard.js';
 import { drawTemplate, findTemplate } from './titletemplates.js';
 import { stabilizeAt } from './stabilize.js';
-import { maskList, paintMask, shapeAt, shapeCorners, shapePath } from './shapes.js';
+import { clipMatrix, maskList, paintMask, shapeAt, shapeCorners, shapePath } from './shapes.js';
 import {
   DEFAULT_CAPTION_STYLE,
   FONTS,
@@ -26,15 +27,22 @@ import {
 /**
  * getSource(clip, streamKey, sourceTimeInStream) returnerer { img, w, h } eller null.
  */
-export function drawFrame(ctx, project, frame, getSource, { scale = 1, matrix = null } = {}) {
+export function drawFrame(ctx, project, frame, getSource, { scale = 1, matrix = null, transparent = false } = {}) {
   const W = project.width;
   const H = project.height;
   ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.filter = 'none';
+  if (transparent) ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   if (matrix) {
     // Beskjæring og ny størrelse ved eksport: tøm hele lerretet først.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    if (!transparent) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    }
     ctx.setTransform(matrix[0], 0, 0, matrix[1], matrix[2], matrix[3]);
     ctx.beginPath();
     ctx.rect(0, 0, W, H);
@@ -43,17 +51,19 @@ export function drawFrame(ctx, project, frame, getSource, { scale = 1, matrix = 
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
   ctx.filter = 'none';
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, W, H);
+  if (!transparent) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+  }
   for (const layer of frame.layers) {
-    if (layer.transition) drawTransition(ctx, project, layer, getSource);
+    if (layer.transition) drawTransition(ctx, project, layer, getSource, transparent);
     else drawClip(ctx, project, layer.clip, layer.T, getSource, 1);
   }
   for (const c of frame.captions) drawCaption(ctx, project, c);
   ctx.restore();
 }
 
-function drawTransition(ctx, project, layer, getSource) {
+function drawTransition(ctx, project, layer, getSource, transparent = false) {
   const W = project.width;
   const H = project.height;
   const { p } = layer.transition;
@@ -61,7 +71,7 @@ function drawTransition(ctx, project, layer, getSource) {
   const type = layer.overlay && layer.transition.type.startsWith('dip') ? 'dissolve' : layer.transition.type;
   const drawSide = (side, alpha) => {
     if (side) return drawClip(ctx, project, side.clip, side.T, getSource, alpha);
-    if (layer.overlay) return;
+    if (layer.overlay || transparent) return;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#000';
@@ -160,7 +170,7 @@ function zoomAround(ctx, W, H, s) {
 
 // Fargekorrigering på skjermkortet når det finnes. Uten WebGL2 brukes enkle 2D-filtre.
 function graded(clip, T, src, target = 'main', media = null) {
-  src = applyVideoEffects(src, clip, target);
+  src = applyVideoEffects(src, clip, target, sourceTime(clip, T));
   const g = gradeParams(clip, T, target);
   const cam = media?.cameraLut || null;
   if (!g && !cam) return src;
@@ -211,35 +221,56 @@ function colorFilter(clip, T, H = 1080, target = 'main') {
   return parts.length ? parts.join(' ') : 'none';
 }
 
-// Tegner bildet med skygge, avrundede hjørner, vignett og ramme rundt innholdet.
-function drawWithEffects(ctx, clip, T, r, H, draw) {
+// Composite once so shadows follow the final alpha, and opacity applies to the whole result.
+function compositeLayer(ctx, canvas, w, h, shadow, H, style = null) {
+  const m = ctx.getTransform(), scale = Math.hypot(m.a, m.b) || 1;
+  if (shadow > 0) {
+    // Canvas applies globalAlpha separately to the shadow and image. Merge them at full
+    // opacity first, then fade the completed layer to avoid dark halos during fades.
+    const { c, g } = scratchCanvas(6, w, h);
+    g.save();
+    const color = style?.color || '#000000';
+    const rgb = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+    g.shadowColor = `rgba(${rgb.join(',')},${Math.min(1, style?.opacity ?? 0.75 * shadow).toFixed(3)})`;
+    g.shadowBlur = (style?.blur ?? H * 0.045 * shadow) * scale;
+    const x = style?.offsetX ?? 0, y = style?.offsetY ?? style?.offset ?? H * 0.012 * shadow;
+    g.shadowOffsetX = m.a * x + m.c * y;
+    g.shadowOffsetY = m.b * x + m.d * y;
+    g.drawImage(canvas, 0, 0, w, h, 0, 0, w, h);
+    g.restore();
+    canvas = c;
+  }
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.filter = 'none';
+  ctx.drawImage(canvas, 0, 0, w, h, 0, 0, w, h);
+  ctx.restore();
+}
+
+// Source effects and grading have already run. Keep overlays on the visible pixels.
+function drawWithEffects(output, clip, T, r, H, draw) {
   const radiusPct = valueAt(clip, 'radius', T) || 0;
   const shadow = valueAt(clip, 'shadow', T) || 0;
   const vignette = valueAt(clip, 'vignette', T) || 0;
   const border = valueAt(clip, 'border', T) || 0;
+  const temperature = !gpuGradeAvailable() && (valueAt(clip, 'temperature', T) || 0);
   const rad = (Math.min(r.w, r.h) * radiusPct) / 100;
-  if (shadow > 0) {
-    ctx.save();
-    ctx.filter = 'none';
-    ctx.shadowColor = `rgba(0,0,0,${(0.75 * shadow).toFixed(3)})`;
-    ctx.shadowBlur = H * 0.045 * shadow;
-    ctx.shadowOffsetY = H * 0.012 * shadow;
-    ctx.fillStyle = '#000';
-    ctx.beginPath();
-    ctx.roundRect(r.x, r.y, r.w, r.h, rad);
-    ctx.fill();
-    ctx.restore();
-  }
+  const isolated = shadow > 0 || vignette > 0 || temperature;
+  const w = output.canvas.width, h = output.canvas.height;
+  const layer = isolated ? scratchCanvas(4, w, h) : null;
+  const ctx = layer ? layer.g : output;
+  if (layer) ctx.setTransform(output.getTransform());
   ctx.save();
   if (rad > 0) {
     ctx.beginPath();
     ctx.roundRect(r.x, r.y, r.w, r.h, rad);
     ctx.clip();
   }
-  draw();
+  draw(ctx);
   ctx.filter = 'none';
-  if (!gpuGradeAvailable()) applyTemperature(ctx, clip, T, r);
+  if (temperature) applyTemperature(ctx, clip, T, r);
   if (vignette > 0) {
+    ctx.globalCompositeOperation = 'source-atop';
     const g = ctx.createRadialGradient(r.x + r.w / 2, r.y + r.h / 2, Math.min(r.w, r.h) * 0.3, r.x + r.w / 2, r.y + r.h / 2, Math.hypot(r.w, r.h) * 0.55);
     g.addColorStop(0, 'rgba(0,0,0,0)');
     g.addColorStop(1, `rgba(0,0,0,${Math.min(1, vignette).toFixed(3)})`);
@@ -258,6 +289,7 @@ function drawWithEffects(ctx, clip, T, r, H, draw) {
     ctx.stroke();
     ctx.restore();
   }
+  if (layer) compositeLayer(output, layer.c, w, h, shadow, H, shadowStyle(clip, T, H));
 }
 
 function applyTemperature(ctx, clip, T, rect) {
@@ -265,7 +297,7 @@ function applyTemperature(ctx, clip, T, rect) {
   if (!t) return;
   ctx.save();
   ctx.filter = 'none';
-  ctx.globalCompositeOperation = 'soft-light';
+  ctx.globalCompositeOperation = 'source-atop';
   ctx.globalAlpha = Math.min(1, Math.abs(t)) * 0.65;
   ctx.fillStyle = t > 0 ? '#ff9a2e' : '#2e8bff';
   ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
@@ -284,6 +316,7 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmaske
   const H = project.height;
   const alpha = visualOpacity(clip, T) * alphaMul;
   if (alpha <= 0.001) return;
+  if (clip.type === 'adjustment') return drawAdjustment(ctx, project, clip, T, alpha);
   if (clip.type === 'redact') return drawRedact(ctx, clip, T, W, H, alpha);
   if (!unmasked && clip.type !== 'caption' && maskList(clip).length) return drawMasked(ctx, project, clip, T, getSource, alphaMul);
   const media = project.media[clip.mediaId];
@@ -324,7 +357,7 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmaske
       const nh = img.videoHeight || img.displayHeight || img.naturalHeight || img.height || src.h;
       // Stabilisering: bildet flyttes, roteres og zoomes innenfor sin egen ramme.
       const stab = clip.type === 'video' ? stabilizeAt(clip, media?.streams?.main?.motion, s) : null;
-      drawWithEffects(ctx, clip, T, r, H, () => {
+      drawWithEffects(ctx, clip, T, r, H, (ctx) => {
         ctx.filter = colorFilter(clip, T, H);
         if (stab) {
           ctx.save();
@@ -380,9 +413,9 @@ function scratchCanvas(i, w, h) {
   if (!c) {
     c = scratch[i] = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
   }
-  if (c.width < w || c.height < h) {
-    c.width = Math.max(c.width, w);
-    c.height = Math.max(c.height, h);
+  if (i >= 4 ? c.width !== w || c.height !== h : c.width < w || c.height < h) {
+    c.width = i >= 4 ? w : Math.max(c.width, w);
+    c.height = i >= 4 ? h : Math.max(c.height, h);
   }
   const g = c.getContext('2d');
   g.setTransform(1, 0, 0, 1, 0, 0);
@@ -392,6 +425,51 @@ function scratchCanvas(i, w, h) {
   g.imageSmoothingEnabled = true;
   g.clearRect(0, 0, w, h);
   return { c, g };
+}
+
+// An adjustment processes a snapshot of the composite below its lane. Work in
+// project coordinates so cropped/scaled exports keep the same effect geometry.
+function drawAdjustment(ctx, project, clip, T, alpha) {
+  if (!(clip.props.vfx || []).some((e) => e.on !== false) && !gradeParams(clip, T) &&
+    !['blur', 'sepia', 'grayscale', 'invert', 'hue', 'radius', 'shadow', 'vignette', 'border'].some((key) => valueAt(clip, key, T))) return;
+  const W = project.width, H = project.height, m = ctx.getTransform();
+  const k = Math.max(Math.hypot(m.a, m.b), Math.hypot(m.c, m.d));
+  if (!(k > 0) || !Number.isFinite(k)) return;
+  const w = Math.max(1, Math.round(W * k)), h = Math.max(1, Math.round(H * k));
+  const sx = w / W, sy = h / H;
+  const { c: original, g: og } = scratchCanvas(4, w, h);
+  const inverse = m.inverse();
+  og.setTransform(sx * inverse.a, sy * inverse.b, sx * inverse.c, sy * inverse.d, sx * inverse.e, sy * inverse.f);
+  og.drawImage(ctx.canvas, 0, 0);
+  const src = graded(clip, T, { img: original, w, h, pixelScale: k });
+  const { c: processed, g: pg } = scratchCanvas(5, w, h);
+  pg.setTransform(sx, 0, 0, sy, 0, 0);
+  drawWithEffects(pg, clip, T, { x: 0, y: 0, w: W, h: H }, H, () => {
+    pg.filter = colorFilter(clip, T, H * k);
+    pg.drawImage(src.img, 0, 0, src.w, src.h, 0, 0, W, H);
+  });
+  const { c: mask, g: mg } = scratchCanvas(6, w, h);
+  if (maskList(clip).length) paintMask(mg, clip, T, W, H, new DOMMatrix([sx, 0, 0, sy, 0, 0]), w, h);
+  else { mg.fillStyle = '#fff'; mg.fillRect(0, 0, w, h); }
+  pg.setTransform(1, 0, 0, 1, 0, 0);
+  pg.globalCompositeOperation = 'destination-in';
+  pg.drawImage(mask, 0, 0, w, h, 0, 0, w, h);
+  // Interpolate premultiplied RGBA, including keyed/transparent output. Simply
+  // drawing over the original would retain the original pixels under holes.
+  const { c: mixed, g: bg } = scratchCanvas(7, w, h);
+  bg.drawImage(original, 0, 0, w, h, 0, 0, w, h);
+  bg.globalAlpha = Math.max(0, Math.min(1, alpha));
+  bg.globalCompositeOperation = 'destination-out';
+  bg.drawImage(mask, 0, 0, w, h, 0, 0, w, h);
+  bg.globalCompositeOperation = 'lighter';
+  bg.drawImage(processed, 0, 0, w, h, 0, 0, w, h);
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.filter = 'none';
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(mixed, 0, 0, w, h, 0, 0, W, H);
+  ctx.restore();
 }
 
 function drawRedact(ctx, clip, T, W, H, alpha) {
@@ -488,7 +566,10 @@ function drawMasked(ctx, project, clip, T, getSource, alphaMul) {
   const base = ctx.getTransform();
   const { c: L, g: lg } = scratchCanvas(2, cw, ch);
   lg.setTransform(base);
-  drawClip(lg, project, clip, T, getSource, alphaMul, true);
+  // Apply the shadow after the user mask, including its soft edges.
+  const shadow = valueAt(clip, 'shadow', T) || 0;
+  const content = shadow > 0 ? { ...clip, props: { ...clip.props, shadow: 0 }, kf: { ...clip.kf, shadow: [] } } : clip;
+  drawClip(lg, project, content, T, getSource, 1 / visualOpacity(clip, T), true);
   const { c: M, g: mg } = scratchCanvas(3, cw, ch);
   paintMask(mg, clip, T, project.width, project.height, base, cw, ch);
   lg.setTransform(1, 0, 0, 1, 0, 0);
@@ -497,9 +578,11 @@ function drawMasked(ctx, project, clip, T, getSource, alphaMul) {
   lg.globalCompositeOperation = 'source-over';
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = visualOpacity(clip, T) * alphaMul;
   ctx.filter = 'none';
-  ctx.drawImage(L, 0, 0, cw, ch, 0, 0, cw, ch);
+  // Restore the project transform for consistent shadow size in preview and export.
+  ctx.setTransform(base.multiply(clipMatrix(clip, T, project.width, project.height)));
+  compositeLayer(ctx, L, cw, ch, shadow, project.height, shadowStyle(clip, T, project.height));
   ctx.restore();
 }
 
@@ -509,12 +592,12 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
   const filter = colorFilter(clip, T, H);
   let screenRect = { x: 0, y: 0, w: W, h: H };
   const screen = media.streams.screen;
-  if (screen) {
+  if (screen && clip.recordingPart !== 'camera') {
     let src = getSource(clip, 'screen', s - (screen.offset || 0));
     if (src) src = graded(clip, T, src, 'screen', media);
     if (src) {
       const r = (screenRect = containRect(src.w, src.h, W, H));
-      drawWithEffects(ctx, clip, T, r, H, () => {
+      drawWithEffects(ctx, clip, T, r, H, (ctx) => {
         ctx.filter = filter;
         ctx.drawImage(src.img, r.x, r.y, r.w, r.h);
       });
@@ -532,34 +615,32 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
 
   const camera = media.streams.camera;
   const showCamera = valueAt(clip, 'showCamera', T) !== false;
-  if (camera?.hasVideo && showCamera) {
+  if (camera?.hasVideo && showCamera && clip.recordingPart !== 'screen') {
     const rect = screen ? cameraRectAt(clip, s, W, H) : { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
     let src = rect.a > 0.01 ? getSource(clip, 'camera', s - (camera.offset || 0)) : null;
     if (src) src = graded(clip, T, src, 'camera', media);
     if (src) {
       ctx.save();
       ctx.globalAlpha *= rect.a;
-      ctx.filter = colorFilter(clip, T, H, 'camera');
-      drawCamera(ctx, src.img, src.w, src.h, rect, clip.props.mirror, rect.w < W * 0.9);
+      drawWithEffects(ctx, clip, T, rect, H, (ctx) => {
+        ctx.filter = colorFilter(clip, T, H, 'camera');
+        drawCamera(ctx, src.img, src.w, src.h, rect, clip.props.mirror, rect.w < W * 0.9 && !(valueAt(clip, 'shadow', T) > 0));
+      });
       ctx.restore();
     }
   }
-  if (clip.props.showKeys) drawKeys(ctx, keysAt(media.rec?.keys, s), W, H);
+  if (clip.recordingPart !== 'camera' && clip.props.showKeys) drawKeys(ctx, keysAt(media.rec?.keys, s), W, H);
 }
 
 // Kamerabildet beskjæres slik at det fyller rammen, med skygge når det er bilde i bilde.
 export function drawCamera(ctx, img, vw, vh, cam, mirror, shadow) {
-  if (shadow) {
-    ctx.save();
-    ctx.filter = 'none';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-    ctx.shadowBlur = cam.w * 0.05;
-    ctx.shadowOffsetY = cam.w * 0.012;
-    ctx.fillStyle = '#000';
-    ctx.beginPath();
-    ctx.roundRect(cam.x, cam.y, cam.w, cam.h, cam.r);
-    ctx.fill();
-    ctx.restore();
+  const output = ctx;
+  const w = ctx.canvas.width, h = ctx.canvas.height;
+  const layer = shadow ? scratchCanvas(5, w, h) : null;
+  if (layer) {
+    ctx = layer.g;
+    ctx.setTransform(output.getTransform());
+    ctx.filter = output.filter;
   }
   ctx.save();
   ctx.beginPath();
@@ -578,6 +659,7 @@ export function drawCamera(ctx, img, vw, vh, cam, mirror, shadow) {
     ctx.drawImage(img, sx, sy, sw, sh, cam.x, cam.y, cam.w, cam.h);
   }
   ctx.restore();
+  if (layer) compositeLayer(output, layer.c, w, h, 1, cam.h, { opacity: 0.4, blur: cam.w * 0.05, offset: cam.w * 0.012 });
 }
 
 // Stor pil som vokser frem over den vanlige musepekeren.

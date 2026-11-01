@@ -3,6 +3,7 @@ import { signal } from '@preact/signals';
 import { drawCamera, drawClicks, drawCursor, drawKeys } from '../../shared/render.js';
 import { KEY_LIFE, LAYOUT_ANIM, easeOutCubic, lerpRect, pipRect, ZOOM_RAMP, clamp } from '../../shared/model.js';
 import { settings, saveSettings } from './settings.js';
+import { recordingAudioChoice, recordingPlan, recordingVideoFormat } from '../../shared/recordingFormats.cjs';
 import { projectFolders } from '../editor/store.js';
 import { createMicMixer, EMPTY_LEVELS, normalizeMix } from './mixer.js';
 
@@ -25,11 +26,13 @@ export const paused = signal(false);
 // Mikrofonen: 'none', 'silent', 'quiet', 'good' eller 'loud' (overstyrt), ut fra de siste sekundene.
 export const micStatus = signal('none');
 let roomActive = false;
+let sourcesReady = false;
 
 let screenStream = null;
 let cameraStream = null;
 let micStream = null;
 let micMixer = null;
+let cameraRequest = 0;
 let micRequest = 0;
 const screenVideo = makeVideo();
 const cameraVideo = makeVideo();
@@ -196,19 +199,23 @@ export async function useScreen() {
 }
 
 export async function useCamera() {
+  const request = ++cameraRequest;
   const id = settings.value.cameraId;
   stop(cameraStream);
   cameraStream = null;
   cameraVideo.srcObject = null;
-  if (!id) return updateSize();
+  if (!id || (!roomActive && !recording.value)) return updateSize();
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: { deviceId: { exact: id }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
     });
+    if (request !== cameraRequest) { stop(stream); return; }
+    cameraStream = stream;
     cameraVideo.srcObject = cameraStream;
     await cameraVideo.play().catch(() => {});
   } catch (err) {
+    if (request !== cameraRequest) return;
     console.error(err);
     notice.value = { text: 'Could not start the camera. Check that no other app is using it.' };
   }
@@ -217,17 +224,10 @@ export async function useCamera() {
 
 export async function useMic() {
   if (recording.value || countdown.value || finishing.value || micTest.value) return;
-  const request = ++micRequest;
+  releaseMic();
+  const request = micRequest;
   const id = settings.value.micId;
-  micMixer?.dispose();
-  micMixer = null;
-  stop(micStream);
-  micStream = null;
-  peaks.length = 0;
-  micLevels.value = EMPTY_LEVELS;
-  level.value = 0;
-  micStatus.value = 'none';
-  if (!id) return;
+  if (!id || !roomActive) return;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: false,
@@ -239,13 +239,31 @@ export async function useMic() {
     await audioCtx.resume();
   } catch (err) {
     if (request !== micRequest) return;
-    micMixer?.dispose();
-    micMixer = null;
-    stop(micStream);
-    micStream = null;
+    releaseMic();
     console.error(err);
     notice.value = { text: 'Could not start the microphone.' };
   }
+}
+
+function releaseMic() {
+  ++micRequest;
+  micMixer?.dispose();
+  micMixer = null;
+  stop(micStream);
+  micStream = null;
+  peaks.length = 0;
+  micLevels.value = EMPTY_LEVELS;
+  level.value = 0;
+  micStatus.value = 'none';
+}
+
+function releaseDevices() {
+  cancelMicTest?.();
+  ++cameraRequest;
+  stop(cameraStream);
+  cameraStream = null;
+  cameraVideo.srcObject = null;
+  releaseMic();
 }
 
 function updateSize() {
@@ -426,6 +444,8 @@ function currentMeta() {
     meta[r.name] = {
       raw: r.raw,
       file: r.file,
+      videoFormat: r.plan.videoFormat,
+      audioFormat: r.plan.audioFormat,
       offset: round(Math.max(0, (r.startedAt || t0) - t0) / 1000),
       hasVideo: isCam ? Boolean(cameraStream) : true,
       hasAudio: r.rec.stream.getAudioTracks().length > 0,
@@ -557,7 +577,15 @@ function sendState() {
   api.recState({ state: recording.value ? (paused.value ? 'paused' : 'recording') : countdown.value ? 'countdown' : 'idle', elapsed: elapsed.value, level: level.value, countdown: countdown.value });
 }
 export function setActive(active) {
+  const wasActive = roomActive;
   roomActive = active;
+  if (!active && !recording.value && (!finishing.value || recorders.every((r) => r.rec.state === 'inactive'))) {
+    if (countdown.value) abortCountdown();
+    releaseDevices();
+  } else if (active && !wasActive && sourcesReady && !recording.value && !finishing.value) {
+    useCamera();
+    useMic();
+  }
   if (active || recording.value) scheduleInputDraw();
   else if (inputFrame !== null) {
     cancelAnimationFrame(inputFrame);
@@ -589,21 +617,12 @@ let t0 = 0;
 let layouts = [];
 let recorders = [];
 
-// Opptaket skrives som WebM, som lagres fortløpende til disk (MP4 fra nettleseren skrives først
-// helt når opptaket stoppes, og ville gått tapt ved et krasj). H.264 i WebM pakkes om til MP4
-// uten ny koding når opptaket er ferdig. Gir [mimeType, endelse under opptak, endelig endelse].
-function pickMime(kind) {
-  const list =
-    kind === 'audio'
-      ? [['audio/webm;codecs=opus', 'webm', 'webm'], ['audio/mp4;codecs=opus', 'mp4', 'mp4']]
-      : [
-          ['video/webm;codecs=h264,opus', 'webm', 'mp4'],
-          ['video/webm;codecs=avc1,opus', 'webm', 'mp4'],
-          ['video/webm;codecs=vp9,opus', 'webm', 'webm'],
-          ['video/mp4;codecs=avc1,mp4a.40.2', 'mp4', 'mp4'],
-          ['video/webm', 'webm', 'webm'],
-        ];
-  return list.find(([m]) => MediaRecorder.isTypeSupported(m)) || list[list.length - 1];
+function planForTracks(tracks) {
+  const s = settings.value;
+  const embedsAudio = Boolean(screenStream?.getAudioTracks().length || (cameraStream && micStream));
+  const choice = recordingAudioChoice(s.videoFormat, s.audioFormat, embedsAudio);
+  const audioFormat = choice === 'auto' ? (embedsAudio ? recordingVideoFormat(s.videoFormat).audio[0] : 'aac') : choice;
+  return recordingPlan({ ...s, audioFormat, hasVideo: tracks.some((t) => t.kind === 'video'), hasAudio: tracks.some((t) => t.kind === 'audio') }, (mime) => MediaRecorder.isTypeSupported(mime));
 }
 
 // Skjermbildet beskjæres til området før det tas opp, så resten av skjermen aldri lagres.
@@ -656,12 +675,12 @@ function croppedTrack(track, area, fps) {
   return out;
 }
 
-async function startRecorder(name, tracks, kind, bitrate) {
-  const [mime, ext, finalExt] = pickMime(kind);
-  const raw = `${name}.raw.${ext}`;
+async function startRecorder(name, tracks, bitrate) {
+  const plan = planForTracks(tracks);
+  const raw = `${name}.raw.${plan.rawExt}`;
+  const rec = new MediaRecorder(new MediaStream(tracks), { mimeType: plan.mimeType, videoBitsPerSecond: bitrate, audioBitsPerSecond: 192000 });
   const fileId = await api.recOpen(raw);
-  const rec = new MediaRecorder(new MediaStream(tracks), { mimeType: mime, videoBitsPerSecond: bitrate, audioBitsPerSecond: 192000 });
-  const entry = { name, raw, file: `${name}.${finalExt}`, rec, fileId, chain: Promise.resolve(), startedAt: 0 };
+  const entry = { name, raw, file: `${name}.${plan.ext}`, plan, rec, fileId, chain: Promise.resolve(), startedAt: 0 };
   rec.ondataavailable = (e) => {
     if (!e.data.size) return;
     entry.chain = entry.chain.then(async () => api.recWrite(fileId, new Uint8Array(await e.data.arrayBuffer())));
@@ -690,17 +709,22 @@ export function cancelCountdown() {
 let minimized = false;
 
 export async function startRecording() {
-  if (recording.value || finishing.value || countdown.value) return;
+  if (!roomActive || recording.value || finishing.value || countdown.value) return;
   if (micTest.value) {
     notice.value = { text: 'Wait for the microphone test to finish before recording.' };
     return;
   }
   await audioCtx.resume();
+  if (!roomActive) return;
   const s = settings.value;
   if (!screenStream && !cameraStream && !micStream) {
     notice.value = { text: 'Choose at least one source before you start recording.' };
     return;
   }
+  // Validate codec support before countdown, hiding the app or opening files.
+  if (screenStream) planForTracks(screenStream.getTracks());
+  const camTracks = [...(cameraStream?.getVideoTracks() || []), ...micTracks()];
+  if (camTracks.length) planForTracks(camTracks);
   editingArea.value = false;
   updateSize();
   // Mikrofonen er helt stille: si fra, men ta opp likevel.
@@ -753,11 +777,11 @@ async function beginRecording() {
     const video = area ? [croppedTrack(screenStream.getVideoTracks()[0], area, s.fps)] : screenStream.getVideoTracks();
     const tracks = [...video, ...screenStream.getAudioTracks()];
     const bitrate = Math.round(clamp(w * h * s.fps * 0.1, 4e6, 60e6));
-    recorders.push(await startRecorder('screen', tracks, 'video', bitrate));
+    recorders.push(await startRecorder('screen', tracks, bitrate));
   }
   const camTracks = [...(cameraStream?.getVideoTracks() || []), ...micTracks()];
   if (camTracks.length) {
-    recorders.push(await startRecorder('camera', camTracks, cameraStream ? 'video' : 'audio', 8e6));
+    recorders.push(await startRecorder('camera', camTracks, 8e6));
   }
   recording.value = true;
   elapsed.value = 0;
@@ -783,6 +807,7 @@ export async function stopRecording() {
   try {
     for (const r of recorders) if (r.rec.state !== 'inactive') r.rec.stop();
     await Promise.all(recorders.map((r) => r.stopped));
+    if (!roomActive) releaseDevices();
     cropStop?.();
     cropStop = null;
     syncFrame();
@@ -791,12 +816,17 @@ export async function stopRecording() {
       await api.recClose(r.fileId);
     }
     delete meta.t0;
-    const dir = await api.recFinish(meta);
-    return dir;
+    const result = await api.recFinish(meta);
+    if (result.warnings?.length) notice.value = { text: result.warnings.join('\n') };
+    return result.dir;
   } finally {
     finishing.value = false;
     recorders = [];
     setActive(roomActive);
+    if (roomActive && !cameraStream && !micStream) {
+      useCamera();
+      useMic();
+    }
     if (minimized) {
       minimized = false;
       api.restoreWindow();
@@ -806,15 +836,25 @@ export async function stopRecording() {
 
 /* Test av mikrofonen: fire sekunder opptak som spilles av med en gang. */
 export const micTest = signal(null); // 'recording' | 'playing' | null
+let cancelMicTest = null;
 export async function testMic() {
   if (!micMixer || micTest.value || recording.value || countdown.value || finishing.value) return;
   micTest.value = 'recording';
   let url;
   let rec;
   let playback;
+  let cancelled = false;
+  let finishPlayback;
+  cancelMicTest = () => {
+    cancelled = true;
+    if (rec && rec.state !== 'inactive') rec.stop();
+    playback?.pause();
+    finishPlayback?.();
+  };
   try {
     await audioCtx.resume();
-    const [mime] = pickMime('audio');
+    if (cancelled) return;
+    const { mimeType: mime } = recordingPlan({ hasVideo: false, hasAudio: true, audioFormat: 'opus' }, (m) => MediaRecorder.isTypeSupported(m));
     rec = new MediaRecorder(new MediaStream(micTracks()), { mimeType: mime });
     const chunks = [];
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
@@ -827,23 +867,27 @@ export async function testMic() {
       rec.start();
       await stopped;
     } finally { clearTimeout(timer); }
+    if (cancelled) return;
     micTest.value = 'playing';
     url = URL.createObjectURL(new Blob(chunks, { type: mime }));
     playback = new Audio(url);
     await new Promise((resolve) => {
       const timeout = setTimeout(resolve, 6000);
       const done = () => { clearTimeout(timeout); resolve(); };
+      finishPlayback = done;
       playback.onended = done;
       playback.onerror = done;
       playback.play().catch(done);
     });
   } catch (err) {
-    notice.value = { text: `Could not test the microphone: ${err.message}` };
+    if (!cancelled) notice.value = { text: `Could not test the microphone: ${err.message}` };
   } finally {
     if (rec && rec.state !== 'inactive') rec.stop();
     playback?.pause();
     if (url) URL.revokeObjectURL(url);
+    cancelMicTest = null;
     micTest.value = null;
+    if (roomActive && !micMixer) useMic();
   }
 }
 
@@ -853,14 +897,19 @@ function round(v) {
 
 export async function initSources() {
   await api.requestPermissions();
-  try {
-    stop(await navigator.mediaDevices.getUserMedia({ audio: true, video: true }));
-  } catch {
+  if (roomActive) {
     try {
-      stop(await navigator.mediaDevices.getUserMedia({ audio: true }));
-    } catch {}
+      stop(await navigator.mediaDevices.getUserMedia({ audio: true, video: true }));
+    } catch {
+      if (roomActive) {
+        try {
+          stop(await navigator.mediaDevices.getUserMedia({ audio: true }));
+        } catch {}
+      }
+    }
   }
   await Promise.all([refreshScreens(), refreshDevices()]);
+  sourcesReady = true;
   navigator.mediaDevices.addEventListener('devicechange', async () => {
     const patch = await refreshDevices();
     if ('cameraId' in patch) useCamera();

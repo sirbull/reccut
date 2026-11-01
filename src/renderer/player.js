@@ -1,7 +1,7 @@
 // Avspillingsmotor. Hvert aktivt klipp får sitt eget video- eller lydelement,
 // som holdes i takt med spillhodet. Bildet tegnes med samme kode som eksporten.
 // Redigeringen og eksportfanen har hver sin spiller.
-import { audioWindow, computeAudio, computeFrame, instSpeed, sourceTime, transitionWindow, workPath } from '../shared/model.js';
+import { audioWindow, computeAudio, computeFrame, instSpeed, sourceTime, transitionWindow, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 import { activeEffects } from '../shared/audiofx.js';
 import { prefs, previewResolutionScale } from './prefs.js';
@@ -254,7 +254,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       if (!m || m.kind === 'image' || m.offline) return;
       const s = sourceTime(clip, t);
       const sp = instSpeed(clip, t - clip.start) * (clip.reverse ? -1 : 1);
-      for (const [key, st] of Object.entries(m.streams)) {
+      for (const [key, st] of visualStreams(clip, m)) {
         if (st.hasVideo) out.set(`${clip.id}:${key}`, { clip, key, src: s - (st.offset || 0), gain: 0, speed: clip.speed === 0 && !clip.ramp ? 0 : sp });
       }
     };

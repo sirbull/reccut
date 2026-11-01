@@ -23,7 +23,7 @@ export const maskKey = (id, prop) => `mask.${id}.${prop}`;
 // Matrisen fra klippets rom til bildet, samme som drawClip bruker.
 export function clipMatrix(clip, T, W, H) {
   const m = new DOMMatrix();
-  if (clip.type === 'redact') return m;
+  if (clip.type === 'redact' || clip.type === 'adjustment') return m;
   const x = valueAt(clip, 'x', T) || 0;
   const y = valueAt(clip, 'y', T) || 0;
   const sc = valueAt(clip, 'scale', T) ?? 1;
@@ -115,7 +115,7 @@ export function maskList(clip) {
 
 // Klipp som kan ha masker: alt som tegnes, også sladde- og effektklipp, men ikke mellomrom.
 export function canMask(clip) {
-  return ['video', 'image', 'recording', 'title', 'redact'].includes(clip?.type);
+  return ['video', 'image', 'recording', 'title', 'redact', 'adjustment'].includes(clip?.type);
 }
 
 // Ny maske midt i bildet. Gir id-en.

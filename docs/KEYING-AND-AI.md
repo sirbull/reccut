@@ -10,9 +10,15 @@ I Effects-fanen på et video-, bilde- eller opptaksklipp finnes **Keying & effec
 - **Background reference key** lar deg fange et rent bakgrunnsbilde ved spillhodet. Motivet må være ute av bildet når referansen tas.
 - **Luma key** fjerner mørke områder, eller lyse områder med Invert matte.
 
-**Advanced** åpner spillfjerning for fargekeyeren, matte black/white, krymping eller utvidelse av kanten, feather, invertering og mattevisning. Positiv kantverdi krymper forgrunnen; negativ utvider. Husk å bytte fra mattevisning til Composite før eksport: visningen er del av effekten.
+**Advanced** har nå også **Recover fine detail** for delvis gjennomsiktige hårstrå og fine kanter, **Preserve source shadows** for skygger i opptaket, **Shadow color range** for skyggens fargetoleranse, **Recover edge color** for bakgrunnsfarge i kantpiksler og **Matte gamma** for mellomtonene i alfamasken. De nye recovery-kontrollene starter på 0, slik at eksisterende prosjekter beholder resultatet. Gamma starter på 1. Skyggebevaring trenger en lys, uskygget Screen color-prøve. Motiver med samme farge som bakgrunnen kan kreve en maske.
+
+**Advanced** åpner ellers spillfjerning for fargekeyeren, matte black/white, krymping eller utvidelse av kanten, feather, invertering og mattevisning. Positiv kantverdi krymper forgrunnen; negativ utvider. Husk å bytte fra mattevisning til Composite før eksport: visningen er del av effekten.
 
 Effektene kjøres ovenfra og ned. Du kan legge til samme effekt flere ganger, slå av, duplisere, fjerne og flytte hver instans. Blur, Saturation, Contrast og Opacity kan også legges i denne stakken. Stakken kjøres før klippets eksisterende fargekorrigering og øvrige klippeffekter. Masker kan brukes etterpå. Stack-parametrene er foreløpig statiske; de eksisterende klippeffektene beholder nøkkelbildestøtten sin.
+
+**Drop Shadow** bruker den synlige formen etter keying, beskjæring og masker. Vignett og fargejusteringer bevarer gjennomsiktigheten, og lagene under vises gjennom de fjernede områdene.
+
+Bruk **×** ved effektnavnet for å slette en video- eller lydeffekt. Justerte effekter viser en advarsel med **Don’t show this again**. Valget lagres i appinnstillingene og kan tilbakestilles under **Settings → General → Projects → Warn before removing adjusted effects**. Sletting med alle innstillinger og nøkkelbilder kan angres i ett steg.
 
 Forhåndsvisning og eksport bruker samme effektkode. WebGL2 brukes når det er tilgjengelig; CPU-reserven gir samme matteberegning, men er tregere på store bilder. Keyeren bruker ingen tidsbasert utjevning som kan etterlate spor fra forrige bilde. Det er ikke en garanti for perfekte kanter, hår eller bevegelsesuskarphet.
 

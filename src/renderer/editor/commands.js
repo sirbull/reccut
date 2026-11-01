@@ -5,10 +5,15 @@ import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
 import { addMask, canMask, removeMask } from '../../shared/shapes.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, makeEffect, presetEffects } from '../../shared/audiofx.js';
+import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../../shared/videoEffects.js';
 import { ALL_GROUPS, groupsWithContent, pasteAttributes, removeAttributes } from '../../shared/attributes.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
 import {
   adjacentAudioPairs,
+  attachRecordingCamera,
+  detachRecordingCamera,
+  recordingChildren,
+  separateRecordingCamera,
   groupClips,
   groupMembers,
   ungroupClips,
@@ -55,10 +60,11 @@ import {
   selection,
   sourceMediaId,
 } from './store.js';
-import { getViewerTime, openSource, seek, seekViewer, sourceProject } from './playback.js';
+import { getViewerTime, openSource, pause, seek, seekViewer, sourceProject } from './playback.js';
 import { applyMediaDrop, frameEffectPlacement, libraryDropTarget } from '../../shared/libraryDrop.js';
 import { toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
+import { droppedPaths } from '../fileDrop.js';
 import { setKeyframe } from './keyframes.js';
 
 const api = window.api;
@@ -70,6 +76,15 @@ export const browserSelection = signal(null);
 export const browserPicked = signal([]);
 export const browserFocus = signal(false);
 export const exportOpen = signal(false);
+export const frameExportOpen = signal(null);
+
+export function openFrameExport() {
+  pause();
+  const p = project.value;
+  if (!(p.duration > 0)) return toast('The timeline is empty. Add some clips first.');
+  // Freeze the sequence and playhead so edits while choosing a destination cannot change the image.
+  frameExportOpen.value = { project: structuredClone(p), time: getTime() };
+}
 export const projectsOpen = signal(false);
 export const inspectorTab = signal(null);
 export const captionEditRequest = signal(null);
@@ -166,6 +181,16 @@ export function addFrameEffect(mode = 'blur', T = getTime(), laneHint = null) {
   return id;
 }
 
+export function addAdjustmentLayer(effectType = null, T = getTime(), laneHint = null) {
+  const { start, dur, lane } = frameEffectPlacement(project.value, T, laneHint);
+  const clip = makeClip('adjustment', { start, dur, lane, name: 'Adjustment layer',
+    props: { vfx: effectType ? [makeVideoEffect(effectType)] : [] } });
+  commit((q) => placeFree(q, clip, start, lane));
+  selection.value = [clip.id];
+  inspectorTab.value = 'effects';
+  return clip.id;
+}
+
 /* Pennen: tegn en fri maske punkt for punkt i visningen, som i Premiere Pro. */
 export const penMode = signal(null); // { clipId }
 
@@ -202,18 +227,29 @@ export function finishPen(points, smooth) {
 
 // Effekt fra effektbiblioteket: legges på valgte klipp, eller klippet den slippes på.
 const selectedOf = (types) => selection.value.filter((cid) => types.includes(project.value.clips[cid]?.type));
+const stackEffect = (id) => BROWSER_VIDEO_EFFECTS.some((e) => e.type === id);
 const effectEdit = (id, ids) => (q) => {
   const fx = EFFECTS.find((x) => x.id === id);
+  if (!fx && !stackEffect(id)) return;
   for (const cid of ids) {
     const c = q.clips[cid];
+    if (!c) continue;
+    if (stackEffect(id)) {
+      if (!['video', 'image', 'recording', 'adjustment'].includes(c.type)) continue;
+      const effect = makeVideoEffect(id);
+      effect.target = c.type === 'recording' ? (c.recordingPart || (q.media[c.mediaId]?.streams?.camera?.hasVideo ? 'camera' : 'screen')) : 'main';
+      c.props.vfx = [...(c.props.vfx || []), effect];
+      continue;
+    }
     c.props.fx = [...new Set([...(c.props.fx || []), id])];
     if (!c.props[fx.prop]) c.props[fx.prop] = fx.def;
   }
 };
 export function addEffect(id, clipId = null) {
-  const ids = clipId ? [clipId] : selectedOf(['video', 'image', 'recording', 'title']);
+  const types = stackEffect(id) ? ['video', 'image', 'recording', 'adjustment'] : ['video', 'image', 'recording', 'title', 'adjustment'];
+  const ids = clipId ? [clipId].filter((cid) => types.includes(project.value.clips[cid]?.type)) : selectedOf(types);
   if (!ids.length) {
-    toast('Select a video, image or title clip first, or drag the effect onto a clip.');
+    toast(stackEffect(id) ? 'Select a video, image, recording or adjustment layer first, or drag the effect onto a clip.' : 'Select a video, image, title or adjustment layer first, or drag the effect onto a clip.');
     return;
   }
   commit(effectEdit(id, ids));
@@ -222,7 +258,7 @@ export function addEffect(id, clipId = null) {
 }
 // Viser effekten på de valgte klippene i seeren mens musa er over den (se previewEdit).
 export const previewEffect = (id) => {
-  const ids = selectedOf(['video', 'image', 'recording', 'title']);
+  const ids = selectedOf(stackEffect(id) ? ['video', 'image', 'recording', 'adjustment'] : ['video', 'image', 'recording', 'title', 'adjustment']);
   if (ids.length) previewEdit(effectEdit(id, ids));
 };
 
@@ -238,11 +274,11 @@ export function setFilm(c, id) {
   }
 }
 const filmEdit = (id, ids) => (q) => ids.forEach((cid) => setFilm(q.clips[cid], id));
-export function applyFilm(id, ids = selectedOf(['video', 'image', 'recording'])) {
+export function applyFilm(id, ids = selectedOf(['video', 'image', 'recording', 'adjustment'])) {
   if (!ids.length) return toast('Select a video or image clip first.');
   commit(filmEdit(id, ids));
 }
-export const previewFilm = (id, ids = selectedOf(['video', 'image', 'recording'])) => ids.length && previewEdit(filmEdit(id, ids));
+export const previewFilm = (id, ids = selectedOf(['video', 'image', 'recording', 'adjustment'])) => ids.length && previewEdit(filmEdit(id, ids));
 
 export function addCaption(T = getTime(), text = '') {
   // Avslutt eventuell pågående tekstredigering før det nye klippet opprettes.
@@ -660,6 +696,16 @@ export function addImportPaths(paths) {
   if (req) importOptions.value = { ...req, paths: [...new Set([...req.paths, ...paths])] };
 }
 
+export function importDroppedFiles(paths, placement) {
+  if (!paths.length) return;
+  room.value = 'edit';
+  browserTab.value = 'media';
+  if (!prefs.value.editorBrowserVisible) setPrefs({ editorBrowserVisible: true });
+  // Further drops add to the open request, including its original destination.
+  if (!importOptions.value) importOptions.value = { paths: [], placement };
+  addImportPaths(paths);
+}
+
 // Nummererte bilder (render_0001.png) kan importeres som én video. Valgt i importvinduet.
 export const FPS_PRESETS = [12, 15, 23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 120];
 export const isNumberedImage = (p) => /\d+\.(png|jpe?g|tiff?|exr|dpx|cin|tga|bmp|webp|jp2|j2k|sgi|rgb|pcx|ppm|pgm|hdr|qoi|avif|heic|jxl)$/i.test(p);
@@ -823,6 +869,25 @@ export function detachSelectedAudio() {
   else toast('Select a clip with audio to detach it.');
 }
 
+export function separatePipTrack(clipId) {
+  let id;
+  commit((q) => { id = separateRecordingCamera(q, clipId); });
+  if (id) {
+    selection.value = [id];
+    inspectorTab.value = 'color';
+  }
+}
+
+export function detachPip(clipId) {
+  const c = project.value.clips[clipId];
+  const id = c?.recordingPart === 'camera' ? clipId : recordingChildren(project.value, clipId)[0]?.id;
+  if (id) commit((q) => detachRecordingCamera(q, id));
+}
+
+export function attachPip(clipId, parentId) {
+  commit((q) => attachRecordingCamera(q, clipId, parentId));
+}
+
 export function toggleSolo() {
   const ids = selection.value;
   if (!ids.length) return;
@@ -844,7 +909,7 @@ export function liftSelected() {
 export function overwriteSelectedToPrimary() {
   const ids = selection.value.filter((id) => {
     const c = project.value.clips[id];
-    return c && c.lane > 0 && c.lane !== CAPTION_LANE && isVisual(c) && c.type !== 'redact';
+    return c && c.lane > 0 && c.lane !== CAPTION_LANE && isVisual(c) && !['redact', 'adjustment'].includes(c.type);
   });
   if (!ids.length) return;
   commit((q) => {
@@ -1142,7 +1207,7 @@ export async function handleDrop(dt, lane, T, options = {}) {
   const raw = dt.getData('application/x-reccut');
   if (raw) {
     const item = JSON.parse(raw);
-    const targeted = ['effect', 'afx', 'apreset', 'transition', 'frameFx', 'redact'].includes(item.kind);
+    const targeted = ['effect', 'afx', 'apreset', 'transition', 'frameFx', 'redact', 'adjustment'].includes(item.kind);
     const target = targeted ? libraryDropTarget(project.value, item, lane, T, { transitionDur: prefs.value.transitionDur, ...options }) : null;
     if (targeted && !target) return;
     if (item.kind === 'media') {
@@ -1165,10 +1230,13 @@ export async function handleDrop(dt, lane, T, options = {}) {
       addRedact(item.id, T, lane > 0 && lane !== CAPTION_LANE ? lane : null);
     } else if (item.kind === 'frameFx') {
       addFrameEffect(item.id, T, lane > 0 && lane !== CAPTION_LANE ? lane : null);
+    } else if (item.kind === 'adjustment') {
+      addAdjustmentLayer(item.id === 'empty' ? null : item.id, T, lane > 0 && lane !== CAPTION_LANE ? lane : null);
     } else if (item.kind === 'title') {
       addTitle(item.id, T);
     } else if (item.kind === 'effect') {
-      addEffect(item.id, target.id);
+      if (target.kind === 'layer') addAdjustmentLayer(item.id, T, lane > 0 && lane !== CAPTION_LANE ? lane : null);
+      else addEffect(item.id, target.id);
     } else if (item.kind === 'transition') {
       commit((q) => setTransition(q, target.id, item.id, target.dur, target.edge, prefs.value.transitionAudio));
       selection.value = [];
@@ -1176,10 +1244,10 @@ export async function handleDrop(dt, lane, T, options = {}) {
     }
     return;
   }
-  const files = [...(dt.files || [])].map((f) => api.pathForFile(f)).filter(Boolean);
+  const files = droppedPaths(dt, api.pathForFile);
   if (files.length) {
     const mode = lane === 0 ? 'insert' : 'connect';
-    await importPaths(files, { mode, T, lane: lane === 0 ? undefined : lane });
+    importDroppedFiles(files, { mode, T, lane: lane === 0 ? undefined : lane });
   }
 }
 
@@ -1206,6 +1274,8 @@ export async function clipContextMenu(clipId, T) {
     items.push({ separator: true });
   }
   const media = project.value.media[c.mediaId];
+  if (c.linkedTo || recordingChildren(project.value, clipId).length) items.push({ id: 'detachPip', label: 'Detach PiP' });
+  if (c.type === 'recording' && !c.recordingPart && media?.streams?.screen?.hasVideo && media.streams.camera?.hasVideo) items.push({ id: 'separatePip', label: 'Show PiP on Separate Track' });
   const hasAudio = clipHasAudio(c, media);
   if (['video', 'recording', 'audio'].includes(c.type) && !(c.speed === 0 && !c.ramp)) {
     const sp = c.ramp ? null : c.speed ?? 1;
@@ -1234,7 +1304,7 @@ export async function clipContextMenu(clipId, T) {
   if (selection.value.length > 1) items.push({ id: 'group', label: 'Group Clips', accelerator: 'CmdOrCtrl+G' });
   if (c.group) items.push({ id: 'ungroup', label: 'Ungroup', accelerator: 'Shift+CmdOrCtrl+G' });
   if (c.lane === 0 && c.type !== 'gap') items.push({ id: 'lift', label: 'Lift from Storyline', accelerator: isMac ? 'Alt+Cmd+Up' : 'Ctrl+Alt+Up' });
-  if (c.lane > 0 && c.lane !== CAPTION_LANE && isVisual(c)) items.push({ id: 'overwriteDown', label: 'Overwrite to Storyline', accelerator: isMac ? 'Alt+Cmd+Down' : 'Ctrl+Alt+Down' });
+  if (c.lane > 0 && c.lane !== CAPTION_LANE && isVisual(c) && c.type !== 'adjustment') items.push({ id: 'overwriteDown', label: 'Overwrite to Storyline', accelerator: isMac ? 'Alt+Cmd+Down' : 'Ctrl+Alt+Down' });
   items.push({ separator: true });
   // Effekter og egenskaper fra et kopiert klipp, som i Final Cut Pro.
   if (c.type !== 'gap' && c.type !== 'caption') {
@@ -1293,6 +1363,12 @@ export async function clipContextMenu(clipId, T) {
       break;
     case 'detach':
       detachSelectedAudio();
+      break;
+    case 'detachPip':
+      detachPip(clipId);
+      break;
+    case 'separatePip':
+      separatePipTrack(clipId);
       break;
     case 'solo':
       toggleSolo();

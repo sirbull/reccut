@@ -22,6 +22,7 @@ const path = require('path');
 const developmentMode = !app.isPackaged && process.argv.includes('--reccut-development');
 if (developmentMode) app.setPath('userData', path.join(app.getPath('appData'), 'Reccut Development'));
 const ff = require('./ffmpeg');
+const { finalizeRecordingStream } = require('./recording');
 const jobs = require('./jobs');
 const media = require('./media');
 const sequence = require('./sequence');
@@ -441,7 +442,7 @@ ipcMain.handle('rec:close', async (_e, id) => {
   await f.handle.close();
 });
 
-// Avslutter opptaket: remukser filene og skriver recording.json.
+// Avslutter opptaket i valgt format og skriver recording.json.
 // Pauser: hendelser i en pause fjernes, og tiden etter flyttes tilbake med lengden på pausene.
 function removePauses(out, pauses) {
   if (!pauses?.length) return out;
@@ -499,22 +500,20 @@ ipcMain.handle('rec:recover', async (_e, dir) => {
   // Zoom som var på da det stoppet, avsluttes ved siste kjente tid.
   const end = Math.max(0, ...(out.cursor || []).map((c) => c[0]), ...(out.keys || []).map((k) => k[0]));
   out.zooms = (out.zooms || []).map(([a, b]) => [a, b ?? end]);
+  const sources = [];
+  out.formatWarnings = [];
   for (const f of await fs.promises.readdir(dir)) {
     const m = f.match(/^(screen|camera)\.raw\.(\w+)$/);
     if (!m) continue;
     const key = m[1];
-    const final = path.join(dir, partial[key]?.file || `${key}.${m[2]}`);
-    try {
-      await ff.remux(path.join(dir, f), final);
-      await fs.promises.unlink(path.join(dir, f)).catch(() => {});
-    } catch {
-      await fs.promises.rename(path.join(dir, f), final);
-    }
-    out[key] = { ...(partial[key] || {}), file: path.basename(final), offset: partial[key]?.offset || 0, hasVideo: partial[key]?.hasVideo ?? true, hasAudio: partial[key]?.hasAudio ?? true };
-    delete out[key].raw;
+    const result = await finalizeRecordingStream(dir, { ...(partial[key] || {}), raw: f, file: partial[key]?.file || `${key}.${m[2]}`, offset: partial[key]?.offset || 0 });
+    out[key] = result.stream;
+    if (result.warning) out.formatWarnings.push(result.warning);
+    if (result.stream.file !== f) sources.push(f);
   }
   removePauses(out, out.pauses);
   await fs.promises.writeFile(path.join(dir, 'recording.json'), JSON.stringify(out, null, 1));
+  for (const file of sources) await fs.promises.unlink(path.join(dir, file)).catch(() => {});
   await fs.promises.unlink(path.join(dir, 'recording.partial.json')).catch(() => {});
   await fs.promises.unlink(markerFile()).catch(() => {});
   return dir;
@@ -530,24 +529,21 @@ ipcMain.handle('rec:finish', async (_e, meta) => {
   recordingDir = null;
   const events = input.endSession() || { cursor: [], zooms: [], clicks: [], keys: [] };
   const out = removePauses({ version: 1, createdAt: new Date().toISOString(), ...meta, ...events }, meta.pauses);
+  const sources = [];
+  out.formatWarnings = [];
   for (const key of ['screen', 'camera']) {
     const s = meta[key];
     if (!s) continue;
-    const raw = path.join(dir, s.raw);
-    const final = path.join(dir, s.file);
-    try {
-      await ff.remux(raw, final);
-      await fs.promises.unlink(raw).catch(() => {});
-    } catch (err) {
-      console.error('Remuxing failed, keeping the original recording', err);
-      await fs.promises.rename(raw, final);
-    }
-    delete out[key].raw;
+    const result = await finalizeRecordingStream(dir, s);
+    out[key] = result.stream;
+    if (result.warning) out.formatWarnings.push(result.warning);
+    if (result.stream.file !== s.raw) sources.push(s.raw);
   }
   await fs.promises.writeFile(path.join(dir, 'recording.json'), JSON.stringify(out, null, 1));
+  for (const file of sources) await fs.promises.unlink(path.join(dir, file)).catch(() => {});
   await fs.promises.unlink(path.join(dir, 'recording.partial.json')).catch(() => {});
   await fs.promises.unlink(markerFile()).catch(() => {});
-  return dir;
+  return { dir, warnings: out.formatWarnings };
 });
 
 /* Media */
@@ -829,7 +825,7 @@ ipcMain.handle('export:start', (_e, payload) => {
         if (m.kind === 'image') continue;
         for (const st of Object.values(m.streams)) if (st.hasVideo && st.needsProxy) st.decodeFilters = ff.decodeFilters(st);
       }
-      for (const c of Object.values(p.clips)) {
+      for (const c of payload.settings.frame ? [] : Object.values(p.clips)) {
         const m = c.reverse && !p.media[c.mediaId]?.offline && p.media[c.mediaId];
         if (!m) continue;
         for (const [key, st] of Object.entries(m.streams)) {

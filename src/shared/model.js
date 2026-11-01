@@ -101,11 +101,14 @@ export const EFFECTS = [
   { id: 'invert', label: 'Invert', prop: 'invert', min: 0, max: 1, def: 1, scale: 100, unit: '%', css: (v) => `invert(${v})` },
   { id: 'hue', label: 'Hue Shift', prop: 'hue', min: -180, max: 180, def: 90, unit: '°', css: (v) => `hue-rotate(${v}deg)` },
   { id: 'radius', label: 'Rounded Corners', prop: 'radius', min: 0, max: 50, def: 6, unit: '%', css: () => 'none' },
-  { id: 'shadow', label: 'Drop Shadow', prop: 'shadow', min: 0, max: 1, def: 0.6, scale: 100, unit: '%', css: () => 'none' },
+  { id: 'shadow', label: 'Drop Shadow', prop: 'shadow', min: 0, max: 5, def: 0.6, scale: 100, unit: '%', css: () => 'none' },
   { id: 'border', label: 'Border', prop: 'border', min: 0, max: 40, def: 6, unit: 'px', css: () => 'none' },
 ];
 
-export const EFFECT_DEFAULTS = { blur: 0, vignette: 0, sepia: 0, grayscale: 0, invert: 0, hue: 0, radius: 0, shadow: 0, border: 0, borderColor: '#ffffff' };
+// Null keeps the amount-dependent appearance of projects saved before shadow controls.
+export const SHADOW_DEFAULTS = { shadowColor: '#000000', shadowSoftness: 1, shadowOpacity: null, shadowOffsetX: 0, shadowOffsetY: null };
+
+export const EFFECT_DEFAULTS = { ...SHADOW_DEFAULTS, blur: 0, vignette: 0, sepia: 0, grayscale: 0, invert: 0, hue: 0, radius: 0, shadow: 0, border: 0, borderColor: '#ffffff' };
 
 export const EASINGS = [
   { id: 'linear', label: 'Linear' },
@@ -218,7 +221,7 @@ export function titleText(clip) {
 }
 
 export function isVisual(clip) {
-  return clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title' || clip.type === 'gap' || clip.type === 'redact';
+  return clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title' || clip.type === 'gap' || clip.type === 'redact' || clip.type === 'adjustment';
 }
 
 /* Sladding: et eget klipp over bildet som gjør et område ugjenkjennelig (passord, ansikter, skilt).
@@ -247,6 +250,7 @@ export function redactStrength(amount, H) {
 }
 
 export function clipHasAudio(clip, media) {
+  if (clip.recordingPart === 'camera') return false;
   if (clip.props?.audioDetached || (clip.speed === 0 && !clip.ramp)) return false;
   if (clip.type === 'audio') return true;
   if (clip.type === 'video' || clip.type === 'recording') return Object.values(media?.streams || {}).some((s) => s.hasAudio);
@@ -264,6 +268,7 @@ export function componentLabel(media, key, stream) {
 
 export function audioComponents(clip, media) {
   if (!media || !clip) return [];
+  if (clip.recordingPart === 'camera') return [];
   const off = clip.props?.audioOff || {};
   if (clip.type === 'audio') {
     const key = clip.stream || 'main';
@@ -274,6 +279,11 @@ export function audioComponents(clip, media) {
   return Object.entries(media.streams)
     .filter(([, st]) => st.hasAudio)
     .map(([key, st]) => ({ key, stream: st, label: componentLabel(media, key, st), off: Boolean(off[key]) }));
+}
+
+// Kamera og skjerm kan være egne klipp, men peker fortsatt på samme opptaksmedia.
+export function visualStreams(clip, media) {
+  return Object.entries(media?.streams || {}).filter(([key, stream]) => stream.hasVideo && (!clip.recordingPart || key === clip.recordingPart));
 }
 
 // Volumet for en komponent: opptak har eget nivå for mikrofon og systemlyd.
@@ -290,7 +300,7 @@ export function primaryComponent(clip, media) {
 
 // Klipp som kan forlenges uten grense (de har ingen kildefil med fast lengde).
 export function isElastic(clip) {
-  return (clip.speed === 0 && !clip.ramp) || clip.type === 'image' || clip.type === 'title' || clip.type === 'gap' || clip.type === 'caption' || clip.type === 'redact';
+  return (clip.speed === 0 && !clip.ramp) || clip.type === 'image' || clip.type === 'title' || clip.type === 'gap' || clip.type === 'caption' || clip.type === 'redact' || clip.type === 'adjustment';
 }
 
 export function newProject(name = 'Untitled Project') {
@@ -408,6 +418,8 @@ export function defaultProps(type, media) {
       return { ...visual, ...audio };
     case 'image':
       return { ...visual };
+    case 'adjustment':
+      return { ...visual, vfx: [] };
     case 'audio':
       return { ...audio };
     case 'recording': {
@@ -923,8 +935,9 @@ export function visualOpacity(clip, T) {
 // Lagene som skal tegnes ved tid T, nederst først.
 export function computeFrame(project, T, { captions = true } = {}) {
   const layers = [];
+  const primary = primaryAt(project, T);
   if (!laneHidden(project, 0)) {
-    const p = primaryAt(project, T);
+    const p = primary;
     if (p?.transition) {
       layers.push({
         transition: p.transition,
@@ -936,19 +949,37 @@ export function computeFrame(project, T, { captions = true } = {}) {
     }
   }
   const free = [];
+  const upper = [];
+  const inherited = new Set();
+  // PiP følger hovedklippets overgang, også i håndtakene utenfor selve kuttet.
+  // En egen overgang på PiP-klippet kan fortsatt styres uavhengig.
+  if (primary?.transition) {
+    const byLane = new Map();
+    for (const c of Object.values(project.clips)) {
+      if (c.recordingPart !== 'camera' || !c.linkedTo || !c.enabled || laneHidden(project, c.lane) || c.transition || c.transitionOut) continue;
+      const side = c.linkedTo === primary.a?.id ? 'a' : c.linkedTo === primary.b?.id ? 'b' : null;
+      if (!side) continue;
+      let layer = byLane.get(c.lane);
+      if (!layer) byLane.set(c.lane, layer = { transition: primary.transition, overlay: true, a: null, b: null });
+      layer[side] = { clip: c, T };
+      inherited.add(c.id);
+    }
+    for (const [lane, layer] of byLane) upper.push({ lane, start: 0, layer });
+  }
   const near = clipsNear(project, T);
   for (const c of near) {
-    if (c.lane > 0 && c.lane < CAPTION_LANE && c.enabled && isVisual(c) && T >= c.start && T < c.start + c.dur && !laneHidden(project, c.lane)) {
+    if (!inherited.has(c.id) && c.lane > 0 && c.lane < CAPTION_LANE && c.enabled && isVisual(c) && T >= c.start && T < c.start + c.dur && !laneHidden(project, c.lane)) {
       free.push(c);
     }
   }
-  free.sort((a, b) => a.lane - b.lane || a.start - b.start);
   for (const c of free) {
     const tr = hasFreeTransitions(c) ? freeTransitionAt(c, T) : null;
     // Utgangen er inngangen spilt baklengs, så alle overgangene tegner klippet som B.
-    if (!tr) layers.push({ clip: c, T });
-    else layers.push({ transition: tr.edge === 'end' ? { ...tr, p: 1 - tr.p } : tr, overlay: true, a: null, b: { clip: c, T } });
+    const layer = !tr ? { clip: c, T } : { transition: tr.edge === 'end' ? { ...tr, p: 1 - tr.p } : tr, overlay: true, a: null, b: { clip: c, T } };
+    upper.push({ lane: c.lane, start: c.start, layer });
   }
+  upper.sort((a, b) => a.lane - b.lane || a.start - b.start);
+  layers.push(...upper.map(({ layer }) => layer));
 
   const caps = [];
   if (captions && !laneHidden(project, CAPTION_LANE)) {

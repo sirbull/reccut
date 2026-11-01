@@ -206,7 +206,9 @@ export function Slider({ value, min, max, step = 0.01, onInput, onStart, onCommi
       style={{ '--lo': `${lo}%`, '--hi': `${hi}%` }}
       onPointerDown={() => onStart?.()}
       onInput={(e) => onInput(Number(e.currentTarget.value))}
-      onChange={() => onCommit?.()}
+      // Native change commits after the last input. preact/compat remaps onChange
+      // to input, which would commit before the live edit and lose the undo step.
+      onChangeCapture={() => onCommit?.()}
       onKeyDown={(e) => e.stopPropagation()}
     />
   );
@@ -225,7 +227,7 @@ export function Modal({ title, onClose, children, footer, width = 720, class: cl
   }, [onClose]);
   return (
     <div class="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose?.()}>
-      <div class={`modal ${cls}`} style={{ width }} onKeyDown={(e) => e.stopPropagation()}>
+      <div class={`modal ${cls}`} role="dialog" aria-modal="true" aria-label={title} style={{ width }} onKeyDown={(e) => e.stopPropagation()}>
         <header>
           <h2>{title}</h2>
           {onClose && <IconButton icon={X} title="Close" onClick={onClose} />}

@@ -93,12 +93,16 @@ app
         sourceFile,
       ]);
       await ui.webContents.executeJavaScript(`window.sourceFile = ${JSON.stringify(sourceFile)}`);
-      for (const name of ['verifyUI', 'verifySource', 'showSettings', 'verifyChat', 'verifyLook', 'verifyCommands', 'verifyFootage', 'verifySetup', 'verifyCreative', 'verifyBuiltinPlugins', 'verifyProcessor']) {
+      for (const name of ['verifyUI', 'verifySource', 'showSettings', 'verifyChat', 'verifyLook', 'verifyCommands', 'verifyFootage', 'verifySetup', 'verifyCreative', 'verifyBuiltinPlugins', 'verifyProcessor', 'verifyPip', 'verifyGradientUI', 'verifyEffectRemoval', 'verifyShadowUI', 'verifyAdjustmentUI']) {
         const result = await ui.webContents.executeJavaScript(
           `uiVerification.${name}().catch(error=>({error:error.message,stack:error.stack}))`,
         );
         if (result.error) throw new Error(JSON.stringify(result));
         console.log(JSON.stringify({ ui: name, ...result }));
+        if (name === 'verifyShadowUI') fs.writeFileSync(path.join(os.tmpdir(), 'reccut-shadow-ui.png'), (await ui.webContents.capturePage()).toPNG());
+        if (name === 'verifyAdjustmentUI') fs.writeFileSync(path.join(os.tmpdir(), 'reccut-adjustment-ui.png'), (await ui.webContents.capturePage()).toPNG());
+        if (name === 'verifyGradientUI') fs.writeFileSync(path.join(os.tmpdir(), 'reccut-gradient-ui.png'), (await ui.webContents.capturePage()).toPNG());
+        if (name === 'verifyPip') fs.writeFileSync(path.join(os.tmpdir(), 'reccut-pip-ui.png'), (await ui.webContents.capturePage()).toPNG());
         if (name === 'verifyUI')
           fs.writeFileSync(path.join(os.tmpdir(), 'reccut-keyer-ui.png'), (await ui.webContents.capturePage()).toPNG());
         if (name === 'verifySetup' || name === 'verifyCreative' || name === 'verifyBuiltinPlugins')

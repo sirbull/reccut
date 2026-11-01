@@ -84,6 +84,7 @@ function showBrowser(tab) {
  * keys: hurtigtast i Electron-format. CmdOrCtrl er Cmd på Mac og Ctrl på Windows, Alt er Option på Mac.
  * mac/win: egen tast per plattform når de er forskjellige. also: flere taster for samme kommando.
  * register: hurtigtasten registreres i menyen (bare for taster med Cmd eller Ctrl som også skal virke i tekstfelt).
+ * allowWhileTyping: eksplisitte menyvalg kan åpne eksportdialogen selv når et felt har fokus.
  * rooms: hvor kommandoen virker. help: hjelpeartikkelen som forklarer den.
  */
 export const COMMANDS = [
@@ -105,7 +106,8 @@ export const COMMANDS = [
   { id: 'importTemplate', label: 'Import Title Template', menu: 'File', group: 'media', keys: 'Shift+Alt+CmdOrCtrl+I', run: () => commands.importTitleTemplate(), help: 'templates', keywords: 'after effects reccut-title lower third custom' },
   { id: 'templateKit', label: 'Get the Template Kit', menu: 'Help', group: 'help', keys: 'Shift+Alt+CmdOrCtrl+K', rooms: ALL, run: () => commands.downloadTemplateKit(), help: 'templates', keywords: 'after effects script jsx lower third design' },
   { id: 'relink', label: 'Relink File', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+L', run: () => { const id = commands.browserTargets()[0]; return id ? commands.relinkDialog(id) : toast('Select a clip in the browser or on the timeline first.'); }, help: 'offline', keywords: 'missing offline media find reconnect', desc: 'Point the selected media to a new file, for example when it is missing or has been moved.' },
-  { id: 'export', label: 'Export', menu: 'File', group: 'export', keys: 'CmdOrCtrl+E', register: true, rooms: ALL, run: () => (room.value === 'edit' ? (commands.exportOpen.value = true) : (room.value = 'export')), help: 'export', desc: 'Export the project to a video, audio or image sequence file.' },
+  { id: 'export', label: 'Easy Export', menu: 'File', group: 'export', keys: 'CmdOrCtrl+E', register: true, allowWhileTyping: true, rooms: ALL, run: () => (commands.exportOpen.value = true), help: 'export', keywords: 'quick export project presets video', desc: 'Open the simple project export dialog with presets, format, resolution and destination.' },
+  { id: 'exportFrame', label: 'Export Frame…', menu: 'File', group: 'export', keys: 'Shift+CmdOrCtrl+E', register: true, allowWhileTyping: true, rooms: ALL, run: commands.openFrameExport, help: 'export-frame', keywords: 'still image picture snapshot screenshot png jpeg jpg webp alpha transparent transparency mask chroma key', desc: 'Save the timeline frame at the playhead as an image. Choose its size, format, location and alpha channel.' },
   { id: 'prefs', label: 'Settings', menu: isMac ? 'App' : 'File', group: 'prefs', keys: 'CmdOrCtrl+,', register: true, rooms: ALL, run: () => (commands.prefsOpen.value = true), help: 'preferences' },
 
   /* Edit */
@@ -137,6 +139,7 @@ export const COMMANDS = [
   { id: 'mask:rect', label: 'Add Rectangle Mask', menu: 'Edit', group: 'mask', keys: 'Alt+M', run: () => commands.addMaskToSelected('rect'), help: 'masks', keywords: 'mask shape crop cut out matte vignette', desc: 'Add a mask to the selected clip. Only what is inside the shape is shown.' },
   { id: 'mask:ellipse', label: 'Add Ellipse Mask', menu: 'Edit', group: 'mask', keys: 'Alt+Shift+M', run: () => commands.addMaskToSelected('ellipse'), help: 'masks', keywords: 'mask circle oval shape matte spotlight' },
   { id: 'mask:pen', label: 'Draw Mask with Pen', menu: 'Edit', group: 'mask', keys: 'Alt+CmdOrCtrl+M', run: () => commands.startPen(), help: 'masks', keywords: 'pen tool draw mask bezier freeform shape points premiere roto', desc: 'Click in the viewer to place points. Click the first point, double click or press Return to close the shape.' },
+  { id: 'adjustment:add', label: 'Add Adjustment Layer', menu: 'Edit', group: 'redact', run: () => commands.addAdjustmentLayer(), help: 'effects', keywords: 'adjustment layer grade color effects noise glitch vhs overlay justeringslag', desc: 'Add an empty layer that applies color and effects to the picture on all video tracks below it.' },
   { id: 'fx:blur', label: 'Add Blur Effect', menu: 'Edit', group: 'redact', run: () => commands.addFrameEffect('blur'), help: 'redact', keywords: 'blur whole frame adjustment effect mask pen' },
   { id: 'fx:pixelate', label: 'Add Pixelate Effect', menu: 'Edit', group: 'redact', run: () => commands.addFrameEffect('pixelate'), help: 'redact', keywords: 'pixelate mosaic whole frame adjustment effect mask pen' },
   { id: 'mask:path', label: 'Add Freeform Mask', menu: 'Edit', group: 'mask', run: () => commands.addMaskToSelected('path'), help: 'masks', keywords: 'mask freeform draw bezier polygon roto rotoscope shape matte' },
@@ -206,7 +209,7 @@ export const COMMANDS = [
   /* View */
   { id: 'roomRecord', label: 'Record', menu: 'View', keys: 'CmdOrCtrl+1', register: true, rooms: ALL, run: () => (room.value = 'record'), checked: () => room.value === 'record', help: 'recording' },
   { id: 'roomEdit', label: 'Edit', menu: 'View', keys: 'CmdOrCtrl+2', register: true, rooms: ALL, run: () => (room.value = 'edit'), checked: () => room.value === 'edit', help: 'editing' },
-  { id: 'roomExport', label: 'Export', menu: 'View', keys: 'CmdOrCtrl+3', register: true, rooms: ALL, run: () => (room.value = 'export'), checked: () => room.value === 'export', help: 'export' },
+  { id: 'roomExport', label: 'Export Room', menu: 'View', keys: 'CmdOrCtrl+3', register: true, rooms: ALL, run: () => (room.value = 'export'), checked: () => room.value === 'export', help: 'export' },
   { id: 'toggleBrowser', label: 'Media Browser', menu: 'View', group: 'panels', run: () => {
     const visible = !prefs.value.editorBrowserVisible;
     setPrefs({ editorBrowserVisible: visible });

@@ -185,6 +185,10 @@ On a Mac the Help menu also has a search field. Type a word and macOS points to 
     body: `
 Choose a screen, a camera and a microphone in the Record room. Turn on system audio to record the sound from your computer.
 
+Under **Recording → Video format**, choose MP4 (H.264), MOV (H.264), MKV (H.264), or WebM (VP9 or VP8). **Audio format** offers codecs supported by that container when recording system audio or camera with microphone; Automatic chooses a matching codec. Microphone audio without a camera is saved as a separate audio file. With no camera and system audio off, choose M4A (AAC), Ogg (Opus), WAV (16-bit PCM), FLAC or MP3, also while recording the screen. To record only audio, choose **No screen** and **No camera**. Your choices are remembered. Formats cannot be changed during countdown, recording or saving.
+
+Recordings are written to disk continuously for crash recovery, then finalized in the selected format when you stop. Finalizing may take a moment. PCM and FLAC use uncompressed audio capture. If finalizing fails, Reccut keeps the original recording and shows a message.
+
 ## Start recording from any app
 
 Press the record shortcut to start and stop recording: by default **Control Option 0** on a Mac and **Ctrl Shift 0** on Windows (the keys can be changed under Shortcuts in the Record room). The same keys with **8** pause and resume. By default these shortcuts work only while Reccut has focus, outside input fields and dialogs. To control recording from another app, enable **Allow shortcuts in other apps** under **Record → Shortcuts**. This explicitly enables global keys, which can override those combinations in other apps. The floating recording controls and tray menu always let you pause and stop without global keys.
@@ -236,7 +240,11 @@ Choose a countdown of 3, 5 or 10 seconds under Recording. The numbers are shown 
 
 Everything is saved as separate files, so in the editor you can still change the layout, camera shape, overlays and the level of the microphone and system audio.
 
-If your camera image is too dark, select the recording on the timeline and open **Recording → Camera Color**. Raise **Exposure** to brighten it, or adjust **Contrast**, **Saturation** and **Temperature**. This changes only the camera image, including when it fills the screen. The controls are also in the **Color** tab. Changes are saved in the project and included in the export. **Reset Camera Color** restores these four controls, including their keyframes.
+Screen recordings with a camera are added as two clips: the screen on **V1** and **PiP** on **V2** (or the next available video track). They are linked, so moving, trimming, cutting or changing the speed keeps them in sync. Click PiP to select only the camera. Microphone and system audio stay on the screen clip.
+
+If your camera image is too dark, select the **PiP** clip and open **Color → Camera Color** (also in **Recording**). Raise **Exposure** to brighten it, or adjust **Contrast**, **Saturation** and **Temperature**. All color and effect controls on this clip affect only the camera, including when it fills the screen. Changes are saved in the project and included in the export. **Reset Camera Color** restores the four simple controls, including their keyframes.
+
+Choose **Detach PiP** in the Recording tab or the clip's right click menu to edit its timing independently. In **Recording → PiP Connection**, choose a screen recording to link it again; this synchronizes PiP to that screen clip. For an older recording that is still one combined timeline clip, choose **Show PiP on Separate Track** in Recording or the right click menu.
 `,
     see: ['projects', 'editing', 'redact'],
   },
@@ -249,7 +257,7 @@ If your camera image is too dark, select the recording on the timeline and open 
     summary: 'Copy files into the project, or leave them where they are.',
     keywords: 'import copy leave in place formats drag',
     body: `
-Choose Import Media ({{key:import}}) and select files, or drag files into the browser or the timeline. Reccut reads about as many formats as VLC, so you should not need to convert anything first:
+Choose Import Media ({{key:import}}) and select files, or drag files from Finder or File Explorer into the main window. The import window opens with the dropped files selected, so you can choose whether to copy and optimize them. Importing adds them to the media browser; dropping directly onto the timeline also places them there after confirmation. The Export room has its own drop area for batch conversion. Reccut reads about as many formats as VLC, so you should not need to convert anything first:
 
 - **Video:** MP4, MOV, MKV, WebM, AVI, MXF, MPEG 1 and 2, MPEG-TS, M2TS and AVCHD (.mts) from cameras, DV, FLV, WMV, 3GP, OGV, Y4M and raw H.264 or HEVC streams. Codecs include H.264 and HEVC (also 10-bit and 4:2:2), ProRes (also 4444 with alpha), DNxHD and DNxHR, AV1, VP8, VP9, FFV1, MJPEG and Theora.
 - **Audio:** WAV, AIFF, FLAC, MP3, AAC and M4A, ALAC, Ogg, Opus, WMA, AC-3, E-AC-3, DTS, AMR, CAF, WavPack, TTA, Speex, MP2 and more.
@@ -892,10 +900,44 @@ Redactions work the same in the viewer and in the exported file.
     id: 'effects',
     section: 'Editing',
     title: 'Effects',
-    summary: 'Blur, vignette, black and white, shadows, borders and more.',
-    keywords: 'effects blur vignette sepia shadow border rounded',
+    summary: 'Adjustment layers, color fills, grain, glitch, VHS, glow and other video effects.',
+    keywords: 'effects adjustment layer justeringslag noise grain glitch VHS analog tape RGB split scanlines glow bloom blur vignette sepia shadow border rounded solid color gradient ramp linear radial freeform points spread',
     body: `
 The Effects browser ({{key:browser:effects}}) shows every effect with a live preview. At the top are the redactions for hiding passwords and faces, see Redacting Passwords and Faces. Drag an effect onto a clip, or select clips and click it. Adjust or remove effects in the Effects tab of the inspector ({{key:inspector:effects}}). The classic clip effect amounts can have keyframes. Keying and stack effects have their own controls above them.
+
+Click the **×** beside an effect name to remove it. Adjusted effects show a warning before removal. **Don’t show this again** disables the warning for future removals; restore it in **Settings → General → Projects → Warn before removing adjusted effects**. Removing an effect and all its settings or keyframes is one Undo step.
+
+**Drop Shadow** follows the visible pixels after keying, cropping and masks. **Amount** reaches 500% for large shadows. Choose a **Color**, adjust **Softness** (0% gives a sharp edge), set **Opacity**, and move the shadow with **Position X/Y** in project pixels. Amount, softness, opacity and position support keyframes. Transparent areas continue to show the clips underneath. Vignette and colour adjustments also preserve the source transparency.
+
+## Adjustment layers
+
+Choose **Adjustment layer** at the top of the Effects browser, or **Edit → Add Adjustment Layer**. This creates an empty clip on a video track above the picture. It covers the marked In/Out range when one is set, otherwise the remainder of the storyline clip at the playhead (or five seconds in empty space). Trim, extend, move, split or duplicate it like a clip.
+
+The layer processes the combined picture on every video track below it, only during its duration. Video clips and titles on higher tracks, and captions, are unaffected. Add effects in **Effects**, set exposure, white balance, wheels or Film Looks in **Color**, and draw **Masks** to limit the affected region. **Video → Layer strength** blends the whole look, and Fade in/out can ease it in. A blank layer leaves the picture unchanged. Switch the layer off to compare. Multiple adjustment layers process in track order.
+
+## Stylize effects
+
+The **Stylize** section includes **Digital noise**, **Film grain**, **Digital glitch**, **VHS / analog tape**, **RGB split**, **Chromatic aberration**, **Scanlines**, and **Glow / bloom**. Click to apply to selected video/image/recording clips or an adjustment layer. With no eligible selection, a click creates an adjustment layer carrying the effect. Drag onto a clip to apply it there, or onto an empty video track for a new adjustment layer. The same effects are available under **Add stack effect…**.
+
+Noise, film grain, glitch and VHS animate from the timeline, so seeking and exporting a frame reproduce the same pattern. **Speed 0** freezes animation and **Seed** changes its random pattern. Parameters in the stack are static; layer strength, color controls and masks support keyframes.
+
+**VHS** treats the whole picture as a soft, low-bandwidth tape image. Color bleeds more than luminance, static changes from frame to frame, and brief tracking faults occasionally bend the picture. Choose an SP, LP or EP-inspired preset, then adjust Picture softness, Color bleed, Static noise and Tracking faults. Advanced includes chroma delay, subtle scanlines, faded color, speed and seed. These are creative tape simulations, not a measured hardware-deck profile.
+
+**Film grain** uses irregular, spatially correlated texture and a tonal response instead of digital static. Start with fine 35mm-inspired grain, use the 16mm preset for stronger texture, or aged 8mm for optional dust, scratches, gate weave and flicker. These are procedural film-inspired looks, not scanned stock samples. Grain size is consistent across output sizes.
+
+**RGB split** offsets channels uniformly in a chosen direction. **Chromatic aberration** models radial lens fringing: it leaves the lens center aligned and increases separation toward the edges. Use a low Amount for subtle optics, and Advanced to move the lens center.
+
+Start with light film grain and glow for a subtle look. Use RGB split and glitch in short bursts around edits. Keep important text on a track above the adjustment layer for legibility.
+
+## Solid color and gradient ramp
+
+Choose **Solid color** or **Gradient ramp** under **Color fills** in the Effects browser, or from **Add stack effect…** in the inspector. These effects fill a video, image or recording source. **Strength** blends the fill with the source. Turn on **Preserve source alpha** to keep transparent areas, for example after a color key.
+
+- **Linear**: drag the start and end handles to set the direction and length. Double-click the color bar to add stops, then drag each stop or set its position and color below.
+- **Radial**: drag the center and radius handles. Color stops run from the center to the outer radius. Center and Radius also have numeric controls.
+- **Freeform**: double-click the preview to add a color point. Drag points to place them, choose their colors, and adjust **Point spread** with the square handle or numeric control. Larger spread gives a color more influence. Freeform uses smooth point blending; it does not include Illustrator's gradient lines.
+
+Use **Add point/stop** and **Remove point/stop** for explicit controls. A gradient supports up to 32 stops or points. Arrow keys move focused handles; Shift makes larger steps. Edits support undo and redo and are saved in the project. Gradient settings are static. Preview and export use the same renderer.
 `,
     see: ['keying', 'ai-plugins', 'keyframes', 'color', 'redact'],
   },
@@ -904,13 +946,22 @@ The Effects browser ({{key:browser:effects}}) shows every effect with a live pre
     section: 'Editing',
     title: 'Keying and Background Removal',
     summary: 'Remove a solid or static background, refine edges and stack multiple keys.',
-    keywords: 'greenscreen blue screen chroma key keyer matte despill background remove clean plate difference stack',
+    keywords: 'greenscreen blue screen chroma key keyer matte gamma despill hair fine detail shadow edge color background remove clean plate difference stack',
     body: `
 Select a video, image or recording clip and open the Effects inspector. **Remove solid background** samples the source border at the playhead and adds a color key. Use **Screen color** to select a different color.
 
 **Remove static background** estimates a background reference from nine source frames. Keep the camera and lighting fixed. The subject must move enough to reveal the background in most samples. A stationary subject may become part of the reference. For better control, add a **Background reference key**, put the playhead on a frame with the subject out of shot, and choose **Capture clean background**.
 
-Open **Advanced** to adjust color spill, matte black and white points, shrink or expand the edge, feather, invert and inspect the matte. Positive edge values shrink the foreground. Return View to Composite before export: matte view is also exported.
+Open **Advanced** for additional controls:
+
+- **Recover fine detail** restores fractional coverage in hair and fine edges. Increase gradually; dark patches of background can also return.
+- **Preserve source shadows** retains darker areas of the screen as translucent shadows. Select a bright, unshadowed **Screen color**. **Shadow color range** controls how close the shadow’s hue must be to that sample. These controls cannot distinguish a shadow from foreground with the same screen colour; use a mask where needed.
+- **Recover edge color** reduces screen colour contamination in translucent edge pixels. **Remove color spill** reduces the dominant screen channel.
+- **Matte black/white** set the transparent and opaque limits. **Matte gamma** adjusts intermediate coverage; values above 1 strengthen translucent detail.
+- **Shrink / expand edge** adjusts the outline; positive values shrink the foreground. **Edge feather** softens the boundary. **Invert matte** reverses the retained areas.
+- **View** switches between Composite and the black-and-white matte. Return to Composite before exporting, because matte view is also exported.
+
+Fine-detail, shadow and edge-colour recovery belong to Color key. Gamma and the other matte controls also work with Background reference key and Luma key. The new recovery controls default to zero, so existing project keys keep their previous settings.
 
 Effects run from top to bottom. Use the arrows to reorder, duplicate a key to remove another color, or switch an instance off to compare. Blur, saturation, contrast and opacity can also be added to the stack. Existing color correction and clip effects follow the stack. Masks can remove unwanted areas afterward. Stack parameters are currently static.
 
@@ -1092,7 +1143,7 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
     body: `
 Select a clip and show Color ({{key:inspector:color}}).
 
-For screen recordings with a camera, **Camera Color** adjusts exposure, contrast, saturation and temperature for the camera separately. The controls below it apply to both the screen and the camera. Use **Reset Camera Color** to reset the camera adjustments, and **Reset Color** to reset the shared correction.
+For screen recordings, select the **PiP** clip on V2 to adjust only the camera. **Camera Color** provides simple exposure, contrast, saturation and temperature controls; the looks, light, color and wheels below also apply only to the selected PiP clip. Select the screen clip on V1 to adjust the screen separately. On older recordings that are still a single timeline clip, Camera Color adjusts just the camera and the other color controls apply to both images. Choose **Show PiP on Separate Track** in Recording to separate an older clip.
 
 ![Color wheels for shadows, midtones and highlights.](color.jpg)
 
@@ -1112,12 +1163,14 @@ The correction runs on the graphics card in 16-bit floating point. 10-bit clips 
     id: 'export',
     section: 'Export',
     title: 'Exporting',
-    summary: 'Quick export from the editor, or every option in the Export room.',
+    summary: 'Use Easy Export for presets, the Export room for more options, or Export Frame for a still image.',
     keywords: 'export render share format mp4 mov prores gif audio crop size',
     body: `
-Export ({{key:export}}) in the Edit room opens a quick export. More Options goes to the Export room, which also converts any file you drop on it.
+Choose **File → Easy Export** ({{key:export}}) to open the simple project export dialog. Choose a preset, file name, destination, format, resolution and frame rate, then click **Export**. **More Options** opens the Export room.
 
-![Quick export.](quickexport.jpg)
+Click **Export Project** in the Edit room to open the current project in the Export room. It starts with MP4 (H.264), high quality, and the sequence’s size and frame rate. A marked timeline range is carried over. Review the settings, then click **Export Project** in the Export room to start the job. **View → Export Room** ({{key:roomExport}}) opens the room with your current settings.
+
+You can also drop video or audio files into Export to convert them without putting them on the editing timeline. Choose a preset or your own settings, then convert one file or use **Convert All** to add the imported files to the queue.
 
 ![The Export room with format, size, crop and captions.](exportroom.jpg)
 
@@ -1128,7 +1181,26 @@ Export ({{key:export}}) in the Edit room opens a quick export. More Options goes
 
 Exports are saved in the Exports folder of the project by default, and run in the background so you can keep working.
 `,
-    see: ['captions', 'range'],
+    see: ['export-frame', 'captions', 'range'],
+  },
+  {
+    id: 'export-frame',
+    section: 'Export',
+    title: 'Export a frame',
+    summary: 'Save the timeline image at the playhead as PNG, JPEG or WebP, with optional transparency.',
+    keywords: 'export frame still image picture screenshot snapshot png jpeg jpg webp alpha transparent transparency mask chroma key resolution',
+    body: `
+Move the timeline playhead to the image you want, then choose **File → Export Frame…** ({{key:exportFrame}}). Playback pauses and the current sequence and position are captured for this export.
+
+Choose **PNG**, **JPEG** or **WebP**, and enter the width and height in pixels. **Keep sequence aspect ratio** links the dimensions. Turn it off to set each dimension yourself; the picture fits inside that size without stretching. Still images can use exact, odd dimensions, from 1 to 8192 pixels per side.
+
+Choose a folder with **Save to**, then click **Export Frame…** to choose the final file name and location. The full quality image renders in the background from the original media, including visible layers, titles, captions, color, effects, cropping, masks and chroma key.
+
+Enable **Include alpha channel** with PNG or WebP to keep empty and removed areas transparent, including soft mask and key edges. Visible layers underneath are still included: disable or remove a background layer if you want transparency there. With alpha off, empty areas are black. JPEG cannot store transparency; choose PNG or WebP for alpha.
+
+At the end of the timeline, Export Frame saves the last frame. A marked In/Out range does not change which frame is exported. When it is ready, use the notification to open the image or reveal it in its folder.
+`,
+    see: ['export', 'masks', 'effects'],
   },
 
   /* Referanse */

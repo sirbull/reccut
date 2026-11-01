@@ -3,9 +3,10 @@
 import { setMotion } from '../shared/stabilize.js';
 import { CAMERA_LOGS, setLut } from '../shared/grade.js';
 import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOutputFormat, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, WebMOutputFormat, canEncodeVideo } from 'mediabunny';
-import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sealProject, sourceTime, workPath } from '../shared/model.js';
+import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sealProject, sourceTime, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 import { AUDIO_FORMATS, QUALITIES, audioKbps, outputGeometry, videoBitrate, videoFormat } from '../shared/formats.js';
+import { FRAME_FORMATS, frameExportSettings, frameGeometry } from '../shared/frameExport.js';
 import { captionItems, toSrt, toVtt } from '../shared/srt.js';
 import { activeEffects, createChain } from '../shared/audiofx.js';
 
@@ -496,7 +497,7 @@ function neededFrames(project, frame, copies) {
     const m = project.media[clip.mediaId];
     if (!m || m.offline) return;
     const s = sourceTime(clip, T);
-    for (const [key, st] of Object.entries(m.streams)) {
+    for (const [key, st] of visualStreams(clip, m)) {
       if (!st.hasVideo) continue;
       const t = s - (st.offset || 0);
       // Baklengs: les den baklengs kopien framover, så dekodingen går raskt.
@@ -518,20 +519,33 @@ function neededFrames(project, frame, copies) {
   return out;
 }
 
-async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, bitrate, akbps, burnCaptions, embedPath, useWebCodecs, wavPath, output, hasAudio }) {
+async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, bitrate, akbps, burnCaptions, embedPath, useWebCodecs, wavPath, output, hasAudio, still = null }) {
   const { project, ffmpegBin, tmp } = ctx;
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
-  const g = canvas.getContext('2d', { alpha: false, willReadFrequently: !useWebCodecs });
-  const frames = Math.max(1, Math.round((b - a) * fps));
+  const g = canvas.getContext('2d', { alpha: Boolean(still?.alpha), willReadFrequently: !useWebCodecs });
+  if (!g) throw new Error('Could not create the export image. Try a smaller resolution.');
+  const frames = still ? 1 : Math.max(1, Math.round((b - a) * fps));
   const readers = new Map();
   const images = new Map();
   const rotated = new Map();
   const q = { ...(QUALITIES.find((x) => x.id === quality) || QUALITIES[2]), audioKbps: akbps, bitrate };
 
   let encoder;
-  if (useWebCodecs) {
+  if (still) {
+    const format = FRAME_FORMATS.find((f) => f.id === still.format);
+    encoder = {
+      add: async () => {
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, format.mime, 1));
+        if (!blob || blob.type !== format.mime) throw new Error(`Could not encode ${format.label}.`);
+        checkCancel(jobId);
+        fs.writeFileSync(output, Buffer.from(await blob.arrayBuffer()));
+      },
+      finish: async () => {},
+      abort: () => {},
+    };
+  } else if (useWebCodecs) {
     const videoTmp = path.join(tmp, `video.${fmt.ext === 'mov' ? 'mov' : fmt.container === 'webm' ? 'webm' : fmt.container === 'mkv' ? 'mkv' : 'mp4'}`);
     const fd = fs.openSync(videoTmp, 'w');
     const writable = new WritableStream({ write: (chunk) => void fs.writeSync(fd, chunk.data, 0, chunk.data.length, chunk.position) });
@@ -631,7 +645,7 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
         const sh = project.media[clip.mediaId]?.streams?.[key]?.height;
         return { img: s.toCanvasImageSource(), w: s.displayWidth, h: s.displayHeight, pixelScale: sh ? s.displayHeight / sh : 1 };
       };
-      drawFrame(g, project, frame, getSource, { matrix });
+      drawFrame(g, project, frame, getSource, { matrix, transparent: Boolean(still?.alpha) });
       await encoder.add(i);
       for (const [id, r] of readers) {
         if (T - r.lastUsed > 2) {
@@ -639,7 +653,7 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
           readers.delete(id);
         }
       }
-      if (i % 5 === 0) progress(jobId, 0.15 + (i / frames) * 0.8, 'Rendering video');
+      if (i % 5 === 0) progress(jobId, 0.15 + (i / frames) * 0.8, still ? 'Rendering frame' : 'Rendering video');
     }
     progress(jobId, 0.96, 'Finishing');
     await encoder.finish();
@@ -696,6 +710,7 @@ function videoArgsCrf(fmt, q) {
 
 async function runExport(jobId, payload) {
   const { project, settings, ffmpeg: ffmpegBin } = payload;
+  const still = settings.frame ? frameExportSettings(project, settings.frame) : null;
   // Eksporten endrer ikke prosjektet, så tidsindeksen kan gjenbrukes for hvert bilde og hver lydblokk.
   sealProject(project);
   const tmp = path.join(payload.tmpDir, `job-${Date.now()}-${jobId}`);
@@ -710,13 +725,18 @@ async function runExport(jobId, payload) {
   for (const m of Object.values(project.media)) {
     if (m.cameraLut && !CAMERA_LOGS.some((x) => x.id === m.cameraLut)) setLut(m.cameraLut, fs.readFileSync(m.cameraLut, 'utf8'));
   }
-  const a = settings.range ? settings.range.in : 0;
-  const b = settings.range ? settings.range.out : project.duration;
+  const a = still ? still.time : settings.range ? settings.range.in : 0;
+  const b = still ? a + 1 / project.fps : settings.range ? settings.range.out : project.duration;
   if (b - a <= 0) throw new Error('The timeline is empty.');
   const q = QUALITIES.find((x) => x.id === settings.quality) || QUALITIES[2];
   const wavPath = path.join(tmp, 'mix.wav');
 
   try {
+    if (still) {
+      const { w, h, matrix } = frameGeometry(project, still);
+      await renderVideo(jobId, ctx, { a, b, w, h, matrix, fps: project.fps, burnCaptions: true, output: settings.output, still });
+      return settings.output;
+    }
     if (settings.audioOnly) {
       const fmt = AUDIO_FORMATS.find((x) => x.id === settings.audioFormat) || AUDIO_FORMATS[0];
       progress(jobId, 0, 'Mixing audio');

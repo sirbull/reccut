@@ -382,7 +382,7 @@ async function recordingMedia(dir, notify) {
       height: info.height,
       fps: info.fps,
       color: info.hasVideo ? info.color : undefined,
-      needsProxy: false,
+      needsProxy: needsOptimizing(file, info),
     };
   }
   const duration = Math.max(...Object.values(streams).map((s) => s.offset + s.duration), 0.1);

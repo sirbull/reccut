@@ -47,6 +47,7 @@ const DEFAULTS = {
   importOptimize: false,
   syncGroup: true,
   askSequenceSettings: true,
+  confirmEffectRemoval: true,
 };
 
 function load() {

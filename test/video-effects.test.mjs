@@ -9,6 +9,8 @@ import {
   rgb,
   sampleScreenColor,
 } from '../src/shared/videoEffects.js';
+import { makeClip, SHADOW_DEFAULTS } from '../src/shared/model.js';
+import { shadowStyle } from '../src/shared/shadow.js';
 import { pasteAttributes, removeAttributes } from '../src/shared/attributes.js';
 const pixel = (r, g, b, a = 255) => [r, g, b, a];
 test('chroma key removes green and preserves foreground, existing alpha and soft edges', () => {
@@ -122,4 +124,61 @@ test('temporal median recovers a static background behind a moving subject', asy
       .flat(),
   );
   assert.throws(() => estimateBackground([frames[0]]));
+});
+
+test('fine detail recovers fractional hair coverage without restoring the screen', () => {
+  const e = makeVideoEffect('chroma');
+  e.p.color = '#00ff00';
+  const hair = [0.02, 0.95, 0.02];
+  assert.equal(keyAlpha(hair, e), 0);
+  e.p.detail = 1;
+  assert.ok(keyAlpha(hair, e) > 0.06 && keyAlpha(hair, e) < 0.08);
+  assert.equal(keyAlpha([0, 1, 0], e), 0);
+  assert.equal(keyAlpha([1, 0, 0], e), 1);
+});
+
+test('source shadows become neutral translucent coverage and retain source alpha', () => {
+  const e = makeVideoEffect('chroma');
+  e.p.color = '#00ff00';
+  e.p.shadows = 1;
+  const data = new Uint8ClampedArray([...pixel(0, 255, 0), ...pixel(0, 128, 0, 128), ...pixel(255, 0, 0)]);
+  const out = keyPixels(data, 3, 1, e);
+  assert.equal(out[3], 0);
+  assert.ok(Math.abs(out[7] - 64) <= 1);
+  assert.deepEqual([...out.slice(4, 7)], [0, 0, 0]);
+  assert.deepEqual([...out.slice(8)], pixel(255, 0, 0));
+});
+
+test('matte gamma adjusts only fractional coverage and edge recovery removes screen contamination', () => {
+  const e = makeVideoEffect('luma');
+  Object.assign(e.p, { similarity: 0.1, softness: 0.8 });
+  const a = keyAlpha([0.5, 0.5, 0.5], e);
+  e.p.gamma = 2;
+  assert.ok(Math.abs(keyAlpha([0.5, 0.5, 0.5], e) - Math.sqrt(a)) < 1e-6);
+  assert.equal(keyAlpha([0, 0, 0], e), 0);
+  assert.equal(keyAlpha([1, 1, 1], e), 1);
+  const c = makeVideoEffect('chroma');
+  Object.assign(c.p, { color: '#00ff00', similarity: 0.05, softness: 0.8, despill: 0 });
+  const data = new Uint8ClampedArray(pixel(128, 128, 0));
+  const before = keyPixels(data, 1, 1, c);
+  c.p.edgeColor = 1;
+  const after = keyPixels(data, 1, 1, c);
+  assert.equal(after[3], before[3]);
+  assert.ok(after[0] > before[0] && after[1] < before[1]);
+});
+
+
+test('custom shadow settings and keyframes survive save, paste and removal', () => {
+  const source = makeClip('image', { dur: 4 });
+  Object.assign(source.props, { fx: ['shadow'], shadow: 5, shadowColor: '#3366ff', shadowSoftness: 2, shadowOpacity: 0.3, shadowOffsetX: -80, shadowOffsetY: 120 });
+  source.kf.shadowOffsetX = [[0, -80], [2, 80]];
+  const saved = JSON.parse(JSON.stringify(source));
+  const destination = makeClip('video', { dur: 4 });
+  pasteAttributes(saved, destination, ['effects']);
+  assert.deepEqual(shadowStyle(destination, 1, 1080), shadowStyle(source, 1, 1080));
+  assert.deepEqual(destination.kf.shadowOffsetX, source.kf.shadowOffsetX);
+  removeAttributes(destination, ['effects']);
+  for (const [key, value] of Object.entries(SHADOW_DEFAULTS)) assert.equal(destination.props[key], value);
+  assert.equal(destination.kf.shadowOffsetX, undefined);
+  assert.equal(destination.props.shadow, 0);
 });

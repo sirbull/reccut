@@ -102,6 +102,7 @@ function GeneralPane() {
           }}
         />
         {toggle('reopenLast', 'Open the last project when Reccut starts')}
+        {toggle('confirmEffectRemoval', 'Warn before removing adjusted effects')}
         {toggle('askSequenceSettings', 'Ask for sequence settings when adding the first clip')}
         <p class="hint">Projects are saved automatically after every change, and earlier versions are kept in Project History.</p>
       </Section>

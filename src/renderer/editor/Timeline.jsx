@@ -57,7 +57,7 @@ import {
   valueAt,
   removeKeyframe,
 } from '../../shared/model.js';
-import { groupLead, groupMembers, moveClip, positionMove, positionTrim, removeTransition, rollEdit, setTransition, slideClip, slipClip, splitClip, trimClip } from '../../shared/ops.js';
+import { groupLead, groupMembers, moveClip, positionMove, positionTrim, recordingEditId, removeTransition, rollEdit, setTransition, slideClip, slipClip, splitClip, syncRecordingTracks, trimClip } from '../../shared/ops.js';
 import {
   beginTransient,
   commit,
@@ -680,7 +680,9 @@ export function Timeline() {
       const row = rowAt(e.clientY);
       // En gruppe med et klipp i hovedsporet flyttes ved å flytte det klippet; resten følger med.
       const lead = d.ids.length > 1 ? groupLead(d.originalProject, d.ids) : null;
-      const c = lead ? d.originalProject.clips[lead] : d.clip;
+      const linkedParent = recordingEditId(d.originalProject, d.clip.id);
+      const linked = linkedParent !== d.clip.id;
+      const c = lead ? d.originalProject.clips[lead] : linked ? d.originalProject.clips[linkedParent] : d.clip;
       if (d.ids.length === 1 || lead) {
         const visual = isVisual(c);
         let lane = row.lane;
@@ -689,6 +691,7 @@ export function Timeline() {
         else if (visual && lane < 0) lane = c.lane === 0 ? 0 : 1;
         else if (!visual && lane >= 0) lane = -1;
         if (lead) lane = 0;
+        if (linked) lane = c.lane;
         // Ikke høyere enn ett nytt spor over de som finnes: et nytt spor skyver alle sporene ned,
         // og ellers havner musa over et nytt tomt spor for hver bevegelse.
         const used = Object.values(d.originalProject.clips).map((o) => o.lane).filter((l) => l !== CAPTION_LANE);
@@ -728,6 +731,7 @@ export function Timeline() {
         const anchored = new Set(d.originalProject.primary.map((id) => d.originalProject.clips[id].group).filter(Boolean));
         updateTransient((p) => {
           for (const o of d.originals) if (o.lane !== 0 && !anchored.has(o.group) && p.clips[o.id]) p.clips[o.id].start = Math.max(0, o.start + dt);
+          syncRecordingTracks(p);
         });
       }
     }
@@ -819,10 +823,10 @@ export function Timeline() {
         .filter((clip) => clip.row);
       e.dataTransfer.dropEffect = clips.length ? 'copy' : 'none';
       setGhost(clips.length ? { kind: 'media', replace: replace.length > 0, clips } : null);
-    } else if (item && ['transition', 'effect', 'afx', 'apreset', 'frameFx', 'redact'].includes(item.kind)) {
+    } else if (item && ['transition', 'effect', 'afx', 'apreset', 'frameFx', 'redact', 'adjustment'].includes(item.kind)) {
       skim.value = null;
       if (skimRef.current) skimRef.current.style.display = 'none';
-      const T = ['frameFx', 'redact'].includes(item.kind) ? snap(timeAt(e.clientX)).t : timeAt(e.clientX);
+      const T = ['frameFx', 'redact', 'adjustment'].includes(item.kind) ? snap(timeAt(e.clientX)).t : timeAt(e.clientX);
       const target = libraryDropTarget(project.value, item, row.lane, T, { transitionDur: prefs.value.transitionDur, tolerance: 12 / pps.value });
       const targetRow = target && rows.find((r) => r.lane === target.lane);
       e.dataTransfer.dropEffect = target && targetRow ? 'copy' : 'none';
@@ -908,6 +912,14 @@ export function Timeline() {
               }
               return out;
             })()}
+            {Object.values(p.clips).map((c) => {
+              const parent = c.linkedTo && p.clips[c.linkedTo];
+              if (!parent) return null;
+              const row = rows.find((r) => r.lane === c.lane);
+              const parentRow = rows.find((r) => r.lane === parent.lane);
+              if (!row || !parentRow) return null;
+              return <div key={`pip-link-${c.id}`} class="pip-connection" title="PiP linked to screen recording" style={{ left: tx(c.start) + 8, top: row.y + row.h, height: Math.max(2, parentRow.y - row.y - row.h) }} />;
+            })}
             {transitions.map(({ id, edge, transition, a, b, prev }) => {
               const row = rows.find((r) => r.lane === p.clips[id].lane);
               if (!row) return null;
@@ -1162,13 +1174,13 @@ const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0,
   const hasAudio = clipHasAudio(clip, media);
   const expanded = clip.expanded && hasAudio && clip.type !== 'audio';
   const speed = speedOf(clip);
-  const visual = isVisual(clip) && clip.type !== 'title' && clip.type !== 'redact';
+  const visual = isVisual(clip) && !['title', 'redact', 'adjustment'].includes(clip.type);
   const busy = media ? busyMedia.value.get(media.id) : null;
   const colorTag = CLIP_COLORS.find((c) => c.id === clip.colorLabel);
   const cls = ['tl-clip', `t-${clip.type}`, busy && 'busy', colorTag && 'labeled', selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped', media?.offline && 'offline', audioComponents(clip, media).length > 0 && audioComponents(clip, media).every((c) => c.off) && 'audio-off'].filter(Boolean).join(' ');
   const label = clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? `${redactLabel(clip)} (redact)` : clip.type === 'caption' ? clip.props.text || 'Caption' : clip.name || media?.name || clip.type;
   const narrow = w < 24;
-  const thumbStream = media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
+  const thumbStream = clip.recordingPart === 'camera' ? media?.streams?.camera : media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
   const audioComp = primaryComponent(clip, media);
   const audioStream = audioComp?.stream;
   const bandH = expanded ? bandHeight(row, clip, media) : Math.round(row.h * 0.34);
@@ -1181,7 +1193,9 @@ const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0,
     <div class={cls} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y, height: boxH, ...(colorTag ? { '--label': colorTag.color } : {}) }} title={busy ? `${busy.title}${busy.queued ? ' (waiting)' : ` ${Math.round(busy.progress * 100)} %`}` : undefined}>
       {!narrow && (
         <div class="clip-label" data-hit="clip" data-clip={clip.id} style={{ marginLeft: labelStart, marginRight: labelEnd }}>
-          {clip.type === 'recording' && <span class="badge">REC</span>}
+          {clip.type === 'recording' && <span class="badge">{clip.recordingPart === 'camera' ? 'PiP' : 'REC'}</span>}
+          {clip.type === 'adjustment' && <span class="badge">ADJ</span>}
+          {clip.linkedTo && <span class="badge group" title="PiP linked to screen. Select to adjust PiP only; detach to edit its timing independently."><Link2 size={9} strokeWidth={2.6} /></span>}
           {clip.reverse && <span class="badge speed" title="Reversed">Reverse</span>}
           {clip.ramp ? <span class="badge speed" title="Speed ramp">Ramp</span> : speed !== 1 && <span class="badge speed">{speed === 0 ? 'Freeze' : `${Math.round(speed * 100)}%`}</span>}
           {clip.solo && <span class="badge solo">S</span>}
@@ -1234,7 +1248,7 @@ function Filmstrip({ clip, stream, x, w, h, z, media }) {
 
 // Tynne bånd som viser når kamera og forstørret peker er i bruk i et opptak.
 function RecBands({ clip, media }) {
-  const cam = media.streams.camera?.hasVideo && clip.props.showCamera !== false;
+  const cam = clip.recordingPart !== 'screen' && media.streams.camera?.hasVideo && clip.props.showCamera !== false;
   return (
     <div class="rec-bands">
       {cam && <span class="band cam" title="Camera" />}

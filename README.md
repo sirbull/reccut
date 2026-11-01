@@ -1,7 +1,7 @@
 <h1 align="center">Reccut</h1>
 
 <p align="center">
-  Record your screen and camera, then edit the recording.<br>
+  Video editing and screen recording in one app.<br>
   Free and open source, for Mac and Windows.
 </p>
 
@@ -16,28 +16,59 @@
 </p>
 
 <p align="center">
-  <img src="docs/media/record-gameplay.jpg" alt="Reccut recording gameplay from Echoes of Quite Recent, with the creator on camera in the lower-right corner and recording controls above">
+  <img src="docs/media/overview.jpg" alt="The Reccut video editor with imported nature footage, a title in the viewer, and video, title and music tracks on the timeline">
 </p>
 
-Reccut is a free, open-source screen recorder and video editor for Mac and Windows. Record your screen with your camera and microphone, then cut out mistakes, add titles or subtitles and export the finished video in the same app.
+Reccut is a free, open-source video editor and screen recorder for Mac and Windows. Import video from your camera or phone, arrange clips on a magnetic timeline, mix sound, correct colour and add titles or subtitles. Use it for a short film, an interview, a travel video or a YouTube project.
 
-You can also edit footage from other cameras, or use **Export** to convert files. Recording and editing run on your own machine and work offline. Optional **AI agents** can do the editing for you using a model you choose from a cloud provider or a local model server.
+The built-in screen recorder captures your screen, camera and microphone straight into a project. You can also use **Export** to convert files. Recording and editing run on your own machine and work offline. Optional **AI agents** can edit for you using a model you choose from a cloud provider or a local model server.
+
+## Video editing
+
+<p align="center">
+  <img src="docs/media/timeline.jpg" alt="Timeline with colour-coded nature clips, titles above and a music track below">
+</p>
+
+Import video, audio and images into a project and build your edit from there. Skim through clips in the media browser, mark the parts you want and add them to the timeline. Video, titles and graphics can sit above the main track, with dialogue, music and sound effects below.
+
+If you use Final Cut Pro, the magnetic main storyline and editing shortcuts will feel familiar. The main track closes gaps as you work, while connected clips stay with the shots they belong to. Use select, trim, position, range and blade tools to make the edit.
+
+- Roll, slip and slide, J- and L-cuts, unlimited video and audio tracks
+- Speed changes and speed ramps, reverse, freeze frames
+- Keyframes with easing on almost everything
+- Stabilization, masks drawn with a pen tool, chroma and luma keying
+- Pixelate or blur faces and passwords, and follow them with keyframes
+- Audio repair (noise reduction, hum removal, de-esser), EQ, compressor and 30+ presets
+- Automatic audio sync with an external recorder
+- Subtitles with automatic transcription by Whisper, plus SRT and WebVTT import and export
 
 ## Screen and camera recording
 
-The demo above shows me playing my own game, Echoes of Quite Recent, with my camera in the corner.
+<p align="center">
+  <img src="docs/media/record-gameplay.jpg" alt="Reccut recording gameplay from Echoes of Quite Recent, with the creator on camera in the lower-right corner">
+  <br>
+  <sub>Playing my own game, Echoes of Quite Recent, with my camera in the corner.</sub>
+</p>
 
 Record the whole screen, a single window or a selected area, with your webcam and microphone. You can also record the camera on its own. Use it for a tutorial, a presentation, gameplay or a piece to camera.
 
 When you stop, click **Edit** to open the recording on the timeline. Trim the start and end, cut out a mistake, add subtitles or music, and export. Screen and camera are stored separately, along with the layout, cursor movements and keystrokes, so you can change the camera position or hide overlays after recording.
 
-If the camera image is too dark, select the recording on the timeline and open **Recording → Camera Color**. Adjust exposure, contrast, saturation and temperature for the camera separately. The controls are also available in **Color**, and the adjustments are saved with the project and included in exports.
+The camera appears as a separate **PiP** clip on V2, linked to the screen clip on V1. Click PiP and open **Color → Camera Color** to adjust exposure, contrast, saturation and temperature for the camera alone. Linked clips stay in sync when moved, trimmed or cut. Choose **Detach PiP** to edit its timing independently, and reconnect it in **Recording → PiP Connection**. Older combined clips can use **Show PiP on Separate Track**. Adjustments are saved with the project and included in exports.
 
 <p align="center">
   <img src="docs/media/record-gameplay-edit.jpg" alt="The gameplay recording in Reccut’s editor, with a cut and a title on the timeline">
 </p>
 
 A global shortcut starts and stops recording from any app. Pause and resume without leaving gaps in the video. A floating control bar shows the recording time and controls without appearing in the recording. Recordings are saved as you go, with recovery after a crash.
+
+## Green screen, PiP backgrounds and masks
+
+Use **chroma key** to remove a green or blue screen, or pick another background colour. Adjust the matte and edges, reduce colour spill, and place the keyed clip over another video or image.
+
+The camera recording is a separate **PiP** clip in Edit. Select it and open **Effects → Keying & effect stack** to remove its background without changing the screen recording. You can also use a mask to keep only the part of the camera image you want. For a static background, use a clean reference frame with a fixed camera and steady lighting.
+
+Draw masks with the pen tool and animate their position or shape with keyframes. Stabilization smooths shaky footage, and effects can be combined with colour correction, titles and speed ramps. Keying and masks are applied in the editor and used in both the preview and export. See [keying and background removal](docs/KEYING-AND-AI.md) for the controls and requirements.
 
 ## Titles and lower thirds
 
@@ -70,24 +101,31 @@ Exposure, contrast, temperature, tint and three-way colour wheels, calculated on
 
 LOG footage from Apple, Sony, Panasonic, Fujifilm and ARRI is converted with one click, or you can load your own `.cube` LUT. HDR clips are recognised and tone-mapped.
 
-## Editing
+## Import formats
+
+These are some of the formats and codecs Reccut can import. Many more are read through FFmpeg. Files that need conversion are prepared in the background for editing.
+
+| | Video | Audio |
+| --- | --- | --- |
+| **Codecs** | H.264 / AVC, H.265 / HEVC (including 10-bit), AV1, VP8, VP9, ProRes, DNxHD / DNxHR, MPEG-2, MPEG-4, MJPEG, DV, WMV, VC-1 | MP3, AAC, ALAC (Apple Lossless), PCM, FLAC, Vorbis, Opus, WMA, AC-3, E-AC-3, DTS, AMR, APE (Monkey’s Audio), WavPack |
+| **File formats and containers** | MP4, MOV / QuickTime, M4V, MKV, WebM, AVI, MXF, MPEG / MPG, TS, MTS / M2TS (AVCHD), VOB, 3GP, OGV | MP3, WAV, M4A / M4B, AAC, FLAC, AIFF / AIF, Ogg / OGA, Opus, WebM audio, WMA, CAF, MKA, AC3 / EAC3, DTS, AMR, APE, WV, AU, W64, RF64 |
+
+You can also import numbered image sequences, camera RAW stills and LOG footage. HDR (PQ and HLG) is tone-mapped to SDR for editing and export. RAW video such as BRAW, R3D, N-RAW, ARRIRAW and ProRes RAW requires the appropriate external decoder; availability depends on the format and platform.
+
+## Export and batch conversion
+
+Export is also a video and audio converter. Drop in files, make smaller copies, change formats or extract audio, without adding anything to an editing timeline. It is included in Reccut, free and open source.
 
 <p align="center">
-  <img src="docs/media/timeline.jpg" alt="Timeline with colour-coded nature clips, titles above and a music track below">
+  <img src="docs/media/export-queue.jpg" alt="The Export tab with a project export and two video conversions running or waiting in the background queue">
+  <br>
+  <sub>A project export and two file conversions in the same queue.</sub>
 </p>
 
-If you have used Final Cut Pro, the timeline will feel familiar: a magnetic main storyline with connected clips above and audio below, and the same tools and shortcuts (select, trim, position, range, blade). Skim over clips to see and hear them, mark a range in the browser and drop it in.
-
-- Roll, slip and slide, J- and L-cuts, unlimited video and audio tracks
-- Speed changes and speed ramps, reverse, freeze frames
-- Keyframes with easing on almost everything
-- Stabilization, masks drawn with a pen tool, chroma and luma keying
-- Pixelate or blur faces and passwords, and follow them with keyframes
-- Audio repair (noise reduction, hum removal, de-esser), EQ, compressor and 30+ presets
-- Automatic audio sync with an external recorder
-- Subtitles with automatic transcription by Whisper, plus SRT and WebVTT import and export
-
-## Export
+- **Export a project:** click the blue **Export Project** button in the editor (or Cmd/Ctrl+E). The current project opens in Export with MP4/H.264, high quality, and the sequence’s size and frame rate. Review or change the settings, then click **Export Project** in the Export tab to start the job.
+- **Convert files:** import or drop video and audio files into Export. Choose settings and convert one file, or use **Convert All** to queue the imported files.
+- **Make another version:** change the codec, size, crop, frame rate or quality for a smaller file, a different aspect ratio or an editing master.
+- **Background queue:** follow progress, cancel jobs and open finished files while continuing to edit. Existing output files are not overwritten.
 
 <p align="center">
   <img src="docs/media/fmt-169.jpg" height="200" alt="Waterfall in 16:9">
@@ -103,13 +141,15 @@ Choose a preset (YouTube, Apple devices, smallest file, master, GIF, audio only)
 
 | Video | Audio |
 | --- | --- |
-| MP4 (H.264, HEVC, AV1), WebM (VP9, AV1), MOV (H.264, ProRes 422), MKV, GIF | MP3, AAC, WAV, FLAC, Opus |
-
-Reccut opens almost anything: ProRes, DNxHR, 10-bit HEVC, AVCHD, MXF, image sequences, camera RAW stills and RAW video through the manufacturers' own tools. What can't be played directly is converted in the background.
+| MP4 (H.264, H.265/HEVC, AV1), WebM (VP9, AV1), MOV (H.264, ProRes 422), MKV, GIF | MP3, AAC, WAV, FLAC, Opus |
 
 ## AI agents and model choice
 
-Connect a model in **Settings → AI & Plugins**, then ask the AI agent to edit your recording or other footage. For example: *"cut this recording down to a minute and add English subtitles"*. The agent can inspect the project and use Reccut's tools to cut clips, adjust colour and add titles. Review the edits on the timeline; its changes can be undone.
+Connect a model in **Settings → AI & Plugins**, import your clips and ask the AI agent to edit them. You can attach a script in the AI chat:
+
+> “Read the script I’ve attached and make a first cut from my camera takes and screen recordings. Use the best takes and show the screen when I explain each step.”
+
+The agent can read the script, transcribe the takes and build a sequence with camera footage, screen recordings, titles and subtitles. Review and adjust the first cut on the timeline; its changes can be undone. The result depends on the model and the material you give it.
 
 Choose a provider and model, and add your own API key. Reccut supports OpenAI, Anthropic (Claude), Google (Gemini), Mistral, OpenRouter and other providers. You can also connect a local model through Ollama, LM Studio or llama.cpp. Choose a model with **tool calling** so the agent can use the editing tools. Cloud models use your provider account; local models run through the server you configure.
 

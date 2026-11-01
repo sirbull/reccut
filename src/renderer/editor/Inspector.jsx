@@ -1,5 +1,6 @@
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
 import { ProcessorEffects } from './ProcessorEffects.jsx';
+import { RemoveEffectButton } from './RemoveEffectButton.jsx';
 import { VideoEffects } from './VideoEffects.jsx';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
@@ -17,6 +18,7 @@ import {
   DEFAULT_CAPTION_STYLE,
   EASINGS,
   EFFECTS,
+  SHADOW_DEFAULTS,
   REDACT_MODES,
   REDACT_SHAPES,
   redactLabel,
@@ -38,14 +40,15 @@ import {
   sourceTime,
   valueAt,
 } from '../../shared/model.js';
-import { setClipDuration, setSpeed, setTransition } from '../../shared/ops.js';
+import { shadowStyle } from '../../shared/shadow.js';
+import { recordingChildren, setClipDuration, setSpeed, setTransition } from '../../shared/ops.js';
 import { GRADE_PROPS, CAMERA_LOGS } from '../../shared/grade.js';
 import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { beginTransient, commit, endPreview, endTransient, getWave, mirror, previewEdit, motionVersion, project, selectedClips, selectedTransition, tasks, timeSig, updateTransient, waveVersion } from './store.js';
+import { beginTransient, commit, endPreview, endTransient, getWave, mirror, previewEdit, motionVersion, project, selectedClips, selectedTransition, selection, tasks, timeSig, updateTransient, waveVersion } from './store.js';
 import { seek } from './playback.js';
 import { setKeyframe } from './keyframes.js';
-import { addMaskToSelected, applyFilm, previewFilm, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
+import { addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
 import { prefs } from '../prefs.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
@@ -115,8 +118,8 @@ function tabsFor(clip, media) {
   if (clip.type === 'recording') tabs.push({ id: 'recording', label: 'Recording', icon: MonitorPlay });
   if (clip.type === 'redact') tabs.push({ id: 'redact', label: 'Redact', icon: EyeOff });
   if (isVisual(clip) && clip.type !== 'gap' && clip.type !== 'redact') tabs.push({ id: 'video', label: 'Video', icon: Film });
-  if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording') tabs.push({ id: 'color', label: 'Color', icon: Palette });
-  if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title') tabs.push({ id: 'effects', label: 'Effects', icon: Wand2 });
+  if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'adjustment') tabs.push({ id: 'color', label: 'Color', icon: Palette });
+  if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title' || clip.type === 'adjustment') tabs.push({ id: 'effects', label: 'Effects', icon: Wand2 });
   if (canMask(clip)) tabs.push({ id: 'masks', label: 'Masks', icon: SquareDashed });
   if (clipHasAudio(clip, media)) tabs.push({ id: 'audio', label: 'Audio', icon: Volume2 });
   if (['video', 'recording', 'audio'].includes(clip.type)) tabs.push({ id: 'speed', label: clip.speed === 0 ? 'Freeze' : 'Speed', icon: Gauge });
@@ -192,7 +195,7 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
   const T = timeSig.value;
   const inside = T >= clip.start && T <= clip.start + clip.dur;
   const Tc = Math.min(Math.max(T, clip.start), clip.start + clip.dur);
-  const raw = valueAt(clip, prop, Tc) ?? 0;
+  const raw = valueAt(clip, prop, Tc) ?? def ?? 0;
   const value = raw * scale;
   const s = kfTime(clip, Tc);
   const list = clip.kf?.[prop] || [];
@@ -320,15 +323,16 @@ function VideoTab({ clip }) {
   return (
     <>
       <Section title="Compositing">
-        <Param clip={clip} prop="opacity" label="Opacity" min={0} max={100} scale={100} unit="%" />
+        <Param clip={clip} prop="opacity" label={clip.type === 'adjustment' ? 'Layer strength' : 'Opacity'} min={0} max={100} scale={100} unit="%" />
+        {clip.type === 'adjustment' && <p class="hint">Processes the combined picture on lower video tracks during this layer’s duration. Clips above it and captions stay unchanged. Use Color, Effects and Masks to build the look.</p>}
       </Section>
-      <Section title="Transform">
+      {clip.type !== 'adjustment' && <Section title="Transform">
         <Param clip={clip} prop="x" label="Position X" min={-p.width} max={p.width} unit="px" slider={false} />
         <Param clip={clip} prop="y" label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} />
         <Param clip={clip} prop="scale" label="Scale" min={10} max={400} scale={100} unit="%" />
         <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
         <p class="hint">Tip: drag the clip directly in the viewer to move it.</p>
-      </Section>
+      </Section>}
       {clip.type === 'video' && <StabilizeSection clip={clip} />}
       {(clip.type === 'video' || clip.type === 'image') && (
         <Section title="Crop">
@@ -338,7 +342,7 @@ function VideoTab({ clip }) {
           <Param clip={clip} prop="cropB" label="Bottom" min={0} max={49} scale={100} unit="%" />
         </Section>
       )}
-      <AnimationPresets clip={clip} />
+      {clip.type !== 'adjustment' && <AnimationPresets clip={clip} />}
       <Section title="Fade">
         <PlainNumber clip={clip} prop="vFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
         <PlainNumber clip={clip} prop="vFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
@@ -448,7 +452,7 @@ function AudioFxSection({ clip }) {
               <b title={def.desc}>{def.label}</b>
               <IconButton icon={ArrowUp} size={12} title="Move up" disabled={i === 0} onClick={() => move(i, -1)} />
               <IconButton icon={ArrowDown} size={12} title="Move down" disabled={i === list.length - 1} onClick={() => move(i, 1)} />
-              <IconButton icon={Trash2} size={12} title="Remove effect" onClick={() => edit((pr) => (pr.afx = pr.afx.filter((x) => x.id !== e.id)))} />
+              <RemoveEffectButton label={def.label} adjusted={def.params.some((p) => (e.p[p.id] ?? p.def) !== p.def)} onRemove={() => edit((pr) => (pr.afx = pr.afx.filter((x) => x.id !== e.id)))} />
             </div>
             {e.type === 'eq' ? (
               <EqEditor effect={e} onLive={(patch) => live(e.id, patch)} onSet={(patch) => edit((pr) => Object.assign(pr.afx.find((x) => x.id === e.id).p, patch))} />
@@ -743,6 +747,9 @@ function StabilizeSection({ clip }) {
 }
 
 function EffectsTab({ clip, multi }) {
+  const shadowTime = Math.min(Math.max(timeSig.value, clip.start), clip.start + clip.dur);
+  const shadowAmount = valueAt(clip, 'shadow', shadowTime) || 0;
+  const shadow = shadowStyle(clip, shadowTime, project.value.height);
   const active = EFFECTS.filter((fx) => (clip.props.fx || []).includes(fx.id) || clip.props[fx.prop] || clip.kf?.[fx.prop]?.length);
   const available = EFFECTS.filter((fx) => !active.includes(fx));
   const add = (id) =>
@@ -758,20 +765,33 @@ function EffectsTab({ clip, multi }) {
       c.props.fx = (c.props.fx || []).filter((x) => x !== fx.id);
       c.props[fx.prop] = 0;
       delete c.kf[fx.prop];
+      if (fx.id === 'shadow') for (const [key, value] of Object.entries(SHADOW_DEFAULTS)) {
+        c.props[key] = value;
+        delete c.kf[key];
+      }
     });
   return (
     <>
       <VideoEffects clip={clip} />
-      {!multi && <ProcessorEffects clip={clip} />}
+      {!multi && clip.type !== 'adjustment' && <ProcessorEffects clip={clip} />}
       <Section title="Effects">
         {active.length === 0 && <p class="hint">No effects yet. Add one below, or drag one from the Effects browser.</p>}
         {active.map((fx) => (
           <div key={fx.id} class="fx-item" data-fx={fx.id}>
             <div class="fx-head">
               <b>{fx.label}</b>
-              <IconButton icon={Trash2} size={13} title="Remove effect" onClick={() => remove(fx)} />
+              <RemoveEffectButton label={fx.label} adjusted={(clip.props[fx.prop] ?? 0) !== fx.def || Boolean(clip.kf?.[fx.prop]?.length) || (fx.id === 'shadow' && Object.entries(SHADOW_DEFAULTS).some(([key, value]) => (clip.props[key] ?? value) !== value || clip.kf?.[key]?.length)) || (fx.id === 'border' && (clip.props.borderColor || '#ffffff') !== '#ffffff')} onRemove={() => remove(fx)} />
             </div>
             <Param clip={clip} prop={fx.prop} label="Amount" min={fx.min * (fx.scale || 1)} max={fx.max * (fx.scale || 1)} scale={fx.scale || 1} unit={fx.unit} center={fx.min < 0 ? 0 : undefined} />
+            {fx.id === 'shadow' && <>
+              <Row label="Color">
+                <ColorField value={shadow.color} onLive={(v) => updateTransient((q) => (q.clips[clip.id].props.shadowColor = v))} />
+              </Row>
+              <Param clip={clip} prop="shadowSoftness" label="Softness" min={0} max={500} scale={100} unit="%" def={1} />
+              <Param clip={clip} prop="shadowOpacity" label="Opacity" min={0} max={100} scale={100} unit="%" def={Math.min(1, 0.75 * shadowAmount)} />
+              <Param clip={clip} prop="shadowOffsetX" label="Position X" min={-project.value.width} max={project.value.width} unit="px" center={0} def={0} />
+              <Param clip={clip} prop="shadowOffsetY" label="Position Y" min={-project.value.height} max={project.value.height} unit="px" center={0} def={project.value.height * 0.012 * shadowAmount} />
+            </>}
             {fx.id === 'border' && (
               <Row label="Color">
                 <ColorField value={clip.props.borderColor || '#ffffff'} onLive={(v) => updateTransient((q) => (q.clips[clip.id].props.borderColor = v))} />
@@ -1090,7 +1110,7 @@ function ColorTab({ clip, mediaIds }) {
   const p = project.value;
   return (
     <>
-      {clip.type === 'recording' && p.media[clip.mediaId]?.streams?.camera?.hasVideo && <CameraColorSection clip={clip} />}
+      {clip.type === 'recording' && clip.recordingPart !== 'screen' && p.media[clip.mediaId]?.streams?.camera?.hasVideo && <CameraColorSection clip={clip} />}
       {mediaIds?.length > 0 && (
         <Section title="Camera LUT">
           <CameraLutRow media={p.media[mediaIds[0]]} ids={mediaIds} />
@@ -1159,7 +1179,7 @@ function ColorTab({ clip, mediaIds }) {
 function CameraColorSection({ clip }) {
   return (
     <Section title="Camera Color">
-      <p class="hint">Adjust only the camera image, in picture in picture or full screen. If your face is too dark, raise Exposure. These adjustments are included in your export.</p>
+      <p class="hint">{clip.recordingPart === 'camera' ? 'Adjust only this PiP clip. Raise Exposure if your face is too dark. Changes are saved with the project and included in your export.' : 'Adjust only the camera image, in picture in picture or full screen. If your face is too dark, raise Exposure. These adjustments are included in your export.'}</p>
       <Param clip={clip} prop="cameraExposure" label="Exposure" min={-100} max={100} scale={100} center={0} />
       <Param clip={clip} prop="cameraContrast" label="Contrast" min={-100} max={100} scale={100} center={0} />
       <Param clip={clip} prop="cameraSaturation" label="Saturation" min={-100} max={100} scale={100} center={0} />
@@ -1262,11 +1282,34 @@ function RecordingTab({ clip, media }) {
   const s = sourceTime(clip, Tc);
   const layout = valueAt(clip, 'layout', Tc) ?? 6;
   const atSwitch = keyframeIndexAt(clip, 'layout', s, 0.05) >= 0;
-  const hasCam = media?.streams?.camera?.hasVideo;
+  const hasCam = clip.recordingPart !== 'screen' && media?.streams?.camera?.hasVideo;
+  const camera = recordingChildren(project.value, clip.id)[0];
+  const parents = clip.recordingPart === 'camera' ? Object.values(project.value.clips).filter((c) => c.recordingPart === 'screen' && c.mediaId === clip.mediaId && (!recordingChildren(project.value, c.id).length || c.id === clip.linkedTo)) : [];
   const rec = media?.rec || {};
   const switches = (clip.kf.layout || []).filter(([t]) => t >= clip.in && t <= clip.in + clip.dur);
   return (
     <>
+      {clip.recordingPart === 'camera' && (
+        <Section title="PiP Connection">
+          <Row label="Screen recording" stacked>
+            <Select value={clip.linkedTo || ''} options={[{ value: '', label: 'Detached' }, ...parents.map((c) => ({ value: c.id, label: `${c.name || 'Screen'} (${formatShort(c.start)})` }))]} onChange={(id) => id ? attachPip(clip.id, id) : detachPip(clip.id)} />
+          </Row>
+          <p class="hint">{clip.linkedTo ? 'PiP follows the screen when you move, trim or cut either clip. Select this PiP clip to adjust its color and effects separately.' : 'PiP has its own timing. Choose a screen recording to link and synchronize it again.'} Microphone and system audio stay on the screen clip.</p>
+          {clip.linkedTo && <Button onClick={() => detachPip(clip.id)}>Detach PiP</Button>}
+        </Section>
+      )}
+      {clip.recordingPart === 'screen' && (
+        <Section title="PiP Track">
+          <p class="hint">{camera ? 'The camera is on the video track above this clip. Select PiP to adjust its color, shape and effects.' : 'The camera has been detached or removed from this screen clip.'}</p>
+          {camera && <><Button onClick={() => { selection.value = [camera.id]; inspectorTab.value = 'color'; }}>Adjust PiP</Button><Button onClick={() => detachPip(clip.id)}>Detach PiP</Button></>}
+        </Section>
+      )}
+      {!clip.recordingPart && hasCam && media?.streams?.screen?.hasVideo && (
+        <Section title="PiP Track">
+          <p class="hint">Put the camera on a separate video track, linked to this screen recording. You can then select and adjust PiP on its own.</p>
+          <Button onClick={() => separatePipTrack(clip.id)}>Show PiP on Separate Track</Button>
+        </Section>
+      )}
       {hasCam && (
         <Section title="Camera">
           <Row label="Show camera">
@@ -1325,7 +1368,7 @@ function RecordingTab({ clip, media }) {
         </Section>
       )}
       {hasCam && <CameraColorSection clip={clip} />}
-      <Section title="Overlays">
+      {clip.recordingPart !== 'camera' && <Section title="Overlays">
         <Row label={`Keystrokes (${rec.keys?.length || 0})`}>
           <Toggle checked={clip.props.showKeys} onChange={(v) => setProp(clip, { showKeys: v })} />
         </Row>
@@ -1336,7 +1379,7 @@ function RecordingTab({ clip, media }) {
           <Toggle checked={clip.props.showClicks} onChange={(v) => setProp(clip, { showClicks: v })} />
         </Row>
         <p class="hint">Blade the clip (B or {window.api.platform === 'darwin' ? 'Cmd' : 'Ctrl'} B) to turn overlays on or off for part of the recording.</p>
-      </Section>
+      </Section>}
     </>
   );
 }

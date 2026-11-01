@@ -44,8 +44,10 @@ import {
   sequenceSettingsOpen,
 } from './editor/store.js';
 import * as commands from './editor/commands.js';
-import { startExport } from './editor/ExportDialog.jsx';
+import { ExportDialog, startExport } from './editor/ExportDialog.jsx';
+import { ExportFrameDialog } from './editor/ExportFrameDialog.jsx';
 import { ExportRoom } from './export/ExportRoom.jsx';
+import { prepareProjectExport } from './export/state.js';
 import { currentSequence, formatDuration } from '../shared/model.js';
 import { Button, IconButton, Modal, Toasts, toast } from './ui.jsx';
 import { HistoryDialog, NewProjectDialog, PackageDialog, ProjectsDialog, SaveAsDialog, SequenceSettingsDialog } from './ProjectDialogs.jsx';
@@ -54,6 +56,7 @@ import { SettingsWindow } from './Settings.jsx';
 import { prefs } from './prefs.js';
 import { helpOpen, paletteOpen } from './registry.js';
 import { isTyping, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } from './keyboard.js';
+import { installFileDrop } from './fileDrop.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -192,7 +195,7 @@ function TitleBar() {
           <span class="sep" />
           <IconButton icon={Settings} title={`Settings (${isMac ? '⌘' : 'Ctrl+'},)`} onClick={() => (commands.prefsOpen.value = true)} />
           <IconButton icon={Plus} title={`Import media (${isMac ? '⌘' : 'Ctrl+'}I)`} onClick={() => commands.importDialog()} />
-          <button class="btn primary" onClick={() => (commands.exportOpen.value = true)} title={`Export project (${isMac ? '⌘' : 'Ctrl+'}E)`}>
+          <button class="btn primary" onClick={prepareProjectExport} title="Prepare project in Export">
             <Share size={15} />
             Export Project
           </button>
@@ -276,8 +279,14 @@ function handleMenu(id) {
   if (!document.hasFocus()) return;
   const cmd = byId.get(id);
   if (isTyping()) {
-    if (cmd?.text) document.execCommand(cmd.text);
-    return;
+    if (cmd?.text) {
+      document.execCommand(cmd.text);
+      return;
+    }
+    // Export dialogs are explicit actions, also when an inspector/search field
+    // retains focus. Ordinary editing commands still belong to the focused field.
+    if (!cmd?.allowWhileTyping) return;
+    document.activeElement?.blur?.();
   }
   if (dialogOwnsKeyboard()) return;
   runCommand(id);
@@ -303,6 +312,19 @@ effect(() => {
 
 function App() {
   const r = room.value;
+  const [fileHover, setFileHover] = useState(false);
+  useEffect(() => installFileDrop(window, {
+    pathForFile: api.pathForFile,
+    onFiles: commands.importDroppedFiles,
+    onHover: setFileHover,
+    onError: (err) => toast(err.message, { kind: 'error' }),
+  }), []);
+  useEffect(() => {
+    if (r !== 'record' && engine.recording.value) {
+      finishRecording().catch((err) => toast(`Could not save the recording: ${err.message}`, { kind: 'error' }));
+    }
+  }, [r, engine.recording.value]);
+
   useEffect(() => {
     engine.initSources();
     loadInitialProject().then(checkRecovery);
@@ -352,6 +374,8 @@ function App() {
           <ExportRoom active={r === 'export'} />
         </div>
       </main>
+      {commands.exportOpen.value && <ExportDialog />}
+      {commands.frameExportOpen.value && <ExportFrameDialog request={commands.frameExportOpen.value} />}
       {(commands.newProjectOpen.value || needsProject.value) && <NewProjectDialog />}
       {commands.projectsOpen.value && !needsProject.value && <ProjectsDialog />}
       {commands.saveAsOpen.value && <SaveAsDialog />}
@@ -365,6 +389,7 @@ function App() {
       {paletteOpen.value && <CommandPalette />}
       {recoverList.value.length > 0 && <RecoverDialog />}
       <Toasts />
+      {fileHover && <div class="file-drop-hint" role="status"><FolderOpen size={24} /><span>Drop files to import</span></div>}
     </div>
   );
 }

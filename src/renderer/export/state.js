@@ -1,9 +1,9 @@
 // Tilstand for eksportfanen: kilder (prosjektet eller importerte filer) og innstillinger.
-import { computed, signal } from '@preact/signals';
+import { batch, computed, signal } from '@preact/signals';
 import { CAPTION_LANE, newProject } from '../../shared/model.js';
 import { addMediaClip, autoFormat } from '../../shared/ops.js';
 import { PRESETS } from '../../shared/formats.js';
-import { project as editorProject, reportFailed, withAnalysis } from '../editor/store.js';
+import { playing, project as editorProject, reportFailed, room, withAnalysis } from '../editor/store.js';
 
 const api = window.api;
 
@@ -93,6 +93,20 @@ export function setSettings(patch) {
     const { ...persist } = settings.value;
     localStorage.setItem('exportRoom', JSON.stringify(persist));
   } catch {}
+}
+
+// Open the current edit in Export with a broadly compatible delivery format.
+// Keep the sequence dimensions and frame rate; a previous file conversion must
+// not leave the project cropped, resized, audio-only or using a different rate.
+export function prepareProjectExport() {
+  const p = editorProject.value;
+  batch(() => {
+    playing.value = false;
+    selectedId.value = PROJECT_SOURCE;
+    setSettings({ ...DEFAULTS, size: { preset: 0, w: p.width, h: p.height }, fps: p.fps });
+    setSourceOptions(PROJECT_SOURCE, { crop: null, range: p.range ? { ...p.range } : null });
+    room.value = 'export';
+  });
 }
 
 export function applyPreset(id) {

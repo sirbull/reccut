@@ -1,5 +1,6 @@
 import { computed, effect, signal } from '@preact/signals';
 import { FLAT_MIX, normalizeMix } from './mixer.js';
+import { RECORDING_AUDIO_FORMATS, recordingVideoFormat } from '../../shared/recordingFormats.cjs';
 
 const isMac = window.api.platform === 'darwin';
 
@@ -27,6 +28,8 @@ const DEFAULTS = {
   showPipOnScreen: false,
   mirror: false,
   fps: 30,
+  videoFormat: 'mp4',
+  audioFormat: 'auto',
   hideFromCapture: false,
   captureVisibilityVersion: 1,
   modifier: MODIFIERS[0].value,
@@ -60,6 +63,8 @@ function load() {
     if (!['circle', 'square', 'rect'].includes(s.pipShape)) s.pipShape = 'rect';
     if (!MODIFIERS.some((m) => m.value === s.modifier)) s.modifier = MODIFIERS[0].value;
     s.micMixer = normalizeMix(s.micMixer);
+    s.videoFormat = recordingVideoFormat(s.videoFormat).value;
+    if (s.audioFormat !== 'auto' && !RECORDING_AUDIO_FORMATS.some((f) => f.value === s.audioFormat)) s.audioFormat = 'auto';
     if (migrateCaptureVisibility) {
       try { localStorage.setItem('settings', JSON.stringify(s)); } catch {}
     }

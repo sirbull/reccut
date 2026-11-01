@@ -161,7 +161,7 @@ export function ExportDialog() {
 
   return (
     <Modal
-      title="Export Project"
+      title="Easy Export"
       width={860}
       class="export-modal"
       onClose={() => (exportOpen.value = false)}

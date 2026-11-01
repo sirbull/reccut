@@ -58,7 +58,7 @@ export function parseSrt(text) {
 export function speechSources(p) {
   const sources = [];
   for (const c of Object.values(p.clips)) {
-    if (!c.enabled || c.lane === CAPTION_LANE || !c.mediaId) continue;
+    if (!c.enabled || c.lane === CAPTION_LANE || !c.mediaId || c.recordingPart === 'camera') continue;
     const m = p.media[c.mediaId];
     let stream = null;
     if (c.type === 'recording') stream = m.streams.camera?.hasAudio ? m.streams.camera : m.streams.screen?.hasAudio ? m.streams.screen : null;

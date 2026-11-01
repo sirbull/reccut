@@ -16,7 +16,7 @@ export function startLibraryDrag(e, item) {
   e.dataTransfer.setData('application/x-reccut', JSON.stringify(payload));
   e.dataTransfer.effectAllowed = 'copy';
   libraryDrag.value = payload;
-  if (['transition', 'effect', 'afx', 'apreset', 'frameFx', 'redact'].includes(item.kind)) {
+  if (['transition', 'effect', 'afx', 'apreset', 'frameFx', 'redact', 'adjustment'].includes(item.kind)) {
     dragImage = document.createElement('div');
     dragImage.className = `library-drag-preview${item.kind === 'transition' ? ' transition' : ''}`;
     const icon = document.createElement('span');

@@ -2,19 +2,98 @@ import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { ProcessorEffects } from '../src/renderer/editor/ProcessorEffects.jsx';
 import { VideoEffects } from '../src/renderer/editor/VideoEffects.jsx';
+import { Inspector } from '../src/renderer/editor/Inspector.jsx';
+import { Timeline } from '../src/renderer/editor/Timeline.jsx';
 import { ExtensionsPane, AIChat } from '../src/renderer/Extensions.jsx';
 import { runAgent } from '../src/renderer/agent.js';
 import { PluginWindows, PluginsButton, PluginsPane, exportingPlugin, openPlugin, openPluginFile, openPlugins, plugins, settingsFocus } from '../src/renderer/Plugins.jsx';
 import { prefs, setPrefs } from '../src/renderer/prefs.js';
 import * as editorCommands from '../src/renderer/editor/commands.js';
-import { project, commit, undo, redo, selection } from '../src/renderer/editor/store.js';
+import { project, commit, undo, redo, selection, timeSig, tool } from '../src/renderer/editor/store.js';
 import { readClipFrame, readClipFrames } from '../src/renderer/editor/sourceFrame.js';
 import { newProject, makeClip } from '../src/shared/model.js';
+import { makeEffect } from '../src/shared/audiofx.js';
 import { makeVideoEffect } from '../src/shared/videoEffects.js';
+import { addMediaClip, recordingChildren } from '../src/shared/ops.js';
+export { verifyAdjustmentUI } from './adjustment-ui.browser.jsx';
 const tick = () => new Promise((r) => setTimeout(r, 50));
 const assert = (c, m) => {
   if (!c) throw new Error(m);
 };
+
+export async function verifyPip() {
+  const p = newProject('PiP editing');
+  const st = { path: window.sourceFile, hasVideo: true, hasAudio: true, width: 1280, height: 720, duration: 12 };
+  const m = { id: 'rec', name: 'Screen recording', kind: 'recording', duration: 12, streams: { screen: { ...st }, camera: { ...st } }, rec: { layouts: [[0, 6]] } };
+  p.media.rec = m;
+  const id = addMediaClip(p, m, 'append');
+  const cameraId = recordingChildren(p, id)[0].id;
+  project.value = p;
+  selection.value = [id];
+  timeSig.value = 1;
+  tool.value = 'select';
+  editorCommands.browserFocus.value = false;
+  editorCommands.inspectorTab.value = 'recording';
+  render(
+    <div class="editor" style="height:100vh;grid-template-rows:minmax(0,1fr) 300px">
+      <div class="editor-top" style="grid-template-columns:minmax(320px,1fr) 340px">
+        <div class="panel" style="display:grid;place-content:center;gap:12px;text-align:center"><h2>Screen recording + PiP</h2><p>Select the PiP clip on V2 to adjust only the camera.</p></div>
+        <Inspector />
+      </div>
+      <Timeline />
+    </div>, document.getElementById('root'),
+  );
+  await tick();
+  assert(document.querySelectorAll('.tl-clip').length === 2, 'screen and PiP must have separate timeline clips');
+  assert(document.querySelector('.pip-connection'), 'timeline must show the PiP connection');
+  const el = document.querySelector(`[data-clip="${cameraId}"] .clip-label`);
+  const box = el.getBoundingClientRect();
+  const capture = Element.prototype.setPointerCapture;
+  Element.prototype.setPointerCapture = () => {};
+  try {
+    el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: box.left + 40, clientY: box.top + 8 }));
+    el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 1 }));
+  } finally { Element.prototype.setPointerCapture = capture; }
+  await tick();
+  assert(selection.value.length === 1 && selection.value[0] === cameraId, 'clicking linked PiP must select only PiP');
+  document.querySelector('[data-tab="color"]').click();
+  await tick();
+  const slider = document.querySelector('[data-prop="cameraExposure"] input[type="range"]');
+  slider.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  slider.value = '55';
+  slider.dispatchEvent(new Event('input', { bubbles: true }));
+  slider.dispatchEvent(new Event('change', { bubbles: true }));
+  await tick();
+  assert(project.value.clips[cameraId].props.cameraExposure === 0.55 && project.value.clips[id].props.cameraExposure === 0, 'PiP slider must edit only the camera');
+  undo();
+  assert(project.value.clips[cameraId].props.cameraExposure === 0, 'color adjustment must undo');
+  redo();
+  assert(project.value.clips[cameraId].props.cameraExposure === 0.55, 'color adjustment must redo');
+  document.querySelector('[data-tab="recording"]').click();
+  await tick();
+  [...document.querySelectorAll('button')].find((b) => b.textContent === 'Detach PiP').click();
+  await tick();
+  assert(!project.value.clips[cameraId].linkedTo, 'Detach PiP must remove the temporal connection');
+  undo();
+  assert(project.value.clips[cameraId].linkedTo === id, 'detaching must be undoable');
+  redo();
+  await tick();
+  const select = [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => o.value === id));
+  select.value = id;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+  await tick();
+  assert(project.value.clips[cameraId].linkedTo === id, 'PiP must be relinkable from the inspector');
+  const popup = window.api.popupMenu;
+  let items;
+  window.api.popupMenu = async (menu) => { items = menu; return null; };
+  try { await editorCommands.clipContextMenu(cameraId, 1); }
+  finally { window.api.popupMenu = popup; }
+  assert(items.some((i) => i.id === 'detachPip') && !items.some((i) => i.id === 'detach'), 'PiP context menu must offer visual detachment without duplicating microphone audio');
+  document.querySelector('[data-tab="color"]').click();
+  await tick();
+  assert(document.documentElement.scrollWidth <= window.innerWidth, 'PiP inspector must fit the window');
+  return { status: 'passed', checks: 11 };
+}
 function EffectsHarness() {
   const [p, setP] = useState(project.value);
   useEffect(() => {
@@ -57,17 +136,222 @@ export async function verifyUI() {
   assert(project.value.clips.subject.props.vfx.length === 3, 'duplicate should add a separate instance');
   titles('Remove effect')[0].click();
   await tick();
+  assert(document.querySelector('.modal') && project.value.clips.subject.props.vfx.length === 3, 'adjusted effects must ask before removal');
+  [...document.querySelectorAll('.modal button')].find((b) => b.textContent === 'Cancel').click();
+  await tick();
+  assert(!document.querySelector('.modal') && project.value.clips.subject.props.vfx.length === 3, 'cancel must keep all adjustments');
+  titles('Remove effect')[0].click();
+  await tick();
+  [...document.querySelectorAll('.modal button')].find((b) => b.textContent === 'Remove effect').click();
+  await tick();
   assert(project.value.clips.subject.props.vfx.length === 2, 'remove should delete only one instance');
   undo();
   await tick();
   assert(project.value.clips.subject.props.vfx.length === 3, 'effect removal should be undoable');
   redo();
   await tick();
+  const remaining = project.value.clips.subject.props.vfx.length;
+  titles('Remove effect')[0].click();
+  await tick();
+  const checkbox = document.querySelector('.modal input[type="checkbox"]');
+  checkbox.click();
+  await tick();
+  [...document.querySelectorAll('.modal button')].find((b) => b.textContent === 'Cancel').click();
+  await tick();
+  assert(prefs.value.confirmEffectRemoval, 'cancel must not save the skip-warning preference');
+  titles('Remove effect')[0].click();
+  await tick();
+  document.querySelector('.modal input[type="checkbox"]').click();
+  await tick();
+  [...document.querySelectorAll('.modal button')].find((b) => b.textContent === 'Remove effect').click();
+  await tick();
+  assert(!prefs.value.confirmEffectRemoval && JSON.parse(localStorage.getItem('prefs')).confirmEffectRemoval === false, 'skip warning must persist across sessions');
+  undo(); await tick();
+  titles('Remove effect')[0].click(); await tick();
+  assert(!document.querySelector('.modal') && project.value.clips.subject.props.vfx.length === remaining - 1, 'skip warning must remove adjusted effects directly');
+  undo(); await tick();
+  setPrefs({ confirmEffectRemoval: true });
   const details = document.querySelector('details');
   details.open = true;
   await tick();
   assert(document.documentElement.scrollWidth <= window.innerWidth, 'keying inspector should fit the window');
-  return { status: 'passed', checks: 6 };
+    for (const label of ['Recover fine detail', 'Preserve source shadows', 'Recover edge color', 'Matte gamma'])
+    assert([...details.querySelectorAll('.row-label')].some((el) => el.textContent === label), `${label} must be available under Advanced`);
+  const head = document.querySelector('[data-vfx] .afx-head');
+  assert([...head.children].every((el) => el.getBoundingClientRect().bottom <= head.getBoundingClientRect().bottom + 1), 'all effect actions must fit in one header row');
+  return { status: 'passed', checks: 16 };
+}
+export async function verifyShadowUI() {
+  const p = newProject('Shadow controls');
+  const m = { id: 'm', kind: 'image', streams: { main: { hasVideo: true } } };
+  p.media.m = m;
+  const c = makeClip('image', { media: m, lane: 0 }); c.id = 'subject';
+  c.props.fx = ['shadow']; c.props.shadow = 0.6;
+  p.clips.subject = c; p.primary = ['subject'];
+  project.value = p; selection.value = ['subject']; timeSig.value = 0;
+  editorCommands.inspectorTab.value = 'effects';
+  setPrefs({ confirmEffectRemoval: true });
+  render(<div style="width:320px;height:850px"><Inspector /></div>, document.getElementById('root'));
+  await tick();
+  const row = (prop) => document.querySelector(`[data-prop="${prop}"]`);
+  const set = async (prop, value) => {
+    const slider = row(prop).querySelector('.slider');
+    slider.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    slider.value = value; slider.dispatchEvent(new Event('input', { bubbles: true }));
+    slider.dispatchEvent(new Event('change', { bubbles: true })); await tick();
+  };
+  assert(row('shadow').querySelector('.slider').max === '500', 'shadow slider must reach 500%');
+  for (const prop of ['shadow', 'shadowSoftness', 'shadowOpacity', 'shadowOffsetX', 'shadowOffsetY']) {
+    const slider = row(prop).querySelector('.slider').getBoundingClientRect();
+    const field = row(prop).querySelector('.num-field').getBoundingClientRect();
+    assert(field.left - slider.right >= 7, `${prop}: thumb must have room at the right endpoint`);
+    assert(row(prop).lastElementChild.getBoundingClientRect().right <= row(prop).getBoundingClientRect().right + 1, `${prop}: controls must fit the narrow inspector`);
+  }
+  await set('shadow', '500');
+  assert(project.value.clips.subject.props.shadow === 5, '500% must persist');
+  undo(); await tick(); assert(project.value.clips.subject.props.shadow === 0.6, 'amount must undo in one step');
+  redo(); await tick();
+  await set('shadowSoftness', '0'); await set('shadowOpacity', '25');
+  await set('shadowOffsetX', '-80'); await set('shadowOffsetY', '120');
+  const color = document.querySelector('[data-fx="shadow"] input[type="color"]');
+  color.value = '#3366ff'; color.dispatchEvent(new Event('input', { bubbles: true }));
+  color.dispatchEvent(new Event('change', { bubbles: true })); await tick();
+  assert(project.value.clips.subject.props.shadowColor === '#3366ff' && project.value.clips.subject.props.shadowOpacity === 0.25, 'color and opacity must persist independently');
+  row('shadowOffsetX').querySelector('.kf-btn').click(); await tick();
+  assert(project.value.clips.subject.kf.shadowOffsetX[0][1] === -80, 'position must support keyframes');
+  row('shadowOpacity').querySelector('[title="Reset"]').click(); await tick();
+  assert(project.value.clips.subject.props.shadowOpacity === 1, 'opacity reset must restore the amount-based default');
+  document.querySelector('[data-fx="shadow"] [title="Remove effect"]').click(); await tick();
+  [...document.querySelectorAll('.modal button')].find((b) => b.textContent === 'Remove effect').click(); await tick();
+  assert(project.value.clips.subject.props.shadowColor === '#000000' && !project.value.clips.subject.kf.shadowOffsetX, 'removal must clear all shadow settings and keyframes');
+  undo(); await tick();
+  assert(project.value.clips.subject.props.shadowColor === '#3366ff' && project.value.clips.subject.kf.shadowOffsetX[0][1] === -80, 'Undo must restore the entire shadow');
+  return { status: 'passed', checks: 19 };
+}
+
+export async function verifyEffectRemoval() {
+  const p = newProject('Remove effects');
+  const m = { id: 'm', kind: 'video', duration: 10, streams: { main: { hasVideo: true, hasAudio: true } } };
+  p.media.m = m;
+  const c = makeClip('video', { media: m, lane: 0 }); c.id = 'subject';
+  c.props.fx = ['shadow']; c.props.shadow = 0.6;
+  p.clips.subject = c; p.primary = ['subject'];
+  project.value = p; selection.value = ['subject'];
+  editorCommands.browserFocus.value = false;
+  editorCommands.inspectorTab.value = 'effects';
+  setPrefs({ confirmEffectRemoval: true });
+  render(<div style="width:320px;height:850px"><Inspector /></div>, document.getElementById('root'));
+  await tick();
+  document.querySelector('[data-fx="shadow"] [title="Remove effect"]').click(); await tick();
+  assert(!document.querySelector('.modal') && !project.value.clips.subject.props.fx.includes('shadow'), 'default clip effect must delete without a warning');
+  undo(); await tick();
+  commit((q) => { q.clips.subject.kf.shadow = [[0, 0.3], [1, 0.8]]; }); await tick();
+  const keyframes = JSON.stringify(project.value.clips.subject.kf.shadow);
+  document.querySelector('[data-fx="shadow"] [title="Remove effect"]').click(); await tick();
+  assert(document.querySelector('[role="dialog"]'), 'keyframed effect must warn even when its base amount is unchanged');
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await tick();
+  assert(!document.querySelector('.modal') && JSON.stringify(project.value.clips.subject.kf.shadow) === keyframes, 'Escape must cancel without losing keyframes');
+  document.querySelector('[data-fx="shadow"] [title="Remove effect"]').click(); await tick();
+  [...document.querySelectorAll('.modal button')].find((b) => b.textContent === 'Remove effect').click(); await tick();
+  assert(!project.value.clips.subject.kf.shadow && project.value.clips.subject.props.shadow === 0, 'confirm must remove the effect and its keyframes');
+  undo(); await tick();
+  assert(JSON.stringify(project.value.clips.subject.kf.shadow) === keyframes && project.value.clips.subject.props.shadow === 0.6, 'one Undo must restore the complete effect');
+  commit((q) => { q.clips.subject.props.afx = [makeEffect('gain', { db: 9 })]; });
+  editorCommands.inspectorTab.value = 'audio'; await tick();
+  document.querySelector('[data-afx-item="gain"] [title="Remove effect"]').click(); await tick();
+  assert(document.querySelector('.modal'), 'adjusted audio effects must share the removal warning');
+  [...document.querySelectorAll('.modal button')].find((b) => b.textContent === 'Remove effect').click(); await tick();
+  assert(project.value.clips.subject.props.afx.length === 0, 'confirm must remove audio effect');
+  undo(); await tick();
+  assert(project.value.clips.subject.props.afx[0].p.db === 9, 'Undo must restore audio settings');
+  return { status: 'passed', checks: 8 };
+}
+
+export async function verifyGradientUI() {
+  const p = newProject('Gradient editor');
+  const m = { id: 'm', kind: 'image', name: 'Image', streams: { main: { hasVideo: true, width: 1920, height: 1080 } } };
+  p.media.m = m;
+  const clip = makeClip('image', { media: m, lane: 0 });
+  clip.id = 'subject'; p.clips.subject = clip; p.primary = ['subject'];
+  project.value = p; selection.value = ['subject'];
+  render(<EffectsHarness />, document.getElementById('root'));
+  await tick();
+  const choose = async (select, value) => {
+    select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); await tick();
+  };
+  const button = (text) => [...document.querySelectorAll('button')].find((b) => b.textContent === text);
+  const effect = () => project.value.clips.subject.props.vfx.find((e) => e.type === 'gradient');
+  const add = () => [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => o.textContent === 'Add stack effect…'));
+  await choose(add(), 'gradient');
+  assert(effect() && document.querySelector('[data-gradient-mode="linear"]'), 'add menu must create an editable gradient');
+  button('Add stop').click(); await tick();
+  assert(effect().p.stops.length === 3, 'add stop must add a third editable stop');
+  const color = document.querySelector('[aria-label="Selected gradient color"]');
+  color.value = '#00ff00'; color.dispatchEvent(new Event('input', { bubbles: true }));
+  color.dispatchEvent(new Event('change', { bubbles: true })); await tick();
+  assert(effect().p.stops.some((s) => s.color === '#00ff00'), 'new stop color must be editable');
+  button('Remove stop').click(); await tick();
+  assert(effect().p.stops.length === 2, 'selected stop must be removable');
+  undo(); await tick();
+  assert(effect().p.stops.length === 3, 'stop removal must undo');
+  const mode = () => document.querySelector('.gradient-editor select');
+  await choose(mode(), 'radial');
+  assert(document.querySelector('[data-gradient-handle="radius"]'), 'radial mode must expose radius handle');
+  await choose(mode(), 'freeform');
+  assert(document.querySelectorAll('[data-gradient-handle="point"]').length === 3, 'freeform must start with three points');
+  button('Add point').click(); await tick();
+  assert(effect().p.points.length === 4, 'freeform must accept additional points');
+  const canvas = document.querySelector('.gradient-preview');
+  const box = canvas.getBoundingClientRect();
+  assert(Math.abs(box.width / box.height - 16 / 9) < 0.01, 'gradient preview must keep the source aspect ratio');
+  canvas.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: box.left + box.width * 0.65, clientY: box.top + box.height * 0.7 }));
+  await tick();
+  assert(effect().p.points.length === 5, 'double-clicking preview must add a point');
+  const selected = effect().p.points.at(-1), selectedId = selected.id;
+  const oldCapture = Element.prototype.setPointerCapture;
+  Element.prototype.setPointerCapture = () => {};
+  const dragHandle = async (kind, id, x, y, dx, dy) => {
+    const handle = document.querySelector(`[data-gradient-handle="${kind}"][data-id="${id}"]`);
+    handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 9, clientX: x, clientY: y }));
+    canvas.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 9, clientX: x + dx, clientY: y + dy }));
+    await tick();
+    canvas.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 9 })); await tick();
+  };
+  try {
+    await dragHandle('point', selectedId, box.left + box.width * 0.65, box.top + box.height * 0.7, -box.width * 0.2, -box.height * 0.2);
+    const moved = effect().p.points.find((s) => s.id === selectedId);
+    assert(Math.abs(moved.x - 0.45) < 0.01 && Math.abs(moved.y - 0.5) < 0.01, 'dragging must update point coordinates');
+    undo(); await tick();
+    assert(Math.abs(effect().p.points.find((s) => s.id === selectedId).x - 0.65) < 0.01, 'whole point drag must undo in one step');
+    redo(); await tick();
+    const radius = effect().p.points.find((s) => s.id === selectedId).radius;
+    await dragHandle('spread', selectedId, box.left + box.width * 0.6, box.top + box.height * 0.5, 20, 0);
+    assert(effect().p.points.find((s) => s.id === selectedId).radius > radius + 0.05, 'spread handle must enlarge point influence');
+    undo(); await tick();
+    assert(effect().p.points.find((s) => s.id === selectedId).radius === radius, 'spread drag must undo');
+  } finally { Element.prototype.setPointerCapture = oldCapture; }
+  document.querySelector(`[data-gradient-handle="point"][data-id="${selectedId}"]`).dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowRight' }));
+  await tick();
+  assert(Math.abs(effect().p.points.find((s) => s.id === selectedId).x - 0.46) < 0.01, 'point handles must support keyboard movement');
+  document.querySelector('[data-vfx="gradient"] [title="Duplicate effect"]').click(); await tick();
+  assert(project.value.clips.subject.props.vfx.filter((e) => e.type === 'gradient').length === 2, 'gradients must be duplicatable');
+  commit((q) => { q.clips.subject.props.vfx[1].p.points[0].color = '#ffffff'; });
+  assert(effect().p.points[0].color !== '#ffffff', 'duplicate gradient must own independent point settings');
+  document.querySelectorAll('[data-vfx="gradient"] [title="Remove effect"]')[1].click(); await tick();
+  assert(document.querySelector('.modal'), 'adjusted gradients must warn before removal');
+  [...document.querySelectorAll('.modal button')].find((b) => b.textContent === 'Remove effect').click(); await tick();
+  await choose(add(), 'solid');
+  assert(document.querySelector('[aria-label="Solid color"]'), 'solid must expose a color control');
+  undo(); await tick();
+  editorCommands.addEffect('solid'); await tick();
+  assert(project.value.clips.subject.props.vfx.at(-1).type === 'solid', 'effect library command must add solid fill');
+  undo(); await tick();
+  editorCommands.addEffect('gradient'); await tick();
+  assert(project.value.clips.subject.props.vfx.length === 2, 'effect library command must add independent gradient');
+  undo(); await tick();
+  document.querySelector('.gradient-editor').scrollIntoView();
+  assert(document.documentElement.scrollWidth <= window.innerWidth, 'gradient controls must fit the inspector');
+  return { status: 'passed', checks: 21 };
 }
 export async function showSettings() {
   render(
