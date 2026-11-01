@@ -12,7 +12,7 @@
   &nbsp;·&nbsp;
   <a href="#build-from-source">Build from source</a>
   &nbsp;·&nbsp;
-  <a href="docs/FUNKSJONER.md">Full feature list (Norwegian)</a>
+  <a href="docs/FEATURES.md">Full feature list</a>
 </p>
 
 <p align="center">
@@ -217,7 +217,7 @@ To publish a new version, bump the version in `package.json`, tag it (for exampl
 ## Documentation
 
 - **In the app:** Help → Reccut Help (F1) opens the handbook, with search and pictures. It works offline.
-- [Full feature list, shortcuts and settings](docs/FUNKSJONER.md) (Norwegian)
+- [Full feature list, shortcuts and settings](docs/FEATURES.md)
 - [AI, keying and plugins](docs/KEYING-AND-AI.md)
 
 ## Licence
