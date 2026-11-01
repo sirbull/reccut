@@ -9,6 +9,8 @@
 <meta property="og:description" content="An open-source video editor and screen recorder for Mac, Windows and Linux. Edit imported footage, mix audio, add titles and connect an AI agent to your choice of model.">
 <meta property="og:image" content="media/overview.jpg">
 <meta name="theme-color" content="#0b0c0e">
+<link rel="icon" type="image/png" href="media/icon-192.png">
+<link rel="apple-touch-icon" href="media/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
@@ -48,8 +50,8 @@ nav {
   border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
 }
 nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; text-decoration: none; }
-.brand i { width: 18px; height: 18px; border-radius: 50%; border: 4px solid var(--accent); box-shadow: 0 0 18px var(--accent); }
+.brand { display: flex; align-items: center; }
+.brand img { height: 28px; width: auto; }
 nav .links { display: flex; gap: 24px; margin-left: auto; font-size: 15px; color: var(--muted); }
 nav .links a { text-decoration: none; transition: color .2s; }
 nav .links a:hover { color: var(--text); }
@@ -252,7 +254,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 
 <nav>
   <div class="wrap">
-    <a class="brand" href="#"><i></i>Reccut</a>
+    <a class="brand" href="#"><img src="media/reccut-wordmark.svg" alt="Reccut" width="94" height="28"></a>
     <div class="links">
       <a href="#edit">Video editing</a>
       <a href="#record">Record</a>
