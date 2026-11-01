@@ -70,6 +70,7 @@ export const prefsOpen = signal(false);
 export const saveAsOpen = signal(false);
 export const packageOpen = signal(false);
 export const historyOpen = signal(false);
+export const aiChatOpen = signal(false);
 // Valg når et lydklipp passer under flere videoklipp: { audioId, matches }.
 export const syncDialog = signal(null);
 
@@ -593,7 +594,20 @@ export async function runPlugin(pluginId, clipId, params = {}) {
   }
 }
 
-export function revertPlugin(clipId) {
+// Velg et installert tillegg fra en meny og kjør det på det valgte klippet.
+export async function choosePlugin(clipId = null) {
+  const list = (await api.pluginsList()).filter((x) => !x.errors.length);
+  if (!list.length) {
+    toast('No plugins are installed yet. Install one under Settings, Plugins.', { actions: [{ label: 'Open Settings', onClick: () => (localStorage.setItem('settingsPane', 'plugins'), (prefsOpen.value = true)) }] });
+    return;
+  }
+  const id = list.length === 1 ? `plugin:${list[0].id}` : await api.popupMenu(list.map((x) => ({ id: `plugin:${x.id}`, label: x.manifest.name })));
+  if (id) openRunPlugin(id.slice(7), clipId);
+}
+
+export function revertPlugin(clipId = null) {
+  clipId ||= selection.value.find((x) => project.value.clips[x]?.props?.pluginOriginal);
+  if (!clipId) return toast('Select a clip that a plugin has processed.');
   commit((q) => {
     const c = q.clips[clipId];
     const o = c?.props?.pluginOriginal;
@@ -1337,6 +1351,13 @@ export async function clipContextMenu(clipId, T) {
       { separator: true }
     );
   }
+  // Tillegg (plugins) for video og bilder.
+  if (c.type === 'video' || c.type === 'image') {
+    const plugins = (await api.pluginsList().catch(() => [])).filter((x) => !x.errors.length);
+    if (plugins.length) items.push({ label: 'Run Plugin', submenu: plugins.map((x) => ({ id: `plugin:${x.id}`, label: x.manifest.name })) });
+    if (c.props?.pluginOriginal) items.push({ id: 'pluginRevert', label: `Revert to Original (before ${c.props.pluginOriginal.plugin})` });
+    if (plugins.length || c.props?.pluginOriginal) items.push({ separator: true });
+  }
   if (c.mediaId) items.push({ id: 'reveal', label: k('Reveal in Finder', 'Show in Explorer') }, { separator: true });
   items.push({ id: 'delete', label: c.lane === 0 ? 'Delete' : 'Delete', accelerator: 'Backspace' });
   if (c.lane === 0) items.push({ id: 'deleteGap', label: 'Delete and Leave Gap', accelerator: 'Shift+Backspace' });
@@ -1357,6 +1378,8 @@ export async function clipContextMenu(clipId, T) {
   if (id?.startsWith('speed:')) return setSpeedSelected(Number(id.slice(6)));
   if (id?.startsWith('ramp:')) return applyRamp(id === 'ramp:none' ? null : id.slice(5));
   if (id === 'reverse') return toggleReverse();
+  if (id?.startsWith('plugin:')) return openRunPlugin(id.slice(7), clipId);
+  if (id === 'pluginRevert') return revertPlugin(clipId);
   if (id?.startsWith('comp:')) return toggleComponent(clipId, id.slice(5));
   switch (id) {
     case 'copy':

@@ -170,6 +170,7 @@ export function redo() {
 }
 
 export const canUndo = () => undoStack.length > 0;
+export const undoDepth = () => undoStack.length;
 export const canRedo = () => redoStack.length > 0;
 
 function pruneSelection() {

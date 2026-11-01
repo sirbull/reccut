@@ -1,6 +1,7 @@
 import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import {
+  Bot,
   CheckCircle2,
   CircleAlert,
   CircleHelp,
@@ -172,6 +173,7 @@ function TitleBar() {
           <IconButton icon={Undo2} title="Undo" disabled={!canUndo()} onClick={undo} />
           <IconButton icon={Redo2} title="Redo" disabled={!canRedo()} onClick={redo} />
           <span class="sep" />
+          <IconButton icon={Bot} active={commands.aiChatOpen.value} title={`AI Assistant (${isMac ? '⌥⌘J' : 'Ctrl+Alt+J'})`} onClick={() => (commands.aiChatOpen.value = !commands.aiChatOpen.value)} />
           <IconButton icon={Settings} title={`Settings (${isMac ? '⌘' : 'Ctrl+'},)`} onClick={() => (commands.prefsOpen.value = true)} />
           <IconButton icon={Plus} title={`Import media (${isMac ? '⌘' : 'Ctrl+'}I)`} onClick={() => commands.importDialog()} />
           <button class="btn primary" onClick={() => (commands.exportOpen.value = true)} title={`Export project (${isMac ? '⌘' : 'Ctrl+'}E)`}>

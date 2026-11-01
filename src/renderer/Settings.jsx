@@ -1,7 +1,7 @@
 // Innstillinger (Cmd ,), bygd som i Final Cut Pro: faner med ikoner øverst, og en kommandoeditor
 // for hurtigtaster. Alle valg lagres med en gang og gjelder hele appen.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AudioLines, Download, FolderOpen, Keyboard, Play, RotateCcw, Scissors, Search, Settings2, Share, Upload, X } from 'lucide-preact';
+import { AudioLines, Bot, Download, FolderOpen, Keyboard, Play, Puzzle, RotateCcw, Scissors, Search, Settings2, Share, Upload, X } from 'lucide-preact';
 import { prefs, setPrefs } from './prefs.js';
 import { audioSkimming, skimming, snapping } from './editor/store.js';
 import * as commands from './editor/commands.js';
@@ -32,6 +32,8 @@ const PANES = [
   { id: 'audio', label: 'Audio', icon: AudioLines },
   { id: 'export', label: 'Export', icon: Share },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard },
+  { id: 'plugins', label: 'Plugins', icon: Puzzle },
+  { id: 'ai', label: 'AI', icon: Bot },
 ];
 
 const seconds = (key, label, min, max, step = 0.1, hint) => (
@@ -265,6 +267,176 @@ function ExportPane() {
 
 const MENUS = ['All', 'File', 'Edit', 'Mark', 'Clip', 'Tools', 'Playback', 'View', 'Help'];
 
+/* Tillegg: installerte tillegg, innstillingene deres, og eksemplene som følger med. */
+function PluginsPane() {
+  const [list, setList] = useState(null);
+  const [bundled, setBundled] = useState([]);
+  const load = async () => {
+    setList(await api.pluginsList());
+    setBundled(await api.pluginsBundled());
+  };
+  useEffect(() => {
+    load();
+  }, []);
+  const install = async (dir) => {
+    if (!dir && !confirm('Plugins run programs on your computer. Only install plugins from sources you trust. Continue?')) return;
+    try {
+      const id = await api.pluginsInstall(dir || null);
+      if (id) toast('The plugin is installed.', { kind: 'success', timeout: 3000 });
+    } catch (err) {
+      toast(err.message, { kind: 'error', timeout: 8000 });
+    }
+    load();
+  };
+  const setValue = async (pl, key, value) => {
+    const values = { ...pl.settings, [key]: value };
+    await api.pluginsSettings(pl.id, values);
+    load();
+  };
+  const installed = new Set((list || []).map((p) => p.id));
+  return (
+    <>
+      <Section title="Installed Plugins" collapsible={false}>
+        {list && !list.length && <p class="hint">No plugins yet. Install one of the plugins below, or a plugin folder you have.</p>}
+        {(list || []).map((pl) => (
+          <div key={pl.id} class="afx-item" data-plugin={pl.id}>
+            <div class="afx-head">
+              <b>{pl.manifest.name}</b>
+              <span class="hint" style={{ margin: 0 }}>{pl.manifest.version}</span>
+              <Button
+                class="small"
+                variant="ghost"
+                onClick={async () => {
+                  if (!confirm(`Remove ${pl.manifest.name}?`)) return;
+                  await api.pluginsRemove(pl.id);
+                  load();
+                }}
+              >
+                Remove
+              </Button>
+            </div>
+            <p class="hint">{pl.manifest.description}</p>
+            {pl.errors.length > 0 && <p class="hint warn">Problems: {pl.errors.join(', ')}</p>}
+            {(pl.manifest.settings || []).map((st) => (
+              <Row key={st.id} label={st.label} stacked>
+                <div class="plugin-setting">
+                  <input class="text-input" value={pl.settings[st.id] ?? st.default ?? ''} onChange={(e) => setValue(pl, st.id, e.currentTarget.value)} />
+                  {(st.type === 'file' || st.type === 'folder') && (
+                    <Button
+                      class="small"
+                      onClick={async () => {
+                        const v = st.type === 'folder' ? await api.chooseDir(pl.settings[st.id] || '') : await api.openFileDialog({ title: st.label });
+                        if (v) setValue(pl, st.id, v);
+                      }}
+                    >
+                      Choose…
+                    </Button>
+                  )}
+                </div>
+              </Row>
+            ))}
+            {pl.manifest.homepage && <p class="hint">More information: {pl.manifest.homepage}</p>}
+          </div>
+        ))}
+        <div class="afx-add">
+          <Button class="small" onClick={() => install()}>
+            Install Plugin Folder…
+          </Button>
+          <Button class="small" variant="ghost" onClick={() => api.pluginsOpenFolder()}>
+            Show Plugins Folder
+          </Button>
+        </div>
+        <p class="hint">A plugin is a folder with a plugin.json that describes a program Reccut runs on a clip, for example an AI keyer. Reccut prepares the frames, runs the program, and replaces the clip with the result. Plugins run programs on your computer, so only install plugins you trust.</p>
+      </Section>
+      <Section title="Included with Reccut" collapsible={false}>
+        {bundled.map((b) => (
+          <div key={b.id} class="afx-item">
+            <div class="afx-head">
+              <b>{b.manifest.name}</b>
+              <Button class="small" disabled={installed.has(b.id)} onClick={() => install(b.dir)}>
+                {installed.has(b.id) ? 'Installed' : 'Install'}
+              </Button>
+            </div>
+            <p class="hint">{b.manifest.description}</p>
+          </div>
+        ))}
+      </Section>
+    </>
+  );
+}
+
+/* AI-assistenten: leverandør, modell og egen API-nøkkel (lagres kryptert i hovedprosessen). */
+const AI_PROVIDERS = [
+  { value: 'anthropic', label: 'Claude (Anthropic)' },
+  { value: 'openai', label: 'OpenAI-compatible' },
+];
+
+function AiPane() {
+  const [cfg, setCfg] = useState(null);
+  const [key, setKey] = useState('');
+  const [status, setStatus] = useState('');
+  useEffect(() => {
+    api.aiConfig().then(setCfg);
+  }, []);
+  if (!cfg) return null;
+  const save = async (patch) => setCfg(await api.aiSetConfig(patch));
+  const test = async () => {
+    setStatus('Testing…');
+    try {
+      const r = await api.aiTest();
+      setStatus(`Works. Answered by ${r.model}.`);
+    } catch (err) {
+      setStatus(err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+    }
+  };
+  return (
+    <>
+      <Section title="AI Assistant" collapsible={false}>
+        <p class="hint">The assistant is a chat panel in the editor that can look at your project and edit it for you, for example cut out pauses, add titles and captions, key a green screen or clean up audio. Every change it makes can be undone. Open it with the AI button in the toolbar or from the View menu.</p>
+        <Row label="Service">
+          <Segmented value={cfg.provider} options={AI_PROVIDERS} onChange={(v) => save({ provider: v })} />
+        </Row>
+        {cfg.provider === 'openai' && (
+          <Row label="Address" stacked hint="For OpenAI use https://api.openai.com/v1. Local models work too, for example LM Studio (http://localhost:1234/v1) or Ollama (http://localhost:11434/v1).">
+            <input class="text-input" value={cfg.baseUrl} onChange={(e) => save({ baseUrl: e.currentTarget.value })} />
+          </Row>
+        )}
+        <Row label="Model" stacked hint={cfg.provider === 'anthropic' ? 'claude-opus-5-5 is the most capable. claude-sonnet-5-5 is faster and costs less.' : 'The model name the service uses, for example gpt-5.'}>
+          <input class="text-input" value={cfg.model} placeholder={cfg.provider === 'anthropic' ? 'claude-opus-5-5' : 'Model name'} onChange={(e) => save({ model: e.currentTarget.value })} />
+        </Row>
+        <Row label="API key" stacked hint={cfg.encrypted ? 'Stored encrypted on this computer, and only sent to the service you chose.' : 'Stored on this computer, and only sent to the service you chose.'}>
+          <div class="plugin-setting">
+            <input class="text-input" type="password" value={key} placeholder={cfg.hasKey ? 'A key is saved' : cfg.provider === 'anthropic' ? 'sk-ant-…' : 'Not needed for local models'} onInput={(e) => setKey(e.currentTarget.value)} />
+            <Button
+              class="small"
+              disabled={!key}
+              onClick={async () => {
+                await save({ apiKey: key });
+                setKey('');
+                setStatus('The key is saved.');
+              }}
+            >
+              Save
+            </Button>
+            {cfg.hasKey && (
+              <Button class="small" variant="ghost" onClick={() => save({ apiKey: '' })}>
+                Remove
+              </Button>
+            )}
+          </div>
+        </Row>
+        <div class="afx-add">
+          <Button class="small" onClick={test} disabled={cfg.provider === 'anthropic' && !cfg.hasKey}>
+            Test Connection
+          </Button>
+          {status && <span class="hint inline">{status}</span>}
+        </div>
+        <p class="hint">Reccut works fully offline. The assistant is the only part that sends anything over the internet, and only when you write to it: your message, an overview of the project (names, times and settings, not the media files), and pictures from the viewer when it checks its work. Usage is billed by the service on your own account.</p>
+      </Section>
+    </>
+  );
+}
+
 function KeyboardPane() {
   const [query, setQuery] = useState('');
   const [menu, setMenu] = useState('All');
@@ -467,6 +639,8 @@ export function SettingsWindow() {
           {current.id === 'audio' && <AudioPane />}
           {current.id === 'export' && <ExportPane />}
           {current.id === 'keyboard' && <KeyboardPane />}
+          {current.id === 'plugins' && <PluginsPane />}
+          {current.id === 'ai' && <AiPane />}
         </div>
       </div>
     </div>

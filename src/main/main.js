@@ -27,6 +27,7 @@ const { createRecordUI } = require('./recordui');
 const updates = require('./updates');
 const plate = require('./plate');
 const plugins = require('./plugins');
+const ai = require('./ai');
 const { InputTracker, ZOOM_KEYS } = require('./input');
 
 const isMac = process.platform === 'darwin';
@@ -374,6 +375,12 @@ ipcMain.handle('plugins:run', (_e, job) => {
   const { done } = jobs.add({ kind: 'plugin', title: `${job.pluginName}: ${job.name}`, queue: 'heavy', run: (ctx) => plugins.run(job, ctx) });
   return done;
 });
+// AI-assistenten (nøkkelen blir i hovedprosessen).
+ipcMain.handle('ai:getConfig', () => ai.getConfig());
+ipcMain.handle('ai:setConfig', (_e, patch) => ai.setConfig(patch || {}));
+ipcMain.handle('ai:test', () => ai.test());
+ipcMain.handle('ai:send', (_e, req) => ai.send(req, (text) => send('ai:text', { id: req.id, text })));
+ipcMain.handle('ai:stop', (_e, id) => ai.stop(id));
 ipcMain.handle('app:version', () => app.getVersion());
 // Bare nettadresser til GitHub åpnes i nettleseren.
 ipcMain.handle('shell:openExternal', (_e, url) => {

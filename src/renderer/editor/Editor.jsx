@@ -7,6 +7,7 @@ import { Viewer } from './Viewer.jsx';
 import { Inspector } from './Inspector.jsx';
 import { Timeline } from './Timeline.jsx';
 import { ExportDialog } from './ExportDialog.jsx';
+import { AiChat } from './AiChat.jsx';
 import { audioSkimming, commit, makeCaptionClip, project, skimming, snapping } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
@@ -66,6 +67,7 @@ export function Editor({ active }) {
         <Browser />
         <Viewer />
         <Inspector />
+        {commands.aiChatOpen.value && <AiChat />}
       </div>
       <div class="divider" onPointerDown={onDividerDown} />
       <Timeline />
@@ -74,7 +76,59 @@ export function Editor({ active }) {
       {commands.attributesDialog.value && <AttributesDialog />}
       {commands.importOptions.value && <ImportOptionsDialog />}
       {layerImport.value && <LayerImportDialog key={layerImport.value.file} />}
+      {commands.pluginDialog.value && <PluginDialog key={commands.pluginDialog.value.clipId} />}
     </div>
+  );
+}
+
+// Kjør et tillegg: valgene tillegget har (tall, lister, tekst og av/på), så Run.
+function PluginDialog() {
+  const { plugin, clipId } = commands.pluginDialog.value;
+  const m = plugin.manifest;
+  const [params, setParams] = useState(() => Object.fromEntries((m.params || []).map((p) => [p.id, p.default ?? (p.type === 'toggle' ? false : '')])));
+  const close = () => (commands.pluginDialog.value = null);
+  const set = (id, v) => setParams({ ...params, [id]: v });
+  const clip = project.value.clips[clipId];
+  return (
+    <Modal
+      title={m.name}
+      width={460}
+      onClose={close}
+      footer={
+        <>
+          <Button variant="ghost" onClick={close}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={() => commands.runPlugin(plugin.id, clipId, params)}>
+            Run
+          </Button>
+        </>
+      }
+    >
+      {m.description && <p class="hint">{m.description}</p>}
+      {(m.params || []).map((p) => (
+        <Row key={p.id} label={p.label || p.id}>
+          {p.type === 'number' ? (
+            <NumberField value={Number(params[p.id]) || 0} min={p.min ?? -1e9} max={p.max ?? 1e9} step={p.step ?? 1} precision={p.step && p.step < 1 ? 2 : 0} onChange={(v) => set(p.id, v)} />
+          ) : p.type === 'select' ? (
+            <select value={params[p.id]} onChange={(e) => set(p.id, e.currentTarget.value)}>
+              {(p.options || []).map((o) => (
+                <option key={o.value ?? o} value={o.value ?? o}>
+                  {o.label ?? o}
+                </option>
+              ))}
+            </select>
+          ) : p.type === 'toggle' ? (
+            <Toggle checked={Boolean(params[p.id])} onChange={(v) => set(p.id, v)} />
+          ) : (
+            <input class="text-input" value={params[p.id]} onInput={(e) => set(p.id, e.currentTarget.value)} />
+          )}
+        </Row>
+      ))}
+      <p class="hint">
+        Runs on {clip?.name || 'the clip'} in the background. When it is done, the clip uses the result, and you can go back with Revert to Original in the clip menu.
+      </p>
+    </Modal>
   );
 }
 
