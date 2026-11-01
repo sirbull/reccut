@@ -20,6 +20,7 @@ const common = {
 };
 
 const builds = [
+  { ...common, entryPoints: [path.join(root, 'src/renderer/help/Handbook.jsx')], outfile: path.join(out, 'help.js'), format: 'esm', platform: 'browser' },
   { ...common, entryPoints: [path.join(root, 'src/renderer/app.jsx')], outfile: path.join(out, 'app.js'), format: 'esm', platform: 'browser' },
   {
     ...common,
@@ -35,10 +36,11 @@ const builds = [
 ];
 
 function copyStatic() {
-  for (const f of ['index.html', 'export.html', 'transcribe.html']) {
+  for (const f of ['index.html', 'help.html', 'export.html', 'transcribe.html']) {
     const src = fs.existsSync(path.join(root, 'src/renderer', f)) ? path.join(root, 'src/renderer', f) : path.join(root, 'src/worker', f);
     fs.copyFileSync(src, path.join(out, f));
   }
+  fs.copyFileSync(path.join(root, 'src/renderer/help/handbook.css'), path.join(out, 'handbook.css'));
   // Bilder til hjelpen.
   const help = path.join(root, 'assets/help');
   const helpOut = path.join(out, 'help');

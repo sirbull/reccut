@@ -1,0 +1,59 @@
+/* Handbook-only styles: larger readable text without changing the editing interface. */
+.handbook { display:grid; grid-template-columns:270px minmax(0,1fr); height:100%; }
+.handbook-brand { display:flex; gap:12px; align-items:center; padding:24px 20px 12px; }
+.handbook-brand strong { display:block; font-size:19px; color:var(--text); }
+.handbook-brand span { display:block; color:var(--text-2); margin-top:3px; }
+.handbook .help-nav { overflow:hidden; }
+.handbook .help-nav nav { flex:1; }
+.handbook .help-search { margin:12px 14px; padding:10px; }
+.handbook .help-search input { width:0; min-width:0; font-size:13px; }
+.handbook .help-search button { display:flex; padding:0; }
+.handbook .help-section h2 { margin:22px 9px 6px; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-2); }
+.handbook .help-section button { padding:7px 10px; font-size:13px; line-height:1.45; }
+.handbook .help-nav footer { border-top:1px solid var(--line-2); color:var(--text-2); padding:12px 20px; }
+.handbook-main { display:flex; flex-direction:column; min-height:0; min-width:0; background:var(--bg-1); }
+.handbook-toolbar { display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--line-2); min-height:55px; padding:8px 24px; color:var(--text-2); }
+.handbook-toolbar .icon-btn:disabled { opacity:.3; }
+.handbook-search-key { margin-left:auto; font-size:11px; white-space:nowrap; }
+.handbook .help-body { flex:1; padding:32px clamp(24px,4vw,64px) 70px; scroll-behavior:auto; }
+.handbook .help-article,.handbook .help-results { margin:0 auto; max-width:820px; font-size:15px; line-height:1.75; color:#c5c5ca; user-select:text; overflow-wrap:anywhere; }
+.handbook h1 { font-size:32px; line-height:1.2; color:var(--text); letter-spacing:-.025em; margin:6px 0 14px; }
+.handbook .help-article h3 { font-size:20px; line-height:1.35; margin:34px 0 12px; scroll-margin-top:15px; }
+.handbook h2 { color:var(--text); }
+.handbook .help-summary { font-size:17px; line-height:1.6; margin-bottom:26px; color:#bcbcc3; }
+.handbook-eyebrow { display:block; color:#8abfff; font-size:11px; text-transform:uppercase; letter-spacing:.09em; margin:0 0 5px; }
+.handbook strong,.handbook b { color:var(--text); }
+.handbook .help-article li { margin:8px 0; padding-left:4px; }
+.handbook .help-article ol { padding-left:24px; }
+.handbook-contents { display:flex; flex-direction:column; gap:5px; border:1px solid var(--line-2); background:var(--bg-2); border-radius:10px; padding:16px 20px; margin:24px 0; font-size:13px; }
+.handbook-contents a { color:#8abfff; text-decoration:none; }
+.handbook-contents a:hover { text-decoration:underline; }
+.handbook code { background:var(--bg-3); padding:2px 5px; border-radius:4px; font-size:.9em; }
+.handbook blockquote { margin:20px 0; border-left:3px solid #559eee; padding:12px 18px; background:#0a84ff10; }
+.handbook .help-hit { padding:18px 16px; border:1px solid var(--line-2); margin:12px 0; }
+.handbook .help-hit b { font-size:17px; margin:3px 0 6px; }
+.handbook .help-hit span { display:block; color:#aaaab3; font-size:13px; }
+.handbook .help-hit .handbook-eyebrow { color:#8abfff; font-size:10px; }
+.handbook mark { color:#fce29a; background:#f7c94820; border-radius:2px; }
+.handbook .help-cmd { width:100%; text-align:left; padding:10px 8px; }
+.handbook .help-related p { font-size:12px; }
+.handbook .keycap { margin-left:7px; font-size:11px; white-space:nowrap; }
+.handbook .help-run { font-size:12px; padding:4px 9px; cursor:pointer; }
+.handbook .link { color:#8abfff; cursor:pointer; }
+.handbook-command { padding:16px 0; border-bottom:1px solid var(--line-2); }
+.handbook-command > div:first-child { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.handbook-command p { font-size:13px; margin:5px 0 10px; }
+.handbook-command-actions { display:flex; gap:20px; align-items:center; font-size:12px; }
+.handbook-filter { display:flex; align-items:center; gap:12px; margin:20px 0; font-size:13px; }
+.handbook-filter input,.handbook-filter select { border:1px solid var(--line-2); padding:8px 10px; background:var(--bg-2); border-radius:6px; min-width:180px; }
+.handbook-image { display:block; padding:0; background:none; border:0; text-align:left; cursor:zoom-in; max-width:100%; position:relative; }
+.handbook-image span { position:absolute; bottom:8px; right:8px; display:flex; gap:6px; align-items:center; background:#141416e8; padding:5px 9px; border-radius:6px; font-size:11px; color:white; }
+.handbook .help-article figcaption { color:#aaaab3; font-size:12px; line-height:1.6; }
+.handbook :focus-visible { outline:2px solid #69adff; outline-offset:3px; }
+.handbook-lightbox { background:var(--bg-1); color:var(--text); border:1px solid var(--line-2); border-radius:12px; padding:40px 20px 12px; max-width:94vw; max-height:94vh; }
+.handbook-lightbox::backdrop { background:#000c; }
+.handbook-lightbox .icon-btn { position:absolute; right:10px; top:8px; }
+.handbook-lightbox img { display:block; max-width:calc(94vw - 44px); max-height:calc(94vh - 110px); object-fit:contain; }
+.handbook-lightbox p { margin:12px 0 0; font-size:13px; }
+.handbook-error { display:flex; justify-content:space-between; padding:10px 24px; background:#612b22; }
+@media(max-width:860px) { .handbook { grid-template-columns:230px minmax(0,1fr); } .handbook .help-body { padding:24px 24px 60px; } .handbook h1 { font-size:27px; } .handbook-search-key { display:none; } .handbook .help-cmd .where { display:none; } }

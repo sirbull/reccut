@@ -12,6 +12,9 @@ const on = (channel) => (cb) => {
 };
 
 contextBridge.exposeInMainWorld('api', {
+  openHelp: invoke('help:open'),
+  updateHelp: invoke('help:update'),
+  onHelpCommand: on('help:command'),
   aiConfig: invoke('ai:config'),
   aiSave: invoke('ai:save'),
   aiComplete: invoke('ai:complete'),

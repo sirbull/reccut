@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { Maximize2, Minimize2, Settings2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-preact';
+import { Activity, Maximize2, Minimize2, Settings2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-preact';
 import { deepClone, formatTimecode, isVisual, kfTime, valueAt } from '../../shared/model.js';
 import { captionLayout, wrapText } from '../../shared/render.js';
 import { clipMatrix, maskList, shapeAt } from '../../shared/shapes.js';
@@ -10,6 +10,7 @@ import { IconButton } from '../ui.jsx';
 import { PREVIEW_RESOLUTIONS, prefs, setPrefs } from '../prefs.js';
 import { setKeyframe } from './keyframes.js';
 import { toggleViewerFullscreen } from './fullscreen.js';
+import { VideoScopes } from './VideoScopes.jsx';
 import { isTyping } from '../keyboard.js';
 
 // Spill bakover: avspillingsikonet speilet.
@@ -134,6 +135,7 @@ export function Viewer() {
         {sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} label="Redaction. Drag to move, drag the handles to resize." />}
         {editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
       </div>
+      {prefs.value.videoScopesVisible && !fullscreen && <VideoScopes sourceRef={canvasRef} onClose={() => setPrefs({ videoScopesVisible: false })} />}
       <div class="transport">
         <div class="tc big">{formatTimecode(source ? (skim.value?.mediaId === browserPlayhead.value?.mediaId ? skim.value.T : browserPlayhead.value?.t || 0) : timeSig.value, p.fps)}</div>
         <div class="controls">
@@ -147,6 +149,7 @@ export function Viewer() {
           <IconButton icon={SkipForward} title="Go to end (End)" onClick={commands.goEnd} />
         </div>
         <div class="right">
+          <IconButton icon={Activity} title={`${prefs.value.videoScopesVisible ? 'Hide' : 'Show'} video scopes`} active={prefs.value.videoScopesVisible} aria-pressed={Boolean(prefs.value.videoScopesVisible)} onClick={() => setPrefs({ videoScopesVisible: !prefs.value.videoScopesVisible })} />
           <select
             class="select preview-resolution"
             aria-label="Preview resolution"

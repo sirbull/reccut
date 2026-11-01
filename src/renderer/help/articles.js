@@ -1,13 +1,15 @@
 // Hjelpeartiklene. Teksten er på engelsk, som resten av appen. Se Help.jsx for formatet:
-// ## overskrift, - punkt, ![bildetekst](fil.jpg), **fet**, {{key:kommando}} og [[run:kommando|Tekst]].
-export const SECTIONS = ['Getting Started', 'Recording', 'Media', 'Editing', 'Audio', 'Look', 'Export', 'Reference'];
+// ## heading, - bullets, numbered steps, ![caption](file), **bold**, {{key:id}}, [[run:id|label]], [[article:id|label]].
+import { WORKFLOWS } from './workflows.js';
+import { CATALOG_ARTICLES } from './catalog.js';
+export const SECTIONS = ['Getting Started', 'Recording', 'Media', 'Editing', 'Audio', 'Look', 'AI and Plugins', 'Export', 'Reference'];
 
 export const ARTICLES = [
   {
     id: 'welcome',
     section: 'Getting Started',
     title: 'Welcome to Reccut',
-    summary: 'Record your screen and camera, edit like in Final Cut Pro, and export to almost any format.',
+    summary: 'Your illustrated, searchable guide to recording, editing, AI tools and delivery. Available offline inside Reccut.',
     keywords: 'overview rooms start',
     body: `
 Reccut has three rooms, shown at the top of the window. Switch between them with {{key:roomRecord}}, {{key:roomEdit}} and {{key:roomExport}}.
@@ -20,7 +22,17 @@ Reccut has three rooms, shown at the top of the window. Switch between them with
 
 Everything belongs to a project. A project is a folder that holds the project file, your recordings, copied media, optimized media and exports.
 
+## Start with a task
+
+- [[article:first-edit|Make your first video]] — a complete recording, edit and export example.
+- [[article:ai-setup|Connect a cloud AI agent]] or [[article:ai-local|use a local model]].
+- [[article:tools|Learn the editing tools]] and [[article:creative-reference|browse creative presets]].
+- [[article:troubleshooting|Solve a picture, sound or export problem]].
+- [[article:command-reference|Find every command]] or [[article:glossary|look up an unfamiliar term]].
+
 ## Finding things fast
+
+This handbook opens in its own window, so you can keep it beside your project. Search covers article text, headings, examples and commands. Try “connect local AI”, “no sound”, “roll trim” or “export captions”. Use the chapter filter to narrow results. Click an image to enlarge it. Back and Forward return to earlier guides or search results. Cmd/Ctrl F focuses search; Option/Alt Left and Right navigate history. Escape clears search or closes an enlarged image.
 
 Press {{key:findCommand}} and type what you want to do, for example "blade", "sync" or "color". Press Enter and the command runs, or the tool or panel opens. On a Mac you can also search in the Help menu, like in other Mac apps. Every command shows its shortcut in the menus and in the search.
 
@@ -32,10 +44,10 @@ Press {{key:findCommand}} and type what you want to do, for example "blade", "sy
     id: 'history',
     section: 'Getting Started',
     title: 'Project History and Autosave',
-    summary: 'Nothing is lost: autosave after every change, and earlier versions kept for a long time.',
+    summary: 'Autosave after changes, plus a history of earlier project versions you can restore.',
     keywords: 'autosave auto save history versions backup restore revert crash undo earlier older',
     body: `
-Reccut saves the project automatically a moment after every change. The file is written safely, so a crash or power cut in the middle of saving cannot damage it, and the project is saved once more when you quit.
+Reccut saves the project automatically a moment after every change. Atomic writes reduce the risk of a partial project file, and the project is saved once more when you quit. Keep separate backups of important projects and media; history does not back up your source files.
 
 In addition, a copy of the project is kept every few minutes while you work, and when you close Reccut. The copies are in the **Auto-Save** folder next to the project file, compressed. Older copies are thinned out: everything from the last two hours, one per hour for two days, one per day for a month, one per week for a year, and one per month after that.
 
@@ -485,8 +497,34 @@ The tools are in the toolbar above the timeline. The pointer changes to show wha
 - **Blade** ({{key:tool:blade}}) cuts where you click.
 - **Zoom** ({{key:tool:zoom}}) zooms in where you click; Option (Alt) click zooms out.
 - **Hand** ({{key:tool:hand}}) drags the timeline around.
+
+## Select: ordinary editing
+
+Press A, click a clip, and drag it to reorder it or change its lane. Drag an edge to trim. **Example:** move the second demonstration shot before the third, then shorten its ending. The magnetic storyline closes up around the edit.
+
+## Trim: roll, slip and slide
+
+Press T. Drag the edit between two adjacent clips to **roll** it: one clip grows while the other shrinks, keeping their combined duration. **Example:** move a cut later because the first shot ends too soon.
+
+Drag inside a clip to **slip** its source content while its timeline position and duration stay fixed. **Example:** show a later part of a screen recording without changing the surrounding narration. Hold Option/Alt while dragging for a **slide**, which moves the clip and adjusts its neighbours. Available source material limits these edits.
+
+## Position: preserve the empty time
+
+Press P when a clip needs a fixed timeline position and gaps are intentional. **Example:** move a shot later to leave room for a title card. Unlike the magnetic Select move, this can leave a gap and overwrite content at the destination; inspect the result and use Undo if needed.
+
+## Range: work on a time interval
+
+Press R and drag over the timeline to mark an interval. The marked interval can define an export range or the duration of a new effect/redaction. **Example:** mark just the five seconds containing a private email address, then add a redaction. I and O also set range start and end.
+
+## Blade: split before removing
+
+Press B and click the point where you want two clips instead of one. Then press A, select the unwanted piece, and delete it. **Example:** cut on both sides of a failed sentence and remove only that piece. The keyboard Blade command cuts at the playhead instead of the mouse position.
+
+## Zoom and Hand: navigate a long edit
+
+Press Z and click around a cut to inspect it more closely; Option/Alt-click to zoom out. Press H and drag to pan across the timeline without moving clips. Use Zoom to Fit ({{key:zoomFit}}) to see the whole edit, then return to A for clip selection.
 `,
-    see: ['trimming', 'cutting', 'range'],
+    see: ['trimming', 'cutting', 'range', 'creative-reference'],
   },
   {
     id: 'adding',
@@ -880,7 +918,7 @@ On recordings, choose Camera or Screen before adding an effect. Preview and expo
   },
   {
     id: 'ai-plugins',
-    section: 'Reference',
+    section: 'AI and Plugins',
     title: 'AI Editing Agent and External Processors',
     summary: 'Let an AI model edit for you, with a cloud provider or a local model, or connect a local video processor.',
     keywords: 'ai chat agent model api key openai anthropic claude gemini mistral openrouter ollama lm studio llama local plugins corridorkey ofx processor',
@@ -919,7 +957,7 @@ The agent cannot yet create voice-over or music, or export. What is sent to the 
 
 Native OFX and Adobe plugins cannot be loaded directly. CorridorKey needs an adapter that writes an alpha video, or processing in its standalone app followed by importing the result. Models, licences and runtimes are installed separately. There is no bundled CorridorKey adapter or AI matting model.
 `,
-    see: ['keying', 'effects'],
+    see: ['ai-setup', 'ai-local', 'ai-recipes', 'plugins-guide', 'processor-guide', 'keying'],
   },
   {
     id: 'inspector',
@@ -1105,6 +1143,8 @@ Open Settings with {{key:prefs}}. The icons at the top switch between the parts,
 - **Import**: copy files into the project or leave them in place, create optimized media, and analyze video for stabilization.
 - **Audio**: how Auto Sync Audio groups audio and switches off the camera audio.
 - **Export**: whether exports go to the project's Exports folder or another folder.
+- **AI**: provider, API key, model, image support and local-server connections.
+- **Plugins**: open tools, configure defaults, share and remove plugins, and set up Higgsfield.
 
 ![General settings.](settings.jpg)
 
@@ -1126,5 +1166,36 @@ The menus, the Keyboard Shortcuts list ({{key:shortcuts}}) and Quick Search alwa
 `,
     see: ['shortcuts', 'search'],
   },
-  { id: 'shortcuts', section: 'Reference', title: 'Keyboard Shortcuts', summary: 'Every shortcut in Reccut, grouped by menu.', keywords: 'keys keyboard hotkeys', body: '' },
+  { id: 'shortcuts', section: 'Reference', title: 'Keyboard Shortcuts', summary: 'Every shortcut in Reccut, grouped by menu.', keywords: 'keys keyboard hotkeys', body: 'On macOS, Cmd is ⌘, Option is ⌥, Control is ⌃ and Shift is ⇧. Windows uses Ctrl where a command uses Cmd, and Alt where it uses Option, except for commands with their own platform bindings. This list shows the actual binding on this computer, including custom shortcuts. Change them in Settings → Keyboard.', see: ['preferences', 'command-reference'] },
+  {
+    id: 'video-scopes',
+    section: 'Look',
+    title: 'Video Scopes',
+    summary: 'Measure the displayed image with luma and RGB waveforms, RGB parade, histogram and vectorscope.',
+    keywords: 'scopes spectrogram luminance luma rgb parade waveform histogram vectorscope skin tone exposure color',
+    body: `
+Open **View → Video Scopes** ({{key:toggleVideoScopes}}), or click the scope icon beside the viewer's playback controls. Scopes are optional and off by default. They follow the image displayed in the viewer after grading, LUTs, effects and compositing.
+
+Choose **Four scopes** or one larger view:
+
+- **Luma waveform**: brightness from 0 to 100%, preserving the image's left-to-right position.
+- **RGB waveform**: the three color channels overlaid at the same image positions.
+- **RGB parade**: separate red, green and blue waveforms for comparing channel levels and color casts.
+- **Histogram**: the number of pixels at each RGB and luma code value from 0 to 255. The pale trace is luma.
+- **Vectorscope**: hue direction and chroma strength around a neutral center, with 75% color-bar targets and an optional approximate skin-hue guide.
+
+**Gain** changes trace brightness only. **Log** switches the histogram between logarithmic and linear counts. **Hold** freezes the scopes without pausing the video. Resume to follow the viewer again. Drag the panel's lower-right corner to resize it. Close with the cross or the same menu command. Your layout and display settings are remembered.
+
+The scopes read a sampled **8-bit SDR viewer signal**, not raw camera data or HDR luminance in nits. LOG and HDR sources are measured after their conversion to the viewer. Luma uses Rec.709 coefficients. The skin guide is a reference direction, not a target for every skin tone or light source.
+
+**RGB at 255** is the fraction of sampled pixels with at least one channel at the upper code value. It does not by itself prove overexposure in the original source. Sampling and reduced preview resolution can miss small details or short peaks.
+
+Scopes update up to eight times per second, reuse unchanged frames, and stop sampling when held or hidden. Closing the panel removes its sampler. Scopes and guide labels do not appear in exports. They are hidden during full-screen playback.
+
+[[run:toggleVideoScopes|Show or Hide Video Scopes]]
+`,
+    see: ['color', 'hdr', 'playback'],
+  },
+  ...WORKFLOWS,
+  ...CATALOG_ARTICLES,
 ];

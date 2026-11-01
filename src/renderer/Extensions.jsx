@@ -104,8 +104,8 @@ export function ExtensionsPane() {
             )}
             {presetOf(config).local && (
               <p class="hint">
-                Start the server first and load a model that supports tool calling. Nothing leaves your computer. To use
-                a server on another machine, choose Other server and enter its local network address.
+                Start the server first and load a model that supports tool calling. Reccut sends requests to this server;
+                choose a downloaded local model for offline use. To use another computer, choose Other server and enter its local network address.
               </p>
             )}
             <Row label="API key" stacked>

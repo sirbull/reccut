@@ -17,6 +17,10 @@ const {
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// Source runs need their own profile and instance lock so an installed copy cannot
+// silently intercept npm start. Keep installed projects/settings in their existing profile.
+const developmentMode = !app.isPackaged && process.argv.includes('--reccut-development');
+if (developmentMode) app.setPath('userData', path.join(app.getPath('appData'), 'Reccut Development'));
 const ff = require('./ffmpeg');
 const jobs = require('./jobs');
 const media = require('./media');
@@ -98,6 +102,7 @@ function serveMedia(request) {
 }
 
 let win = null;
+const helpWindow = require('./help').createHelpWindow({ BrowserWindow, ipcMain, getMainWindow: () => win, buildDir: path.join(__dirname, '..', '..', 'build') });
 let saveFlushed = false;
 let selectedScreenId = null;
 let wantSystemAudio = false;
@@ -118,6 +123,7 @@ function baseDir() {
 
 // Appen het tidligere OBSlite. Innstillinger, buffer og nylige prosjekter flyttes over første gang.
 function migrateFromOldName() {
+  if (developmentMode) return;
   try {
     const oldData = path.join(app.getPath('appData'), 'OBSlite');
     const newData = app.getPath('userData');
@@ -143,7 +149,7 @@ function createWindow() {
     height: 900,
     minWidth: 1100,
     minHeight: 680,
-    title: 'Reccut',
+    title: developmentMode ? 'Reccut (Development)' : 'Reccut',
     backgroundColor: '#1b1b1d',
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 14, y: 16 },
@@ -184,6 +190,7 @@ function createWindow() {
     }
   });
   win.on('closed', () => {
+    helpWindow.destroy();
     win = null;
     pipPreview.destroy();
     area.closeFrame();
@@ -219,7 +226,7 @@ function menuFromTemplate(items) {
       type: it.checked !== undefined ? 'checkbox' : 'normal',
       checked: it.checked,
       enabled: it.enabled !== false,
-      click: () => send('menu', it.id),
+      click: () => { if (!helpWindow.handleMenu(it.id)) send('menu', it.id); },
     };
   });
 }

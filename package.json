@@ -11,13 +11,16 @@
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
     "postinstall": "node scripts/fetch-ffmpeg.mjs",
-    "start": "node scripts/build.mjs && electron .",
+    "start": "node scripts/start.mjs",
     "dist": "node scripts/fetch-ffmpeg.mjs && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --publish never",
     "dist:mac": "node scripts/fetch-ffmpeg.mjs && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --mac --publish never",
     "dist:win": "node scripts/fetch-ffmpeg.mjs win-x64 && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --win --publish never",
     "test": "node --test test/*.test.mjs",
     "test:render": "electron scripts/verify-effects.cjs",
-    "test:colors": "electron scripts/verify-colors.cjs"
+    "test:colors": "electron scripts/verify-colors.cjs",
+    "test:scopes": "node scripts/verify-scopes.cjs",
+    "test:help": "node scripts/build.mjs && node --test test/help-*.test.mjs && node scripts/verify-help.cjs",
+    "help:screenshots": "node scripts/build.mjs && node scripts/verify-help.cjs --screenshots"
   },
   "devDependencies": {
     "@huggingface/transformers": "^4.3.2",

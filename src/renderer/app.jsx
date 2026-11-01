@@ -49,7 +49,7 @@ import { ExportRoom } from './export/ExportRoom.jsx';
 import { currentSequence, formatDuration } from '../shared/model.js';
 import { Button, IconButton, Modal, Toasts, toast } from './ui.jsx';
 import { HistoryDialog, NewProjectDialog, PackageDialog, ProjectsDialog, SaveAsDialog, SequenceSettingsDialog } from './ProjectDialogs.jsx';
-import { CommandPalette, HelpCenter } from './help/Help.jsx';
+import { CommandPalette, HelpCenter, installHelpBridge } from './help/Help.jsx';
 import { SettingsWindow } from './Settings.jsx';
 import { prefs } from './prefs.js';
 import { helpOpen, paletteOpen } from './registry.js';
@@ -314,6 +314,7 @@ function App() {
       if (a.toggleRecord) toggleRecording();
       if (a.togglePause) engine.togglePause();
     });
+    const offHelp = installHelpBridge();
     const offMenu = api.onMenu(handleMenu);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keydown', onKeyDownCapture, true);
@@ -321,6 +322,7 @@ function App() {
       window.removeEventListener('keydown', onKeyDownCapture, true);
       offShortcut();
       offMenu();
+      offHelp();
       window.removeEventListener('keydown', onKeyDown);
     };
   }, []);
