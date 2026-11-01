@@ -83,6 +83,12 @@ function GeneralPane() {
   }, []);
   return (
     <>
+      <Section title="Screen Capture" collapsible={false}>
+        <Row label="Include Reccut in screenshots and screen recordings">
+          <Toggle checked={!recordingSettings.value.hideFromCapture} onChange={(v) => saveSettings({ hideFromCapture: !v })} />
+        </Row>
+        <p class="hint">On by default. Reccut appears in screenshots and screen recordings. Turn this off to hide Reccut; supported capture tools will show the windows behind it instead.</p>
+      </Section>
       <Section title="Projects" collapsible={false}>
         <FolderRow
           label="Default location for new projects"
@@ -102,12 +108,6 @@ function GeneralPane() {
       <Section title="Updates" collapsible={false}>
         {toggle('checkUpdates', 'Check for new versions on GitHub once a day')}
         <p class="hint">Reccut works fully offline. When there is a connection, it can tell you about a new version and download the installer for you. Nothing is installed without you opening it.</p>
-      </Section>
-      <Section title="Screen Capture" collapsible={false}>
-        <Row label="Include Reccut in screenshots and screen recordings">
-          <Toggle checked={!recordingSettings.value.hideFromCapture} onChange={(v) => saveSettings({ hideFromCapture: !v })} />
-        </Row>
-        <p class="hint">Turn this on to capture Reccut as it appears on your screen. When off, supported capture tools show the windows behind Reccut instead.</p>
       </Section>
       <Section title="Media" collapsible={false}>
         {toggle('checkOfflineOnFocus', 'Look for missing media when you return to Reccut')}

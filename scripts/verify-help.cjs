@@ -21,7 +21,7 @@ if (!electron.app) {
   })();
 } else {
   const { app, BrowserWindow, ipcMain } = electron;
-  const dir = process.argv[2], capture = process.argv.includes('--screenshots');
+  const dir = process.argv[2];
   app.setPath('userData', path.join(dir, 'profile'));
   app.on('window-all-closed', () => {});
   const timeout = setTimeout(() => { console.error('Help verification timed out'); app.exit(1); }, 70000);
@@ -37,6 +37,7 @@ if (!electron.app) {
       await host.loadFile(path.join(dir, 'fixture.html'));
       const js = (source) => host.webContents.executeJavaScript(source);
       console.log('References:', await js('helpTest.verifyReferences()'));
+      await js('helpTest.verifyPalette()');
       await js('helpTest.openManual({article:"ai-setup"})'); await tick();
       const manual = BrowserWindow.getAllWindows().find((w) => w !== host);
       manual.webContents.on('console-message', (e) => { if (e.level === 'error') errors.push(e.message); });
@@ -73,15 +74,6 @@ if (!electron.app) {
       // Validate every bundled image in Chromium, including images not currently visible.
       const assets = fs.readdirSync(path.join(dir, 'help'));
       assert(await hj(`Promise.all(${JSON.stringify(assets)}.map(file=>new Promise(resolve=>{const im=new Image();im.onload=()=>resolve(true);im.onerror=()=>resolve(false);im.src='help/'+file}))).then(r=>r.every(Boolean))`), 'all handbook images should load');
-      if (capture) {
-        fs.mkdirSync(path.join(root, 'assets/help'), { recursive: true });
-        for (const [name, source] of [['ai-settings', 'helpTest.settings()'], ['plugins', 'helpTest.settings("plugins")'], ['ai-setup', 'helpTest.chat(true)'], ['ai-chat', 'helpTest.chat(false)']]) {
-          await js(source); await tick();
-          fs.writeFileSync(path.join(root, `assets/help/${name}.jpg`), (await host.webContents.capturePage()).toJPEG(88));
-        }
-        await js('helpTest.openManual({article:"welcome"})'); await tick();
-        fs.writeFileSync(path.join(root, 'assets/help/handbook.jpg'), (await manual.webContents.capturePage()).toJPEG(88));
-      }
       assert(!errors.length, `renderer errors: ${errors.join('\n')}`);
       help.destroy();
       await js('helpTest.openManual({article:"export-settings"})'); await tick();

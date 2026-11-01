@@ -35,7 +35,7 @@ You need a screen or a short video file and a folder where Reccut can save the p
 2. Keep the automatic format if you want the first video to set the sequence size and frame rate.
 3. Reccut creates the project folder. Changes to the edit are saved automatically.
 
-![The Edit room: library on the left, viewer in the centre, properties on the right, and the timeline below.](overview.jpg)
+![The Into the Wild nature project in the Edit room, with editable titles, transitions and an audio track.](overview.jpg)
 
 ## Add your footage
 
@@ -223,7 +223,7 @@ Look at the chat's tool steps and Background tasks. Initial speech-model downloa
     body: `
 Open **Plugins** in the toolbar to see the available tools. Plugins open in small movable tool windows inside the application. **Settings → Plugins** lists their settings, sharing and removal actions. The built-in **Higgsfield AI Video** plugin is supplied with Reccut; its account is configured separately from the editing agent.
 
-![Plugin management, including the built-in video-generation tool and an example local processor.](plugins.jpg)
+![Plugin management with the built-in video-generation tool and controls for installing additional plugins.](plugins.jpg)
 
 ## Apply a processor plugin
 
@@ -322,7 +322,7 @@ The active project's **Recordings** folder contains the take's media and recordi
 
 ## Pause without leaving a gap
 
-Use **Pause** on the floating controls, or the configured recording modifier with **8**. Repeat to resume. Paused time is removed, and recorded events follow the shortened time. The default start/stop combination is Control Option 0 on macOS and Ctrl Shift 0 on Windows; the Record room shows your configured keys.
+Use **Pause** on the floating controls, or the configured recording modifier with **8**. Repeat to resume. Paused time is removed, and recorded events follow the shortened time. The default start/stop combination is Control Option 0 on macOS and Ctrl Shift 0 on Windows; the Record room shows your configured keys. Keyboard control from another app requires **Record → Shortcuts → Allow shortcuts in other apps**, which is off by default. The floating controls work regardless of this setting.
 
 ## Stop and wait for saving
 

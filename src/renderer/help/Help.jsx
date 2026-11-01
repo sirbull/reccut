@@ -1,7 +1,7 @@
 // Editor-side bridge: the handbook runs in its own restricted renderer.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { effect } from '@preact/signals';
-import { CornerDownLeft, Keyboard } from 'lucide-preact';
+import { CornerDownLeft, Keyboard, Search } from 'lucide-preact';
 import { COMMANDS, helpOpen, isMac, paletteOpen, runCommand, shortcutText } from '../registry.js';
 import { consoleSearch, runItem } from './console.js';
 import { selection } from '../editor/store.js';

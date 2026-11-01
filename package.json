@@ -20,7 +20,8 @@
     "test:colors": "electron scripts/verify-colors.cjs",
     "test:scopes": "node scripts/verify-scopes.cjs",
     "test:help": "node scripts/build.mjs && node --test test/help-*.test.mjs && node scripts/verify-help.cjs",
-    "help:screenshots": "node scripts/build.mjs && node scripts/verify-help.cjs --screenshots"
+    "test:keyboard": "node scripts/build.mjs && node --test test/keyboard.test.mjs test/recording-shortcuts.test.mjs && node scripts/verify-keyboard.cjs",
+    "help:screenshots": "node scripts/build.mjs && node scripts/capture-help.cjs"
   },
   "devDependencies": {
     "@huggingface/transformers": "^4.3.2",

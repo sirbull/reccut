@@ -64,7 +64,7 @@ export function Recorder({ active }) {
 
   useEffect(() => {
     api.setShortcuts(s.modifier).then(setFailed);
-  }, [s.modifier, input?.started]);
+  }, [s.modifier, s.backgroundShortcuts, input?.started]);
 
   const set = (patch, after) => {
     saveSettings(patch);
@@ -309,10 +309,10 @@ export function Recorder({ active }) {
           <Row label="Render video automatically">
             <Toggle checked={s.autoRender} onChange={(v) => set({ autoRender: v })} />
           </Row>
-          <Row label={<><AppWindow size={14} /> Hide Reccut from recording</>}>
+          <Row label={<><AppWindow size={14} /> Include Reccut in screen capture</>}>
             <Toggle
-              checked={s.hideFromCapture}
-              onChange={(v) => set({ hideFromCapture: v })}
+              checked={!s.hideFromCapture}
+              onChange={(v) => set({ hideFromCapture: !v })}
             />
           </Row>
           <Row label="Saved in project" stacked>
@@ -325,11 +325,15 @@ export function Recorder({ active }) {
         </Section>
 
         <Section title="Shortcuts">
+          <Row label="Allow shortcuts in other apps">
+            <Toggle checked={s.backgroundShortcuts} onChange={(v) => set({ backgroundShortcuts: v })} />
+          </Row>
           <Row label="Keys" stacked>
             <Select value={s.modifier} options={MODIFIERS} onChange={(v) => set({ modifier: v })} />
           </Row>
           <p class="hint">
-            <b>{mod.short}0</b> starts and stops recording from any app, also when Reccut is in the background. <b>{mod.short}8</b> pauses and resumes. While recording, {mod.short}1 camera, {mod.short}2 screen and {mod.short}3 to {mod.short}6 corners.
+            <b>{mod.short}0</b> starts and stops recording. <b>{mod.short}8</b> pauses and resumes. {mod.short}1 camera, {mod.short}2 screen and {mod.short}3 to {mod.short}6 corners.
+            {' '}By default, these keys work only in Reccut, outside input fields and dialogs. Enable “Allow shortcuts in other apps” to use them in the background; those combinations can then override shortcuts in other apps. You can always use the floating controls or tray menu to pause and stop.
             {failed.length > 0 && <span class="warn"> Used by another app: {failed.join(', ')}.</span>}
             {isMac && s.modifier === 'Command+Shift' && <span class="warn"> Cmd + Shift + 3, 4 and 5 are used by macOS for screenshots.</span>}
             {!isMac && s.modifier === 'Control+Alt' && <span class="warn"> Ctrl + Alt is the same as AltGr on many European keyboards.</span>}

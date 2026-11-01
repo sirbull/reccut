@@ -1,9 +1,7 @@
 // Real UI components and command registry, with fictional data in a disposable renderer.
 import { render } from 'preact';
-import { SettingsWindow } from '../src/renderer/Settings.jsx';
-import { AIChat } from '../src/renderer/Extensions.jsx';
 import { COMMANDS, setShortcut, shortcutText } from '../src/renderer/registry.js';
-import { installHelpBridge } from '../src/renderer/help/Help.jsx';
+import { CommandPalette, installHelpBridge } from '../src/renderer/help/Help.jsx';
 import { ARTICLES } from '../src/renderer/help/articles.js';
 
 const wait = () => new Promise((resolve) => setTimeout(resolve, 100));
@@ -17,23 +15,16 @@ export async function verifyReferences() {
   for (const c of COMMANDS) if (!c.hidden && !c.menuOnly && !articles.has(c.help)) throw new Error(`${c.id}: no guide ${c.help}`);
   return { articles: ARTICLES.length, commands: commands().length };
 }
-export async function settings(pane = 'extensions') {
-  window.demoConfigured = true;
-  render(null, document.getElementById('root'));
-  localStorage.setItem('settingsPane', pane);
-  render(<SettingsWindow />, document.getElementById('root'));
+export async function verifyPalette() {
+  render(<CommandPalette />, document.getElementById('root'));
   await wait();
-}
-export async function chat(setup = false) {
-  render(null, document.getElementById('root'));
-  window.demoConfigured = !setup;
-  render(<AIChat />, document.getElementById('root'));
+  const input = document.querySelector('.palette-input input');
+  if (!input) throw new Error('Quick Search should render its input and search icon.');
+  input.value = 'color'; input.dispatchEvent(new Event('input', { bubbles: true }));
   await wait();
-  if (!setup) {
-    const help = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('What can I ask'));
-    help?.click();
-    await wait();
-  }
+  if (!document.querySelectorAll('.palette-item').length) throw new Error('Quick Search should return results.');
+  render(null, document.getElementById('root'));
+  return true;
 }
 export const openManual = (request = {}) => window.api.openHelp({ request, commands: commands() });
 export const customize = () => setShortcut('tool:blade', 'Shift+B');

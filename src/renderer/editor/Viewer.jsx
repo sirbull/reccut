@@ -11,7 +11,7 @@ import { PREVIEW_RESOLUTIONS, prefs, setPrefs } from '../prefs.js';
 import { setKeyframe } from './keyframes.js';
 import { toggleViewerFullscreen } from './fullscreen.js';
 import { VideoScopes } from './VideoScopes.jsx';
-import { isTyping } from '../keyboard.js';
+import { commandsBlocked } from '../keyboard.js';
 
 // Spill bakover: avspillingsikonet speilet.
 const PlayBackward = ({ size }) => <Play size={size} fill="currentColor" style={{ transform: 'scaleX(-1)' }} />;
@@ -450,7 +450,7 @@ function PenOverlay({ clip, canvasRef }) {
     ro.observe(cv);
     // Tastene fanges før hurtigtastene, så Retur, Escape og rettetasten bare virker på pennen.
     const onKey = (e) => {
-      if (isTyping(e) || e.isComposing) return;
+      if (commandsBlocked(e)) return;
       if (!['Enter', 'Escape', 'Backspace', 'Delete'].includes(e.key)) return;
       e.preventDefault();
       e.stopImmediatePropagation();

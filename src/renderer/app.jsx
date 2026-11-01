@@ -53,7 +53,7 @@ import { CommandPalette, HelpCenter, installHelpBridge } from './help/Help.jsx';
 import { SettingsWindow } from './Settings.jsx';
 import { prefs } from './prefs.js';
 import { helpOpen, paletteOpen } from './registry.js';
-import { isTyping, writingText } from './keyboard.js';
+import { isTyping, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } from './keyboard.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -243,8 +243,9 @@ function Notice() {
 
 // Tastetrykk går gjennom kommandoregisteret. Taster i tekstfelt og åpne dialoger røres ikke.
 function onKeyDownCapture(e) {
-  // Mellomrom spiller av uansett hvor fokus er, bortsett fra der man skriver tekst. Et tallfelt lagres og slippes.
-  if (e.code === 'Space' && !e.isComposing && !writingText(e) && !document.querySelector('.modal-backdrop, .help-window, .palette')) {
+  if (commandsBlocked(e) || e.defaultPrevented) return;
+  // Mellomrom spiller av utenfor felt og dialoger. Tallfelt eier også sine taster.
+  if (e.code === 'Space') {
     const cmd = commandForEvent(e, room.value);
     if (cmd?.id === 'play' || cmd?.id === 'playReverse') {
       e.preventDefault();
@@ -254,8 +255,6 @@ function onKeyDownCapture(e) {
       return;
     }
   }
-  if (isTyping(e) || e.isComposing || e.defaultPrevented) return;
-  if (document.querySelector('.help-window') || document.querySelector('.palette')) return;
   const any = commandForEvent(e, room.value);
   if (!any?.anywhere) return;
   e.preventDefault();
@@ -264,7 +263,7 @@ function onKeyDownCapture(e) {
 }
 
 function onKeyDown(e) {
-  if (isTyping(e) || e.isComposing || e.defaultPrevented || document.querySelector('.modal-backdrop')) return;
+  if (commandsBlocked(e) || e.defaultPrevented) return;
   const cmd = commandForEvent(e, room.value);
   if (!cmd) return;
   e.preventDefault();
@@ -274,12 +273,13 @@ function onKeyDown(e) {
 
 // Menyvalg. Klipp ut, kopier, lim inn og angre virker på teksten når du skriver i et felt.
 function handleMenu(id) {
+  if (!document.hasFocus()) return;
   const cmd = byId.get(id);
   if (isTyping()) {
     if (cmd?.text) document.execCommand(cmd.text);
     return;
   }
-  if (cmd?.register && document.querySelector('.modal-backdrop') && !['roomRecord', 'roomEdit', 'roomExport'].includes(id)) return;
+  if (dialogOwnsKeyboard()) return;
   runCommand(id);
 }
 
@@ -309,11 +309,19 @@ function App() {
     // Nye versjoner sjekkes litt etter start, så det ikke sinker oppstarten.
     setTimeout(() => import('./updates.js').then((m) => m.checkForUpdates(false)), 8000);
     const offShortcut = api.onShortcut((a) => {
-      if (isTyping()) return;
+      // Tray/control-bar clicks are explicit actions. Keyboard callbacks must also
+      // pass the renderer check in case focus changed before native IPC arrived.
+      if (a.keyboard && (document.hasFocus()
+        ? commandsBlocked()
+        : !settings.value.backgroundShortcuts)) return;
       if (a.layout) engine.setLayout(a.layout);
       if (a.toggleRecord) toggleRecording();
       if (a.togglePause) engine.togglePause();
     });
+    let keyboardBlocked = true;
+    const scope = () => api.setShortcutScope({ blocked: keyboardBlocked, background: settings.value.backgroundShortcuts });
+    const offScope = watchKeyboardScope((blocked) => { keyboardBlocked = blocked; scope(); });
+    const offScopeSettings = effect(scope);
     const offHelp = installHelpBridge();
     const offMenu = api.onMenu(handleMenu);
     window.addEventListener('keydown', onKeyDown);
@@ -321,6 +329,8 @@ function App() {
     return () => {
       window.removeEventListener('keydown', onKeyDownCapture, true);
       offShortcut();
+      offScope();
+      offScopeSettings();
       offMenu();
       offHelp();
       window.removeEventListener('keydown', onKeyDown);

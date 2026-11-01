@@ -27,8 +27,10 @@ const DEFAULTS = {
   showPipOnScreen: false,
   mirror: false,
   fps: 30,
-  hideFromCapture: true,
+  hideFromCapture: false,
+  captureVisibilityVersion: 1,
   modifier: MODIFIERS[0].value,
+  backgroundShortcuts: false,
   showKeys: true,
   cursorZoom: true,
   showClicks: false,
@@ -45,10 +47,22 @@ const DEFAULTS = {
 
 function load() {
   try {
-    const s = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('settings') || '{}') };
+    const saved = JSON.parse(localStorage.getItem('settings') || '{}');
+    const s = { ...DEFAULTS, ...saved };
+    // Older releases persisted the hidden-by-default value with every settings
+    // change. Migrate once so existing installations get the visible default too;
+    // explicit choices made after this migration remain saved.
+    const migrateCaptureVisibility = saved.captureVisibilityVersion !== 1;
+    if (migrateCaptureVisibility) {
+      s.hideFromCapture = false;
+      s.captureVisibilityVersion = 1;
+    }
     if (!['circle', 'square', 'rect'].includes(s.pipShape)) s.pipShape = 'rect';
     if (!MODIFIERS.some((m) => m.value === s.modifier)) s.modifier = MODIFIERS[0].value;
     s.micMixer = normalizeMix(s.micMixer);
+    if (migrateCaptureVisibility) {
+      try { localStorage.setItem('settings', JSON.stringify(s)); } catch {}
+    }
     return s;
   } catch {
     return { ...DEFAULTS };

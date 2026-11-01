@@ -144,7 +144,9 @@ Settings (Cmd ,) er bygd som i Final Cut Pro, med faner øverst:
 * **Option Cmd K** viser alle hurtigtaster, gruppert etter meny.
 
 
-### Opptak (globale, virker selv om en annen app er i fokus)
+### Opptak
+
+Snarveiene virker som standard bare når Reccut er i fokus, utenfor felt og dialoger. Slå på **Allow shortcuts in other apps** under **Record → Shortcuts** for globale opptakssnarveier. Da kan disse tastekombinasjonene overstyre snarveier i andre programmer. Flytende opptakskontroller og menyikonet kan alltid brukes til pause og stopp.
 
 | Handling | Mac (standard) | Windows (standard) |
 | --- | --- | --- |
@@ -224,6 +226,8 @@ npm start        # bygger grensesnittet og starter appen
 npm test         # tester redigeringslogikken
 npm run dist:mac # eller dist:win, lager installasjonsfil
 ```
+
+`npm start` åpner kildekodeversjonen med en egen profil i **Reccut Development**, så en installert Reccut-versjon ikke overtar oppstarten. Innstillinger og nylige prosjekter er separate; eksisterende prosjektfiler kan åpnes med Open Project. Oppstarten fjerner også `ELECTRON_RUN_AS_NODE` fra miljøet til appen, slik at den åpnes med et grafisk vindu fra terminaler inne i Electron-baserte verktøy.
 
 ## Teknisk
 

@@ -70,6 +70,7 @@ contextBridge.exposeInMainWorld('api', {
   areaFrame: invoke('area:frame'),
   setShortcuts: invoke('shortcuts:set'),
   setShortcutsActive: invoke('shortcuts:active'),
+  setShortcutScope: invoke('shortcuts:scope'),
   inputStatus: invoke('input:status'),
   requestInput: invoke('input:request'),
   setZoomKey: invoke('input:setZoomKey'),

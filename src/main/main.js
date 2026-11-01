@@ -108,6 +108,8 @@ let selectedScreenId = null;
 let wantSystemAudio = false;
 let shortcutModifier = null;
 let shortcutsActive = true;
+let shortcutsBlocked = true;
+let backgroundShortcuts = false;
 const input = new InputTracker();
 const openFiles = new Map();
 let fileSeq = 1;
@@ -163,9 +165,13 @@ function createWindow() {
     },
   });
   win.loadFile(path.join(__dirname, '..', '..', 'build', 'index.html'));
-  win.on('focus', () => pipPreview.hide());
-  win.webContents.on('render-process-gone', () => pipPreview.hide());
-  win.webContents.on('did-start-loading', () => pipPreview.hide());
+  win.on('focus', () => { pipPreview.hide(); registerShortcuts(); });
+  win.on('blur', registerShortcuts);
+  const resetKeyboardScope = () => {
+    pipPreview.hide(); shortcutsBlocked = true; backgroundShortcuts = false; registerShortcuts();
+  };
+  win.webContents.on('render-process-gone', resetKeyboardScope);
+  win.webContents.on('did-start-loading', resetKeyboardScope);
   win.on('close', (e) => {
     if (recordingDir) {
       const choice = dialog.showMessageBoxSync(win, {
@@ -226,7 +232,9 @@ function menuFromTemplate(items) {
       type: it.checked !== undefined ? 'checkbox' : 'normal',
       checked: it.checked,
       enabled: it.enabled !== false,
-      click: () => { if (!helpWindow.handleMenu(it.id)) send('menu', it.id); },
+      click: () => {
+        if (!helpWindow.handleMenu(it.id) && win?.isFocused()) send('menu', it.id);
+      },
     };
   });
 }
@@ -265,23 +273,20 @@ async function listScreens() {
   return list;
 }
 
-function registerShortcuts() {
-  globalShortcut.unregisterAll();
-  if (!shortcutModifier) return [];
-  const failed = [];
-  const reg = (key, fn) => {
-    const acc = `${shortcutModifier}+${key}`;
-    if (!globalShortcut.register(acc, fn)) failed.push(acc);
-  };
-  // Start, stopp og pause virker alltid, også når et annet program er foran og Reccut står i Edit.
-  reg('0', () => send('shortcut', { toggleRecord: true }));
-  reg('8', () => send('shortcut', { togglePause: true }));
-  if (!shortcutsActive) return failed;
-  for (let n = 1; n <= 6; n++) reg(String(n), () => send('shortcut', { layout: n }));
-  // Uten tastaturlytter blir forstørring av pekeren en av/på-snarvei.
-  if (!input.started) reg('9', () => input.toggleZoom());
-  return failed;
-}
+const recordingShortcuts = require('./shortcuts').createRecordingShortcuts({
+  globalShortcut,
+  context: () => ({
+    modifier: shortcutModifier, active: shortcutsActive, blocked: shortcutsBlocked,
+    background: backgroundShortcuts, nativeInput: input.started,
+    focused: Boolean(win?.isFocused()),
+    otherWindowFocused: Boolean(BrowserWindow.getFocusedWindow() && BrowserWindow.getFocusedWindow() !== win),
+  }),
+  send: (payload) => send('shortcut', payload),
+  toggleZoom: () => input.toggleZoom(),
+});
+function registerShortcuts() { return recordingShortcuts.refresh(); }
+app.on('browser-window-focus', registerShortcuts);
+app.on('browser-window-blur', () => setImmediate(registerShortcuts));
 
 input.listener = (event) => send('input', event);
 
@@ -323,6 +328,12 @@ ipcMain.handle('shortcuts:set', (_e, modifier) => {
 ipcMain.handle('shortcuts:active', (_e, active) => {
   shortcutsActive = active;
   registerShortcuts();
+});
+ipcMain.handle('shortcuts:scope', (e, scope) => {
+  if (e.sender !== win?.webContents) return [];
+  shortcutsBlocked = Boolean(scope.blocked);
+  backgroundShortcuts = scope.background === true;
+  return registerShortcuts();
 });
 ipcMain.handle('input:status', () => ({
   available: input.available(),
@@ -907,11 +918,15 @@ function openProjectFromOS(file) {
   else pendingOpen = file;
 }
 // Bare én Reccut om gangen: åpnes en prosjektfil mens appen kjører, åpnes den i vinduet.
-if (!app.requestSingleInstanceLock()) app.quit();
+if (!app.requestSingleInstanceLock()) {
+  console.info('Reccut is already running; activating its window.');
+  app.quit();
+}
 app.on('second-instance', (_e, argv) => {
   openProjectFromOS(argv.find((a) => a.endsWith('.reccut') || a.endsWith('.reccut-plugin')));
   if (win) {
     if (win.isMinimized()) win.restore();
+    win.show();
     win.focus();
   }
 });

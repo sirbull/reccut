@@ -8,7 +8,7 @@ The handbook is English, bundled with the application and readable without an in
 2. **Handbook window.** Add a dedicated Electron window with a restricted preload. Repeated requests reuse it. Preserve editor state. Forward only explicit command-button actions to the main application. Keep keyboard editing in Help from changing the timeline.
 3. **Navigation and search.** Full-text offline search over titles, summaries, keywords, headings and body text; ranked results and matching excerpts; chapter navigation, back/forward, article contents, related articles, image enlargement and keyboard access. Derive command and shortcut references from the live registry, including custom shortcuts.
 4. **Content.** Retain and audit the illustrated reference. Add an end-to-end first edit, cloud and local AI setup, agent recipes and troubleshooting, plugin workflows, recording permissions and recovery, sequence formats, animation examples, captions, advanced export, tasks and terminology. Include prerequisites, numbered actions, expected results and recovery advice.
-5. **Visuals.** Use existing real application screenshots and add reproducible captures of the actual AI settings, chat, plugins and handbook. Captures must use a disposable profile and fictional data; never real keys or projects. Clearly caption explanatory diagrams as diagrams.
+5. **Visuals.** Use the dedicated Into the Wild nature demo for every screenshot. Capture the actual application with its real editor, inspector, dialogs, recording preview and handbook. Use a disposable application profile, fictional AI configuration and no personal camera, microphone or screen capture. The user has supplied the seven nature clips for this demo. Clearly caption explanatory diagrams as diagrams.
 6. **Verification.** Validate unique IDs, related links, command references and every image; test search for real user questions, local-server terms and multiword queries. Exercise window reuse, IPC boundaries, search/navigation, custom shortcuts, command handoff and images in Electron. Run the production build and existing tests.
 
 ## Coverage map
@@ -30,18 +30,18 @@ The handbook is English, bundled with the application and readable without an in
 
 ## Maintenance
 
-Article data lives in `src/renderer/help/`. The editor, AI help tool and handbook read the same article collection. Built-in effect/format catalogues and the command list are generated from application definitions. `npm run test:help` checks handbook content and exercises the window in a disposable Electron session; `npm run help:screenshots` refreshes the new illustrative UI captures. Add a guide or update the coverage map whenever a user-facing feature changes. Source-based inventory and automatic link checks catch drift, but do not replace editorial review of each new feature.
+Article data lives in `src/renderer/help/`. The editor, AI help tool and handbook read the same article collection. Built-in effect/format catalogues and the command list are generated from application definitions. `npm run test:help` checks handbook content and exercises the window in a disposable Electron session; `npm run help:screenshots` prepares the portable Into the Wild project and refreshes all 32 screenshots using the seven videos in Downloads/Nature-video. See [HELP-SCREENSHOTS.md](HELP-SCREENSHOTS.md) for the source mapping and capture workflow. Add a guide or update the coverage map whenever a user-facing feature changes. Source-based inventory and automatic link checks catch drift, but do not replace editorial review of each new feature.
 
 ## Progress
 
 - [x] Initial inventory: existing English article collection and 27 application screenshots; Help was an editor modal at the start of this work.
 - [x] Separate Help window and navigation; restricted preload, window reuse and explicit command handoff.
 - [x] Expanded workflows and searchable reference catalogues: 74 guides, 149 live commands, all built-in audio effects/controls, visual effects, creative presets and export formats.
-- [x] Five new screenshots from real application components/Help in a disposable profile, with fictional configuration; visual review completed. Existing 27 screenshots retained.
+- [x] All 32 screenshots refreshed from the Into the Wild nature project using actual application components. Real video thumbnails, title overlays, a labelled demo audio track and actual stabilization analysis replace the old test material. Visual review completed.
 - [x] Content/link/image checks, search cases, IPC boundaries and Electron navigation, command, custom-shortcut and image interaction checks. Initial full suite: 243 passed.
 
 This is a living plan. Completion of an implementation pass does not imply every future feature is documented; the coverage map and checks are the review checklist for subsequent releases.
 
 ## Validation limits and next editorial pass
 
-The Electron interaction checks run on macOS in this workspace. Windows-native window/menu behaviour still needs a Windows run before a release. AI screenshots and connection walkthroughs use fictional settings; the documentation checks do not call a paid provider or launch an actual local language model. Older screenshots are useful illustrations but should be refreshed when their panels change. Treat individual feature changes as documentation work: verify the instructions with a real practice project, capture new UI where needed, and keep examples aligned with the shipped release.
+The Electron interaction checks run on macOS in this workspace. Windows-native window/menu behaviour still needs a Windows run before a release. AI screenshots and connection walkthroughs use fictional settings; the documentation checks do not call a paid provider or launch an actual local language model. Refresh the nature-project screenshots when their panels change; do not reintroduce the former test-pattern project. Treat individual feature changes as documentation work: verify the instructions with a real practice project, capture new UI where needed, and keep examples aligned with the shipped release.

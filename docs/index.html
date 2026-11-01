@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reccut — Record, edit and export in one app</title>
+<meta name="description" content="Reccut is a free, open-source video studio for creators and hobby filmmakers. Screen recording, a magnetic timeline, film looks, titles, audio repair, an AI editing agent and export to every format. For Mac and Windows.">
+<meta property="og:title" content="Reccut — Record, edit and export in one app">
+<meta property="og:description" content="Free, open-source video studio for creators and hobby filmmakers. Mac and Windows.">
+<meta property="og:image" content="media/overview.jpg">
+<meta name="theme-color" content="#0b0c0e">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b0c0e;
+  --bg2: #111215;
+  --card: #16171b;
+  --line: #24262c;
+  --text: #f2f2f4;
+  --muted: #9a9ca5;
+  --accent: #0a84ff;
+  --accent2: #ffb35c;
+  --radius: 18px;
+  --max: 1200px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 17px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+img, video { display: block; max-width: 100%; height: auto; }
+a { color: inherit; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+.serif { font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-weight: 400; }
+
+/* Nav */
+nav {
+  position: fixed; inset: 0 0 auto; z-index: 20;
+  backdrop-filter: blur(14px) saturate(1.4);
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; text-decoration: none; }
+.brand i { width: 18px; height: 18px; border-radius: 50%; border: 4px solid var(--accent); box-shadow: 0 0 18px var(--accent); }
+nav .links { display: flex; gap: 24px; margin-left: auto; font-size: 15px; color: var(--muted); }
+nav .links a { text-decoration: none; transition: color .2s; }
+nav .links a:hover { color: var(--text); }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 13px 22px; border-radius: 999px;
+  font-weight: 600; font-size: 15px; text-decoration: none;
+  border: 1px solid var(--line); background: var(--card);
+  transition: transform .2s, background .2s, border-color .2s;
+}
+.btn:hover { transform: translateY(-1px); border-color: #3a3d45; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 10px 40px -10px var(--accent); }
+.btn.primary:hover { background: #2b95ff; }
+.btn.small { padding: 8px 16px; font-size: 14px; }
+.btn svg { width: 18px; height: 18px; }
+
+/* Hero */
+.hero { position: relative; min-height: 100vh; display: grid; place-items: center; overflow: hidden; text-align: center; padding: 120px 0 220px; }
+.hero video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hero::after {
+  content: ""; position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(11,12,14,.25), rgba(11,12,14,.75) 70%),
+    linear-gradient(to bottom, rgba(11,12,14,.55), rgba(11,12,14,.2) 40%, var(--bg));
+}
+.hero .wrap { position: relative; z-index: 1; }
+.eyebrow {
+  display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
+  padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 500;
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(8px);
+}
+.eyebrow b { color: var(--accent2); font-weight: 600; }
+h1 { font-size: clamp(44px, 8vw, 104px); line-height: .98; letter-spacing: -.035em; margin: 26px 0 22px; font-weight: 700; }
+h1 .serif { letter-spacing: -.01em; }
+.lead { font-size: clamp(18px, 2vw, 21px); color: #d6d7dc; max-width: 680px; margin: 0 auto 36px; }
+.ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.facts { display: flex; gap: 22px; justify-content: center; flex-wrap: wrap; margin-top: 30px; font-size: 14px; color: #c3c5cc; }
+.facts span::before { content: "✓"; color: var(--accent2); margin-right: 7px; font-weight: 700; }
+
+/* Screenshot frames */
+.showcase { position: relative; z-index: 2; margin-top: -170px; }
+.frame {
+  border-radius: 14px; overflow: hidden; background: #1b1b1d;
+  border: 1px solid #2c2e34;
+  box-shadow: 0 50px 120px -30px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.03), 0 0 120px -40px rgba(10,132,255,.45);
+  cursor: zoom-in;
+}
+.frame img { width: 100%; }
+.caption { text-align: center; color: var(--muted); font-size: 14px; margin-top: 18px; }
+
+/* Sections */
+section { padding: 120px 0; }
+.kicker { color: var(--accent); font-weight: 600; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; }
+h2 { font-size: clamp(34px, 5vw, 60px); line-height: 1.04; letter-spacing: -.03em; margin: 14px 0 20px; font-weight: 700; }
+h3 { font-size: 22px; letter-spacing: -.01em; margin: 0 0 8px; }
+.sub { color: var(--muted); font-size: 19px; max-width: 640px; }
+.center { text-align: center; }
+.center .sub { margin: 0 auto; }
+.band { background: linear-gradient(180deg, var(--bg), var(--bg2) 15%, var(--bg2) 85%, var(--bg)); }
+
+/* Three rooms */
+.rooms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 56px; text-align: left; }
+.room { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 30px; position: relative; overflow: hidden; }
+.room .n { font-family: "Instrument Serif", serif; font-size: 64px; line-height: 1; color: #2a2c33; position: absolute; right: 22px; top: 14px; }
+.room .ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: rgba(10,132,255,.12); color: var(--accent); margin-bottom: 18px; }
+.room .ico svg { width: 22px; height: 22px; }
+.room p { color: var(--muted); margin: 0; font-size: 16px; }
+
+/* Stills: finished frames straight out of the viewer */
+.stills { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 56px; }
+.still { border-radius: var(--radius); overflow: hidden; position: relative; cursor: zoom-in; box-shadow: 0 40px 90px -40px rgba(0,0,0,.9); }
+.still img { width: 100%; aspect-ratio: 16/9; object-fit: cover; transition: transform 1.2s cubic-bezier(.2,.7,.2,1); }
+.still:hover img { transform: scale(1.03); }
+.still span { position: absolute; left: 16px; top: 16px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 5px 10px; border-radius: 999px; background: rgba(0,0,0,.45); backdrop-filter: blur(8px); }
+
+/* Before/after */
+.compare { position: relative; margin-top: 56px; border-radius: 22px; overflow: hidden; aspect-ratio: 16/9; box-shadow: 0 60px 120px -40px rgba(0,0,0,.9); user-select: none; }
+.compare img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.compare .after { clip-path: inset(0 0 0 var(--pos, 50%)); }
+.compare .bar { position: absolute; top: 0; bottom: 0; left: var(--pos, 50%); width: 2px; background: #fff; transform: translateX(-1px); pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,.4); }
+.compare .bar::after { content: "‹ ›"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 50%; background: #fff; color: #111; display: grid; place-items: center; font-weight: 700; font-size: 18px; letter-spacing: 2px; }
+.compare input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: ew-resize; margin: 0; }
+.compare .tag { position: absolute; bottom: 18px; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,.5); backdrop-filter: blur(8px); pointer-events: none; }
+.compare .tag.l { left: 18px; }
+.compare .tag.r { right: 18px; }
+
+.looks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; }
+.look { position: relative; border-radius: 14px; overflow: hidden; cursor: zoom-in; }
+.look img { width: 100%; aspect-ratio: 16/9; object-fit: cover; transition: transform 1s cubic-bezier(.2,.7,.2,1); }
+.look:hover img { transform: scale(1.04); }
+.look figcaption { position: absolute; inset: auto 0 0; padding: 30px 16px 14px; font-size: 14px; font-weight: 600; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
+.look figcaption small { display: block; font-weight: 400; color: #c9cad0; font-size: 12px; }
+figure { margin: 0; }
+
+/* Feature rows */
+.feature { display: grid; grid-template-columns: 5fr 7fr; gap: 64px; align-items: center; }
+.feature.flip { grid-template-columns: 7fr 5fr; }
+.feature.flip .copy { order: 2; }
+.feature ul { list-style: none; padding: 0; margin: 26px 0 0; display: grid; gap: 12px; }
+.feature li { padding-left: 28px; position: relative; color: #cfd0d6; font-size: 16px; }
+.feature li::before { content: ""; position: absolute; left: 0; top: 9px; width: 14px; height: 7px; border-left: 2px solid var(--accent); border-bottom: 2px solid var(--accent); transform: rotate(-45deg); }
+.feature li b { color: var(--text); font-weight: 600; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.chip { font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 999px; background: #1c1d22; border: 1px solid var(--line); color: #d4d5da; }
+.chip.hot { border-color: rgba(255,179,92,.4); color: var(--accent2); background: rgba(255,179,92,.06); }
+
+/* Formats */
+.screens { display: flex; gap: 26px; justify-content: center; align-items: flex-end; margin-top: 60px; }
+.screens figure { text-align: center; color: var(--muted); font-size: 14px; }
+.screens img { border-radius: 14px; border: 6px solid #1f2025; box-shadow: 0 40px 80px -30px rgba(0,0,0,.9); margin-bottom: 14px; object-fit: cover; }
+.screens b { color: var(--text); display: block; font-size: 15px; }
+.s169 img { width: 560px; aspect-ratio: 16/9; }
+.s916 img { width: 200px; aspect-ratio: 9/16; border-radius: 22px; }
+.s11 img { width: 300px; aspect-ratio: 1; }
+
+/* AI */
+.ai { position: relative; border-radius: 28px; overflow: hidden; padding: 90px 64px; isolation: isolate; }
+.ai > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+.ai::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(100deg, rgba(11,12,14,.94) 30%, rgba(11,12,14,.55)); }
+.ai .sub { color: #c6c8cf; }
+.prompts { display: grid; gap: 12px; margin-top: 36px; max-width: 620px; }
+.prompt { display: flex; gap: 14px; align-items: flex-start; padding: 16px 20px; border-radius: 16px; background: rgba(22,23,27,.7); border: 1px solid rgba(255,255,255,.1); backdrop-filter: blur(10px); font-size: 16px; }
+.prompt::before { content: "✦"; color: var(--accent2); }
+.providers { margin-top: 30px; color: #b5b7be; font-size: 14px; }
+
+/* Small feature grid */
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-top: 56px; }
+.grid div { background: var(--bg); padding: 26px; }
+.grid h4 { margin: 0 0 6px; font-size: 16px; }
+.grid p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.55; }
+
+/* Open source */
+.oss { background: var(--card); border: 1px solid var(--line); border-radius: 28px; padding: 64px; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; position: relative; overflow: hidden; }
+.oss::before { content: ""; position: absolute; width: 520px; height: 520px; right: -160px; top: -200px; background: radial-gradient(circle, rgba(10,132,255,.25), transparent 65%); }
+pre { margin: 0; background: #0d0e11; border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; overflow-x: auto; font: 14px/1.8 ui-monospace, Menlo, Consolas, monospace; color: #d6d7dc; position: relative; }
+pre .c { color: #6b6e78; }
+pre .p { color: var(--accent2); user-select: none; }
+
+footer { padding: 60px 0 70px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+footer .wrap { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+
+/* Lightbox */
+dialog { padding: 0; border: 0; background: transparent; max-width: 96vw; max-height: 94vh; }
+dialog::backdrop { background: rgba(0,0,0,.88); backdrop-filter: blur(6px); }
+dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoom-out; }
+
+/* Scroll reveal (progressive enhancement) */
+@supports (animation-timeline: view()) {
+  .reveal { animation: rise linear both; animation-timeline: view(); animation-range: entry 0% entry 35%; }
+  @keyframes rise { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal { animation: none !important; }
+  html { scroll-behavior: auto; }
+}
+
+@media (max-width: 900px) {
+  nav .links { display: none; }
+  nav .btn { margin-left: auto; }
+  section { padding: 80px 0; }
+  .rooms, .stills, .oss { grid-template-columns: 1fr; }
+  .looks { grid-template-columns: 1fr 1fr; }
+  .feature, .feature.flip { grid-template-columns: 1fr; gap: 32px; }
+  .feature.flip .copy { order: 0; }
+  .grid { grid-template-columns: repeat(2, 1fr); }
+  .oss, .ai { padding: 40px 24px; }
+  .showcase { margin-top: -140px; }
+  .screens { gap: 14px; }
+  .s169 img { width: 46vw; } .s916 img { width: 17vw; } .s11 img { width: 26vw; }
+}
+@media (max-width: 520px) {
+  .wrap { padding: 0 16px; }
+  .grid { grid-template-columns: 1fr; }
+  .hero { padding-bottom: 180px; }
+  .screens { font-size: 12px; }
+  .screens b { font-size: 12px; }
+  .screens img { border-width: 3px; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#"><i></i>Reccut</a>
+    <div class="links">
+      <a href="#looks">Looks</a>
+      <a href="#edit">Edit</a>
+      <a href="#record">Record</a>
+      <a href="#export">Export</a>
+      <a href="#ai">AI</a>
+      <a href="#open-source">Open source</a>
+    </div>
+    <a class="btn small" href="https://github.com/sirbull/OBSlite">
+      <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<header class="hero">
+  <video autoplay muted loop playsinline poster="media/reel-poster.jpg">
+    <source src="media/reel.mp4" type="video/mp4">
+  </video>
+  <div class="wrap">
+    <span class="eyebrow"><b>Free &amp; open source</b> For creators and hobby filmmakers</span>
+    <h1>Record. Edit.<br><span class="serif">Export everywhere.</span></h1>
+    <p class="lead">Reccut is the all-in-one video studio. Capture your screen and camera, cut on a magnetic timeline, grade like film and export to any format. One app, no subscription, no internet needed.</p>
+    <div class="ctas">
+      <a class="btn primary" href="https://github.com/sirbull/OBSlite/releases/latest">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
+        Download for Mac &amp; Windows
+      </a>
+      <a class="btn" href="https://github.com/sirbull/OBSlite">Star on GitHub</a>
+    </div>
+    <div class="facts"><span>macOS &amp; Windows</span><span>Works fully offline</span><span>MIT licence</span><span>No watermark, no account</span></div>
+  </div>
+</header>
+
+<div class="wrap showcase reveal">
+  <div class="frame"><img src="media/overview.jpg" alt="The Reccut editor with the title Into the Wild over a mountain lake, and a timeline of nature clips with transitions, titles and music" width="2000" height="1333"></div>
+</div>
+
+<section>
+  <div class="wrap center">
+    <div class="kicker">Made with Reccut</div>
+    <h2>Titles that look <span class="serif">broadcast-ready</span></h2>
+    <p class="sub">Animated titles and lower thirds, ready the moment you drop them on the timeline. Type, drag them into place, done.</p>
+    <div class="stills">
+      <figure class="still reveal"><img src="media/still-title.jpg" alt="Title Into the Wild, A moment outside, over a mountain lake" loading="lazy"><span>Title</span></figure>
+      <figure class="still reveal"><img src="media/still-lowerthird.jpg" alt="Lower third Falling water, A quiet moment in the forest, over a waterfall" loading="lazy"><span>Lower third</span></figure>
+    </div>
+  </div>
+</section>
+
+<section id="looks" class="band">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Colour &amp; film looks</div>
+      <h2>Give every shot <span class="serif">a feeling</span></h2>
+      <p class="sub">More than 40 film looks, from Kodak Portra to Technicolor, on top of a full 16-bit GPU colour grade with colour wheels, LOG conversion and LUTs.</p>
+    </div>
+    <div class="compare reveal" id="compare">
+      <img src="media/ba-before.jpg" alt="Coastal ridge, original footage" loading="lazy">
+      <img class="after" src="media/ba-after.jpg" alt="Coastal ridge with the Technicolor three-strip look" loading="lazy">
+      <div class="bar"></div>
+      <span class="tag l">Original</span><span class="tag r">Technicolor three-strip</span>
+      <input type="range" min="0" max="100" value="50" aria-label="Drag to compare original and graded footage">
+    </div>
+    <div class="looks">
+      <figure class="look reveal"><img src="media/look-velvia50.jpg" alt="Waterfall with the Fujifilm Velvia 50 look" loading="lazy"><figcaption>Fujifilm Velvia 50<small>Color film</small></figcaption></figure>
+      <figure class="look reveal"><img src="media/look-vision500t.jpg" alt="Forest with the Kodak Vision3 500T look" loading="lazy"><figcaption>Kodak Vision3 500T<small>Cinema film</small></figcaption></figure>
+      <figure class="look reveal"><img src="media/look-goldenhour.jpg" alt="Blossoms with the Golden hour look" loading="lazy"><figcaption>Golden hour<small>Creative</small></figcaption></figure>
+      <figure class="look reveal"><img src="media/look-portra400.jpg" alt="Coastal cliff with the Kodak Portra 400 look" loading="lazy"><figcaption>Kodak Portra 400<small>Color film</small></figcaption></figure>
+      <figure class="look reveal"><img src="media/look-bleachbypass.jpg" alt="River gorge with the Bleach bypass look" loading="lazy"><figcaption>Bleach bypass<small>Cinema film</small></figcaption></figure>
+      <figure class="look reveal"><img src="media/look-trix400.jpg" alt="Beach with the Kodak Tri-X 400 look" loading="lazy"><figcaption>Kodak Tri-X 400<small>Black &amp; white film</small></figcaption></figure>
+    </div>
+    <p class="caption">Real frames from the demo project, graded with Reccut's built-in looks.</p>
+  </div>
+</section>
+
+<section id="edit">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Edit</div>
+      <h2>A timeline that <span class="serif">gets out of your way</span></h2>
+      <p class="sub">A magnetic main storyline with connected titles above and music below. If you've used Final Cut Pro or Premiere, you'll feel at home right away.</p>
+    </div>
+    <div class="frame reveal" style="margin-top:50px"><img src="media/timeline.jpg" alt="Timeline with colour coded nature clips, titles on V2, transitions and a music track" loading="lazy" width="2000" height="551"></div>
+    <div class="chips reveal" style="justify-content:center;margin-top:28px">
+      <span class="chip">Trim, roll, slip &amp; slide</span><span class="chip">Skimming with audio</span><span class="chip">J- and L-cuts</span><span class="chip">Unlimited tracks</span><span class="chip">Keyframes with easing</span><span class="chip">Speed ramps</span><span class="chip">Stabilization</span><span class="chip">Masks &amp; keying</span><span class="chip">Transitions</span><span class="chip">Auto-sync audio</span><span class="chip">Whisper subtitles</span>
+    </div>
+  </div>
+</section>
+
+<section id="record" class="band">
+  <div class="wrap">
+    <div class="feature reveal">
+      <div class="copy">
+        <div class="kicker">Record</div>
+        <h2>Capture it <span class="serif">once</span>, fix it later</h2>
+        <p class="sub">Screen and camera are stored separately, together with your layout, cursor and keystrokes. Change all of it afterwards in the editor.</p>
+        <ul>
+          <li><b>Screen, a single window or an area</b>, plus webcam and microphone</li>
+          <li><b>Start from any app</b> with a global shortcut. Pauses are cut out for you</li>
+          <li><b>Six camera layouts</b> you can switch live while recording</li>
+          <li><b>Cursor zoom, click highlights and keystrokes</b> on screen</li>
+          <li><b>Crash-safe</b>: recordings are saved as you go and recovered automatically</li>
+        </ul>
+      </div>
+      <div class="frame"><img src="media/record.jpg" alt="Record room with a large preview of a mountain lake" loading="lazy" width="2000" height="1333"></div>
+    </div>
+  </div>
+</section>
+
+<section id="export">
+  <div class="wrap center">
+    <div class="reveal">
+      <div class="kicker">Export</div>
+      <h2>One edit, <span class="serif">every screen</span></h2>
+      <p class="sub">YouTube, Shorts, Reels, TikTok or the big screen. Reframe, resize and pick a format, or let a preset do it.</p>
+    </div>
+    <div class="screens reveal">
+      <figure class="s169"><img src="media/fmt-169.jpg" alt="Waterfall in 16:9" loading="lazy"><b>YouTube</b>16:9 · up to 4K</figure>
+      <figure class="s916"><img src="media/fmt-916.jpg" alt="Waterfall in vertical 9:16" loading="lazy"><b>Shorts · Reels · TikTok</b>9:16</figure>
+      <figure class="s11"><img src="media/fmt-11.jpg" alt="Waterfall in square 1:1" loading="lazy"><b>Instagram</b>1:1 · 4:5</figure>
+    </div>
+    <div class="chips reveal" style="justify-content:center;margin-top:50px">
+      <span class="chip hot">MP4 · H.264</span><span class="chip hot">HEVC</span><span class="chip hot">AV1</span><span class="chip">WebM · VP9</span><span class="chip">MOV · ProRes 422</span><span class="chip">MKV</span><span class="chip">GIF</span><span class="chip">MP3</span><span class="chip">AAC</span><span class="chip">WAV</span><span class="chip">FLAC</span><span class="chip">Opus</span>
+    </div>
+    <p class="caption">Batch-convert files without opening the editor. Subtitles burned in, as a track or as SRT/VTT.</p>
+  </div>
+</section>
+
+<section id="ai" style="padding-top:0">
+  <div class="wrap">
+    <div class="ai reveal">
+      <img src="media/look-vision500t.jpg" alt="" loading="lazy">
+      <div class="kicker">AI editing agent</div>
+      <h2>Describe the result,<br><span class="serif">not the steps</span></h2>
+      <p class="sub">The agent reads your project, edits with the same tools you use, checks the result and tells you what it did. Every change can be undone.</p>
+      <div class="prompts">
+        <div class="prompt">Cut this interview into a 60 second story for Instagram, vertical.</div>
+        <div class="prompt">Adjust colour and exposure on every clip so they look good and match.</div>
+        <div class="prompt">Subtitle this video in Finnish.</div>
+        <div class="prompt">Make a 5 second intro with the title "Getting started" in a modern style.</div>
+      </div>
+      <p class="providers">Works with OpenAI, Claude, Gemini, Mistral and OpenRouter, or fully local with Ollama and LM Studio.</p>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">And much more</div>
+      <h2>Everything in <span class="serif">one place</span></h2>
+    </div>
+    <div class="grid reveal">
+      <div><h4>Opens almost anything</h4><p>ProRes, DNxHR, 10-bit HEVC, AVCHD, image sequences, camera RAW and HDR.</p></div>
+      <div><h4>Studio sound</h4><p>Noise reduction, hum removal, EQ, compressor and 30+ presets like Podcast Voice.</p></div>
+      <div><h4>Speed &amp; stabilization</h4><p>Smooth speed ramps from 10% to 20×, and stabilization that tracks hundreds of points.</p></div>
+      <div><h4>Photoshop layers</h4><p>Import PSD and SVG files as separate, stacked layers ready to animate.</p></div>
+      <div><h4>Redaction</h4><p>Pixelate or blur faces, passwords and number plates, and follow them with keyframes.</p></div>
+      <div><h4>Your own templates</h4><p>Design lower thirds in After Effects and bring them in with the template kit.</p></div>
+      <div><h4>Autosave &amp; history</h4><p>Saved after every change, with snapshots going back months.</p></div>
+      <div><h4>Plugins</h4><p>Extend Reccut with plugins, or let the AI agent write one for you.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="open-source" style="padding-top:0">
+  <div class="wrap">
+    <div class="oss reveal">
+      <div style="position:relative">
+        <div class="kicker">Open source</div>
+        <h2>Yours to use, <span class="serif">read and improve</span></h2>
+        <p class="sub">Reccut is free under the MIT licence. No account, no watermark, no telemetry. It works fully offline and only checks GitHub for updates, which you can turn off.</p>
+        <div class="ctas" style="justify-content:flex-start;margin-top:30px">
+          <a class="btn primary" href="https://github.com/sirbull/OBSlite/releases/latest">Download</a>
+          <a class="btn" href="https://github.com/sirbull/OBSlite">View source</a>
+        </div>
+      </div>
+      <pre><span class="c"># Build from source (Node 22+)</span>
+<span class="p">$ </span>git clone https://github.com/sirbull/OBSlite.git
+<span class="p">$ </span>cd OBSlite
+<span class="p">$ </span>npm install
+<span class="p">$ </span>npm start
+
+<span class="c"># Installers for Mac and Windows</span>
+<span class="p">$ </span>npm run dist</pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>© Reccut contributors · MIT licence</span>
+    <span>Made for creators. <a href="https://github.com/sirbull/OBSlite/issues">Report an issue</a></span>
+  </div>
+</footer>
+
+<dialog id="lightbox"><img alt=""></dialog>
+<script>
+  const box = document.getElementById('lightbox');
+  const big = box.querySelector('img');
+  document.querySelectorAll('.frame img, .still img, .look img').forEach((img) => img.addEventListener('click', () => {
+    big.src = img.src;
+    big.alt = img.alt;
+    box.showModal();
+  }));
+  box.addEventListener('click', () => box.close());
+
+  const compare = document.getElementById('compare');
+  compare.querySelector('input').addEventListener('input', (e) => compare.style.setProperty('--pos', e.target.value + '%'));
+</script>
+</body>
+</html>

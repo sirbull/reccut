@@ -18,7 +18,7 @@ Reccut has three rooms, shown at the top of the window. Switch between them with
 - **Edit** is a magnetic timeline editor with the tools and shortcuts from Final Cut Pro.
 - **Export** turns the project, or any file, into the format you need.
 
-![The Edit room: browser on the left, viewer in the middle, inspector on the right and the timeline below.](overview.jpg)
+![The Into the Wild nature project: media on the left, viewer in the centre, inspector on the right and the timeline below.](overview.jpg)
 
 Everything belongs to a project. A project is a folder that holds the project file, your recordings, copied media, optimized media and exports.
 
@@ -187,7 +187,7 @@ Choose a screen, a camera and a microphone in the Record room. Turn on system au
 
 ## Start recording from any app
 
-Press the record shortcut to start and stop recording: by default **Control Option 0** on a Mac and **Ctrl Shift 0** on Windows (the keys can be changed under Shortcuts in the Record room). It works also when another app is in front and Reccut is in the background or in the Edit room. The same keys with **8** pause and resume. Go to the app you want to record and press the shortcut.
+Press the record shortcut to start and stop recording: by default **Control Option 0** on a Mac and **Ctrl Shift 0** on Windows (the keys can be changed under Shortcuts in the Record room). The same keys with **8** pause and resume. By default these shortcuts work only while Reccut has focus, outside input fields and dialogs. To control recording from another app, enable **Allow shortcuts in other apps** under **Record → Shortcuts**. This explicitly enables global keys, which can override those combinations in other apps. The floating recording controls and tray menu always let you pause and stop without global keys.
 
 While you record, you can always see that the screen is being recorded, without it ending up in the video:
 
@@ -227,7 +227,7 @@ Choose a countdown of 3, 5 or 10 seconds under Recording. The numbers are shown 
 
 ![The Record room. The layouts at the bottom switch between camera, screen and picture in picture.](record.jpg)
 
-- The layout buttons, or the global shortcuts shown on them, switch between camera full screen, screen only and the camera in a corner. They work even when another app is in front.
+- The layout buttons, or the shortcuts shown on them, switch between camera full screen, screen only and the camera in a corner. To use these keys from another app, enable **Allow shortcuts in other apps** under **Record → Shortcuts**.
 - Choose the camera shape (circle, square or 16:9), size and mirroring.
 - Turn on **Show PiP on screen** under Camera to see the camera over the app you are demonstrating. It follows the recording's position, size and shape, including when recording a screen area. Clicks pass through to the app underneath. It appears while Reccut is in the background and hides when you return. Use the layout shortcuts with **3–6** to switch corners. This is available for display and area capture. On macOS and Linux, the on-screen camera can also appear in the screen file; leave it off if you need a clean screen file for later editing.
 - **Show keystrokes** shows shortcuts you press, but never normal typing and never Reccut's own shortcuts.
@@ -280,7 +280,7 @@ Your choices are remembered and used when you drag files in. Files that cannot b
     body: `
 The browser shows every clip as a filmstrip with its waveform, like in Final Cut Pro. Hold the pointer over a clip to skim it; the viewer shows the frame under the pointer.
 
-![Media in the browser. Badges show optimized media, merged audio, HDR and RAW.](browser.jpg)
+![Nature footage in the Media browser. Each filmstrip previews a source clip.](browser.jpg)
 
 ## Mark a range
 
@@ -369,7 +369,7 @@ The Info tab in the inspector shows the bit depth, HDR format and which file is 
     body: `
 Import a Photoshop file (.psd or .psb) or an SVG with layers, and Reccut shows its layers with small previews. Tick the layers you want; hidden layers start unticked.
 
-![Choosing layers from a Photoshop file.](layers.jpg)
+![Choosing layers from the nature project’s SVG title artwork. The same dialog is used for Photoshop layers.](layers.jpg)
 
 - **Separate layers**: each layer becomes an image with transparency, in the size of the document, so the layers line up exactly. With Add to the timeline, they are stacked above the storyline, the bottom layer lowest, and grouped so they move together. Animate each layer in the Video tab, for example to slide a logo in.
 - **One merged image**: the ticked layers are combined into one image.
@@ -1065,7 +1065,7 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
     summary: 'Volume, fades, components, J and L cuts, detach and solo.',
     keywords: 'audio volume fade expand detach solo components j cut l cut',
     body: `
-![The Audio tab with audio components.](audio.jpg)
+![The Audio inspector with levels, volume, fades and effects for the demo audio track.](audio.jpg)
 
 - Drag the yellow volume line on a clip, or use {{key:volumeUp}} and {{key:volumeDown}}. The waveform grows or shrinks with the level. Option (Alt) click the line once to add a volume keyframe.
 - Clip volume starts at **0 dB**. The clip shows its level, and hovering or dragging the volume line or a volume point shows the exact dB value next to the pointer. Positive values boost the level; negative values reduce it.
@@ -1133,7 +1133,7 @@ Exports are saved in the Exports folder of the project by default, and run in th
     section: 'Reference',
     title: 'Settings',
     summary: 'Defaults for editing, playback, import, audio and export, and your own keyboard shortcuts.',
-    keywords: 'settings preferences options defaults keyboard shortcuts command editor customize',
+    keywords: 'settings preferences options defaults keyboard shortcuts command editor customize screenshot screen capture hidden invisible window behind',
     body: `
 Open Settings with {{key:prefs}}. The icons at the top switch between the parts, like in Final Cut Pro. Every change is saved right away.
 
@@ -1145,6 +1145,12 @@ Open Settings with {{key:prefs}}. The icons at the top switch between the parts,
 - **Export**: whether exports go to the project's Exports folder or another folder.
 - **AI**: provider, API key, model, image support and local-server connections.
 - **Plugins**: open tools, configure defaults, share and remove plugins, and set up Higgsfield.
+
+## Include Reccut in screenshots
+
+Open **Settings → General → Screen Capture** and leave **Include Reccut in screenshots and screen recordings** on. This is the default, including after upgrading from the older hidden default. The same switch is available under **Record → Recording**. Changes apply immediately and are saved.
+
+If you turn it off, supported capture tools show the windows behind Reccut instead. Turn it back on if Reccut is missing from your screenshots.
 
 ![General settings.](settings.jpg)
 
