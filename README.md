@@ -173,7 +173,17 @@ Download the latest version from [Releases](https://github.com/sirbull/reccut/re
 
 The app is not code-signed yet:
 
-- **Mac:** if macOS says the app is damaged, run `xattr -cr /Applications/Reccut.app` in Terminal. Allow access to camera, microphone and screen recording. Keystrokes and cursor zoom also need access under Privacy & Security → Accessibility. Restart the app after granting access.
+- **Mac:** the first time you open Reccut, macOS says it can't verify the app. Click **Done**, open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Reccut, then confirm with your password.
+
+  If macOS instead says the app is **damaged**, run this in Terminal and open Reccut again:
+
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/Reccut.app
+  ```
+
+  If Terminal answers *Operation not permitted*, delete Reccut from Applications, run `xattr -d com.apple.quarantine ~/Downloads/Reccut-*.dmg`, and install again from the `.dmg`.
+
+  Allow access to camera, microphone and screen recording. Keystrokes and cursor zoom also need access under Privacy & Security → Accessibility. Restart the app after granting access.
 - **Windows:** if SmartScreen warns you, choose **More info** and **Run anyway**.
 - **Linux:** run `chmod +x Reccut-*.AppImage` and start the file. Ubuntu 22.04 and newer need `sudo apt install libfuse2`. If it closes right away with a sandbox error (Ubuntu 24.04), start it with `--no-sandbox`. Keystrokes and cursor zoom need an X11 session. System audio is not recorded on Linux, and HEVC clips are converted before playback.
 

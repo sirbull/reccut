@@ -215,7 +215,7 @@ Installasjonsfiler bygges av GitHub Actions: fanen **Actions**, arbeidsflyten **
 
 Appen er ikke kodesignert ennå:
 
-* **Mac:** Hvis macOS sier at appen er skadet, kjør `xattr -cr /Applications/Reccut.app` i Terminal. Gi tilgang til kamera, mikrofon og skjermopptak. For tastetrykk og forstørret peker trengs også tilgang under Personvern og sikkerhet, Tilgjengelighet. Start appen på nytt etter at tilgang er gitt.
+* **Mac:** Første gang sier macOS at appen ikke kan bekreftes. Trykk **Ferdig**, åpne **Systeminnstillinger → Personvern og sikkerhet**, bla ned og trykk **Åpne likevel** ved Reccut, og bekreft med passordet. Sier macOS i stedet at appen er **skadet**, kjør `xattr -dr com.apple.quarantine /Applications/Reccut.app` i Terminal. Svarer Terminal *Operation not permitted*, slett appen, kjør `xattr -d com.apple.quarantine ~/Downloads/Reccut-*.dmg` og installer på nytt fra `.dmg`-filen. Gi tilgang til kamera, mikrofon og skjermopptak. For tastetrykk og forstørret peker trengs også tilgang under Personvern og sikkerhet, Tilgjengelighet. Start appen på nytt etter at tilgang er gitt.
 * **Windows:** Velg **Mer informasjon** og **Kjør likevel** hvis SmartScreen advarer.
 * **Linux:** Kjør `chmod +x Reccut-*.AppImage` og start filen. Ubuntu 22.04 og nyere trenger `sudo apt install libfuse2`. Lukker den seg med en sandbox-feil (Ubuntu 24.04), start den med `--no-sandbox`. Tastetrykk og forstørret peker krever en X11-økt. Systemlyd tas ikke opp på Linux, og HEVC-klipp gjøres om før avspilling.
 
