@@ -4385,3 +4385,19 @@ kbd.keycap {
   font: inherit;
   font-size: 12.5px;
 }
+.ai-test-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+}
+.plugin-setting {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+.plugin-setting .text-input {
+  flex: 1;
+  min-width: 0;
+}

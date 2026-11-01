@@ -425,7 +425,7 @@ function AiPane() {
             )}
           </div>
         </Row>
-        <div class="afx-add">
+        <div class="ai-test-row">
           <Button class="small" onClick={test} disabled={cfg.provider === 'anthropic' && !cfg.hasKey}>
             Test Connection
           </Button>

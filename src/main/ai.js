@@ -85,8 +85,9 @@ async function sendAnthropic(cfg, key, req, onText) {
     model: cfg.model || DEFAULTS.model,
     max_tokens: cfg.maxTokens || DEFAULTS.maxTokens,
     thinking: { type: 'adaptive' },
-    system: req.system,
-    tools: req.tools,
+    // Systemteksten og verktøyene er like hver gang, så de mellomlagres hos Anthropic (billigere og raskere).
+    system: req.system ? [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }] : undefined,
+    tools: req.tools?.length ? req.tools : undefined,
     messages: req.messages,
   };
   // Nektes en forespørsel av sikkerhetsfiltrene, prøver API-et selv en annen modell
@@ -149,7 +150,7 @@ async function sendOpenAI(cfg, key, req, onText) {
       body: JSON.stringify({
         model: cfg.model,
         messages: toOpenAI(req),
-        tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })),
+        ...(req.tools?.length ? { tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })) } : {}),
       }),
     });
     if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 400)}`);
