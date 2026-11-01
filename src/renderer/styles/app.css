@@ -3599,6 +3599,14 @@ kbd.keycap {
   font-size: 11.5px;
   color: var(--text-3);
 }
+.palette-group {
+  padding: 12px 10px 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
 .palette-item .kind {
   flex: none;
   width: 74px;

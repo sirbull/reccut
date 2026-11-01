@@ -214,10 +214,25 @@ function score(item, words) {
 
 const DEFAULT = ['cmd:import', 'fx:blur', 'param:exposure', 'tr:dissolve', 'title:lower', 'cmd:syncAudio', 'cmd:blade', 'cmd:retime', 'param:wheels', 'cmd:export'];
 
-export function consoleSearch(query, limit = 40) {
+const KIND_ORDER = ['Command', 'Effect', 'Transition', 'Title', 'Lower Third', 'Look', 'Animation', 'Setting', 'Media', 'Help'];
+const plural = (kind) => (kind === 'Media' || kind === 'Help' ? kind : `${kind}s`);
+
+// Uten søkeord: forslagene først, så alt annet gruppert etter type, så du kan bla og lære. group gir overskriften.
+function browseAll(items) {
+  const suggested = DEFAULT.map((id) => items.find((x) => x.id === id)).filter(Boolean);
+  const rest = items
+    .filter((x) => !DEFAULT.includes(x.id))
+    .sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || (a.kind === 'Command' ? a.sub.localeCompare(b.sub) : 0) || a.label.localeCompare(b.label));
+  return [
+    ...suggested.map((x, i) => (i ? x : { ...x, group: 'Suggested' })),
+    ...rest.map((x, i) => (i && rest[i - 1].kind === x.kind ? x : { ...x, group: plural(x.kind) })),
+  ];
+}
+
+export function consoleSearch(query, limit = Infinity) {
   const items = itemsFor();
   const words = norm(query).split(/\s+/).filter(Boolean);
-  if (!words.length) return DEFAULT.map((id) => items.find((x) => x.id === id)).filter(Boolean);
+  if (!words.length) return browseAll(items);
   return items
     .map((x) => ({ x, s: score(x, words) }))
     .filter((r) => r.s >= 0)

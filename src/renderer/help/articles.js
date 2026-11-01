@@ -159,7 +159,7 @@ To collect everything into one folder for archiving, use Package Project.
 Press {{key:findCommand}} when you are not typing in a field. A search window opens in the middle of the screen. Type a few letters of what you want and press Enter:
 
 - **Effects** are applied to the selected clips (or the clip under the playhead), and the effect is shown and highlighted in the inspector so you can adjust it right away.
-- **Transitions** are added at the selected edit, or the edit nearest the playhead.
+- **Transitions** are added at the selected edit, or the edit nearest the playhead. With the playhead at the end of the last clip, the clip fades out.
 - **Titles** are added at the playhead.
 - **Looks** and **animations** are applied to the selected clips.
 - **Settings** such as Exposure, Scale or Volume open the right tab in the inspector, and the setting is highlighted with its number field ready to type in.
@@ -168,6 +168,8 @@ Press {{key:findCommand}} when you are not typing in a field. A search window op
 - **Help** articles open in the help window.
 
 ![Quick Search. The label on the left shows what kind of result it is, and commands show their shortcut.](palette.jpg)
+
+With nothing typed, scroll down to see everything you can search for, grouped by type, with the shortcut next to each command.
 
 The top right corner shows how many clips are selected, so you know what an effect will be applied to. Press {{key:findCommand}} again or Escape to close it. You can also open it with Cmd K (Ctrl K on Windows) or the question mark at the top right.
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newProject, makeClip, transitionWindow, computeFrame, computeAudio, transitionSelection, parseTransitionSelection } from '../src/shared/model.js';
+import { newProject, makeClip, transitionWindow, computeFrame, computeAudio, transitionSelection, parseTransitionSelection, nearestEdit } from '../src/shared/model.js';
 import { addMediaClip, removeTransition, setTransition, splitClip } from '../src/shared/ops.js';
 import { frameEffectPlacement, libraryDropTarget, resizedTransitionDuration } from '../src/shared/libraryDrop.js';
 
@@ -161,4 +161,14 @@ test('whole frame effects like Pixelate can fade in with a transition', () => {
   const layer = computeFrame(p, 2.5).layers.find((l) => l.b?.clip.id === fx.id);
   assert.equal(layer.overlay, true);
   assert.equal(layer.transition.p, 0.5);
+});
+
+test('nearestEdit picks the cut, opening or closing edge closest to the playhead', () => {
+  const p = setup();
+  const [a, b] = p.primary;
+  assert.deepEqual(nearestEdit(p, 0.5), { id: a, edge: 'start' });
+  assert.deepEqual(nearestEdit(p, 7.2), { id: b, edge: 'start' });
+  assert.deepEqual(nearestEdit(p, 15.9), { id: b, edge: 'end' }, 'playhead at the end of the last clip fades out');
+  assert.deepEqual(nearestEdit(p, 30), { id: b, edge: 'end' });
+  assert.equal(nearestEdit(newProject('Empty'), 3), null);
 });

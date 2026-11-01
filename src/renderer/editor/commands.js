@@ -1,6 +1,6 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
-import { addSequence, currentSequence, deleteSequence, sequenceList, hasFreeTransitions, CAPTION_LANE, CLIP_COLORS, EFFECTS, parseTransitionSelection, transitionSelection, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, componentVolumeProp, kfTime, valueAt } from '../../shared/model.js';
+import { addSequence, currentSequence, deleteSequence, sequenceList, hasFreeTransitions, CAPTION_LANE, CLIP_COLORS, EFFECTS, parseTransitionSelection, transitionSelection, nearestEdit, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, componentVolumeProp, kfTime, valueAt } from '../../shared/model.js';
 import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates.js';
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
 import { addMask, canMask, removeMask } from '../../shared/shapes.js';
@@ -449,26 +449,19 @@ export function addTransition(type = 'dissolve') {
   }
   let ids = selection.value.filter((id) => p.clips[id]?.lane === 0);
   if (!ids.length) {
-    // Uten utvalg: bruk kuttet nærmest spillhodet.
-    const T = getTime();
-    let best = null;
-    for (const id of p.primary.slice(1)) {
-      const c = p.clips[id];
-      if (!best || Math.abs(c.start - T) < Math.abs(p.clips[best].start - T)) best = id;
-    }
-    if (!best) {
-      if (p.primary[0]) best = p.primary[0];
-      else return;
-    }
-    commit((q) => setTransition(q, best, type, dur, 'start', prefs.value.transitionAudio));
-    selectedTransition.value = best;
+    // Uten utvalg: bruk kuttet nærmest spillhodet, også slutten av siste klipp.
+    const edit = nearestEdit(p, getTime());
+    if (!edit) return;
+    commit((q) => setTransition(q, edit.id, type, dur, edit.edge, prefs.value.transitionAudio));
+    selectedTransition.value = transitionSelection(edit.id, edit.edge);
     return;
   }
   commit((q) => {
     for (const id of ids) {
       setTransition(q, id, type, dur, 'start', prefs.value.transitionAudio);
-      const next = q.primary[q.primary.indexOf(id) + 1];
-      if (next) setTransition(q, next, type, dur, 'start', prefs.value.transitionAudio);
+      const next = q.clips[q.primary[q.primary.indexOf(id) + 1]];
+      if (next && next.type !== 'gap') setTransition(q, next.id, type, dur, 'start', prefs.value.transitionAudio);
+      else setTransition(q, id, type, dur, 'end', prefs.value.transitionAudio);
     }
   });
 }

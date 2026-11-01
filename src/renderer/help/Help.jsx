@@ -1,4 +1,5 @@
 // Editor-side bridge: the handbook runs in its own restricted renderer.
+import { Fragment } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { effect } from '@preact/signals';
 import { CornerDownLeft, Keyboard, Search } from 'lucide-preact';
@@ -90,15 +91,18 @@ export function CommandPalette() {
           <span class="palette-target">{sel ? `${sel} selected` : 'Nothing selected'}</span>
         </div>
         <div class="palette-list" ref={listRef}>
-          {!query && <div class="palette-hint">Start typing to find anything in Reccut.</div>}
+          {!query && <div class="palette-hint">Start typing, or scroll to see everything you can do.</div>}
           {items.length === 0 && <p class="dim">Nothing found.</p>}
           {items.map((it, i) => (
-            <button key={it.id} class={`palette-item${i === index ? ' active' : ''}`} onPointerMove={() => setIndex(i)} onClick={() => choose(it)}>
-              <span class={`kind k-${it.kind.toLowerCase()}`}>{it.kind}</span>
-              <span class="label">{it.label}</span>
-              <span class="where">{it.sub}</span>
-              {it.cmd && <Keycap cmd={it.cmd} />}
-            </button>
+            <Fragment key={it.id}>
+              {it.group && <div class="palette-group">{it.group}</div>}
+              <button class={`palette-item${i === index ? ' active' : ''}`} onPointerMove={() => setIndex(i)} onClick={() => choose(it)}>
+                <span class={`kind k-${it.kind.toLowerCase()}`}>{it.kind}</span>
+                <span class="label">{it.label}</span>
+                <span class="where">{it.sub}</span>
+                {it.cmd && <Keycap cmd={it.cmd} />}
+              </button>
+            </Fragment>
           ))}
         </div>
         <footer>

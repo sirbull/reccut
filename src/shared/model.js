@@ -817,6 +817,20 @@ export function freeTransitionAt(clip, T) {
   return null;
 }
 
+// Kuttet i hovedsporet nærmest T: starten av hvert klipp, og slutten av et klipp uten nabo etter seg (toning ut).
+export function nearestEdit(project, T) {
+  const clips = project.primary.map((id) => project.clips[id]).filter(Boolean);
+  let best = null;
+  clips.forEach((c, i) => {
+    if (c.type === 'gap') return;
+    const next = clips[i + 1];
+    const edges = [['start', c.start]];
+    if (!next || next.type === 'gap') edges.push(['end', c.start + c.dur]);
+    for (const [edge, t] of edges) if (!best || Math.abs(t - T) < best.d) best = { id: c.id, edge, d: Math.abs(t - T) };
+  });
+  return best && { id: best.id, edge: best.edge };
+}
+
 export const transitionSelection = (id, edge = 'start') => edge === 'end' ? `out:${id}` : id;
 export function parseTransitionSelection(value) {
   return value?.startsWith('out:') ? { id: value.slice(4), edge: 'end', key: 'transitionOut' } : { id: value, edge: 'start', key: 'transition' };
