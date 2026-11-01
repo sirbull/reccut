@@ -12,7 +12,7 @@ function repo() {
     const m = url.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
     if (m) return { owner: m[1], name: m[2] };
   } catch {}
-  return { owner: 'sirbull', name: 'OBSlite' };
+  return { owner: 'sirbull', name: 'reccut' };
 }
 
 // Sammenligner versjoner som 1.2.10 og 1.2.9 (et "v" foran ignoreres).

@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Reccut — Record, edit and export in one app</title>
-<meta name="description" content="Reccut is a free, open-source video studio for creators and hobby filmmakers. Screen recording, a magnetic timeline, film looks, titles, audio repair, an AI editing agent and export to every format. For Mac and Windows.">
-<meta property="og:title" content="Reccut — Record, edit and export in one app">
-<meta property="og:description" content="Free, open-source video studio for creators and hobby filmmakers. Mac and Windows.">
+<title>Reccut — Open-source screen recorder and video editor</title>
+<meta name="description" content="Record your screen and camera, then edit the recording in Reccut. Free and open source for Mac and Windows, with optional AI agents and your choice of model.">
+<meta property="og:title" content="Reccut — Open-source screen recorder and video editor">
+<meta property="og:description" content="An open-source screen recorder and video editor for Mac and Windows. Record yourself, edit the footage and connect an AI agent to the model you choose.">
 <meta property="og:image" content="media/overview.jpg">
 <meta name="theme-color" content="#0b0c0e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,7 +26,7 @@
   --max: 1200px;
 }
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
 body {
   margin: 0;
   background: var(--bg);
@@ -99,6 +99,13 @@ h1 .serif { letter-spacing: -.01em; }
   cursor: zoom-in;
 }
 .frame img { width: 100%; }
+.record-demo { margin-top: 40px; }
+.record-demo .frame { cursor: default; }
+.record-demo video { width: 100%; }
+.record-details { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; }
+.record-details p { color: var(--muted); margin: 0; }
+.record-followup { margin-top: 56px; }
+.record-followup .sub { margin: 0 auto 28px; text-align: center; }
 .caption { text-align: center; color: var(--muted); font-size: 14px; margin-top: 18px; }
 
 /* Sections */
@@ -212,7 +219,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   nav .links { display: none; }
   nav .btn { margin-left: auto; }
   section { padding: 80px 0; }
-  .rooms, .stills, .oss { grid-template-columns: 1fr; }
+  .rooms, .stills, .oss, .record-details { grid-template-columns: 1fr; }
   .looks { grid-template-columns: 1fr 1fr; }
   .feature, .feature.flip { grid-template-columns: 1fr; gap: 32px; }
   .feature.flip .copy { order: 0; }
@@ -238,14 +245,14 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <a class="brand" href="#"><i></i>Reccut</a>
     <div class="links">
-      <a href="#looks">Looks</a>
-      <a href="#edit">Edit</a>
       <a href="#record">Record</a>
+      <a href="#edit">Edit</a>
+      <a href="#looks">Colour</a>
       <a href="#export">Export</a>
-      <a href="#ai">AI</a>
+      <a href="#ai">AI agents</a>
       <a href="#open-source">Open source</a>
     </div>
-    <a class="btn small" href="https://github.com/sirbull/OBSlite">
+    <a class="btn small" href="https://github.com/sirbull/reccut">
       <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
       GitHub
     </a>
@@ -257,15 +264,15 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     <source src="media/reel.mp4" type="video/mp4">
   </video>
   <div class="wrap">
-    <span class="eyebrow"><b>Free &amp; open source</b> For creators and hobby filmmakers</span>
-    <h1>Record. Edit.<br><span class="serif">Export everywhere.</span></h1>
-    <p class="lead">Reccut is the all-in-one video studio. Capture your screen and camera, cut on a magnetic timeline, grade like film and export to any format. One app, no subscription, no internet needed.</p>
+    <span class="eyebrow"><b>Free &amp; open source</b> Mac &amp; Windows</span>
+    <h1>Record your screen.<br><span class="serif">Edit the recording.</span></h1>
+    <p class="lead">Record your screen, camera and microphone, then open the recording in the editor. Cut out mistakes, add subtitles and save the finished video. Reccut is free and open source.</p>
     <div class="ctas">
-      <a class="btn primary" href="https://github.com/sirbull/OBSlite/releases/latest">
+      <a class="btn primary" href="https://github.com/sirbull/reccut/releases/latest">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
         Download for Mac &amp; Windows
       </a>
-      <a class="btn" href="https://github.com/sirbull/OBSlite">Star on GitHub</a>
+      <a class="btn" href="https://github.com/sirbull/reccut">Source on GitHub</a>
     </div>
     <div class="facts"><span>macOS &amp; Windows</span><span>Works fully offline</span><span>MIT licence</span><span>No watermark, no account</span></div>
   </div>
@@ -275,11 +282,58 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="frame"><img src="media/overview.jpg" alt="The Reccut editor with the title Into the Wild over a mountain lake, and a timeline of nature clips with transitions, titles and music" width="2000" height="1333"></div>
 </div>
 
+<section id="record" class="band">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Record</div>
+      <h2>Record your screen <span class="serif">and yourself</span></h2>
+      <p class="sub">Record a game, a tutorial or a presentation with your camera and microphone. When you stop, open the recording in Edit to cut out mistakes, add subtitles and adjust the sound.</p>
+    </div>
+    <figure class="record-demo reveal">
+      <div class="frame">
+        <video id="record-demo" autoplay muted loop playsinline controls preload="metadata" poster="media/record-gameplay.jpg" width="1440" height="960" aria-label="Gameplay and camera recording demo in Reccut">
+          <source src="media/record-gameplay.mp4" type="video/mp4">
+          <img src="media/record-gameplay.jpg" alt="Reccut recording gameplay from Echoes of Quite Recent, with the creator's face in the lower-right corner" width="2000" height="1333">
+        </video>
+      </div>
+      <figcaption class="caption">Playing my own game, Echoes of Quite Recent. A recording demo using gameplay footage with my camera in the corner.</figcaption>
+    </figure>
+    <div class="record-details reveal">
+      <div>
+        <h3>Choose what to record</h3>
+        <p>Capture the whole screen, a window or a selected area. Add a camera and microphone, or record just yourself. Start, pause and stop from any app with a global shortcut.</p>
+      </div>
+      <div>
+        <h3>Adjust it afterwards</h3>
+        <p>Reccut can save screen and camera as separate files, so you can change the layout later. Cursor zoom, click highlights and keystrokes can also be adjusted in the editor.</p>
+      </div>
+    </div>
+    <div class="record-followup reveal">
+      <p class="sub">The same gameplay recording in Edit, with a cut and a title added on the timeline.</p>
+      <div class="frame"><img src="media/record-gameplay-edit.jpg" alt="The gameplay recording opened in Reccut’s editor, split into clips with an Echoes of Quite Recent title on a separate track" loading="lazy" width="2000" height="1333"></div>
+    </div>
+  </div>
+</section>
+
+<section id="edit">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Edit</div>
+      <h2>Edit on a <span class="serif">magnetic timeline</span></h2>
+      <p class="sub">Trim recordings or imported footage, remove a bad take, and add titles and music on separate tracks. The main track closes gaps as you edit, much like Final Cut Pro.</p>
+    </div>
+    <div class="frame reveal" style="margin-top:50px"><img src="media/timeline.jpg" alt="Timeline with colour coded nature clips, titles on V2, transitions and a music track" loading="lazy" width="2000" height="551"></div>
+    <div class="chips reveal" style="justify-content:center;margin-top:28px">
+      <span class="chip">Trim, roll, slip &amp; slide</span><span class="chip">Skimming with audio</span><span class="chip">J- and L-cuts</span><span class="chip">Unlimited tracks</span><span class="chip">Keyframes with easing</span><span class="chip">Speed ramps</span><span class="chip">Stabilization</span><span class="chip">Masks &amp; keying</span><span class="chip">Transitions</span><span class="chip">Auto-sync audio</span><span class="chip">Whisper subtitles</span>
+    </div>
+  </div>
+</section>
+
 <section>
   <div class="wrap center">
-    <div class="kicker">Made with Reccut</div>
-    <h2>Titles that look <span class="serif">broadcast-ready</span></h2>
-    <p class="sub">Animated titles and lower thirds, ready the moment you drop them on the timeline. Type, drag them into place, done.</p>
+    <div class="kicker">Titles</div>
+    <h2>Titles and <span class="serif">lower thirds</span></h2>
+    <p class="sub">Add a title to the timeline, enter your text and position it in the preview. The animation adjusts to the length of the clip.</p>
     <div class="stills">
       <figure class="still reveal"><img src="media/still-title.jpg" alt="Title Into the Wild, A moment outside, over a mountain lake" loading="lazy"><span>Title</span></figure>
       <figure class="still reveal"><img src="media/still-lowerthird.jpg" alt="Lower third Falling water, A quiet moment in the forest, over a waterfall" loading="lazy"><span>Lower third</span></figure>
@@ -291,8 +345,8 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="center reveal">
       <div class="kicker">Colour &amp; film looks</div>
-      <h2>Give every shot <span class="serif">a feeling</span></h2>
-      <p class="sub">More than 40 film looks, from Kodak Portra to Technicolor, on top of a full 16-bit GPU colour grade with colour wheels, LOG conversion and LUTs.</p>
+      <h2>Colour correction and <span class="serif">film looks</span></h2>
+      <p class="sub">Adjust exposure, white balance and colour wheels, or start with one of more than 40 film looks. You can also convert LOG footage and load your own LUTs.</p>
     </div>
     <div class="compare reveal" id="compare">
       <img src="media/ba-before.jpg" alt="Coastal ridge, original footage" loading="lazy">
@@ -313,46 +367,16 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   </div>
 </section>
 
-<section id="edit">
-  <div class="wrap">
-    <div class="center reveal">
-      <div class="kicker">Edit</div>
-      <h2>A timeline that <span class="serif">gets out of your way</span></h2>
-      <p class="sub">A magnetic main storyline with connected titles above and music below. If you've used Final Cut Pro or Premiere, you'll feel at home right away.</p>
-    </div>
-    <div class="frame reveal" style="margin-top:50px"><img src="media/timeline.jpg" alt="Timeline with colour coded nature clips, titles on V2, transitions and a music track" loading="lazy" width="2000" height="551"></div>
-    <div class="chips reveal" style="justify-content:center;margin-top:28px">
-      <span class="chip">Trim, roll, slip &amp; slide</span><span class="chip">Skimming with audio</span><span class="chip">J- and L-cuts</span><span class="chip">Unlimited tracks</span><span class="chip">Keyframes with easing</span><span class="chip">Speed ramps</span><span class="chip">Stabilization</span><span class="chip">Masks &amp; keying</span><span class="chip">Transitions</span><span class="chip">Auto-sync audio</span><span class="chip">Whisper subtitles</span>
-    </div>
-  </div>
-</section>
 
-<section id="record" class="band">
-  <div class="wrap">
-    <div class="feature reveal">
-      <div class="copy">
-        <div class="kicker">Record</div>
-        <h2>Capture it <span class="serif">once</span>, fix it later</h2>
-        <p class="sub">Screen and camera are stored separately, together with your layout, cursor and keystrokes. Change all of it afterwards in the editor.</p>
-        <ul>
-          <li><b>Screen, a single window or an area</b>, plus webcam and microphone</li>
-          <li><b>Start from any app</b> with a global shortcut. Pauses are cut out for you</li>
-          <li><b>Six camera layouts</b> you can switch live while recording</li>
-          <li><b>Cursor zoom, click highlights and keystrokes</b> on screen</li>
-          <li><b>Crash-safe</b>: recordings are saved as you go and recovered automatically</li>
-        </ul>
-      </div>
-      <div class="frame"><img src="media/record.jpg" alt="Record room with a large preview of a mountain lake" loading="lazy" width="2000" height="1333"></div>
-    </div>
-  </div>
-</section>
+
+
 
 <section id="export">
   <div class="wrap center">
     <div class="reveal">
       <div class="kicker">Export</div>
-      <h2>One edit, <span class="serif">every screen</span></h2>
-      <p class="sub">YouTube, Shorts, Reels, TikTok or the big screen. Reframe, resize and pick a format, or let a preset do it.</p>
+      <h2>Export in the <span class="serif">format you need</span></h2>
+      <p class="sub">Choose a size and format for YouTube, Shorts, Reels or another destination. Use a preset or set the resolution, frame rate and quality yourself.</p>
     </div>
     <div class="screens reveal">
       <figure class="s169"><img src="media/fmt-169.jpg" alt="Waterfall in 16:9" loading="lazy"><b>YouTube</b>16:9 · up to 4K</figure>
@@ -370,16 +394,16 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="ai reveal">
       <img src="media/look-vision500t.jpg" alt="" loading="lazy">
-      <div class="kicker">AI editing agent</div>
-      <h2>Describe the result,<br><span class="serif">not the steps</span></h2>
-      <p class="sub">The agent reads your project, edits with the same tools you use, checks the result and tells you what it did. Every change can be undone.</p>
+      <div class="kicker">Optional AI agents</div>
+      <h2>Let an AI agent <span class="serif">do the editing</span></h2>
+      <p class="sub">Connect a model and tell the AI agent what you want changed. It can cut clips, add subtitles, adjust colour and create titles using Reccut’s editing tools. Review its edits on the timeline and undo them if needed.</p>
       <div class="prompts">
-        <div class="prompt">Cut this interview into a 60 second story for Instagram, vertical.</div>
-        <div class="prompt">Adjust colour and exposure on every clip so they look good and match.</div>
-        <div class="prompt">Subtitle this video in Finnish.</div>
-        <div class="prompt">Make a 5 second intro with the title "Getting started" in a modern style.</div>
+        <div class="prompt">Cut this recording down to a minute and make it vertical.</div>
+        <div class="prompt">Match the exposure and white balance across these clips.</div>
+        <div class="prompt">Add English subtitles to this recording.</div>
+        <div class="prompt">Add a title that says "Getting started" for the first five seconds.</div>
       </div>
-      <p class="providers">Works with OpenAI, Claude, Gemini, Mistral and OpenRouter, or fully local with Ollama and LM Studio.</p>
+      <p class="providers">Choose your provider and model: OpenAI, Anthropic (Claude), Google (Gemini), Mistral, OpenRouter and others. Enter your API key in Settings, or connect a local model through Ollama, LM Studio or llama.cpp. The model needs tool calling to make edits. Cloud models use your provider account; recording and manual editing work offline without AI.</p>
     </div>
   </div>
 </section>
@@ -387,13 +411,13 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 <section style="padding-top:0">
   <div class="wrap">
     <div class="center reveal">
-      <div class="kicker">And much more</div>
-      <h2>Everything in <span class="serif">one place</span></h2>
+      <div class="kicker">More tools</div>
+      <h2>Audio, effects and <span class="serif">project tools</span></h2>
     </div>
     <div class="grid reveal">
-      <div><h4>Opens almost anything</h4><p>ProRes, DNxHR, 10-bit HEVC, AVCHD, image sequences, camera RAW and HDR.</p></div>
-      <div><h4>Studio sound</h4><p>Noise reduction, hum removal, EQ, compressor and 30+ presets like Podcast Voice.</p></div>
-      <div><h4>Speed &amp; stabilization</h4><p>Smooth speed ramps from 10% to 20×, and stabilization that tracks hundreds of points.</p></div>
+      <div><h4>Media formats</h4><p>ProRes, DNxHR, 10-bit HEVC, AVCHD, image sequences, camera RAW and HDR.</p></div>
+      <div><h4>Audio cleanup</h4><p>Noise reduction, hum removal, EQ, compressor and 30+ presets like Podcast Voice.</p></div>
+      <div><h4>Speed &amp; stabilization</h4><p>Change speed, add speed ramps or stabilize shaky footage.</p></div>
       <div><h4>Photoshop layers</h4><p>Import PSD and SVG files as separate, stacked layers ready to animate.</p></div>
       <div><h4>Redaction</h4><p>Pixelate or blur faces, passwords and number plates, and follow them with keyframes.</p></div>
       <div><h4>Your own templates</h4><p>Design lower thirds in After Effects and bring them in with the template kit.</p></div>
@@ -408,16 +432,16 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     <div class="oss reveal">
       <div style="position:relative">
         <div class="kicker">Open source</div>
-        <h2>Yours to use, <span class="serif">read and improve</span></h2>
-        <p class="sub">Reccut is free under the MIT licence. No account, no watermark, no telemetry. It works fully offline and only checks GitHub for updates, which you can turn off.</p>
+        <h2>Free and <span class="serif">open source</span></h2>
+        <p class="sub">The source code is on GitHub under the MIT licence. You can build Reccut yourself, change it and contribute fixes or features. Recording and editing need no account or subscription, and exports have no watermark. The app checks GitHub for updates; you can turn that off in Settings.</p>
         <div class="ctas" style="justify-content:flex-start;margin-top:30px">
-          <a class="btn primary" href="https://github.com/sirbull/OBSlite/releases/latest">Download</a>
-          <a class="btn" href="https://github.com/sirbull/OBSlite">View source</a>
+          <a class="btn primary" href="https://github.com/sirbull/reccut/releases/latest">Download</a>
+          <a class="btn" href="https://github.com/sirbull/reccut">Browse the source</a>
         </div>
       </div>
       <pre><span class="c"># Build from source (Node 22+)</span>
-<span class="p">$ </span>git clone https://github.com/sirbull/OBSlite.git
-<span class="p">$ </span>cd OBSlite
+<span class="p">$ </span>git clone https://github.com/sirbull/reccut.git
+<span class="p">$ </span>cd reccut
 <span class="p">$ </span>npm install
 <span class="p">$ </span>npm start
 
@@ -430,12 +454,17 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 <footer>
   <div class="wrap">
     <span>© Reccut contributors · MIT licence</span>
-    <span>Made for creators. <a href="https://github.com/sirbull/OBSlite/issues">Report an issue</a></span>
+    <span><a href="https://github.com/sirbull/reccut/issues">Report an issue</a></span>
   </div>
 </footer>
 
 <dialog id="lightbox"><img alt=""></dialog>
 <script>
+  const recordDemo = document.getElementById('record-demo');
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    recordDemo.autoplay = false;
+    recordDemo.pause();
+  }
   const box = document.getElementById('lightbox');
   const big = box.querySelector('img');
   document.querySelectorAll('.frame img, .still img, .look img').forEach((img) => img.addEventListener('click', () => {
