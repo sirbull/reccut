@@ -289,21 +289,35 @@ export function processVfx(img, list, { scale = 1, plate = null } = {}) {
       const a = new Float32Array(n);
       const t = 0.02 + (1 - p.threshold) * 0.25;
       const soft = 0.01 + p.softness * 0.15;
-      for (let i = 0, j = 0; j < n; i += 4, j++) {
+      // Forskjellen mot bakgrunnen, og mot nabopunktene i den: små forskyvninger ved skarpe
+      // kanter (skalering og komprimering) gir da ikke tynne linjer.
+      const diffAt = (i, k) => {
         const r = d[i] / 255;
         const g = d[i + 1] / 255;
         const b = d[i + 2] / 255;
-        const pr = pd[i] / 255;
-        const pg = pd[i + 1] / 255;
-        const pb = pd[i + 2] / 255;
+        const pr = pd[k] / 255;
+        const pg = pd[k + 1] / 255;
+        const pb = pd[k + 2] / 255;
         const y = 0.299 * r + 0.587 * g + 0.114 * b;
         const py = 0.299 * pr + 0.587 * pg + 0.114 * pb;
         // Forskjell i farge teller fullt. Forskjell i bare lysstyrke (skygger) teller mindre.
         const dc = Math.hypot(r - y - (pr - py), g - y - (pg - py), b - y - (pb - py));
         let dl = y - py;
         if (dl < 0) dl *= 1 - p.shadows * 0.85;
-        const diff = Math.hypot(dc * 1.6, dl);
-        a[j] = smooth(t, t + soft, diff);
+        return Math.hypot(dc * 1.6, dl);
+      };
+      for (let y = 0, j = 0; y < h; y++) {
+        for (let x = 0; x < w; x++, j++) {
+          const i = j * 4;
+          let diff = diffAt(i, i);
+          if (diff > t) {
+            if (x > 0) diff = Math.min(diff, diffAt(i, i - 4));
+            if (x < w - 1) diff = Math.min(diff, diffAt(i, i + 4));
+            if (y > 0) diff = Math.min(diff, diffAt(i, i - w * 4));
+            if (y < h - 1) diff = Math.min(diff, diffAt(i, i + w * 4));
+          }
+          a[j] = smooth(t, t + soft, diff);
+        }
       }
       // Fyll små hull i personen, og fjern små flekker i bakgrunnen.
       if (p.fill > 0) {

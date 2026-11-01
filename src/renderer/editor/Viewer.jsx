@@ -25,6 +25,23 @@ export function Viewer() {
   const pen = commands.penMode.value;
   const editMask = sel && sm?.clipId === sel.id ? maskList(sel).find((m) => m.id === sm.id) : null;
   const onCanvasDown = (e) => {
+    // Plukk nøkkelfargen: les fargen i bildet der du klikker (effektene er slått av imens).
+    if (commands.keyPick.value && e.button === 0) {
+      const cv = canvasRef.current;
+      const r = cv.getBoundingClientRect();
+      const x = Math.round(((e.clientX - r.left) / r.width) * cv.width);
+      const y = Math.round(((e.clientY - r.top) / r.height) * cv.height);
+      const g = cv.getContext('2d');
+      // Snitt av en liten flate, så støy ikke gir feil farge.
+      const d = g.getImageData(Math.max(0, x - 2), Math.max(0, y - 2), 5, 5).data;
+      const c = [0, 1, 2].map((k) => {
+        let sum = 0;
+        for (let i = k; i < d.length; i += 4) sum += d[i];
+        return sum / (d.length / 4);
+      });
+      commands.finishKeyPick(`#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`);
+      return;
+    }
     if (!draggable || e.button !== 0) return;
     // Sladding: dra utenfor boksen for å tegne et nytt område.
     if (sel.type === 'redact') return sel.props.shape === 'path' || sel.props.shape === 'full' ? undefined : drawRedactBox(e, sel, canvasRef.current, p);
@@ -106,7 +123,7 @@ export function Viewer() {
         </button>
       </div>
       <div class="viewer-box" ref={boxRef} onDblClick={() => wrapRef.current.requestFullscreen?.()}>
-        <canvas ref={canvasRef} class={draggable ? (sel.type === 'redact' ? 'drawable' : 'movable') : ''} onPointerDown={onCanvasDown} />
+        <canvas ref={canvasRef} class={commands.keyPick.value ? 'picking' : draggable ? (sel.type === 'redact' ? 'drawable' : 'movable') : ''} onPointerDown={onCanvasDown} />
         {pen && sel?.id === pen.clipId && <PenOverlay clip={sel} canvasRef={canvasRef} />}
         {sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} label="Redaction. Drag to move, drag the handles to resize." />}
         {editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}

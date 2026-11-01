@@ -796,9 +796,35 @@ const FRAME_FX = [
   { id: 'frosted', label: 'Frosted Glass', desc: 'Blur and blocks together.' },
 ];
 
+const KEY_CARDS = [
+  { id: 'oneClickKey', label: 'Remove Green Screen', desc: 'One click: finds the background color and removes it.' },
+  { id: 'keyer', label: 'Keyer', desc: 'Remove any solid color, with advanced controls.' },
+  { id: 'bgRemove', label: 'Remove Background', desc: 'For a camera that stands still. Finds the empty background.' },
+  { id: 'lumaKey', label: 'Luma Key', desc: 'Remove black or white.' },
+  { id: 'despill', label: 'Despill', desc: 'Remove green or blue edges.' },
+  { id: 'matte', label: 'Matte Cleanup', desc: 'Shrink, grow and soften the edges.' },
+];
+
 function EffectsTab() {
   return (
     <>
+      <div class="sub-head">Keying</div>
+      <div class="afx-grid">
+        {KEY_CARDS.map((k) => (
+          <button
+            key={k.id}
+            class="afx-card"
+            data-vfx={k.id}
+            draggable
+            onDragStart={(e) => dragData(e, { kind: 'vfx', id: k.id })}
+            onClick={() => (k.id === 'oneClickKey' ? commands.oneClickKey() : k.id === 'bgRemove' ? commands.removeBackground() : commands.addVfx(k.id))}
+            title={`${k.desc} Click to add to the selected clip, or drag onto a clip.`}
+          >
+            <b>{k.label}</b>
+            <span>{k.desc}</span>
+          </button>
+        ))}
+      </div>
       <div class="sub-head">Whole Frame</div>
       <div class="card-grid">
         {FRAME_FX.map((m) => (

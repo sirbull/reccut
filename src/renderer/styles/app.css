@@ -4233,3 +4233,29 @@ kbd.keycap {
 .pkg-handles input {
   width: 60px;
 }
+
+/* Keying */
+.key-color {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.plate-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0 8px;
+}
+.plate-row img {
+  width: 96px;
+  border-radius: 4px;
+  border: 1px solid var(--line-2);
+}
+.plate-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.viewer-box canvas.picking {
+  cursor: crosshair;
+}

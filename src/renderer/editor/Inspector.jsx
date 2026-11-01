@@ -37,9 +37,10 @@ import { GRADE_PROPS } from '../../shared/grade.js';
 import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
 import { beginTransient, commit, endTransient, getWave, motionVersion, project, selectedClips, selectedTransition, tasks, timeSig, updateTransient, waveVersion } from './store.js';
 import { seek } from './playback.js';
-import { addMaskToSelected, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
+import { addMaskToSelected, addVfx, deleteMask, finishKeyPick, keyPick, oneClickKey, penMode, plateFromClip, plateFromPlayhead, removeBackground, startKeyPick, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
+import { VIDEO_FX } from '../../shared/vfx.js';
 import { MASK_MODES, MASK_SHAPES, canMask, defaultPoints, ellipsePoints, maskKey, maskList, setMaskShape } from '../../shared/shapes.js';
 import { Button, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
 
@@ -353,6 +354,100 @@ function RedactTab({ clip }) {
         <PlainNumber clip={clip} prop="vFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
       </Section>
     </>
+  );
+}
+
+/* Effektstabel for bilde (keying og matte): effektene virker ovenfra og ned, og samme effekt
+   kan legges på flere ganger. Hver effekt har enkle valg, og flere under Advanced. */
+
+function VfxStack({ clip }) {
+  const list = clip.props.vfx || [];
+  const [open, setOpen] = useState({});
+  const edit = (fn) => commit((q) => fn(q.clips[clip.id].props));
+  const live = (id, patch) => updateTransient((q) => Object.assign(q.clips[clip.id].props.vfx.find((e) => e.id === id).p, patch));
+  const move = (i, d) =>
+    edit((pr) => {
+      const a = [...pr.vfx];
+      const j = i + d;
+      if (j < 0 || j >= a.length) return;
+      [a[i], a[j]] = [a[j], a[i]];
+      pr.vfx = a;
+    });
+  const picking = keyPick.value;
+  return (
+    <Section title="Keying and Matte" data-section="vfx">
+      <div class="afx-add">
+        <Button class="small" variant="primary" onClick={() => oneClickKey(clip.id)} title="Adds a keyer and finds the background color by itself">
+          Remove Green Screen
+        </Button>
+        <Select
+          value=""
+          options={[{ value: '', label: 'Add Effect…' }, ...Object.entries(VIDEO_FX).map(([id, e]) => ({ value: id, label: e.label }))]}
+          onChange={(v) => {
+            if (v === 'bgRemove') removeBackground(clip.id);
+            else if (v) addVfx(v, clip.id);
+          }}
+        />
+      </div>
+      {!list.length && <p class="hint">Remove a green or blue screen with one click, or a background behind someone filmed with a camera that stands still. Effects can be stacked, for example two keyers after each other, and the rest can be masked away in the Masks tab.</p>}
+      {list.map((e, i) => {
+        const def = VIDEO_FX[e.type];
+        if (!def) return null;
+        const adv = Boolean(open[e.id]);
+        const params = def.params.filter((prm) => adv || !prm.advanced);
+        return (
+          <div key={e.id} class={`afx-item${e.on === false ? ' off' : ''}`} data-vfx-item={e.type}>
+            <div class="afx-head">
+              <Toggle checked={e.on !== false} onChange={(v) => edit((pr) => (pr.vfx.find((x) => x.id === e.id).on = v))} />
+              <b title={def.desc}>{def.label}</b>
+              <IconButton icon={ArrowUp} size={12} title="Move up" disabled={i === 0} onClick={() => move(i, -1)} />
+              <IconButton icon={ArrowDown} size={12} title="Move down" disabled={i === list.length - 1} onClick={() => move(i, 1)} />
+              <IconButton icon={Trash2} size={12} title="Remove effect" onClick={() => edit((pr) => (pr.vfx = pr.vfx.filter((x) => x.id !== e.id)))} />
+            </div>
+            {e.type === 'bgRemove' && (
+              <div class="plate-row">
+                {e.p.plate ? <img src={e.p.plate} alt="Background" /> : <span class="hint">No background yet.</span>}
+                <div>
+                  <Button class="small" onClick={() => plateFromClip(clip.id, e.id)}>
+                    Find in Clip
+                  </Button>
+                  <Button class="small" variant="ghost" onClick={() => plateFromPlayhead(clip.id, e.id)} title="Use the frame at the playhead, when the person is not in the picture">
+                    Use Frame at Playhead
+                  </Button>
+                </div>
+              </div>
+            )}
+            {params.map((prm) =>
+              prm.type === 'color' ? (
+                <Row key={prm.id} label={prm.label}>
+                  <div class="key-color">
+                    <ColorField value={e.p[prm.id] || prm.def} onLive={(v) => live(e.id, { [prm.id]: v })} />
+                    <Button class="small" variant={picking?.fxId === e.id ? 'primary' : 'secondary'} onClick={() => (picking ? finishKeyPick(null) : startKeyPick(clip.id, e.id))}>
+                      {picking?.fxId === e.id ? 'Click in Viewer' : 'Pick'}
+                    </Button>
+                  </div>
+                </Row>
+              ) : prm.type === 'choice' ? (
+                <Row key={prm.id} label={prm.label}>
+                  <Segmented value={e.p[prm.id] ?? prm.def} onChange={(v) => edit((pr) => (pr.vfx.find((x) => x.id === e.id).p[prm.id] = v))} options={prm.choices.map((c, k) => ({ value: c, label: prm.labels?.[k] || c }))} />
+                </Row>
+              ) : prm.type === 'toggle' ? (
+                <Row key={prm.id} label={prm.label}>
+                  <Toggle checked={Boolean(e.p[prm.id])} onChange={(v) => edit((pr) => (pr.vfx.find((x) => x.id === e.id).p[prm.id] = v))} />
+                </Row>
+              ) : (
+                <FxParam key={prm.id} prm={prm} value={e.p[prm.id] ?? prm.def} onLive={(v) => live(e.id, { [prm.id]: v })} onSet={(v) => edit((pr) => (pr.vfx.find((x) => x.id === e.id).p[prm.id] = v))} />
+              )
+            )}
+            {def.params.some((prm) => prm.advanced) && (
+              <button class="link-btn" onClick={() => setOpen({ ...open, [e.id]: !adv })}>
+                {adv ? 'Hide advanced' : 'Advanced…'}
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </Section>
   );
 }
 
@@ -705,6 +800,7 @@ function EffectsTab({ clip }) {
     });
   return (
     <>
+      {(clip.type === 'video' || clip.type === 'image') && <VfxStack clip={clip} />}
       <Section title="Effects">
         {active.length === 0 && <p class="hint">No effects yet. Add one below, or drag one from the Effects browser.</p>}
         {active.map((fx) => (
