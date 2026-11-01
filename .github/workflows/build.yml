@@ -51,15 +51,13 @@ jobs:
       - name: Bygg for Mac (Apple Silicon)
         if: matrix.name == 'mac'
         run: |
-          rm -f node_modules/ffmpeg-static/ffmpeg
-          npm_config_arch=arm64 npm rebuild ffmpeg-static
+          node scripts/fetch-ffmpeg.mjs mac-arm64
           npx electron-builder --mac --arm64 --publish never
 
       - name: Bygg for Mac (Intel)
         if: matrix.name == 'mac'
         run: |
-          rm -f node_modules/ffmpeg-static/ffmpeg
-          npm_config_arch=x64 npm rebuild ffmpeg-static
+          node scripts/fetch-ffmpeg.mjs mac-x64
           npx electron-builder --mac --x64 --publish never
 
       - uses: actions/upload-artifact@v4
