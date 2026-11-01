@@ -76,6 +76,7 @@ Before packaging, you can tidy up, like Reduce Project in After Effects:
 - **Remove switched off audio**: synced audio that is switched off in every clip is left out.
 - **Remove clips on hidden tracks**.
 - **Include optimized media**: larger, but smooth to edit right away.
+- **Trim media to the used parts**: only the parts of each video and audio file that are used on the timeline are kept, with a few seconds of extra material on each side (handles) so you can still adjust the cuts and transitions. A two hour recording where you use one minute becomes a short file. Video is cut with high quality (and with transparency kept), and audio without loss. Recordings and still images are copied whole.
 
 The window shows how many files and how much space the package needs, and warns about files that are missing. The packaging runs in the background with progress at the top of the window, and it checks that there is enough free space and that every copy is complete.
 
@@ -740,6 +741,119 @@ Import the template ({{key:importTemplate}}), drop the .reccut-title file on Rec
 Add Caption ({{key:addCaption}}) adds a caption at the playhead. The Captions tab ({{key:browser:captions}}) generates captions automatically from speech, and imports and exports SRT and WebVTT. Captions can have one to three lines, any font, color, outline and background, and can be placed anywhere. When exporting, burn them in, embed them, or save them as a separate file.
 `,
     see: ['export'],
+  },
+  {
+    id: 'keying',
+    section: 'Editing',
+    title: 'Green Screen and Background Removal',
+    summary: 'Remove a green or blue background with one click, fine tune the key, or remove the background behind a person when the camera stands still.',
+    keywords: 'key keyer keying chroma key green screen blue screen remove background cut out matte despill spill luma key clean plate teams segmentation person transparent alpha stack effects',
+    body: `
+## One click
+
+Select the clip and choose **Remove Green Screen** ({{key:key:oneClick}}) in the Clip menu, or click the button at the top of the **Effects** tab in the inspector. Reccut adds a **Keyer**, finds the background color at the edges of the picture by itself, and removes it. Put the clip above another clip, and the clip below shows through. It works for green, blue and other evenly colored backgrounds.
+
+If the color is not quite right, click **Pick** next to Key color and click on the background in the viewer.
+
+## Fine tune the key
+
+The Keyer has the basic settings at the top: **Strength** (how much is removed), **Edge softness** and **Spill removal**, which takes away the green glow on hair and edges. Click **Advanced…** for many more, for difficult clips:
+
+- **Screen balance** decides how the keyer weighs the other two colors against the key color. Change it when uneven light makes parts of the background stay.
+- **Clip black** and **Clip white** clean up the matte: noise in the background becomes fully clear, and the person becomes fully solid.
+- **Shrink or grow** moves the edge in or out, and **Feather** softens it.
+- **Keep spill brightness** decides how bright the spill areas stay after the green is removed.
+- **Keep dark areas** protects dark clothes and hair. Shadows on the background are removed as background, because the keyer looks at color separately from brightness.
+- **View** shows the final result, the matte (white is kept, black is removed) or the source. Looking at the matte is the quickest way to see what is left to fix.
+
+## Stack effects
+
+Effects run from the top of the list to the bottom, and you can add as many as you like, also several of the same kind. Use **Add Effect…** in the Effects tab, or drag an effect from the **Keying** section of the effects browser onto the clip. For example: a Keyer for the green, a second Keyer for a blue light on one side, a **Despill**, and a **Matte Cleanup** last. Each effect can be switched off to compare, and moved up or down. Masks work together with the key, so you can mask away a light stand or the edge of the green screen, like a garbage matte.
+
+Other keying effects:
+
+- **Luma Key** removes dark or bright parts, for example a black background behind fire or smoke.
+- **Despill** on its own, for clips that are keyed already.
+- **Matte Cleanup** chokes, feathers and clips the transparency from the effects above it.
+
+## Remove the background without a green screen
+
+**Remove Background (Still Camera)** ({{key:key:bgRemove}}) works when the camera stands still, for example a person talking in front of a desk. Reccut looks through the whole clip and builds a clean picture of the background without the person: every point is background in most of the frames, so the middle value (the median) is the empty room. The person is then everything that differs from that picture. Because the background is known exactly, there is no ghosting where the person has been.
+
+For the best result:
+
+- The camera must not move, and the light should be steady. Auto exposure and auto white balance on the camera make it harder.
+- If the person never moves away from a spot, that spot can not be found. Then record a few seconds of the empty room at the start, put the playhead there and click **Use Frame at Playhead**. **Find in Clip** looks through the clip again.
+- **Sensitivity** decides how different from the background something must be to be kept, **Ignore shadows** removes the person's shadow on the wall, and **Fill holes** (under Advanced) closes small holes where the person has the same color as the background. **View** can show the background picture that was found.
+
+The effects look the same in the viewer and in the exported file, also with transparency when you export to ProRes 4444.
+
+[[run:key:oneClick|Remove Green Screen]]
+`,
+    see: ['masks', 'plugins', 'effects'],
+  },
+  {
+    id: 'plugins',
+    section: 'Editing',
+    title: 'Plugins',
+    summary: 'Run external programs on a clip, for example an AI keyer such as CorridorKey.',
+    keywords: 'plugin plugins extension corridorkey corridor key ai keyer external program python script install clip processor ofx',
+    body: `
+A plugin lets Reccut use another program on your computer to process a clip. Reccut prepares the frames, runs the program, and then replaces the clip with the result, with transparency where the program made it. It is meant for heavy tools such as AI keyers, which are too slow to run while you edit.
+
+## Install a plugin
+
+Open **Settings** ({{key:prefs}}) and choose **Plugins**. Install one of the plugins that come with Reccut, or click **Install Plugin Folder…** and choose a folder with a plugin.json. Some plugins have settings, for example where the program is installed. Plugins run programs on your computer, so only install plugins you trust.
+
+## Run a plugin
+
+Select a video clip and choose **Run Plugin…** in the Clip menu, or right click the clip and choose it under **Run Plugin**. Set the options and click **Run**. The work happens in the background with progress at the top of the window. When it is done, the clip uses the result. Right click and choose **Revert to Original** to go back to the original clip.
+
+## CorridorKey
+
+CorridorKey from Corridor Digital is an AI keyer that pulls very clean keys, also with hair and motion blur. The open source version runs on your own computer and needs a recent graphics card.
+
+1. Install CorridorKey by following the instructions in its repository.
+2. In Settings, Plugins, install the **CorridorKey** plugin that comes with Reccut.
+3. Set **CorridorKey folder** to where you installed it, and check that **Command** matches how CorridorKey is started on your computer (see the README in the plugin folder).
+
+The paid version of CorridorKey is made as a plugin for other programs (OFX and After Effects) and can not be loaded into Reccut directly. If it can be started from the command line, it can be connected the same way.
+
+## Make your own
+
+A plugin is a folder with a plugin.json. It describes the program to run, the arguments with placeholders such as {input}, {output}, {fps} and {ffmpeg}, whether it wants a video file or a folder of PNG images, and the settings and options to show. The **Denoise (example)** plugin is a complete example that uses FFmpeg. A program can report progress by printing lines like PROGRESS 0.5.
+`,
+    see: ['keying'],
+  },
+  {
+    id: 'ai-assistant',
+    section: 'Editing',
+    title: 'AI Assistant',
+    summary: 'Chat with an AI model that looks at your project and edits it for you, using your own API key.',
+    keywords: 'ai assistant chat claude anthropic openai gpt local model llm lm studio ollama api key edit for me automatic help',
+    body: `
+The AI assistant is a chat panel in the editor. Ask it to do something, for example cut away the long pauses, add a title with the project name, put captions on the first minute, key the green screen on the selected clip or clean up the voice, and it does the work in the project while you watch. You can also ask questions about the project.
+
+## Set it up
+
+Open **Settings** ({{key:prefs}}) and choose **AI**.
+
+- **Claude (Anthropic)**: paste an API key from the Claude Console. The model is claude-opus-5-5, the most capable, or claude-sonnet-5-5, which is faster and costs less.
+- **OpenAI-compatible**: any service that offers the OpenAI chat API. Use https://api.openai.com/v1 for OpenAI, or a local model on your own computer with LM Studio or Ollama, which needs no key and keeps everything offline.
+
+Click **Test Connection** to check that it works. The key is stored encrypted on this computer and is only sent to the service you chose.
+
+## Use it
+
+Click the AI button in the toolbar or press {{key:aiChat}}. Write what you want and press Return. The panel shows what the assistant does as it works. It uses the same commands as the menus, so the result is the same as if you had done it yourself.
+
+Every change can be undone with {{key:undo}}, and **Undo These Changes** under an answer undoes everything from that answer at once. Click the stop button to stop it while it works, and the bin button to start a new conversation.
+
+## Privacy
+
+Reccut works fully offline, and the assistant is the only part that sends anything over the internet, and only when you write to it. It sends your message, an overview of the project (names, times and settings, not the media files) and, when it checks its work, pictures from the viewer. Usage is billed by the service on your own account.
+`,
+    see: ['plugins', 'search'],
   },
   {
     id: 'masks',
