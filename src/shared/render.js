@@ -161,20 +161,43 @@ function zoomAround(ctx, W, H, s) {
 // Fargekorrigering på skjermkortet når det finnes. Uten WebGL2 brukes enkle 2D-filtre.
 function graded(clip, T, src, target = 'main', media = null) {
   src = applyVideoEffects(src, clip, target);
-  const g = gradeParams(clip, T);
+  const g = gradeParams(clip, T, target);
   const cam = media?.cameraLut || null;
   if (!g && !cam) return src;
   const cv = gradeImage(src.img, src.w, src.h, g, cam);
-  return cv ? { img: cv, w: src.w, h: src.h } : src;
+  if (cv) return { img: cv, w: src.w, h: src.h };
+  // Kameraets hvitbalanse må også virke uten WebGL, før beskjæring og maskering.
+  return target === 'camera' && g?.temperature ? temperatureSource(src, g.temperature) : src;
 }
 
-function colorFilter(clip, T, H = 1080) {
+let temperatureCanvas = null;
+function temperatureSource(src, temperature) {
+  temperatureCanvas ||= typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(src.w, src.h) : document.createElement('canvas');
+  if (temperatureCanvas.width !== src.w) temperatureCanvas.width = src.w;
+  if (temperatureCanvas.height !== src.h) temperatureCanvas.height = src.h;
+  const ctx = temperatureCanvas.getContext('2d', { willReadFrequently: true });
+  ctx.clearRect(0, 0, src.w, src.h);
+  ctx.drawImage(src.img, 0, 0, src.w, src.h);
+  const pixels = ctx.getImageData(0, 0, src.w, src.h);
+  const red = Math.pow(Math.max(0, 1 + 0.3 * temperature), 1 / 2.2);
+  const blue = Math.pow(Math.max(0, 1 - 0.3 * temperature), 1 / 2.2);
+  for (let i = 0; i < pixels.data.length; i += 4) {
+    pixels.data[i] *= red;
+    pixels.data[i + 2] *= blue;
+  }
+  ctx.putImageData(pixels, 0, 0);
+  return { img: temperatureCanvas, w: src.w, h: src.h };
+}
+
+function colorFilter(clip, T, H = 1080, target = 'main') {
   const gpu = gpuGradeAvailable();
-  const ex = gpu ? 0 : valueAt(clip, 'exposure', T) || 0;
-  const co = gpu ? 0 : valueAt(clip, 'contrast', T) || 0;
-  const sa = gpu ? 0 : valueAt(clip, 'saturation', T) || 0;
+  const grade = gpu ? null : gradeParams(clip, T, target);
+  const ex = grade?.exposure || 0;
+  const co = grade?.contrast || 0;
+  const sa = grade?.saturation || 0;
   const parts = [];
-  if (ex || co || sa) parts.push(`brightness(${(1 + ex).toFixed(3)}) contrast(${(1 + co).toFixed(3)}) saturate(${Math.max(0, 1 + sa).toFixed(3)})`);
+  const brightness = target === 'camera' ? 2 ** (ex * 2 / 2.2) : 1 + ex;
+  if (ex || co || sa) parts.push(`brightness(${brightness.toFixed(3)}) contrast(${(1 + co).toFixed(3)}) saturate(${Math.max(0, 1 + sa).toFixed(3)})`);
   const blur = valueAt(clip, 'blur', T) || 0;
   if (blur > 0) parts.push(`blur(${((blur * H) / 1080).toFixed(2)}px)`);
   const sepia = valueAt(clip, 'sepia', T) || 0;
@@ -516,7 +539,7 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
     if (src) {
       ctx.save();
       ctx.globalAlpha *= rect.a;
-      ctx.filter = filter;
+      ctx.filter = colorFilter(clip, T, H, 'camera');
       drawCamera(ctx, src.img, src.w, src.h, rect, clip.props.mirror, rect.w < W * 0.9);
       ctx.restore();
     }

@@ -235,6 +235,8 @@ Choose a countdown of 3, 5 or 10 seconds under Recording. The numbers are shown 
 - The recording is saved in the Recordings folder of the open project and added to its media. If the timeline is empty, it is also placed on the timeline.
 
 Everything is saved as separate files, so in the editor you can still change the layout, camera shape, overlays and the level of the microphone and system audio.
+
+If your camera image is too dark, select the recording on the timeline and open **Recording → Camera Color**. Raise **Exposure** to brighten it, or adjust **Contrast**, **Saturation** and **Temperature**. This changes only the camera image, including when it fills the screen. The controls are also in the **Color** tab. Changes are saved in the project and included in the export. **Reset Camera Color** restores these four controls, including their keyframes.
 `,
     see: ['projects', 'editing', 'redact'],
   },
@@ -1089,6 +1091,8 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
     keywords: 'color correction grade exposure contrast highlights shadows saturation temperature tint wheels lift gamma gain looks film stock lut emulation kodak fuji black white orthochromatic filter sepia',
     body: `
 Select a clip and show Color ({{key:inspector:color}}).
+
+For screen recordings with a camera, **Camera Color** adjusts exposure, contrast, saturation and temperature for the camera separately. The controls below it apply to both the screen and the camera. Use **Reset Camera Color** to reset the camera adjustments, and **Reset Color** to reset the shared correction.
 
 ![Color wheels for shadows, midtones and highlights.](color.jpg)
 

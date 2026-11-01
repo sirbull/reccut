@@ -12,6 +12,7 @@ import {
   ANIMATION_PRESETS,
   RAMP_PRESETS,
   CAPTION_LANE,
+  CAMERA_COLOR_PROPS,
   COLOR_LOOKS,
   DEFAULT_CAPTION_STYLE,
   EASINGS,
@@ -1089,6 +1090,7 @@ function ColorTab({ clip, mediaIds }) {
   const p = project.value;
   return (
     <>
+      {clip.type === 'recording' && p.media[clip.mediaId]?.streams?.camera?.hasVideo && <CameraColorSection clip={clip} />}
       {mediaIds?.length > 0 && (
         <Section title="Camera LUT">
           <CameraLutRow media={p.media[mediaIds[0]]} ids={mediaIds} />
@@ -1151,6 +1153,29 @@ function ColorTab({ clip, mediaIds }) {
         </Button>
       </Section>
     </>
+  );
+}
+
+function CameraColorSection({ clip }) {
+  return (
+    <Section title="Camera Color">
+      <p class="hint">Adjust only the camera image, in picture in picture or full screen. If your face is too dark, raise Exposure. These adjustments are included in your export.</p>
+      <Param clip={clip} prop="cameraExposure" label="Exposure" min={-100} max={100} scale={100} center={0} />
+      <Param clip={clip} prop="cameraContrast" label="Contrast" min={-100} max={100} scale={100} center={0} />
+      <Param clip={clip} prop="cameraSaturation" label="Saturation" min={-100} max={100} scale={100} center={0} />
+      <Param clip={clip} prop="cameraTemperature" label="Temperature" min={-100} max={100} scale={100} center={0} />
+      <Button
+        variant="secondary"
+        icon={RotateCcw}
+        onClick={() => commit((q) => {
+          const c = q.clips[clip.id];
+          Object.assign(c.props, CAMERA_COLOR_PROPS);
+          for (const key of Object.keys(CAMERA_COLOR_PROPS)) delete c.kf[key];
+        })}
+      >
+        Reset Camera Color
+      </Button>
+    </Section>
   );
 }
 
@@ -1299,6 +1324,7 @@ function RecordingTab({ clip, media }) {
           </Row>
         </Section>
       )}
+      {hasCam && <CameraColorSection clip={clip} />}
       <Section title="Overlays">
         <Row label={`Keystrokes (${rec.keys?.length || 0})`}>
           <Toggle checked={clip.props.showKeys} onChange={(v) => setProp(clip, { showKeys: v })} />

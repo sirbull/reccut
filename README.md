@@ -31,6 +31,8 @@ Record the whole screen, a single window or a selected area, with your webcam an
 
 When you stop, click **Edit** to open the recording on the timeline. Trim the start and end, cut out a mistake, add subtitles or music, and export. Screen and camera are stored separately, along with the layout, cursor movements and keystrokes, so you can change the camera position or hide overlays after recording.
 
+If the camera image is too dark, select the recording on the timeline and open **Recording → Camera Color**. Adjust exposure, contrast, saturation and temperature for the camera separately. The controls are also available in **Color**, and the adjustments are saved with the project and included in exports.
+
 <p align="center">
   <img src="docs/media/record-gameplay-edit.jpg" alt="The gameplay recording in Reccut’s editor, with a cut and a title on the timeline">
 </p>

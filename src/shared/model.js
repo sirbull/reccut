@@ -6,6 +6,7 @@ import { BUILTIN_TEMPLATES, templateDefaults } from './titletemplates.js';
 
 export const LAYOUT_ANIM = 0.32;
 export const PIP_SIZES = { small: 0.17, medium: 0.23, large: 0.31 };
+export const CAMERA_COLOR_PROPS = { cameraExposure: 0, cameraContrast: 0, cameraSaturation: 0, cameraTemperature: 0 };
 export const CAPTION_LANE = 1000;
 
 export const TRANSITIONS = [
@@ -413,6 +414,7 @@ export function defaultProps(type, media) {
       const rec = media?.rec || {};
       return {
         ...visual,
+        ...CAMERA_COLOR_PROPS,
         aFadeIn: 0,
         aFadeOut: 0,
         volume: 0,

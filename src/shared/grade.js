@@ -1,7 +1,7 @@
 // Fargekorrigering på skjermkortet (WebGL2). Bildet lastes opp som 16-bit flyttall, så 10-bit
 // opptak beholder presisjonen gjennom hele korrigeringen, og alt regnes i flyttall før resultatet
 // tegnes. Brukes likt i forhåndsvisningen og eksporten.
-import { valueAt } from './model.js';
+import { CAMERA_COLOR_PROPS, valueAt } from './model.js';
 import { bakeFilm } from './filmLooks.js';
 
 // Parametre og standardverdier. Alle kan ha nøkkelbilder.
@@ -26,13 +26,24 @@ export const GRADE_PROPS = {
   filmMix: 0, // styrken på filmlooken i clip.props.film, 0 til 1 (se filmLooks.js)
 };
 
-export function gradeParams(clip, T) {
+export function gradeParams(clip, T, target = 'main') {
   const out = {};
   let active = false;
   for (const [k, def] of Object.entries(GRADE_PROPS)) {
     const v = valueAt(clip, k, T) ?? def;
     out[k] = v || 0;
     if (out[k]) active = true;
+  }
+  // Opptakets kamerakorrigering kommer i tillegg til den felles korrigeringen.
+  // Gamle prosjekter uten disse egenskapene beholder det samme bildet.
+  if (clip.type === 'recording' && target === 'camera') {
+    for (const key of Object.keys(CAMERA_COLOR_PROPS)) {
+      const prop = key[6].toLowerCase() + key.slice(7);
+      const v = valueAt(clip, key, T) || 0;
+      if (prop === 'contrast' || prop === 'saturation') out[prop] = (1 + out[prop]) * (1 + v) - 1;
+      else out[prop] += v;
+      if (v) active = true;
+    }
   }
   // Uten styrke satt (for eksempel fra AI-agenten) gjelder looken fullt.
   if (bakeFilm(clip.props.film)) {

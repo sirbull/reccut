@@ -4452,7 +4452,10 @@ kbd.keycap {
 [data-section="vfx"] .afx-head { gap: 4px; flex-wrap: wrap; }
 [data-section="vfx"] .afx-head b { flex: 1 1 110px; font-size: 12px; }
 [data-section="vfx"] > .section-body > .btn { width: 100%; }
-.extension-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.extension-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+/* Inline controls already get their spacing from the surrounding row. */
+.row-control > .extension-actions,
+.processor-row > .extension-actions { margin-top: 0; }
 .processor-row { display: flex; gap: 16px; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #ffffff12; }
 .processor-row small { display: block; max-width: 380px; overflow-wrap: anywhere; color: #a6a6ad; margin-top: 4px; }
 .processor-review { padding: 16px; margin: 14px 0; border: 1px solid #4a6684; border-radius: 8px; background: #233043; }
