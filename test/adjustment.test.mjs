@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { effectWarning } from '../src/shared/effectSupport.js';
 import assert from 'node:assert/strict';
 import { makeClip, newProject, computeFrame, computeAudio, isElastic, isVisual, sourceTime } from '../src/shared/model.js';
 import { moveClip, placeFree, splitClip, setClipDuration } from '../src/shared/ops.js';
@@ -88,4 +89,14 @@ test('zero stylize amounts bypass and colored noise and scanline spacing change 
   }
   const p = makeVideoEffect('noise').p;
   assert.notDeepEqual(stylizePixels(input, 16, 8, stylizeSettings('noise', p, 1, 16, 8)), stylizePixels(input, 16, 8, stylizeSettings('noise', { ...p, colored: true }, 1, 16, 8)));
+});
+
+
+test('adjustment compatibility distinguishes source-only effects from composite effects', () => {
+  const layer = makeClip('adjustment');
+  assert.match(effectWarning(layer, 'shadow'), /Drop Shadow.*adjustment layers/);
+  assert.match(effectWarning(layer, 'difference'), /Background reference key.*adjustment layers/);
+  assert.match(effectWarning(layer, 'gain', 'afx'), /Audio effects/);
+  for (const id of ['blur', 'border', 'radius', 'vignette', 'noise', 'glow', 'chroma', 'luma']) assert.equal(effectWarning(layer, id), null, id);
+  for (const type of ['video', 'image', 'title', 'recording']) assert.equal(effectWarning(makeClip(type), 'shadow'), null);
 });

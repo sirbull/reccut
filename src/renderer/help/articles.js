@@ -959,7 +959,7 @@ Open **Advanced** for additional controls:
 - **Recover edge color** reduces screen colour contamination in translucent edge pixels. **Remove color spill** reduces the dominant screen channel.
 - **Matte black/white** set the transparent and opaque limits. **Matte gamma** adjusts intermediate coverage; values above 1 strengthen translucent detail.
 - **Shrink / expand edge** adjusts the outline; positive values shrink the foreground. **Edge feather** softens the boundary. **Invert matte** reverses the retained areas.
-- **View** switches between Composite and the black-and-white matte. Return to Composite before exporting, because matte view is also exported.
+- **View** switches between Composite and the black-and-white matte. Keep **Black & white matte** selected to export a reusable matte as video or with Export Frame. White retains the foreground, black removes the background, and grey represents partial coverage. Choose Composite to export the keyed picture instead. Exports include the other visible layers and subsequent effects, just as in the viewer; hide them if you need only the matte.
 
 Fine-detail, shadow and edge-colour recovery belong to Color key. Gamma and the other matte controls also work with Background reference key and Luma key. The new recovery controls default to zero, so existing project keys keep their previous settings.
 

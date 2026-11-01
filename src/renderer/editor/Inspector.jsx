@@ -41,6 +41,7 @@ import {
   valueAt,
 } from '../../shared/model.js';
 import { shadowStyle } from '../../shared/shadow.js';
+import { IMAGE_FITS, KEN_BURNS_MODES, enableKenBurns } from '../../shared/imageMotion.js';
 import { recordingChildren, setClipDuration, setSpeed, setTransition } from '../../shared/ops.js';
 import { GRADE_PROPS, CAMERA_LOGS } from '../../shared/grade.js';
 import { FILM_LOOKS } from '../../shared/filmLooks.js';
@@ -48,7 +49,7 @@ import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/
 import { beginTransient, commit, endPreview, endTransient, getWave, mirror, previewEdit, motionVersion, project, selectedClips, selectedTransition, selection, tasks, timeSig, updateTransient, waveVersion } from './store.js';
 import { seek } from './playback.js';
 import { setKeyframe } from './keyframes.js';
-import { addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
+import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
 import { prefs } from '../prefs.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
@@ -322,6 +323,19 @@ function VideoTab({ clip }) {
   const p = project.value;
   return (
     <>
+      {clip.type === 'image' && <Section title="Image framing & motion" data-section="image-motion">
+        <Row label="Fit"><Select value={clip.props.imageFit || 'contain'} options={IMAGE_FITS}
+          onChange={(imageFit) => commit((q) => { q.clips[clip.id].props.imageFit = imageFit; })} /></Row>
+        <Row label="Ken Burns"><Toggle checked={Boolean(clip.props.kenBurns)} onChange={(on) => commit((q) => {
+          const c = q.clips[clip.id]; if (on) enableKenBurns(c, c.props.kenBurnsMode, c.props.kenBurnsAmount); else c.props.kenBurns = false;
+        })} /></Row>
+        {clip.props.kenBurns && <>
+          <Row label="Movement"><Select value={clip.props.kenBurnsMode || 'in'} options={KEN_BURNS_MODES}
+            onChange={(mode) => commit((q) => { q.clips[clip.id].props.kenBurnsMode = mode; })} /></Row>
+          <Param clip={clip} prop="kenBurnsAmount" label="Zoom / travel" min={1} max={60} scale={100} unit="%" keyframes={false} />
+          <p class="hint">Slow, eased motion across the image. Crop and ordinary Transform controls remain available.</p>
+        </>}
+      </Section>}
       <Section title="Compositing">
         <Param clip={clip} prop="opacity" label={clip.type === 'adjustment' ? 'Layer strength' : 'Opacity'} min={0} max={100} scale={100} unit="%" />
         {clip.type === 'adjustment' && <p class="hint">Processes the combined picture on lower video tracks during this layer’s duration. Clips above it and captions stay unchanged. Use Color, Effects and Masks to build the look.</p>}
@@ -752,13 +766,7 @@ function EffectsTab({ clip, multi }) {
   const shadow = shadowStyle(clip, shadowTime, project.value.height);
   const active = EFFECTS.filter((fx) => (clip.props.fx || []).includes(fx.id) || clip.props[fx.prop] || clip.kf?.[fx.prop]?.length);
   const available = EFFECTS.filter((fx) => !active.includes(fx));
-  const add = (id) =>
-    commit((q) => {
-      const c = q.clips[clip.id];
-      const fx = EFFECTS.find((x) => x.id === id);
-      c.props.fx = [...new Set([...(c.props.fx || []), id])];
-      if (!c.props[fx.prop]) c.props[fx.prop] = fx.def;
-    });
+  const add = (id) => addEffect(id);
   const remove = (fx) =>
     commit((q) => {
       const c = q.clips[clip.id];

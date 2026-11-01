@@ -16,6 +16,7 @@ import { makeEffect } from '../src/shared/audiofx.js';
 import { makeVideoEffect } from '../src/shared/videoEffects.js';
 import { addMediaClip, recordingChildren } from '../src/shared/ops.js';
 export { verifyAdjustmentUI } from './adjustment-ui.browser.jsx';
+export { verifySlideshowUI } from './slideshow-ui.browser.jsx';
 const tick = () => new Promise((r) => setTimeout(r, 50));
 const assert = (c, m) => {
   if (!c) throw new Error(m);

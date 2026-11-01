@@ -8,6 +8,7 @@ import { gradientParams, gradientColorAt } from '../src/shared/gradient.js';
 import { addMask, maskKey } from '../src/shared/shapes.js';
 import { renderGradient } from '../src/shared/gradientRender.js';
 import { verifyAdjustmentStyles } from './adjustment.browser.mjs';
+import { verifySlideshowRender } from './slideshow-render.browser.mjs';
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
@@ -160,6 +161,7 @@ export function verify(forceCPU = false) {
   verifyAlphaEffects();
   verifyFills();
   verifyAdjustmentStyles();
+  verifySlideshowRender();
   return { mode: forceCPU ? 'CPU' : 'WebGL2', checks: 86, status: 'passed' };
 }
 

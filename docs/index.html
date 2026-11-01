@@ -135,6 +135,8 @@ h3 { font-size: 22px; letter-spacing: -.01em; margin: 0 0 8px; }
 
 /* Before/after */
 .compare { position: relative; margin-top: 56px; border-radius: 22px; overflow: hidden; aspect-ratio: 16/9; box-shadow: 0 60px 120px -40px rgba(0,0,0,.9); user-select: none; }
+.compare.square { max-width: 720px; margin: 32px auto 0; aspect-ratio: 1; }
+.compare:focus-within { outline: 2px solid var(--accent); outline-offset: 4px; }
 .compare img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .compare .after { clip-path: inset(0 0 0 var(--pos, 50%)); }
 .compare .bar { position: absolute; top: 0; bottom: 0; left: var(--pos, 50%); width: 2px; background: #fff; transform: translateX(-1px); pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,.4); }
@@ -254,7 +256,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     <div class="links">
       <a href="#edit">Video editing</a>
       <a href="#record">Record</a>
-      <a href="#looks">Colour</a>
+      <a href="#looks">Color</a>
       <a href="#export">Export</a>
       <a href="#ai">AI agents</a>
       <a href="#open-source">Open source</a>
@@ -273,7 +275,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <span class="eyebrow"><b>Free &amp; open source</b> Mac &amp; Windows</span>
     <h1>Video editing and<br><span class="serif">screen recording.</span></h1>
-    <p class="lead">Edit footage from your camera, phone or screen. Build a video with multiple tracks, titles, music and colour correction, or record your screen and camera straight into a project.</p>
+    <p class="lead">Edit footage from your camera, phone or screen. Build a video with multiple tracks, titles, music and color correction, or record your screen and camera straight into a project.</p>
     <div class="ctas">
       <a class="btn primary" href="https://github.com/sirbull/reccut/releases/latest">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
@@ -354,24 +356,34 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="center reveal">
       <div class="kicker">Keying, masks &amp; stabilization</div>
-      <h2>Green screen and <span class="serif">camera backgrounds</span></h2>
-      <p class="sub">Remove a green-screen background, place yourself over your screen recording, or combine several shots. Keying, masks and stabilization are built into the editor.</p>
+      <h2>One-click <span class="serif">background removal</span></h2>
+      <p class="sub">Remove a green or blue screen with one click, then place the clip over another image or video. For more demanding shots, use the advanced controls to refine the result.</p>
     </div>
+    <figure class="reveal">
+      <div class="compare square" id="chroma-compare">
+        <img src="media/chroma-before.webp" alt="Before chroma key: a woman in pink in front of a green screen" loading="lazy" width="1080" height="1080">
+        <img class="after" src="media/chroma-after.webp" alt="After chroma key: the same woman with the green screen replaced by a blue-grey background" loading="lazy" width="1080" height="1080">
+        <div class="bar" aria-hidden="true"></div>
+        <span class="tag l">Before</span><span class="tag r">After chroma key</span>
+        <input type="range" min="0" max="100" value="50" aria-label="Compare the original green screen and the chroma key result">
+      </div>
+      <figcaption class="caption">Drag to compare the original green screen with the keyed result. You can also use the arrow keys.</figcaption>
+    </figure>
     <div class="rooms reveal">
       <div class="room">
-        <h3>Chroma key</h3>
-        <p>Remove a green or blue screen, or choose another background colour. Adjust the matte, soften the edges and reduce colour spill before placing the clip over another video or image.</p>
+        <h3>One click to start</h3>
+        <p>Click Remove solid background. Reccut samples the background color from the source frame and applies chroma key automatically. You can use the same tool on a video, a still image or the PiP camera clip.</p>
       </div>
       <div class="room">
-        <h3>Remove the PiP background</h3>
-        <p>The camera is a separate PiP clip in Edit, so you can key or mask it without changing the screen recording. For a static background, use a clean reference frame with a fixed camera and steady lighting.</p>
+        <h3>Advanced controls</h3>
+        <p>Fine-tune tolerance and softness, then open Advanced for fine-detail recovery, source shadows, edge color and spill removal. Adjust matte levels, shrink or expand the edge, add feathering and inspect the matte.</p>
       </div>
       <div class="room">
-        <h3>Masks and stabilization</h3>
-        <p>Draw a mask with the pen tool and animate its position or shape with keyframes. Smooth shaky footage with stabilization, then combine clips with titles, speed ramps and effects.</p>
+        <h3>PiP, masks and stabilization</h3>
+        <p>Key or mask the separate PiP camera clip without changing your screen recording. Draw and animate masks with the pen tool, smooth shaky footage with stabilization, and combine the result with titles and effects.</p>
       </div>
     </div>
-    <p class="caption">Apply these adjustments in Edit. The same keying and masks are used in the preview and the exported video.</p>
+    <p class="caption">Apply these adjustments in Edit; the same keying and masks are used in preview and export. For a static background without a green screen, use Remove static background with a fixed camera and steady lighting, or capture a clean background reference.</p>
   </div>
 </section>
 
@@ -390,9 +402,9 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 <section id="looks" class="band">
   <div class="wrap">
     <div class="center reveal">
-      <div class="kicker">Colour &amp; film looks</div>
-      <h2>Colour correction and <span class="serif">film looks</span></h2>
-      <p class="sub">Adjust exposure, white balance and colour wheels, or start with one of more than 40 film looks. You can also convert LOG footage and load your own LUTs.</p>
+      <div class="kicker">Color &amp; film looks</div>
+      <h2>Color correction and <span class="serif">film looks</span></h2>
+      <p class="sub">Adjust exposure, white balance and color wheels, or start with one of more than 40 film looks. You can also convert LOG footage and load your own LUTs.</p>
     </div>
     <div class="compare reveal" id="compare">
       <img src="media/ba-before.jpg" alt="Coastal ridge, original footage" loading="lazy">
@@ -489,7 +501,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <img src="media/look-vision500t.jpg" alt="" loading="lazy">
       <div class="kicker">Optional AI agents</div>
       <h2>Let an AI agent <span class="serif">do the editing</span></h2>
-      <p class="sub">Connect a model and tell the AI agent what you want changed. It can cut clips, add subtitles, adjust colour and create titles using Reccut’s editing tools. Review its edits on the timeline and undo them if needed.</p>
+      <p class="sub">Connect a model and tell the AI agent what you want changed. It can cut clips, add subtitles, adjust color and create titles using Reccut’s editing tools. Review its edits on the timeline and undo them if needed.</p>
       <div class="prompts">
         <div class="prompt"><span>“Read the script I’ve attached and make a first cut from my camera takes and screen recordings. Use the best takes and show the screen when I explain each step.”</span></div>
         <div class="prompt"><span>“Turn this interview into a three-minute story. Keep the strongest answers, cut the repetition and add subtitles.”</span></div>
@@ -511,7 +523,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     <div class="grid reveal">
       <div><h4>Video &amp; audio import</h4><p>H.264, H.265, ProRes, MP3, WAV, FLAC and many more. <a href="#formats">See formats and codecs</a>.</p></div>
       <div><h4>Audio cleanup</h4><p>Noise reduction, hum removal, EQ, compressor and 30+ presets like Podcast Voice.</p></div>
-      <div><h4>Keying, masks &amp; stabilization</h4><p>Remove a green screen, mask the PiP camera or smooth shaky footage. <a href="#keying">See the editing tools</a>.</p></div>
+      <div><h4>One-click background removal</h4><p>Auto-sampled chroma key, with advanced edge and matte controls for demanding shots. <a href="#keying">Compare before and after</a>.</p></div>
       <div><h4>Photoshop layers</h4><p>Import PSD and SVG files as separate, stacked layers ready to animate.</p></div>
       <div><h4>Redaction</h4><p>Pixelate or blur faces, passwords and number plates, and follow them with keyframes.</p></div>
       <div><h4>Your own templates</h4><p>Design lower thirds in After Effects and bring them in with the template kit.</p></div>
@@ -568,8 +580,12 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   }));
   box.addEventListener('click', () => box.close());
 
-  const compare = document.getElementById('compare');
-  compare.querySelector('input').addEventListener('input', (e) => compare.style.setProperty('--pos', e.target.value + '%'));
+  document.querySelectorAll('.compare').forEach((compare) => {
+    const slider = compare.querySelector('input[type="range"]');
+    const update = () => compare.style.setProperty('--pos', slider.value + '%');
+    slider.addEventListener('input', update);
+    update();
+  });
 </script>
 </body>
 </html>

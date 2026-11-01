@@ -1,5 +1,5 @@
 import { applyVideoEffects } from '../src/shared/videoEffectsRender.js';
-import { makeVideoEffect } from '../src/shared/videoEffects.js';
+import { makeVideoEffect, VIDEO_EFFECTS } from '../src/shared/videoEffects.js';
 import { drawFrame } from '../src/shared/render.js';
 import { newProject, computeFrame, makeClip } from '../src/shared/model.js';
 import { stylizePixels, stylizeSettings } from '../src/shared/stylize.js';
@@ -31,6 +31,24 @@ function verifyStylize() {
       assert(JSON.stringify(render(e, 2)) === JSON.stringify(render(e, 10)), `${type} speed zero must freeze`);
     }
   }
+  for (const [type, params, time] of [
+    ['vhs', VIDEO_EFFECTS.find((d) => d.type === 'vhs').presets.find((p) => p.id === 'ep').p, 23 / 24],
+    ['filmGrain', VIDEO_EFFECTS.find((d) => d.type === 'filmGrain').presets.find((p) => p.id === '8mm').p, 2.375],
+    ['chromatic', { amount: 1, centerX: 0.2, centerY: 0.7, falloff: 1.4 }, 0],
+  ]) {
+    const e = makeVideoEffect(type); Object.assign(e.p, params);
+    const expected = stylizePixels(input.data, w, h, stylizeSettings(type, e.p, time, w, h));
+    const actual = render(e, time);
+    for (let i = 0; i < actual.length; i++) assert(Math.abs(actual[i] - expected[i]) <= 2, `${type} advanced GPU/CPU differs at ${i}: ${actual[i]} / ${expected[i]}`);
+  }
+  const translucent = ctx.getImageData(0, 0, w, h);
+  for (let i = 3; i < translucent.data.length; i += 4) translucent.data[i] = 128;
+  ctx.putImageData(translucent, 0, 0);
+  for (const type of ['vhs', 'filmGrain', 'chromatic']) {
+    const result = render(makeVideoEffect(type));
+    assert(result.every((v, i) => i % 4 !== 3 || Math.abs(v - 128) <= 1), `${type} must preserve partial source alpha`);
+  }
+  ctx.putImageData(input, 0, 0);
   const glow = makeVideoEffect('glow');
   const glowing = render(glow);
   assert(glowing[(24 * w + 48) * 4] > input.data[(24 * w + 48) * 4], 'glow must brighten the source');

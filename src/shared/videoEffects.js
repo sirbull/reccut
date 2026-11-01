@@ -65,6 +65,7 @@ export const VIDEO_EFFECTS = [
   },
   {
     type: 'difference',
+    adjustment: false,
     label: 'Background reference key',
     defaults: {
       similarity: 0.08,

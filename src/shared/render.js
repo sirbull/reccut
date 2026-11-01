@@ -6,6 +6,7 @@ import { applyVideoEffects } from './videoEffectsRender.js';
 import { drawTestCard } from './testcard.js';
 import { drawTemplate, findTemplate } from './titletemplates.js';
 import { stabilizeAt } from './stabilize.js';
+import { imageRectAt } from './imageMotion.js';
 import { clipMatrix, maskList, paintMask, shapeAt, shapeCorners, shapePath } from './shapes.js';
 import {
   DEFAULT_CAPTION_STYLE,
@@ -57,10 +58,29 @@ export function drawFrame(ctx, project, frame, getSource, { scale = 1, matrix = 
   }
   for (const layer of frame.layers) {
     if (layer.transition) drawTransition(ctx, project, layer, getSource, transparent);
-    else drawClip(ctx, project, layer.clip, layer.T, getSource, 1);
+    else drawVisualSide(ctx, project, layer, getSource, 1);
   }
   for (const c of frame.captions) drawCaption(ctx, project, c);
   ctx.restore();
+}
+
+function drawVisualSide(ctx, project, side, getSource, alpha = 1) {
+  if (!side.companions?.length && !side.slideshowFrame) return drawClip(ctx, project, side.clip, side.T, getSource, alpha);
+  if (alpha === 1) {
+    if (side.slideshowFrame) { ctx.save(); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, project.width, project.height); ctx.restore(); }
+    drawClip(ctx, project, side.clip, side.T, getSource);
+    for (const clip of side.companions || []) drawClip(ctx, project, clip, side.T, getSource);
+    return;
+  }
+  // Fade the image + background as one picture, so portrait/landscape changes
+  // never expose an opaque copy of the previous foreground during a dissolve.
+  const { c, g } = scratchCanvas(10, ctx.canvas.width, ctx.canvas.height);
+  g.setTransform(ctx.getTransform());
+  if (side.slideshowFrame) { g.fillStyle = '#000'; g.fillRect(0, 0, project.width, project.height); }
+  drawClip(g, project, side.clip, side.T, getSource);
+  for (const clip of side.companions || []) drawClip(g, project, clip, side.T, getSource);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = alpha;
+  ctx.drawImage(c, 0, 0); ctx.restore();
 }
 
 function drawTransition(ctx, project, layer, getSource, transparent = false) {
@@ -70,7 +90,7 @@ function drawTransition(ctx, project, layer, getSource, transparent = false) {
   // ponytail: over andre spor blir dip en vanlig toning, ellers ville svart/hvitt dekke sporene under.
   const type = layer.overlay && layer.transition.type.startsWith('dip') ? 'dissolve' : layer.transition.type;
   const drawSide = (side, alpha) => {
-    if (side) return drawClip(ctx, project, side.clip, side.T, getSource, alpha);
+    if (side) return drawVisualSide(ctx, project, side, getSource, alpha);
     if (layer.overlay || transparent) return;
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -345,7 +365,7 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmaske
     let src = getSource(clip, 'main', s);
     if (src) src = graded(clip, T, src, 'main', media);
     if (src) {
-      const full = containRect(src.w, src.h, W, H);
+      const full = clip.type === 'image' ? imageRectAt(clip, T, src.w, src.h, W, H) : containRect(src.w, src.h, W, H);
       // Beskjæring (Crop): kantene trimmes, og bildet blir stående der det er.
       const cl = clamp(valueAt(clip, 'cropL', T) || 0, 0, 0.49);
       const cr = clamp(valueAt(clip, 'cropR', T) || 0, 0, 0.49);

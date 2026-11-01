@@ -4521,6 +4521,29 @@ kbd.keycap {
 .gradient-stop-track .gradient-handle { width: 13px; height: 20px; border-radius: 3px; }
 .gradient-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .gradient-hex { color: var(--text-2); font: 11px monospace; }
+.slideshow-layout { display: grid; grid-template-columns: minmax(240px, 0.95fr) minmax(300px, 1.1fr); gap: 24px; }
+.slideshow-preview-column { min-width: 0; }
+.slideshow-preview-frame { position: relative; background: #09090b; border: 1px solid var(--line-2); border-radius: 6px; overflow: hidden; }
+.slideshow-preview-frame canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.slideshow-preview-controls { display: flex; align-items: center; gap: 9px; margin-top: 10px; font-size: 11px; color: var(--text-2); }
+.slideshow-preview-controls input { flex: 1; min-width: 40px; accent-color: var(--accent); }
+.slideshow-summary { margin-top: 18px; padding: 14px; border: 1px solid var(--line-2); border-radius: 6px; font-size: 12px; line-height: 1.5; color: var(--text-2); }
+.slideshow-summary b { color: var(--text); }
+.slideshow-summary p:last-child { margin-bottom: 0; }
+.slideshow-settings { min-width: 0; }
+.slideshow-settings fieldset { margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 6px; }
+.slideshow-settings legend { padding: 0 5px; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.slideshow-settings .row-label { flex-basis: 120px; }
+.slideshow-settings .row-control { min-width: 0; }
+.slideshow-settings select { max-width: 225px; min-width: 0; }
+.slideshow-number { width: 74px; text-align: right; }
+.slideshow-settings input[type="range"] { min-width: 60px; width: 115px; accent-color: var(--accent); }
+.slideshow-transition-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 0 4px; }
+.slideshow-transition-list label, .slideshow-check, .slideshow-remember { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.slideshow-check { margin: 4px 0 12px; }
+.slideshow-remember { margin-right: auto; color: var(--text-2); }
+.slideshow-error { color: var(--red); font-size: 12px; }
+@media (max-width: 780px) { .slideshow-layout { grid-template-columns: 1fr; } .slideshow-preview-column { max-width: 440px; } }
 .vfx-advanced summary { cursor: pointer; color: var(--muted, #a6a6ad); font-size: 12px; padding: 6px 0; }
 [data-section="vfx"] .afx-head { display: grid; grid-template-columns: auto minmax(0, 1fr) repeat(4, 22px); gap: 3px; }
 [data-section="vfx"] .afx-head .icon-btn { width: 22px; min-width: 22px; }

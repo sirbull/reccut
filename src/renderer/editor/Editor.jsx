@@ -7,6 +7,7 @@ import { Viewer } from './Viewer.jsx';
 import { Inspector } from './Inspector.jsx';
 import { Timeline } from './Timeline.jsx';
 import { ImportBrowser } from './ImportBrowser.jsx';
+import { SlideshowDialog } from './SlideshowDialog.jsx';
 import { audioSkimming, commit, makeCaptionClip, needsProject, project, skimming, snapping } from './store.js';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
 import * as playback from './playback.js';
@@ -105,6 +106,7 @@ export function Editor({ active }) {
       {commands.syncDialog.value && <SyncDialog />}
       {commands.attributesDialog.value && <AttributesDialog />}
       {commands.importOptions.value && !needsProject.value && <ImportOptionsDialog />}
+      {commands.slideshowDialog.value && <SlideshowDialog />}
       {layerImport.value && <LayerImportDialog key={layerImport.value.file} />}
     </div>
   );

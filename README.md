@@ -62,11 +62,19 @@ The camera appears as a separate **PiP** clip on V2, linked to the screen clip o
 
 A global shortcut starts and stops recording from any app. Pause and resume without leaving gaps in the video. A floating control bar shows the recording time and controls without appearing in the recording. Recordings are saved as you go, with recovery after a crash.
 
-## Green screen, PiP backgrounds and masks
+## One-click background removal and advanced keying
 
-Use **chroma key** to remove a green or blue screen, or pick another background colour. Adjust the matte and edges, reduce colour spill, and place the keyed clip over another video or image.
+<p align="center">
+  <img src="docs/media/chroma-wipe.gif" width="640" alt="Animated before-and-after comparison: the slider moves back and forth between the original green screen and the chroma-keyed result">
+  <br>
+  <sub>Green screen before and after chroma key. <a href="https://sirbull.github.io/reccut/#keying">Try the interactive slider on the website.</a></sub>
+</p>
 
-The camera recording is a separate **PiP** clip in Edit. Select it and open **Effects → Keying & effect stack** to remove its background without changing the screen recording. You can also use a mask to keep only the part of the camera image you want. For a static background, use a clean reference frame with a fixed camera and steady lighting.
+Click **Remove solid background** to remove a green or blue screen with one click. Reccut samples the background colour from the source frame and applies chroma key automatically. Place the keyed clip over another video or image.
+
+For more demanding shots, adjust **Tolerance** and **Softness**, then open **Advanced** for fine-detail recovery, source-shadow preservation, edge-colour recovery and spill removal. You can also adjust matte black, white and gamma, shrink or expand edges, add feathering and inspect the matte. Start with the automatic result and refine it as needed.
+
+The camera recording is a separate **PiP** clip in Edit. Select it and open **Effects → Keying & effect stack** to remove its background without changing the screen recording. You can also use a mask to keep only the part of the camera image you want. For a static background without a green screen, use **Remove static background** with a fixed camera and steady lighting, or capture a clean background reference.
 
 Draw masks with the pen tool and animate their position or shape with keyframes. Stabilization smooths shaky footage, and effects can be combined with colour correction, titles and speed ramps. Keying and masks are applied in the editor and used in both the preview and export. See [keying and background removal](docs/KEYING-AND-AI.md) for the controls and requirements.
 

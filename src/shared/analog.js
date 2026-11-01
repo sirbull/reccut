@@ -49,11 +49,23 @@ export function pixelSampler(data, w, h) {
       mix(data[(bottom * w + xx) * 4 + channel], data[(bottom * w + right) * 4 + channel], fx), fy) / 255;
   };
 }
-const yiq = (c) => [c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114,
-  c[0] * 0.596 - c[1] * 0.274 - c[2] * 0.322, c[0] * 0.211 - c[1] * 0.523 + c[2] * 0.312];
 export function analogPixels(data, w, h, s, signal = data, sw = w, sh = h) {
   const out = new Uint8ClampedArray(data.length), sample = pixelSampler(signal, sw, sh);
   const read = (x, y) => [0, 1, 2].map((c) => sample((x + 0.5) * sw / w - 0.5, (y + 0.5) * sh / h - 0.5, c));
+  let readTape;
+  if (s.type === 'vhs') {
+    // Transform once, then filter scalar signal planes. This avoids allocating
+    // RGB/YIQ arrays and recalculating three channels for every low-pass tap.
+    const planes = new Float32Array(signal.length);
+    for (let i = 0; i < signal.length; i += 4) {
+      const r = signal[i], g = signal[i + 1], b = signal[i + 2];
+      planes[i] = r * 0.299 + g * 0.587 + b * 0.114;
+      planes[i + 1] = r * 0.596 - g * 0.274 - b * 0.322;
+      planes[i + 2] = r * 0.211 - g * 0.523 + b * 0.312;
+    }
+    const planeSample = pixelSampler(planes, sw, sh);
+    readTape = (x, y, channel) => planeSample((x + 0.5) * sw / w - 0.5, (y + 0.5) * sh / h - 0.5, channel);
+  }
   const lumaRadius = (0.4 + s.softness * 1.7) * w / 720;
   const chromaRadius = (1.5 + s.bleed * 8) * w / 720;
   const lumaWeights = [0.06136, 0.24477, 0.38774, 0.24477, 0.06136];
@@ -66,16 +78,16 @@ export function analogPixels(data, w, h, s, signal = data, sw = w, sh = h) {
         const px = x + line.shift * w;
         // Field sampling and a small vertical low-pass soften HD footage globally.
         const py = y + (random(s.seed + line.row * 13) - 0.5) * s.amount * h / 480 * 0.15;
-        const original = yiq(read(px, py));
+        const original = [readTape(px, py, 0), readTape(px, py, 1), readTape(px, py, 2)];
         let luma = 0, ci = 0, cq = 0;
-        for (let k = -2; k <= 2; k++) luma += yiq(read(px + k * lumaRadius, py))[0] * lumaWeights[k + 2];
+        for (let k = -2; k <= 2; k++) luma += readTape(px + k * lumaRadius, py, 0) * lumaWeights[k + 2];
         luma = mix(original[0], luma, s.softness);
-        const vertical = (yiq(read(px, py - h / 480))[0] + yiq(read(px, py + h / 480))[0]) * 0.5;
+        const vertical = (readTape(px, py - h / 480, 0) + readTape(px, py + h / 480, 0)) * 0.5;
         luma = mix(luma, vertical, s.softness * 0.12);
         for (let k = -3; k <= 3; k++) {
-          const q = yiq(read(px - (1 + s.split * 4) * w / 720 + k * chromaRadius, py));
+          const sampleX = px - (1 + s.split * 4) * w / 720 + k * chromaRadius;
           const weight = k === 0 ? 0.28 : Math.abs(k) === 1 ? 0.22 : Math.abs(k) === 2 ? 0.11 : 0.03;
-          ci += q[1] * weight; cq += q[2] * weight;
+          ci += readTape(sampleX, py, 1) * weight; cq += readTape(sampleX, py, 2) * weight;
         }
         ci = mix(original[1], ci, s.bleed); cq = mix(original[2], cq, s.bleed);
         const n = fieldHash(Math.floor((2 * x + 1) * 360 / w), line.row, s.seed);

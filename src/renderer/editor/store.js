@@ -209,7 +209,7 @@ export function commit(mutator) {
   // autoFormat har nettopp gitt et tomt prosjekt formatet til første klipp.
   if (prev.autoFormat && !next.autoFormat && prefs.value.askSequenceSettings) {
     const first = Object.values(next.clips).find((c) => !prev.clips[c.id] && c.mediaId && next.media[c.mediaId]?.kind !== 'audio');
-    if (first) sequenceSettingsOpen.value = { mediaId: first.mediaId };
+    if (first && !first.slideshowId) sequenceSettingsOpen.value = { mediaId: first.mediaId };
   }
   return result;
 }

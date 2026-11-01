@@ -510,11 +510,11 @@ function neededFrames(project, frame, copies) {
       else out.push({ clip, key, path: workPath(st), t });
     }
   };
+  const addSide = (side) => { if (!side) return; add(side.clip, side.T); for (const clip of side.companions || []) add(clip, side.T); };
   for (const l of frame.layers) {
     if (l.transition) {
-      if (l.a) add(l.a.clip, l.a.T);
-      if (l.b) add(l.b.clip, l.b.T);
-    } else add(l.clip, l.T);
+      addSide(l.a); addSide(l.b);
+    } else addSide(l);
   }
   return out;
 }

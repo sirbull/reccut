@@ -64,9 +64,30 @@ app.whenReady().then(async () => {
       if (mode === 'mask') assert.ok(image.partialAlpha, 'feathered masks must retain partial alpha');
       console.log(JSON.stringify({ mode, format, alpha, ...image }));
     }
+    // Matte view is an exportable image: black/white/gray RGB, rather than transparent keyed footage.
+    const matte = await ui.webContents.executeJavaScript(`testFrame.fixture(${JSON.stringify(source)}, 'matte')`);
+    const inspect = async (file) => ui.webContents.executeJavaScript(`testFrame.inspectImage('data:image/png;base64,${fs.readFileSync(file).toString('base64')}')`);
+    const checkMatte = (image) => {
+      assert.ok(image.corner.slice(0, 3).every((v) => v < 5) && image.corner[3] === 255, 'matte background must export as opaque black');
+      assert.ok(image.center.slice(0, 3).every((v) => v > 250) && image.center[3] === 255, 'matte foreground must export as opaque white');
+      assert.ok(image.hasGray, 'feathered edges must export as gray coverage');
+    };
+    for (const alpha of [false, true]) {
+      const output = path.join(dir, `matte-${alpha}.png`);
+      await run({ project: matte, settings: { frame: { time: 0.74, width: 128, height: 64, format: 'png', alpha }, output }, tmpDir: dir });
+      checkMatte(await inspect(output));
+    }
+    const ffmpeg = require('../src/main/ffmpeg-path.js');
+    for (const forceFfmpeg of [false, true]) {
+      const output = path.join(dir, `matte-video-${forceFfmpeg}.mp4`);
+      await run({ project: matte, settings: { format: 'mp4-h264', quality: 'high', fps: 10, range: { in: 0, out: 0.2 }, forceFfmpeg, output }, ffmpeg, tmpDir: dir });
+      const decoded = path.join(dir, `decoded-matte-${forceFfmpeg}.png`);
+      require('child_process').execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-i', output, '-frames:v', '1', decoded]);
+      checkMatte(await inspect(decoded));
+    }
+    console.log(JSON.stringify({ matteExports: 'passed', checks: 4 }));
     // Decode an actual video and export a later frame, independently of preview resolution.
     const video = path.join(dir, 'changing.webm');
-    const ffmpeg = require('../src/main/ffmpeg-path.js');
     require('child_process').execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=red:s=64x32:r=10:d=1', '-f', 'lavfi', '-i', 'color=blue:s=64x32:r=10:d=1', '-filter_complex', '[0:v][1:v]concat=n=2:v=1:a=0', '-c:v', 'libvpx-vp9', video]);
     const project = await ui.webContents.executeJavaScript(`testFrame.fixture(${JSON.stringify(video)}, 'plain')`);
     project.media.m.kind = 'video';

@@ -26,10 +26,14 @@ export function fixture(file, mode = 'key') {
   p.media.m = { id: 'm', kind: 'image', path: file, name: 'Source', duration: 2, streams: { main: stream } };
   const clip = makeClip('image', { media: p.media.m, start: 0, in: 0, dur: 2 });
   clip.id = 'subject';
-  if (mode === 'key') {
+  if (mode === 'key' || mode === 'matte') {
     const key = makeVideoEffect('chroma');
     key.p.color = '#00ff00';
     key.p.despill = 0;
+    if (mode === 'matte') {
+      key.p.view = 'matte';
+      key.p.feather = 1;
+    }
     clip.props.vfx = [key];
   }
   if (mode === 'mask') {
@@ -133,6 +137,10 @@ export async function inspectImage(url) {
   const bytes = g.getImageData(0, 0, c.width, c.height).data;
   let partialAlpha = false;
   for (let i = 3; i < bytes.length; i += 4) if (bytes[i] > 0 && bytes[i] < 255) partialAlpha = true;
+  let hasGray = false;
+  for (let i = 0; i < bytes.length; i += 4) {
+    if (bytes[i] > 0 && bytes[i] < 255 && bytes[i] === bytes[i + 1] && bytes[i] === bytes[i + 2]) hasGray = true;
+  }
   img.close();
-  return { width: c.width, height: c.height, corner: at(0, 0), center: at(Math.floor(c.width / 2), Math.floor(c.height / 2)), partialAlpha };
+  return { width: c.width, height: c.height, corner: at(0, 0), center: at(Math.floor(c.width / 2), Math.floor(c.height / 2)), partialAlpha, hasGray };
 }

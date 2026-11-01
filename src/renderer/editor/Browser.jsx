@@ -588,6 +588,7 @@ async function mediaContextMenu(e, m, used) {
     { id: 'insert', label: 'Insert at Playhead', accelerator: 'W' },
     { id: 'connect', label: 'Connect to Storyline', accelerator: 'Q' },
     { id: 'overwrite', label: 'Overwrite at Playhead', accelerator: 'D' },
+    { id: 'slideshow', label: 'Add as Slideshow…', enabled: picked.every((x) => x.kind === 'image' && !x.offline) },
     { separator: true },
     { id: 'sync', label: 'Synchronize Audio', accelerator: 'Alt+CmdOrCtrl+G', enabled: hasVideo && hasAudio },
     { id: 'unsync', label: 'Remove Synchronized Audio', enabled: synced },
@@ -598,6 +599,7 @@ async function mediaContextMenu(e, m, used) {
     { id: 'remove', label: n > 1 ? `Remove ${n} Clips from Project` : 'Remove from Project', enabled: !inUse },
   ]);
   if (['append', 'insert', 'connect', 'overwrite'].includes(id)) commands.addBrowserSelection(id);
+  else if (id === 'slideshow') commands.openSlideshow(mediaOrder);
   else if (id === 'sync') commands.syncMediaAudio();
   else if (id === 'unsync') commands.removeSyncedAudio();
   else if (id === 'optimize') commands.optimizeMedia();
@@ -839,7 +841,9 @@ function effectFrameAt(fx) {
   if (!fxFrames.has(fx.id)) {
     fxFrames.set(fx.id, (t) => {
       const k = Math.min(1, t / 1);
-      const props = BROWSER_VIDEO_EFFECTS.some((e) => e.type === fx.id)
+      const props = fx.id === 'kenBurns'
+        ? { kenBurns: true, kenBurnsMode: 'in', kenBurnsAmount: 0.22 }
+        : BROWSER_VIDEO_EFFECTS.some((e) => e.type === fx.id)
         ? { vfx: [makeVideoEffect(fx.id)] }
         : { [fx.prop]: fx.def * (0.15 + 0.85 * k), fx: [fx.id] };
       const framed = ['radius', 'shadow', 'border'].includes(fx.id);
@@ -893,6 +897,16 @@ const FRAME_FX = [
 function EffectsTab() {
   return (
     <>
+      <div class="sub-head">Photo motion</div>
+      <div class="card-grid" onPointerLeave={endPreview}>
+        <button class="gen-card" data-photo-effect="kenBurns" draggable
+          onDragStart={(e) => dragData(e, { kind: 'effect', id: 'kenBurns' })}
+          onPointerEnter={() => commands.previewEffect('kenBurns')} onClick={() => commands.addEffect('kenBurns')}
+          title="Slow pan and zoom for still images. Adjust framing and motion in Video, or select images in Media and choose Add as Slideshow.">
+          <MiniPreview frameAt={effectFrameAt({ id: 'kenBurns' })} duration={2} still={1} label="Ken Burns" />
+          <span>Ken Burns</span>
+        </button>
+      </div>
       <div class="sub-head">Adjustment layers</div>
       <div class="card-grid">
         <button class="gen-card" data-adjustment="empty" draggable

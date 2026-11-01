@@ -36,19 +36,24 @@ export function recordingChildren(project, id) {
 
 export function recordingEditId(project, id) {
   const c = project.clips[id];
+  if (c?.slideshowParent && project.clips[c.slideshowParent]) return c.slideshowParent;
   return c?.recordingPart === 'camera' && project.clips[c.linkedTo] ? c.linkedTo : id;
+}
+
+function timingChildren(project, id) {
+  return [...recordingChildren(project, id), ...Object.values(project.clips).filter((c) => c.slideshowParent === id)];
 }
 
 function recordingTimingLocked(project, id) {
   const c = project.clips[id];
-  return c && (project.lanes?.[c.lane]?.locked || recordingChildren(project, id).some((camera) => project.lanes?.[camera.lane]?.locked));
+  return c && (project.lanes?.[c.lane]?.locked || timingChildren(project, id).some((camera) => project.lanes?.[camera.lane]?.locked));
 }
 
 // Bare tids- og kildeegenskapene følger skjermklippet. Farge, form og effekter er uavhengige.
 export function syncRecordingTracks(project) {
   for (const c of Object.values(project.clips)) {
-    if (c.recordingPart !== 'camera' || !c.linkedTo) continue;
-    const parent = project.clips[c.linkedTo];
+    if (!(c.recordingPart === 'camera' && c.linkedTo) && !c.slideshowParent) continue;
+    const parent = project.clips[c.slideshowParent || c.linkedTo];
     if (!parent) {
       delete project.clips[c.id];
       continue;
@@ -61,7 +66,7 @@ export function syncRecordingTracks(project) {
   }
   // Oppdater alle tidene før sporene løses, så gammel plassering ikke lager falske kollisjoner.
   for (const c of Object.values(project.clips)) {
-    if (c.recordingPart !== 'camera' || !c.linkedTo) continue;
+    if (!(c.recordingPart === 'camera' && c.linkedTo) && !c.slideshowParent) continue;
     while (lanesOverlap(project, c, c.lane)) c.lane++;
   }
 }
@@ -156,13 +161,13 @@ function applyTrim(project, c, edge, d) {
     // Nøkkelbildene skal bli liggende på samme sted i bildet.
     const shift = c.in - oldIn - d * r;
     shiftKeyframes(c, shift);
-    for (const camera of recordingChildren(project, c.id)) shiftKeyframes(camera, shift);
+    for (const camera of timingChildren(project, c.id)) shiftKeyframes(camera, shift);
   } else {
     if (c.reverse) c.in = round(c.in - d * av);
     c.dur = round(c.dur + d);
     const shift = c.in - oldIn;
     shiftKeyframes(c, shift);
-    for (const camera of recordingChildren(project, c.id)) shiftKeyframes(camera, shift);
+    for (const camera of timingChildren(project, c.id)) shiftKeyframes(camera, shift);
   }
   return d;
 }
@@ -180,7 +185,7 @@ export function withSync(project, fn) {
   const anchors = [];
   for (const c of Object.values(project.clips)) {
     // PiP har en eksplisitt kobling. Frakoblet PiP beholder sin egen plassering.
-    if (c.recordingPart === 'camera') continue;
+    if (c.recordingPart === 'camera' || c.slideshowParent) continue;
     if (c.lane === 0 || project.lanes?.[c.lane]?.locked) continue;
     // Undertekster har egne tider. Bare eksplisitt gruppering kobler dem til hovedsporet.
     if (c.type === 'caption' && !(c.group && groupParent.has(c.group))) continue;
@@ -335,6 +340,14 @@ export function splitClip(project, id, T, independent = false) {
     const cameraRight = splitClip(project, camera.id, T, true);
     if (cameraRight) project.clips[cameraRight].linkedTo = right.id;
   }
+  const fg = project.clips[c.slideshowForeground];
+  if (fg?.slideshowParent === c.id) {
+    const fgRight = splitClip(project, fg.id, T, true);
+    if (fgRight) {
+      right.slideshowForeground = fgRight; project.clips[fgRight].slideshowParent = right.id;
+      right.group = project.clips[fgRight].group = uid();
+    }
+  }
   if (!independent) syncRecordingTracks(project);
   return right.id;
 }
@@ -343,7 +356,7 @@ export function splitClip(project, id, T, independent = false) {
 export function bladeAt(project, T, ids = null) {
   if (ids) ids = [...new Set(ids.map((id) => recordingEditId(project, id)))];
   const targets = Object.values(project.clips).filter(
-    (c) => !c.linkedTo && (!ids || ids.includes(c.id)) && !project.lanes?.[c.lane]?.locked && T > c.start && T < c.start + c.dur
+    (c) => !c.linkedTo && !c.slideshowParent && (!ids || ids.includes(c.id)) && !project.lanes?.[c.lane]?.locked && T > c.start && T < c.start + c.dur
   );
   const pieces = targets.map((c) => [c, splitClip(project, c.id, T)]).filter(([, r]) => r);
   // Kuttes alle klippene i en gruppe, blir høyre deler en egen gruppe.
@@ -359,7 +372,11 @@ export function bladeAt(project, T, ids = null) {
 
 export function deleteClips(project, ids, { ripple = true } = {}) {
   const set = new Set(ids);
-  for (const id of ids) for (const child of recordingChildren(project, id)) set.add(child.id);
+  for (const id of ids) {
+    const parent = project.clips[id]?.slideshowParent;
+    if (parent) { set.add(parent); for (const child of timingChildren(project, parent)) set.add(child.id); }
+    for (const child of timingChildren(project, id)) set.add(child.id);
+  }
   // Slettes klippet i hovedsporet, forsvinner også klippene som er gruppert med det.
   for (const id of ids) {
     const c = project.clips[id];
@@ -578,7 +595,8 @@ export function removeTransition(project, id, edge = 'start') {
 
 // Kopier og lim inn: tider lagres relativt til det første klippet.
 export function copyClips(project, ids) {
-  ids = [...new Set([...ids, ...ids.flatMap((id) => recordingChildren(project, id).map((c) => c.id))])];
+  ids = [...new Set([...ids, ...ids.map((id) => project.clips[id]?.slideshowParent).filter(Boolean)])];
+  ids = [...new Set([...ids, ...ids.flatMap((id) => timingChildren(project, id).map((c) => c.id))])];
   const clips = ids.map((id) => project.clips[id]).filter(Boolean);
   if (!clips.length) return null;
   const t0 = Math.min(...clips.map((c) => c.start));
@@ -609,6 +627,10 @@ export function pasteClips(project, items, T) {
   cleanGroups(project);
   for (const id of ids) {
     const c = project.clips[id];
+    for (const field of ['slideshowParent', 'slideshowForeground']) if (c[field]) {
+      if (copied.has(c[field])) c[field] = copied.get(c[field]); else delete c[field];
+    }
+    if (c.slideshowParent && project.clips[c.slideshowParent]) project.clips[c.slideshowParent].group = c.group || (c.group = uid());
     if (!c.linkedTo) continue;
     if (copied.has(c.linkedTo)) c.linkedTo = copied.get(c.linkedTo);
     else delete c.linkedTo;

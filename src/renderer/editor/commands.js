@@ -5,6 +5,7 @@ import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
 import { addMask, canMask, removeMask } from '../../shared/shapes.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, makeEffect, presetEffects } from '../../shared/audiofx.js';
+import { effectWarning } from '../../shared/effectSupport.js';
 import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../../shared/videoEffects.js';
 import { ALL_GROUPS, groupsWithContent, pasteAttributes, removeAttributes } from '../../shared/attributes.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
@@ -44,6 +45,8 @@ import {
   commit,
   commitSequence,
   previewEdit,
+  endPreview,
+  mirror,
   endTransient,
   updateTransient,
   browserPlayhead,
@@ -66,6 +69,8 @@ import { toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
 import { droppedPaths } from '../fileDrop.js';
 import { setKeyframe } from './keyframes.js';
+import { enableKenBurns } from '../../shared/imageMotion.js';
+import { addSlideshow, slideshowOptions } from '../../shared/slideshow.js';
 
 const api = window.api;
 
@@ -75,6 +80,28 @@ export const browserSelection = signal(null);
 // Alle medier som er valgt i biblioteket, og om biblioteket sist ble brukt (for Cmd A og synk).
 export const browserPicked = signal([]);
 export const browserFocus = signal(false);
+export const slideshowDialog = signal(null);
+export function openSlideshow(order = null) {
+  const ordered = [...(order || []), ...mediaOrderOf(browserPicked.value)];
+  const ids = [...new Set(ordered)].filter((id) => browserPicked.value.includes(id));
+  if (!ids.length || ids.some((id) => project.value.media[id]?.kind !== 'image' || project.value.media[id]?.offline)) {
+    toast('Select available still images in the media browser first.'); return;
+  }
+  pause();
+  slideshowDialog.value = { ids, projectId: project.value.id, sequenceId: currentSequence(project.value).id };
+}
+export function confirmSlideshow(options, remember = true) {
+  const request = slideshowDialog.value;
+  if (!request || request.projectId !== project.value.id || request.sequenceId !== currentSequence(project.value).id) throw new Error('The sequence changed. Open Add as Slideshow again.');
+  let result;
+  commit((p) => { result = addSlideshow(p, request.ids, options); });
+  if (remember) setPrefs({ slideshow: slideshowOptions(options, project.value.fps) });
+  slideshowDialog.value = null;
+  selection.value = result.foregrounds;
+  browserFocus.value = false; sourceMediaId.value = null; selectedTransition.value = null;
+  inspectorTab.value = 'video'; room.value = 'edit'; seek(result.start);
+  return result;
+}
 export const exportOpen = signal(false);
 export const frameExportOpen = signal(null);
 
@@ -182,6 +209,8 @@ export function addFrameEffect(mode = 'blur', T = getTime(), laneHint = null) {
 }
 
 export function addAdjustmentLayer(effectType = null, T = getTime(), laneHint = null) {
+  const warning = effectType && effectWarning({ type: 'adjustment' }, effectType);
+  if (warning) return toast(warning, { timeout: 4000 });
   const { start, dur, lane } = frameEffectPlacement(project.value, T, laneHint);
   const clip = makeClip('adjustment', { start, dur, lane, name: 'Adjustment layer',
     props: { vfx: effectType ? [makeVideoEffect(effectType)] : [] } });
@@ -230,10 +259,11 @@ const selectedOf = (types) => selection.value.filter((cid) => types.includes(pro
 const stackEffect = (id) => BROWSER_VIDEO_EFFECTS.some((e) => e.type === id);
 const effectEdit = (id, ids) => (q) => {
   const fx = EFFECTS.find((x) => x.id === id);
-  if (!fx && !stackEffect(id)) return;
+  if (!fx && !stackEffect(id) && id !== 'kenBurns') return;
   for (const cid of ids) {
     const c = q.clips[cid];
-    if (!c) continue;
+    if (!c || effectWarning(c, id)) continue;
+    if (id === 'kenBurns') { if (c.type === 'image') enableKenBurns(c); continue; }
     if (stackEffect(id)) {
       if (!['video', 'image', 'recording', 'adjustment'].includes(c.type)) continue;
       const effect = makeVideoEffect(id);
@@ -246,20 +276,35 @@ const effectEdit = (id, ids) => (q) => {
   }
 };
 export function addEffect(id, clipId = null) {
-  const types = stackEffect(id) ? ['video', 'image', 'recording', 'adjustment'] : ['video', 'image', 'recording', 'title', 'adjustment'];
+  const types = id === 'kenBurns' ? ['image'] : stackEffect(id) ? ['video', 'image', 'recording', 'adjustment'] : ['video', 'image', 'recording', 'title', 'adjustment'];
   const ids = clipId ? [clipId].filter((cid) => types.includes(project.value.clips[cid]?.type)) : selectedOf(types);
   if (!ids.length) {
     toast(stackEffect(id) ? 'Select a video, image, recording or adjustment layer first, or drag the effect onto a clip.' : 'Select a video, image, title or adjustment layer first, or drag the effect onto a clip.');
     return;
   }
-  commit(effectEdit(id, ids));
+  endPreview();
+  const warning = ids.map((cid) => effectWarning(project.value.clips[cid], id)).find(Boolean);
+  if (warning) toast(warning, { timeout: 4000 });
+  const supported = ids.filter((cid) => !effectWarning(project.value.clips[cid], id));
+  if (!supported.length) return;
+  editTargets(commit, effectEdit(id, supported));
   selection.value = ids;
-  inspectorTab.value = 'effects';
+  inspectorTab.value = id === 'kenBurns' ? 'video' : 'effects';
+}
+// Each target is edited explicitly. Inspector mirroring would copy the effect
+// back onto unsupported layers in a mixed selection.
+function editTargets(edit, mutator) {
+  const paused = mirror.paused;
+  mirror.paused = true;
+  try { edit(mutator); }
+  finally { mirror.paused = paused; }
 }
 // Viser effekten på de valgte klippene i seeren mens musa er over den (se previewEdit).
 export const previewEffect = (id) => {
-  const ids = selectedOf(stackEffect(id) ? ['video', 'image', 'recording', 'adjustment'] : ['video', 'image', 'recording', 'title', 'adjustment']);
-  if (ids.length) previewEdit(effectEdit(id, ids));
+  const ids = selectedOf(id === 'kenBurns' ? ['image'] : stackEffect(id) ? ['video', 'image', 'recording', 'adjustment'] : ['video', 'image', 'recording', 'title', 'adjustment']);
+  const supported = ids.filter((cid) => !effectWarning(project.value.clips[cid], id));
+  if (supported.length) editTargets(previewEdit, effectEdit(id, supported));
+  else endPreview();
 };
 
 // Filmlook (filmLooks.js) på klipp. Ny look får full styrke, ellers beholdes styrken.
@@ -535,9 +580,12 @@ export function removeEffects() {
 
 function audioTargets(clipId) {
   const p = project.value;
+  const targets = clipId ? [clipId] : selection.value;
+  const warning = targets.map((id) => effectWarning(p.clips[id], null, 'afx')).find(Boolean);
+  if (warning) toast(warning, { timeout: 4000 });
   const ok = (c) => c && clipHasAudio(c, p.media[c.mediaId]);
   const ids = clipId ? [clipId].filter((id) => ok(p.clips[id])) : selection.value.filter((id) => ok(p.clips[id]));
-  if (!ids.length) toast('Select a clip with sound first, or drag the effect onto a clip.');
+  if (!ids.length && !warning) toast('Select a clip with sound first, or drag the effect onto a clip.');
   return ids;
 }
 
@@ -545,7 +593,7 @@ export function addAudioEffect(type, clipId = null) {
   if (!AUDIO_EFFECTS[type]) return;
   const ids = audioTargets(clipId);
   if (!ids.length) return;
-  commit((q) => ids.forEach((id) => (q.clips[id].props.afx = [...(q.clips[id].props.afx || []), makeEffect(type)])));
+  editTargets(commit, (q) => ids.forEach((id) => (q.clips[id].props.afx = [...(q.clips[id].props.afx || []), makeEffect(type)])));
   selection.value = ids;
   inspectorTab.value = 'audio';
 }
@@ -555,7 +603,7 @@ export function applyAudioPreset(presetId, clipId = null) {
   if (!pr) return;
   const ids = audioTargets(clipId);
   if (!ids.length) return;
-  commit((q) => ids.forEach((id) => (q.clips[id].props.afx = [...(q.clips[id].props.afx || []), ...presetEffects(presetId)])));
+  editTargets(commit, (q) => ids.forEach((id) => (q.clips[id].props.afx = [...(q.clips[id].props.afx || []), ...presetEffects(presetId)])));
   selection.value = ids;
   inspectorTab.value = 'audio';
   toast(`${pr.label} added to ${ids.length} clip${ids.length > 1 ? 's' : ''}.`, { timeout: 2000 });
@@ -1209,7 +1257,14 @@ export async function handleDrop(dt, lane, T, options = {}) {
     const item = JSON.parse(raw);
     const targeted = ['effect', 'afx', 'apreset', 'transition', 'frameFx', 'redact', 'adjustment'].includes(item.kind);
     const target = targeted ? libraryDropTarget(project.value, item, lane, T, { transitionDur: prefs.value.transitionDur, ...options }) : null;
-    if (targeted && !target) return;
+    if (targeted && !target) {
+      if (!project.value.lanes?.[lane]?.locked && ['effect', 'afx', 'apreset'].includes(item.kind)) {
+        const clip = Object.values(project.value.clips).find((c) => c.lane === lane && T >= c.start && T < c.start + c.dur);
+        const warning = effectWarning(clip, item.id, item.kind);
+        if (warning) toast(warning, { timeout: 4000 });
+      }
+      return;
+    }
     if (item.kind === 'media') {
       if (!item.clips) {
         const ids = item.ids || [item.id];

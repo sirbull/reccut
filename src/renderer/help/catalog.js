@@ -85,7 +85,7 @@ Click **×** beside an effect name to remove it. Adjusted effects show a warning
 - **Matte gamma** adjusts fractional coverage without changing fully transparent or fully opaque pixels. Values above 1 strengthen fine detail.
 - **Black and white points** refine the matte. Black-and-white matte view helps identify holes or leftover background.
 - **Edge shrink/expand** adjusts the boundary; positive edge values shrink the foreground. **Feather** softens it.
-- **Invert** reverses visible and removed areas. **View** chooses Composite or matte; return to Composite before export, because matte view is exported too.
+- **Invert** reverses visible and removed areas. **View** chooses Composite or matte. Keep the black-and-white matte selected to export it for use in another project, as video or with Export Frame. Choose Composite to export the keyed picture instead.
 
 ## Film looks
 

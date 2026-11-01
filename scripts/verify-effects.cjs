@@ -93,12 +93,14 @@ app
         sourceFile,
       ]);
       await ui.webContents.executeJavaScript(`window.sourceFile = ${JSON.stringify(sourceFile)}`);
-      for (const name of ['verifyUI', 'verifySource', 'showSettings', 'verifyChat', 'verifyLook', 'verifyCommands', 'verifyFootage', 'verifySetup', 'verifyCreative', 'verifyBuiltinPlugins', 'verifyProcessor', 'verifyPip', 'verifyGradientUI', 'verifyEffectRemoval', 'verifyShadowUI', 'verifyAdjustmentUI']) {
+      await ui.webContents.executeJavaScript(`window.slideshowPhotoURL = ${JSON.stringify('data:image/jpeg;base64,' + fs.readFileSync(path.join(__dirname, '../docs/media/ba-before.jpg')).toString('base64'))}`);
+      for (const name of ['verifyUI', 'verifySource', 'showSettings', 'verifyChat', 'verifyLook', 'verifyCommands', 'verifyFootage', 'verifySetup', 'verifyCreative', 'verifyBuiltinPlugins', 'verifyProcessor', 'verifyPip', 'verifyGradientUI', 'verifyEffectRemoval', 'verifyShadowUI', 'verifyAdjustmentUI', 'verifySlideshowUI']) {
         const result = await ui.webContents.executeJavaScript(
           `uiVerification.${name}().catch(error=>({error:error.message,stack:error.stack}))`,
         );
         if (result.error) throw new Error(JSON.stringify(result));
         console.log(JSON.stringify({ ui: name, ...result }));
+        if (name === 'verifySlideshowUI') fs.writeFileSync(path.join(os.tmpdir(), 'reccut-slideshow-ui.png'), (await ui.webContents.capturePage()).toPNG());
         if (name === 'verifyShadowUI') fs.writeFileSync(path.join(os.tmpdir(), 'reccut-shadow-ui.png'), (await ui.webContents.capturePage()).toPNG());
         if (name === 'verifyAdjustmentUI') fs.writeFileSync(path.join(os.tmpdir(), 'reccut-adjustment-ui.png'), (await ui.webContents.capturePage()).toPNG());
         if (name === 'verifyGradientUI') fs.writeFileSync(path.join(os.tmpdir(), 'reccut-gradient-ui.png'), (await ui.webContents.capturePage()).toPNG());

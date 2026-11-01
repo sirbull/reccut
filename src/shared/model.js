@@ -101,7 +101,7 @@ export const EFFECTS = [
   { id: 'invert', label: 'Invert', prop: 'invert', min: 0, max: 1, def: 1, scale: 100, unit: '%', css: (v) => `invert(${v})` },
   { id: 'hue', label: 'Hue Shift', prop: 'hue', min: -180, max: 180, def: 90, unit: '°', css: (v) => `hue-rotate(${v}deg)` },
   { id: 'radius', label: 'Rounded Corners', prop: 'radius', min: 0, max: 50, def: 6, unit: '%', css: () => 'none' },
-  { id: 'shadow', label: 'Drop Shadow', prop: 'shadow', min: 0, max: 5, def: 0.6, scale: 100, unit: '%', css: () => 'none' },
+  { id: 'shadow', label: 'Drop Shadow', adjustment: false, prop: 'shadow', min: 0, max: 5, def: 0.6, scale: 100, unit: '%', css: () => 'none' },
   { id: 'border', label: 'Border', prop: 'border', min: 0, max: 40, def: 6, unit: 'px', css: () => 'none' },
 ];
 
@@ -417,7 +417,7 @@ export function defaultProps(type, media) {
     case 'video':
       return { ...visual, ...audio };
     case 'image':
-      return { ...visual };
+      return { ...visual, imageFit: 'contain', kenBurns: false, kenBurnsMode: 'in', kenBurnsAmount: 0.12, kenBurnsPan: 0.04 };
     case 'adjustment':
       return { ...visual, vfx: [] };
     case 'audio':
@@ -935,22 +935,31 @@ export function visualOpacity(clip, T) {
 // Lagene som skal tegnes ved tid T, nederst først.
 export function computeFrame(project, T, { captions = true } = {}) {
   const layers = [];
+  const inherited = new Set();
+  const visualSide = (clip, handles = false) => {
+    const side = { clip, T }, fg = project.clips[clip.slideshowForeground];
+    if (clip.slideshowId) side.slideshowFrame = true;
+    if (fg?.slideshowParent === clip.id && fg.enabled && !laneHidden(project, fg.lane) && !fg.transition && !fg.transitionOut &&
+      (handles || (T >= fg.start && T < fg.start + fg.dur))) {
+      side.companions = [fg]; inherited.add(fg.id);
+    }
+    return side;
+  };
   const primary = primaryAt(project, T);
   if (!laneHidden(project, 0)) {
     const p = primary;
     if (p?.transition) {
       layers.push({
         transition: p.transition,
-        a: p.a && p.a.enabled ? { clip: p.a, T } : null,
-        b: p.b?.enabled ? { clip: p.b, T } : null,
+        a: p.a && p.a.enabled ? visualSide(p.a, true) : null,
+        b: p.b?.enabled ? visualSide(p.b, true) : null,
       });
     } else if (p?.clip && p.clip.enabled && p.clip.type !== 'gap') {
-      layers.push({ clip: p.clip, T });
+      layers.push(visualSide(p.clip));
     }
   }
   const free = [];
   const upper = [];
-  const inherited = new Set();
   // PiP følger hovedklippets overgang, også i håndtakene utenfor selve kuttet.
   // En egen overgang på PiP-klippet kan fortsatt styres uavhengig.
   if (primary?.transition) {

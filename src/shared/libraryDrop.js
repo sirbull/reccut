@@ -90,7 +90,7 @@ export function libraryDropTarget(project, item, lane, T, { transitionDur = 1, t
   if (['effect', 'afx', 'apreset'].includes(item.kind)) {
     if (project.lanes?.[lane]?.locked) return null;
     const audio = item.kind !== 'effect';
-    const visualTypes = BROWSER_VIDEO_EFFECTS.some((e) => e.type === item.id) ? ['video', 'image', 'recording', 'adjustment'] : ['video', 'image', 'recording', 'title', 'adjustment'];
+    const visualTypes = item.id === 'kenBurns' ? ['image'] : BROWSER_VIDEO_EFFECTS.some((e) => e.type === item.id) ? ['video', 'image', 'recording', 'adjustment'] : ['video', 'image', 'recording', 'title', 'adjustment'];
     const c = Object.values(project.clips).find((c) => c.lane === lane && T >= c.start && T < c.start + c.dur && (audio ? clipHasAudio(c, project.media[c.mediaId]) : visualTypes.includes(c.type)));
     if (c) return { kind: 'effect', id: c.id, a: c.start, b: c.start + c.dur, lane, label: item.label };
     if (item.kind === 'effect' && lane >= 0 && lane !== CAPTION_LANE && BROWSER_VIDEO_EFFECTS.some((e) => e.type === item.id && e.category === 'Stylize')) {

@@ -1,3 +1,4 @@
+import { effectWarning } from '../../shared/effectSupport.js';
 import { useState } from 'preact/hooks';
 import { ArrowDown, ArrowUp, Copy } from 'lucide-preact';
 import {
@@ -32,6 +33,8 @@ export function VideoEffects({ clip }) {
     if (effect) Object.assign(effect.p, values);
   });
   const add = async (type, auto = false) => {
+    const warning = effectWarning(clip, type);
+    if (warning) return toast(warning, { timeout: 4000 });
     const e = makeVideoEffect(type);
     e.target = effectTarget;
     if (auto) {
@@ -274,7 +277,7 @@ export function VideoEffects({ clip }) {
                     />
                   </Row>
                   {p.view === 'matte' && (
-                    <p class="hint">Matte view also appears in exports. Return to Composite before exporting.</p>
+                    <p class="hint">Exports use this black &amp; white matte, so you can reuse it in another project. Choose Composite to export the keyed picture instead.</p>
                   )}
                 </details>
               </>
