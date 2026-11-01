@@ -392,7 +392,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     dirty = true;
   }
 
-  return { attachCanvas, resizeCanvas, start, stopLoop, play, pause, toggle, getRate, shuttle, seek, scrubAudio, invalidate: () => (dirty = true), dispose };
+  return { attachCanvas, resizeCanvas, start, stopLoop, play, pause, toggle, getRate, shuttle, seek, scrubAudio, invalidate: () => (dirty = true), dispose, sourceFor: getSource };
 
   function dispose() {
     stopLoop();

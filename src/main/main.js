@@ -25,6 +25,7 @@ const area = require('./area');
 const packager = require('./packager');
 const { createRecordUI } = require('./recordui');
 const updates = require('./updates');
+const plate = require('./plate');
 const { InputTracker, ZOOM_KEYS } = require('./input');
 
 const isMac = process.platform === 'darwin';
@@ -347,6 +348,11 @@ ipcMain.handle('updates:download', (_e, asset) => {
   const { id, done } = jobs.add({ kind: 'download', title: `Downloading ${asset.name}`, queue: 'light', run: (ctx) => updates.download(asset, (p) => ctx.progress(p)) });
   done.then((file) => send('updates:downloaded', { id, file })).catch((err) => send('updates:downloaded', { id, error: err.message }));
   return id;
+});
+// Bakgrunnsbilde for Remove Background (i bakgrunnen, med fremdrift).
+ipcMain.handle('media:plate', (_e, args) => {
+  const { done } = jobs.add({ kind: 'analyze', title: `Finding the background in ${path.basename(args.path)}`, queue: 'heavy', run: (ctx) => plate.analyzePlate(args, ctx) });
+  return done;
 });
 ipcMain.handle('app:version', () => app.getVersion());
 // Bare nettadresser til GitHub åpnes i nettleseren.

@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('api', {
   downloadUpdate: invoke('updates:download'),
   onUpdateDownloaded: on('updates:downloaded'),
   appVersion: invoke('app:version'),
+  analyzePlate: invoke('media:plate'),
   openExternal: invoke('shell:openExternal'),
   historyList: invoke('history:list'),
   historyLoad: invoke('history:load'),

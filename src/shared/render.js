@@ -5,6 +5,7 @@ import { drawTestCard } from './testcard.js';
 import { drawTemplate, findTemplate } from './titletemplates.js';
 import { stabilizeAt } from './stabilize.js';
 import { maskList, paintMask, shapeAt, shapeCorners, shapePath } from './shapes.js';
+import { activeVfx, processVfx } from './vfx.js';
 import {
   DEFAULT_CAPTION_STYLE,
   FONTS,
@@ -147,6 +148,86 @@ function zoomAround(ctx, W, H, s) {
 }
 
 // Fargekorrigering på skjermkortet når det finnes. Uten WebGL2 brukes enkle 2D-filtre.
+/* Effektstabelen. Bildet behandles i den størrelsen det tegnes i, så visningen er rask og
+   eksporten får full oppløsning. Bakgrunnsbildet for Remove Background lastes én gang. */
+let vfxCanvas = null;
+const plates = new Map(); // dataURL -> { img, data: Map(størrelse -> ImageData) }
+let onAssetLoaded = null;
+export function setAssetListener(fn) {
+  onAssetLoaded = fn;
+}
+// Klipp som ikke skal få effektene sine nå (mens fargen plukkes i visningen).
+export const vfxBypass = new Set();
+
+function makeCanvas(w, h) {
+  return typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
+}
+
+function plateFor(url) {
+  let e = plates.get(url);
+  if (e) return e.img ? e : null;
+  e = { img: null, data: new Map() };
+  plates.set(url, e);
+  fetch(url)
+    .then((r) => r.blob())
+    .then((b) => createImageBitmap(b))
+    .then((bmp) => {
+      e.img = bmp;
+      onAssetLoaded?.();
+    })
+    .catch(() => {});
+  return null;
+}
+
+// Eksporten venter til alle bakgrunnsbilder er lastet før den begynner.
+export async function preloadAssets(project) {
+  const urls = new Set();
+  for (const c of Object.values(project.clips)) for (const e of c.props?.vfx || []) if (e.type === 'bgRemove' && e.p?.plate) urls.add(e.p.plate);
+  for (const u of urls) {
+    plateFor(u);
+    for (let i = 0; i < 200 && !plates.get(u)?.img; i++) await new Promise((r) => setTimeout(r, 25));
+  }
+}
+
+function plateData(url, w, h) {
+  const e = url && plateFor(url);
+  if (!e) return null;
+  const key = `${w}x${h}`;
+  let d = e.data.get(key);
+  if (!d) {
+    const c = makeCanvas(w, h);
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(e.img, 0, 0, w, h);
+    d = g.getImageData(0, 0, w, h);
+    if (e.data.size > 4) e.data.clear();
+    e.data.set(key, d);
+  }
+  return d;
+}
+
+function withVfx(ctx, clip, src, W, H) {
+  const list = activeVfx(clip);
+  if (!list.length || vfxBypass.has(clip.id)) return src;
+  const m = ctx.getTransform();
+  const k = Math.hypot(m.a, m.b) || 1;
+  const full = containRect(src.w, src.h, W, H);
+  const pw = Math.max(32, Math.min(src.w, Math.round(full.w * k)));
+  const ph = Math.max(32, Math.round((pw * src.h) / src.w));
+  if (!vfxCanvas) vfxCanvas = makeCanvas(pw, ph);
+  if (vfxCanvas.width !== pw || vfxCanvas.height !== ph) {
+    vfxCanvas.width = pw;
+    vfxCanvas.height = ph;
+  }
+  const g = vfxCanvas.getContext('2d', { willReadFrequently: true });
+  g.clearRect(0, 0, pw, ph);
+  g.drawImage(src.img, 0, 0, pw, ph);
+  const img = g.getImageData(0, 0, pw, ph);
+  const plateUrl = list.find((e) => e.type === 'bgRemove')?.p?.plate;
+  processVfx(img, list, { scale: ph / 1080, plate: plateUrl ? plateData(plateUrl, pw, ph) : null });
+  g.putImageData(img, 0, 0);
+  return { img: vfxCanvas, w: src.w, h: src.h };
+}
+
 function graded(clip, T, src) {
   const g = gradeParams(clip, T);
   if (!g) return src;
@@ -273,6 +354,8 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmaske
   }
   if (clip.type === 'video' || clip.type === 'image') {
     let src = getSource(clip, 'main', s);
+    // Effektstabelen (keying og matte) behandles før fargekorrigeringen.
+    if (src) src = withVfx(ctx, clip, src, W, H);
     if (src) src = graded(clip, T, src);
     if (src) {
       const full = containRect(src.w, src.h, W, H);

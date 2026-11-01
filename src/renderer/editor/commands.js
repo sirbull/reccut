@@ -5,6 +5,7 @@ import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
 import { addMask, canMask, removeMask } from '../../shared/shapes.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, makeEffect, presetEffects } from '../../shared/audiofx.js';
+import { VIDEO_FX, guessKeyColor, makeVfx } from '../../shared/vfx.js';
 import { ALL_GROUPS, groupsWithContent, pasteAttributes, removeAttributes } from '../../shared/attributes.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
 import {
@@ -433,6 +434,116 @@ export function removeEffects() {
   const ids = attributeTargets();
   if (!ids.length) return;
   commit((q) => ids.forEach((id) => removeAttributes(q.clips[id], ['effects', 'afx', 'masks'])));
+}
+
+/* Effektstabel for bilde: keying, matte og fjerning av bakgrunn */
+
+function vfxTargets(clipId) {
+  const p = project.value;
+  const ok = (c) => c && (c.type === 'video' || c.type === 'image');
+  const ids = clipId ? [clipId].filter((id) => ok(p.clips[id])) : selection.value.filter((id) => ok(p.clips[id]));
+  if (!ids.length) toast('Select a video or image clip first, or drag the effect onto a clip.');
+  return ids;
+}
+
+export function addVfx(type, clipId = null, params = {}) {
+  if (!VIDEO_FX[type]) return [];
+  const ids = vfxTargets(clipId);
+  if (!ids.length) return [];
+  const made = [];
+  commit((q) => {
+    for (const id of ids) {
+      const e = makeVfx(type, params);
+      q.clips[id].props.vfx = [...(q.clips[id].props.vfx || []), e];
+      made.push({ clipId: id, fxId: e.id });
+    }
+  });
+  selection.value = ids;
+  inspectorTab.value = 'effects';
+  return made;
+}
+
+// Bildet i klippet ved spillhodet, i liten størrelse (til å finne nøkkelfargen og bakgrunnen).
+async function grabFrame(clip, width = 480) {
+  const { sourceFor } = await import('./playback.js');
+  const T = Math.min(Math.max(getTime(), clip.start), clip.start + clip.dur - 0.01);
+  if (getTime() !== T) {
+    seek(T);
+    await new Promise((r) => setTimeout(r, 350));
+  }
+  const src = sourceFor(clip, 'main');
+  if (!src) return null;
+  const h = Math.max(2, Math.round((width * src.h) / src.w));
+  const cv = Object.assign(document.createElement('canvas'), { width, height: h });
+  const g = cv.getContext('2d', { willReadFrequently: true });
+  g.drawImage(src.img, 0, 0, width, h);
+  return { canvas: cv, data: g.getImageData(0, 0, width, h) };
+}
+
+// Ett klikk: legg til en keyer og finn bakgrunnsfargen selv.
+export async function oneClickKey(clipId = null) {
+  const made = addVfx('keyer', clipId);
+  for (const m of made) {
+    const clip = project.value.clips[m.clipId];
+    const f = await grabFrame(clip).catch(() => null);
+    const color = f ? guessKeyColor(f.data) : null;
+    if (color) commit((q) => (q.clips[m.clipId].props.vfx.find((e) => e.id === m.fxId).p.color = color));
+    else toast('Could not find a solid background color at the edges of the picture. Pick the color in the viewer instead.', { timeout: 6000 });
+  }
+}
+
+// Plukk nøkkelfargen i visningen: effektene slås av for klippet mens du plukker.
+export const keyPick = signal(null); // { clipId, fxId }
+export async function startKeyPick(clipId, fxId) {
+  const { vfxBypass } = await import('../../shared/render.js');
+  const { invalidate } = await import('./playback.js');
+  vfxBypass.add(clipId);
+  keyPick.value = { clipId, fxId };
+  invalidate();
+}
+export async function finishKeyPick(color) {
+  const kp = keyPick.value;
+  keyPick.value = null;
+  const { vfxBypass } = await import('../../shared/render.js');
+  const { invalidate } = await import('./playback.js');
+  if (kp) vfxBypass.delete(kp.clipId);
+  if (kp && color) commit((q) => (q.clips[kp.clipId].props.vfx.find((e) => e.id === kp.fxId).p.color = color));
+  invalidate();
+}
+
+// Remove Background: bakgrunnen uten personen, enten fra et bilde der personen ikke er med,
+// eller funnet automatisk fra hele klippet (medianen av mange bilder).
+export async function plateFromPlayhead(clipId, fxId) {
+  const clip = project.value.clips[clipId];
+  const { vfxBypass } = await import('../../shared/render.js');
+  vfxBypass.add(clipId);
+  const f = await grabFrame(clip, 960).catch(() => null);
+  vfxBypass.delete(clipId);
+  if (!f) return toast('Could not read the frame. Play a moment and try again.');
+  const url = f.canvas.toDataURL('image/jpeg', 0.9);
+  commit((q) => (q.clips[clipId].props.vfx.find((e) => e.id === fxId).p.plate = url));
+}
+
+export async function plateFromClip(clipId, fxId) {
+  const p = project.value;
+  const clip = p.clips[clipId];
+  const m = p.media[clip?.mediaId];
+  const st = m?.streams?.main;
+  if (!st) return;
+  const a = Math.min(sourceTime(clip, clip.start), sourceTime(clip, clip.start + clip.dur));
+  const b = Math.max(sourceTime(clip, clip.start), sourceTime(clip, clip.start + clip.dur));
+  toast('Finding the background. Follow the progress at the top of the window.', { timeout: 3000 });
+  try {
+    const url = await api.analyzePlate({ path: st.optimized || st.path, from: a, to: b, width: st.width || m.width, height: st.height || m.height });
+    commit((q) => (q.clips[clipId].props.vfx.find((e) => e.id === fxId).p.plate = url));
+  } catch (err) {
+    toast(`Could not find the background: ${err.message}`, { kind: 'error', timeout: 8000 });
+  }
+}
+
+export async function removeBackground(clipId = null) {
+  const made = addVfx('bgRemove', clipId);
+  for (const m of made) await plateFromClip(m.clipId, m.fxId);
 }
 
 /* Lydeffekter */
@@ -1065,6 +1176,12 @@ export async function handleDrop(dt, lane, T) {
         }
       });
       if (added.length) selection.value = added;
+    } else if (item.kind === 'vfx') {
+      const target = hitClipAt(lane, T);
+      if (!target) return toast('Drop the effect onto a video or image clip.');
+      if (item.id === 'oneClickKey') oneClickKey(target);
+      else if (item.id === 'bgRemove') removeBackground(target);
+      else addVfx(item.id, target);
     } else if (item.kind === 'afx' || item.kind === 'apreset') {
       const target = hitAudioClipAt(lane, T);
       if (!target) return toast('Drop the audio effect onto a clip with sound.');

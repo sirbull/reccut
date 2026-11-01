@@ -3,6 +3,7 @@
 import { effect } from '@preact/signals';
 import { primaryAt } from '../../shared/model.js';
 import { createPlayer, fileUrl } from '../player.js';
+import { setAssetListener } from '../../shared/render.js';
 import { getTime, loadMotion, motionVersion, playing, project, setTime, skim } from './store.js';
 
 export { fileUrl };
@@ -14,7 +15,8 @@ const player = createPlayer({
   setTime,
 });
 
-export const { attachCanvas, resizeCanvas, start, stopLoop, getRate, invalidate, scrubAudio } = player;
+export const { attachCanvas, resizeCanvas, start, stopLoop, getRate, invalidate, scrubAudio, sourceFor } = player;
+setAssetListener(() => player.invalidate());
 
 export function play(r = 1) {
   skim.value = null;
