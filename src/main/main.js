@@ -24,6 +24,7 @@ if (developmentMode) app.setPath('userData', path.join(app.getPath('appData'), '
 const ff = require('./ffmpeg');
 const { finalizeRecordingStream } = require('./recording');
 const jobs = require('./jobs');
+const about = require('./about');
 const media = require('./media');
 const sequence = require('./sequence');
 const decoders = require('./decoders');
@@ -224,6 +225,7 @@ function buildMenu() {
 function menuFromTemplate(items) {
   return items.map((it) => {
     if (it.separator) return { type: 'separator' };
+    if (it.role === 'about') return { label: it.label, click: about.show };
     if (it.role && !it.submenu) return { role: it.role, label: it.label };
     if (it.submenu) return { label: it.label, role: it.role, submenu: menuFromTemplate(it.submenu) };
     return {
@@ -942,6 +944,8 @@ ipcMain.handle('project:pendingOpen', () => {
 });
 
 app.whenReady().then(() => {
+  // Ferdigbygd app får ikonet fra electron-builder; under utvikling viser Docken ellers Electron-ikonet.
+  if (!app.isPackaged) app.dock?.setIcon(path.join(__dirname, '../../assets/icon-mac.png'));
   protocol.handle('media', serveMedia);
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
     callback(['media', 'display-capture', 'mediaKeySystem', 'notifications', 'fullscreen'].includes(permission));

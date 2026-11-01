@@ -129,12 +129,9 @@ main {
   font-size: 13px;
   letter-spacing: 0.2px;
 }
-.logo {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 3px solid var(--accent);
-  box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.25);
+.wordmark {
+  height: 18px;
+  display: block;
 }
 .rooms {
   display: flex;

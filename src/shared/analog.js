@@ -39,6 +39,29 @@ export function tapeLine(y, h, s) {
     head * s.amount * (0.0015 + lineNoise * 0.005);
   return { shift, band, head, row, lineNoise };
 }
+function dropoutRows(y) {
+  const row = Math.floor(y), rows = [];
+  let total = 0;
+  for (let k = -2; k <= 2; k++) {
+    const weight = Math.exp(-0.5 * ((y - (row + k + 0.5)) / 0.65) ** 2);
+    rows.push([row + k, weight]); total += weight;
+  }
+  return rows.map(([r, weight]) => [r, weight / total]);
+}
+// Blur only the white dropout mask in tape-signal coordinates. The footage and
+// other noise keep their existing softness, and the blur scales with resolution.
+export function tapeDropout(x, y, s, head = 0, band = 0, rows = dropoutRows(y)) {
+  const threshold = 1 - s.amount * (0.0005 + head * 0.025 + band * 0.012);
+  let value = 0;
+  for (const [row, vertical] of rows) for (let k = -1; k <= 1; k++) {
+    const at = (x + k * 0.8) / 14, cell = Math.floor(at), within = fract(at);
+    if (random(fieldHash(cell, row, s.seed + 461)) > threshold) {
+      const profile = smooth(0, 0.15, within) * (1 - smooth(0.55, 1, within));
+      value += profile * vertical * (k === 0 ? 0.6 : 0.2);
+    }
+  }
+  return value;
+}
 // Bilinear, subpixel sampling is needed for optics and the small drift of tape.
 export function pixelSampler(data, w, h) {
   return (x, y, channel) => {
@@ -71,6 +94,7 @@ export function analogPixels(data, w, h, s, signal = data, sw = w, sh = h) {
   const lumaWeights = [0.06136, 0.24477, 0.38774, 0.24477, 0.06136];
   for (let y = 0; y < h; y++) {
     const line = s.type === 'vhs' ? tapeLine(y, h, s) : null;
+    const dropRows = line ? dropoutRows((y + 0.5) * 480 / h) : null;
     for (let x = 0; x < w; x++) {
       const offset = (y * w + x) * 4;
       let c;
@@ -94,9 +118,7 @@ export function analogPixels(data, w, h, s, signal = data, sw = w, sh = h) {
         const grain = (random(n) + random(n + 7919) - 1) * s.noise * 0.065;
         const chromaNoise = (random(fieldHash(Math.floor(x * 120 / w), Math.floor(line.row / 2), s.seed)) - 0.5) * s.noise * 0.035;
         ci += chromaNoise; cq -= chromaNoise * 0.6;
-        const tapeX = (x + 0.5) / w * 720 / 14, cell = Math.floor(tapeX), within = fract(tapeX);
-        const streak = random(fieldHash(cell, line.row, s.seed + 461)) > 1 - s.amount * (0.0005 + line.head * 0.025 + line.band * 0.012)
-          ? smooth(0, 0.15, within) * (1 - smooth(0.55, 1, within)) : 0;
+        const streak = tapeDropout((x + 0.5) * 720 / w, (y + 0.5) * 480 / h, s, line.head, line.band, dropRows);
         luma = luma * (1 - s.fade * 0.1) + s.fade * 0.025 + grain + streak * 0.5;
         luma *= 1 - s.scanlines * (0.5 + 0.5 * Math.cos((y + 0.5) / h * 480 * Math.PI)) * 0.12;
         const sat = 1 - s.fade * 0.25;

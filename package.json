@@ -1,7 +1,7 @@
 {
   "name": "reccut",
   "productName": "Reccut",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Record, edit and export tutorial videos",
   "main": "src/main/main.js",
   "author": "sirbull",
@@ -15,6 +15,7 @@
     "dist": "node scripts/fetch-ffmpeg.mjs && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --publish never",
     "dist:mac": "node scripts/fetch-ffmpeg.mjs && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --mac --publish never",
     "dist:win": "node scripts/fetch-ffmpeg.mjs win-x64 && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --win --publish never",
+    "dist:linux": "node scripts/fetch-ffmpeg.mjs linux-x64 && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --linux --x64 --publish never",
     "test": "node --test test/*.test.mjs",
     "test:render": "electron scripts/verify-effects.cjs",
     "test:analog": "electron scripts/verify-analog.cjs",
@@ -46,14 +47,17 @@
     "files": [
       "build/**/*",
       "src/main/**/*",
+      "assets/reccut-wordmark.svg",
       "src/shared/pluginTerms.json",
       "src/shared/recordingFormats.cjs",
       "package.json"
     ],
+    "icon": "assets/icon.png",
     "directories": {
       "output": "dist"
     },
     "mac": {
+      "icon": "assets/icon-mac.png",
       "category": "public.app-category.video",
       "target": [
         {
@@ -93,7 +97,8 @@
       "language": "1033"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "category": "AudioVideo"
     },
     "extraResources": [
       {

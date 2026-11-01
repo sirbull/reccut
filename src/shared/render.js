@@ -67,18 +67,22 @@ export function drawFrame(ctx, project, frame, getSource, { scale = 1, matrix = 
 function drawVisualSide(ctx, project, side, getSource, alpha = 1) {
   if (!side.companions?.length && !side.slideshowFrame) return drawClip(ctx, project, side.clip, side.T, getSource, alpha);
   if (alpha === 1) {
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, project.width, project.height); ctx.clip();
     if (side.slideshowFrame) { ctx.save(); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, project.width, project.height); ctx.restore(); }
     drawClip(ctx, project, side.clip, side.T, getSource);
     for (const clip of side.companions || []) drawClip(ctx, project, clip, side.T, getSource);
+    ctx.restore();
     return;
   }
   // Fade the image + background as one picture, so portrait/landscape changes
   // never expose an opaque copy of the previous foreground during a dissolve.
   const { c, g } = scratchCanvas(10, ctx.canvas.width, ctx.canvas.height);
   g.setTransform(ctx.getTransform());
+  g.save(); g.beginPath(); g.rect(0, 0, project.width, project.height); g.clip();
   if (side.slideshowFrame) { g.fillStyle = '#000'; g.fillRect(0, 0, project.width, project.height); }
   drawClip(g, project, side.clip, side.T, getSource);
   for (const clip of side.companions || []) drawClip(g, project, clip, side.T, getSource);
+  g.restore();
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = alpha;
   ctx.drawImage(c, 0, 0); ctx.restore();
 }
@@ -457,16 +461,16 @@ function drawAdjustment(ctx, project, clip, T, alpha) {
   if (!(k > 0) || !Number.isFinite(k)) return;
   const w = Math.max(1, Math.round(W * k)), h = Math.max(1, Math.round(H * k));
   const sx = w / W, sy = h / H;
-  const { c: original, g: og } = scratchCanvas(4, w, h);
+  const { c: original, g: og } = scratchCanvas(8, w, h); // drawWithEffects owns 4
   const inverse = m.inverse();
   og.setTransform(sx * inverse.a, sy * inverse.b, sx * inverse.c, sy * inverse.d, sx * inverse.e, sy * inverse.f);
   og.drawImage(ctx.canvas, 0, 0);
   const src = graded(clip, T, { img: original, w, h, pixelScale: k });
   const { c: processed, g: pg } = scratchCanvas(5, w, h);
   pg.setTransform(sx, 0, 0, sy, 0, 0);
-  drawWithEffects(pg, clip, T, { x: 0, y: 0, w: W, h: H }, H, () => {
-    pg.filter = colorFilter(clip, T, H * k);
-    pg.drawImage(src.img, 0, 0, src.w, src.h, 0, 0, W, H);
+  drawWithEffects(pg, clip, T, { x: 0, y: 0, w: W, h: H }, H, (g) => {
+    g.filter = colorFilter(clip, T, H * k);
+    g.drawImage(src.img, 0, 0, src.w, src.h, 0, 0, W, H);
   });
   const { c: mask, g: mg } = scratchCanvas(6, w, h);
   if (maskList(clip).length) paintMask(mg, clip, T, W, H, new DOMMatrix([sx, 0, 0, sy, 0, 0]), w, h);

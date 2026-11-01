@@ -19,6 +19,8 @@ jobs:
             name: mac
           - os: windows-latest
             name: windows
+          - os: ubuntu-latest
+            name: linux
     runs-on: ${{ matrix.os }}
     env:
       # Ingen kodesignering foreløpig.
@@ -41,6 +43,10 @@ jobs:
         if: matrix.name == 'windows'
         run: npx electron-builder --win --x64 --publish never
 
+      - name: Bygg for Linux
+        if: matrix.name == 'linux'
+        run: npx electron-builder --linux --x64 --publish never
+
       # FFmpeg er en egen binærfil per arkitektur, så Mac bygges i to omganger.
       - name: Bygg for Mac (Apple Silicon)
         if: matrix.name == 'mac'
@@ -62,6 +68,7 @@ jobs:
           path: |
             dist/*.dmg
             dist/*.exe
+            dist/*.AppImage
           if-no-files-found: error
 
       - name: Legg ved i release
@@ -71,3 +78,4 @@ jobs:
           files: |
             dist/*.dmg
             dist/*.exe
+            dist/*.AppImage

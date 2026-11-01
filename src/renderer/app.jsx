@@ -55,6 +55,7 @@ import { CommandPalette, HelpCenter, installHelpBridge } from './help/Help.jsx';
 import { SettingsWindow } from './Settings.jsx';
 import { prefs } from './prefs.js';
 import { helpOpen, paletteOpen } from './registry.js';
+import wordmark from '../../assets/reccut-wordmark.svg';
 import { isTyping, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } from './keyboard.js';
 import { installFileDrop } from './fileDrop.js';
 
@@ -153,8 +154,7 @@ function TitleBar() {
   return (
     <header class={`titlebar${isMac ? ' mac' : ''}`}>
       <div class="brand">
-        <span class="logo" />
-        Reccut
+        <img class="wordmark" src={`data:image/svg+xml,${encodeURIComponent(wordmark)}`} alt="Reccut" />
       </div>
       <div class="rooms">
         <button class={r === 'record' ? 'active' : ''} onClick={() => (room.value = 'record')} title={`Record (${isMac ? '⌘' : 'Ctrl+'}1)`}>

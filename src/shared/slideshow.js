@@ -74,6 +74,7 @@ export function addSlideshow(project, mediaIds, options = {}, { seed = Math.floo
 export function slideshowPreviewProject(source, ids, options) {
   const p = newProject('Slideshow preview');
   Object.assign(p, { width: source.width, height: source.height, fps: source.fps, media: source.media, autoFormat: false });
-  addSlideshow(p, ids.slice(0, 3), options, { seed: 1729 });
+  const ordered = options.order === 'name' ? [...ids].sort((a, b) => (source.media[a]?.name || '').localeCompare(source.media[b]?.name || '', undefined, { numeric: true, sensitivity: 'base' })) : ids;
+  addSlideshow(p, ordered.slice(0, 3), options, { seed: 1729 });
   return p;
 }

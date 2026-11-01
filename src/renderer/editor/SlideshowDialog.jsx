@@ -57,7 +57,7 @@ export function SlideshowDialog() {
           {options.transitionMode !== 'none' && numeric('transitionDuration', 'Transition duration', 1 / source.fps, Math.min(4, options.duration * 0.45))}
           {options.transitionMode === 'random' && <div class="slideshow-transition-list">
             {TRANSITIONS.map((t) => <label key={t.id}><input type="checkbox" checked={options.transitions.includes(t.id)}
-              onChange={(e) => patch('transitions', e.currentTarget.checked ? [...options.transitions, t.id] : options.transitions.filter((id) => id !== t.id))} />{t.label}</label>)}
+              onChange={(e) => { const checked = e.currentTarget.checked; setOptions((p) => ({ ...p, transitions: checked ? [...new Set([...p.transitions, t.id])] : p.transitions.filter((id) => id !== t.id) })); }} />{t.label}</label>)}
           </div>}
         </fieldset>
         <fieldset><legend>Framing & motion</legend>
@@ -89,7 +89,7 @@ function SlideshowPreview({ source, ids, options }) {
   const preview = useMemo(() => slideshowPreviewProject(source, ids, options.transitionMode === 'random' && !options.transitions.length ? { ...options, transitionMode: 'none' } : options), [source, ids, options]);
   useEffect(() => {
     let live = true;
-    for (const id of ids.slice(0, 3)) {
+    for (const id of [...new Set(Object.values(preview.clips).map((c) => c.mediaId).filter(Boolean))]) {
       const m = source.media[id], path = m?.streams?.main?.proxy || m?.path || m?.streams?.main?.path;
       if (!path || images.current.has(id)) continue;
       const image = new Image(); images.current.set(id, image);
@@ -97,7 +97,7 @@ function SlideshowPreview({ source, ids, options }) {
       image.src = /^(data:|blob:)/.test(path) ? path : fileUrl(path);
     }
     return () => { live = false; };
-  }, [ids]);
+  }, [ids, options.order]);
   useEffect(() => {
     time.current = Math.min(time.current, Math.max(0, preview.duration - 0.01));
     let raf, last = performance.now(), painted = 0, label = 0;

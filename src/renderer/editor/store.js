@@ -367,9 +367,15 @@ export async function openProjectFile(path) {
   setProject(p, path);
   const offline = await checkOffline();
   if (offline.length) {
-    import('../ui.jsx').then(({ toast }) =>
-      toast(`${offline.length} media file${offline.length > 1 ? 's are' : ' is'} missing and shown as Media Offline. Right click a clip in the browser and choose Relink File to find it.`, { kind: 'error', timeout: 10000 })
-    );
+    // Meldingen gjelder bare Edit, så den venter til brukeren går dit (og droppes hvis et annet prosjekt åpnes først).
+    const stop = effect(() => {
+      if (room.value !== 'edit') return;
+      queueMicrotask(() => stop());
+      if (projectPath.value !== path) return;
+      import('../ui.jsx').then(({ toast }) =>
+        toast(`${offline.length} media file${offline.length > 1 ? 's are' : ' is'} missing and shown as Media Offline. Right click a clip in the browser and choose Relink File to find it.`, { kind: 'error', timeout: 10000 })
+      );
+    });
   }
   // Finn analyser som mangler (for eksempel etter at bufferen er tømt).
   const missing = [];

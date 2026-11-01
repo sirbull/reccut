@@ -552,7 +552,39 @@ Select a clip or a range in the browser, then:
 
 You can also drag clips from the browser to the timeline, or drop files straight from the Finder or Explorer.
 `,
-    see: ['browser', 'editing'],
+    see: ['browser', 'editing', 'slideshow'],
+  },
+  {
+    id: 'slideshow', section: 'Editing', title: 'Photo Slideshows and Ken Burns',
+    summary: 'Create an editable slideshow from selected images, with transitions, motion and blurred backgrounds.',
+    keywords: 'slideshow photo photos images still ken burns pan zoom fill height width stretch blur background bildeserie lysbilder',
+    body: `Select still images in the Media browser with Shift or Cmd/Ctrl-click. Right-click one of the selected images and choose **Add as Slideshow…**, or use **Edit → Add Selected Photos as Slideshow…**.
+
+Set **Photo duration** and choose browser order, file-name order or a shuffled order. The slideshow appends after existing timeline content. Photo duration is the spacing between cuts; transitions are centered on those cuts, so they do not shorten the total slideshow.
+
+## Transitions
+
+Choose **None** for straight cuts, **Cross Dissolve only**, or **Random from selected types**. With Random, check the types you want. Choices are made once when the slideshow is created and saved with the clips; they do not change during playback. Transition length is limited to less than half a photo so neighboring transitions do not overlap. You can edit each transition later on the timeline.
+
+## Framing and motion
+
+- **Fit entire image** keeps the complete photo visible.
+- **Fill frame** crops enough to cover the sequence.
+- **Fill height** and **Fill width** preserve proportions and match that dimension; the other dimension can be cropped or leave empty space.
+- **Stretch** fills both dimensions and changes proportions.
+
+Choose **None**, **Ken Burns · pan & zoom**, or **Slow pan** for movement. Motion amount controls the zoom. Directions vary across images, and movement eases at the endpoints. An image’s motion remains continuous when the clip is split.
+
+For a single image, apply **Ken Burns** from Effects → Photo motion, or enable it in **Video → Image framing & motion**. Choose zoom in/out or a pan direction and adjust Zoom / travel. Image fit, cropping and ordinary Transform controls remain editable.
+
+## Dark blurred photo background
+
+Enable **Dark, blurred copy of each photo** to create a separate image clip underneath the foreground. Each copy fills the frame, is enlarged slightly to hide blur edges, darkened and blurred. The foreground stays clear. Adjust Background blur and Darkening in the dialog, or edit the background clip’s effects and color afterward.
+
+The image and its background share timing and transition as a single picture, including portrait-to-landscape changes. Clicking either clip lets you edit its appearance independently; timing edits, splits, copies and deletion keep the pair together.
+
+Preview the first three photos, pause or scrub to inspect motion and transitions, then choose **Add Photos**. **Remember these settings** saves defaults for next time. Cancel leaves the timeline unchanged. Creation is one Undo step. Preview and export use the same renderer.
+`, see: ['adding', 'transitions', 'keyframes', 'effects'],
   },
   {
     id: 'cutting',

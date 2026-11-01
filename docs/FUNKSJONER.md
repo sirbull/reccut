@@ -4,7 +4,7 @@
 
 Appen het tidligere OBSlite. Innstillinger, nylige prosjekter og prosjekter med endelsen .obslite flyttes over og åpnes som før.
 
-Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet er på engelsk. Appen er delt i tre faner, **Record**, **Edit** og **Export** (Cmd 1, 2 og 3), som kan brukes hver for seg: du kan redigere uten å ha tatt opp, og eksportere eller konvertere filer uten å ha redigert.
+Ta opp, rediger og eksporter video i én app, for Mac, Windows og Linux. Grensesnittet er på engelsk. Appen er delt i tre faner, **Record**, **Edit** og **Export** (Cmd 1, 2 og 3), som kan brukes hver for seg: du kan redigere uten å ha tatt opp, og eksportere eller konvertere filer uten å ha redigert.
 
 ## Opptak
 
@@ -50,7 +50,7 @@ Ta opp, rediger og eksporter video i én app, for Mac og Windows. Grensesnittet 
 
 * **Lange prosjekter**: endringer lages med delt struktur, så bare det som endres kopieres, og en tidsindeks gjør at avspilling, eksport og lydmiks bare ser på klippene nær spillhodet. Tidslinjen lager bare komponenter for det som synes. Målt med 3100 klipp over to og en halv time: en endring tar 5 ms (før 27 ms), og oppslag for bilde og lyd 0,05 og 0,03 ms (før 1,3 og 1,8 ms), som også gjør eksport av lange prosjekter mye raskere.
 * **Virker helt uten nett.** Med nett ser Reccut én gang i døgnet etter nye versjoner under Releases på GitHub, og kan laste ned installasjonsfilen for maskinen til Nedlastinger. Ingenting installeres før du selv åpner filen. Help, Check for Updates sjekker med en gang, og den automatiske sjekken kan slås av under Settings.
-* **Ny versjon på GitHub**: øk versjonen i package.json, lag en tagg som `v0.3.0` og push den. Arbeidsflyten i `.github/workflows/build.yml` bygger for Mac (Apple Silicon og Intel) og Windows og legger filene ved en release, og appen finner den automatisk.
+* **Ny versjon på GitHub**: øk versjonen i package.json, lag en tagg som `v0.3.0` og push den. Arbeidsflyten i `.github/workflows/build.yml` bygger for Mac (Apple Silicon og Intel), Windows og Linux og legger filene ved en release, og appen finner den automatisk.
 
 ## Redigering
 
@@ -211,12 +211,13 @@ På Windows brukes Ctrl i stedet for Cmd og Alt i stedet for Option.
 
 ## Installere
 
-Installasjonsfiler bygges av GitHub Actions: fanen **Actions**, arbeidsflyten **Bygg installasjonsfiler**, knappen **Run workflow**. Ferdige filer ligger under **Artifacts**: `.dmg` for Mac (Apple Silicon og Intel) og `.exe` for Windows. Med en tag som `v0.2.0` legges de også ved en release.
+Installasjonsfiler bygges av GitHub Actions: fanen **Actions**, arbeidsflyten **Bygg installasjonsfiler**, knappen **Run workflow**. Ferdige filer ligger under **Artifacts**: `.dmg` for Mac (Apple Silicon og Intel) `.exe` for Windows og `.AppImage` for Linux (x64). Med en tag som `v0.2.0` legges de også ved en release.
 
 Appen er ikke kodesignert ennå:
 
 * **Mac:** Hvis macOS sier at appen er skadet, kjør `xattr -cr /Applications/Reccut.app` i Terminal. Gi tilgang til kamera, mikrofon og skjermopptak. For tastetrykk og forstørret peker trengs også tilgang under Personvern og sikkerhet, Tilgjengelighet. Start appen på nytt etter at tilgang er gitt.
 * **Windows:** Velg **Mer informasjon** og **Kjør likevel** hvis SmartScreen advarer.
+* **Linux:** Kjør `chmod +x Reccut-*.AppImage` og start filen. Ubuntu 22.04 og nyere trenger `sudo apt install libfuse2`. Lukker den seg med en sandbox-feil (Ubuntu 24.04), start den med `--no-sandbox`. Tastetrykk og forstørret peker krever en X11-økt. Systemlyd tas ikke opp på Linux, og HEVC-klipp gjøres om før avspilling.
 
 ## Kjøre fra kildekoden
 

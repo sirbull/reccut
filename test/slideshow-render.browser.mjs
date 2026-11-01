@@ -25,6 +25,9 @@ export function verifySlideshowRender() {
   assert(mid.seen.size === 4, 'both image pairs must be loaded during a transition');
   assert(computeFrame(p, 4.8).layers.length === 1, 'foregrounds must not be drawn twice during transitions');
   const reduced = render(5, 0.5).pixel(120, 60); assert(Math.abs(reduced[0] - 128) <= 2 && Math.abs(reduced[2] - 128) <= 2, 'scaled export must preserve paired dissolves');
+  p.clips[p.primary[1]].transition.type = 'slideLeft';
+  const push = render(5);
+  assert(push.pixel(119, 60)[0] > 250 && push.pixel(121, 60)[2] > 250, 'oversized blur backgrounds must stay inside their own frame during a push');
   for (const transition of TRANSITIONS) {
     p.clips[p.primary[1]].transition.type = transition.id;
     for (const t of [4.6, 4.9, 5.1, 5.4]) assert(render(t).pixel(120, 60)[3] === 255, `${transition.id} must keep slideshow composite opaque`);

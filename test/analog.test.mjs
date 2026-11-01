@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analogPixels, filmTexture, tapeLine } from '../src/shared/analog.js';
+import { analogPixels, filmTexture, tapeLine, tapeDropout } from '../src/shared/analog.js';
 import { stylizePixels, stylizeSettings } from '../src/shared/stylize.js';
 import { makeVideoEffect, VIDEO_EFFECTS } from '../src/shared/videoEffects.js';
 const image = (w, h, pixel) => {
@@ -44,6 +44,20 @@ test('tracking errors are brief events, with stable timing when seeking', () => 
   assert.ok(frames.length > 0 && frames.length < 60, 'tracking faults must be occasional');
   assert.deepEqual(tapeLine(123, 480, settings('vhs', {}, 2.5)), tapeLine(123, 480, settings('vhs', {}, 2.5)));
   assert.equal(tapeLine(24, 48, settings('vhs')).row, 245, 'integer tape rows must not depend on floating point rounding');
+});
+
+test('white VHS dropouts have soft vertical shoulders instead of hard scanline edges', () => {
+  const s = settings('vhs', { amount: 1 });
+  let x, row;
+  for (let y = 10; y < 80 && x === undefined; y++) for (let cell = 1; cell < 50; cell++) {
+    const at = cell * 14 + 7;
+    if (tapeDropout(at, y + 0.5, s, 1) > 0.5) { x = at; row = y; break; }
+  }
+  assert.ok(x !== undefined, 'fixture must contain a dropout');
+  const peak = tapeDropout(x, row + 0.5, s, 1), shoulder = tapeDropout(x, row + 1.5, s, 1);
+  assert.ok(peak < 0.9, 'the sharp white peak must be softened');
+  assert.ok(shoulder > 0.05 && shoulder < peak, 'blur must extend smoothly into neighboring rows');
+  assert.equal(tapeDropout(x, row + 0.5, { ...s, amount: 0 }, 1), 0);
 });
 
 test('chromatic aberration aligns the lens center and increases fringing at the edges', () => {

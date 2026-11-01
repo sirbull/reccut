@@ -2,7 +2,7 @@
 
 <p align="center">
   Video editing and screen recording in one app.<br>
-  Free and open source, for Mac and Windows.
+  Free and open source, for Mac, Windows and Linux.
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
   <img src="docs/media/overview.jpg" alt="The Reccut video editor with imported nature footage, a title in the viewer, and video, title and music tracks on the timeline">
 </p>
 
-Reccut is a free, open-source video editor and screen recorder for Mac and Windows. Import video from your camera or phone, arrange clips on a magnetic timeline, mix sound, correct colour and add titles or subtitles. Use it for a short film, an interview, a travel video or a YouTube project.
+Reccut is a free, open-source video editor and screen recorder for Mac, Windows and Linux. Import video from your camera or phone, arrange clips on a magnetic timeline, mix sound, correct colour and add titles or subtitles. Use it for a short film, an interview, a travel video or a YouTube project.
 
 The built-in screen recorder captures your screen, camera and microphone straight into a project. You can also use **Export** to convert files. Recording and editing run on your own machine and work offline. Optional **AI agents** can edit for you using a model you choose from a cloud provider or a local model server.
 
@@ -169,12 +169,13 @@ Reccut's source code is available under the **MIT licence**. You can build it yo
 
 ## Install
 
-Download the latest version from [Releases](https://github.com/sirbull/reccut/releases/latest): `.dmg` for Mac (Apple Silicon and Intel) and `.exe` for Windows.
+Download the latest version from [Releases](https://github.com/sirbull/reccut/releases/latest): `.dmg` for Mac (Apple Silicon and Intel), `.exe` for Windows and `.AppImage` for Linux (x64).
 
 The app is not code-signed yet:
 
 - **Mac:** if macOS says the app is damaged, run `xattr -cr /Applications/Reccut.app` in Terminal. Allow access to camera, microphone and screen recording. Keystrokes and cursor zoom also need access under Privacy & Security → Accessibility. Restart the app after granting access.
 - **Windows:** if SmartScreen warns you, choose **More info** and **Run anyway**.
+- **Linux:** run `chmod +x Reccut-*.AppImage` and start the file. Ubuntu 22.04 and newer need `sudo apt install libfuse2`. If it closes right away with a sandbox error (Ubuntu 24.04), start it with `--no-sandbox`. Keystrokes and cursor zoom need an X11 session. System audio is not recorded on Linux, and HEVC clips are converted before playback.
 
 Reccut checks GitHub for new versions once a day and can download the installer for you. Nothing is installed until you open it yourself, and the check can be turned off in Settings.
 
@@ -188,12 +189,12 @@ cd reccut
 npm install      # also downloads FFmpeg
 npm start        # builds the interface and starts the app
 npm test         # tests the editing logic
-npm run dist:mac # or dist:win, builds an installer
+npm run dist:mac # or dist:win / dist:linux, builds an installer
 ```
 
 `npm start` runs with its own profile (**Reccut Development**), so it doesn't share settings with an installed copy.
 
-To publish a new version, bump the version in `package.json`, tag it (for example `v0.3.0`) and push the tag. The workflow in `.github/workflows/build.yml` builds for Mac and Windows and attaches the files to a release.
+To publish a new version, bump the version in `package.json`, tag it (for example `v0.3.0`) and push the tag. The workflow in `.github/workflows/build.yml` builds for Mac, Windows and Linux and attaches the files to a release.
 
 | Folder | Contents |
 | --- | --- |

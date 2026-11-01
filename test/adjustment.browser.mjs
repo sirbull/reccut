@@ -97,7 +97,11 @@ function verifyAdjustment() {
   const exposed = render();
   assert(pixel(exposed, 90, 50)[0] > pixel(plain, 90, 50)[0], 'Color controls must adjust the composite');
   assert(JSON.stringify(pixel(exposed, 120, 20)) === '[0,255,0,255]', 'Color controls must not affect upper tracks');
-  a.props.exposure = 0; a.props.vfx = [makeVideoEffect('gradient')]; a.props.vfx[0].p.mode = 'freeform';
+  a.props.exposure = 0; a.props.vignette = 0.5;
+  const vignetted = render();
+  assert(JSON.stringify(pixel(vignetted, 90, 45)) === JSON.stringify(pixel(plain, 90, 45)), 'vignette must keep the composite in the center');
+  assert(pixel(vignetted, 3, 3)[0] > 0 && pixel(vignetted, 3, 3)[0] < pixel(plain, 3, 3)[0], 'vignette must darken, not erase, the composite edges');
+  a.props.vignette = 0; a.props.vfx = [makeVideoEffect('gradient')]; a.props.vfx[0].p.mode = 'freeform';
   const full = render(), cropped = render({ crop: true });
   for (const [x, y] of [[10, 60], [55, 60]]) assert(pixel(cropped, x, y, 80).every((v, i) => Math.abs(v - pixel(full, x + 40, y)[i]) <= 1), 'cropped exports must retain project-space gradient geometry');
   const reduced = render({ scale: 0.5 });

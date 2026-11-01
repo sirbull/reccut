@@ -17,6 +17,22 @@ float grainField(vec2 p,uint salt){
 float filmTexture(vec2 p,uint salt){
   return grainField(p/film.x,seed+salt)*(1.0-film.y*0.35)+grainField(p/(film.x*0.57)+vec2(73.2,19.7),seed+salt+101u)*film.y*0.65;
 }
+float tapeDropout(vec2 p,float head,float band){
+  float threshold=1.0-amount*(0.0005+head*0.025+band*0.012);
+  float row=floor(p.y),value=0.0,total=0.0;
+  for(int j=-2;j<=2;j++){
+    float vertical=exp(-0.5*pow((p.y-(row+float(j)+0.5))/0.65,2.0));
+    total+=vertical;
+    for(int k=-1;k<=1;k++){
+      float at=(p.x+float(k)*0.8)/14.0,within=fract(at);
+      if(random(fieldHash(ivec2(floor(at),row+float(j)),seed+461u))>threshold){
+        float profile=smoothstep(0.0,0.15,within)*(1.0-smoothstep(0.55,1.0,within));
+        value+=profile*vertical*(k==0?0.6:0.2);
+      }
+    }
+  }
+  return value/total;
+}
 vec3 renderTape(vec2 p){
   vec2 size=outputSize();float v=(p.y+0.5)/size.y;uint row=(uint(p.y)*2u+1u)*240u/uint(size.y);
   uint eventSeed=hash(baseSeed+uint(floor(clock*1.2))*92821u);float phase=fract(clock*1.2);
@@ -45,9 +61,7 @@ vec3 renderTape(vec2 p){
   float grain=(random(n)+random(n+7919u)-1.0)*noiseAmount*0.065;
   float chromaNoise=(random(fieldHash(ivec2(int(uint(p.x)*120u/uint(size.x)),int(row/2u)),seed))-0.5)*noiseAmount*0.035;
   chroma+=vec2(chromaNoise,-chromaNoise*0.6);
-  float tapeX=(p.x+0.5)/size.x*720.0/14.0,within=fract(tapeX);
-  float streak=random(fieldHash(ivec2(floor(tapeX),int(row)),seed+461u))>1.0-amount*(0.0005+head*0.025+band*0.012)
-    ?smoothstep(0.0,0.15,within)*(1.0-smoothstep(0.55,1.0,within)):0.0;
+  float streak=tapeDropout((p+0.5)*vec2(720,480)/size,head,band);
   luma=luma*(1.0-tape.w*0.1)+tape.w*0.025+grain+streak*0.5;
   luma*=1.0-lineAmount*(0.5+0.5*cos((p.y+0.5)/size.y*480.0*3.14159265359))*0.12;
   chroma*=1.0-tape.w*0.25;
