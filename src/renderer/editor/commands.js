@@ -35,6 +35,7 @@ import {
   trimClip,
 } from '../../shared/ops.js';
 import {
+  addMediaRecords,
   commit,
   endTransient,
   updateTransient,
@@ -544,6 +545,63 @@ export async function plateFromClip(clipId, fxId) {
 export async function removeBackground(clipId = null) {
   const made = addVfx('bgRemove', clipId);
   for (const m of made) await plateFromClip(m.clipId, m.fxId);
+}
+
+/* Tillegg (plugins): et eksternt program behandler klippet, og resultatet erstatter det. */
+
+export const pluginDialog = signal(null); // { plugin, clipId }
+
+export async function openRunPlugin(pluginId, clipId = null) {
+  const id = clipId || selection.value.find((x) => ['video', 'image'].includes(project.value.clips[x]?.type));
+  if (!id) return toast('Select a video clip first.');
+  const list = await api.pluginsList();
+  const plugin = list.find((p) => p.id === pluginId);
+  if (!plugin) return toast('The plugin is not installed. Install it under Settings, Plugins.');
+  if (plugin.errors.length) return toast(`The plugin has errors: ${plugin.errors.join(', ')}`, { kind: 'error' });
+  pluginDialog.value = { plugin, clipId: id };
+}
+
+export async function runPlugin(pluginId, clipId, params = {}) {
+  pluginDialog.value = null;
+  const p = project.value;
+  const clip = p.clips[clipId];
+  const m = p.media[clip?.mediaId];
+  const st = m?.streams?.main;
+  if (!st) return;
+  const list = await api.pluginsList();
+  const plugin = list.find((x) => x.id === pluginId);
+  // Hele den delen av kilden som klippet bruker, så klippet kan trimmes litt etterpå.
+  const a = Math.max(0, Math.min(sourceTime(clip, clip.start), sourceTime(clip, clip.start + clip.dur)) - 0.5);
+  const b = Math.min(m.duration || 1e9, Math.max(sourceTime(clip, clip.start), sourceTime(clip, clip.start + clip.dur)) + 0.5);
+  toast(`${plugin.manifest.name} is working on ${clip.name || m.name}. Follow the progress at the top of the window.`, { timeout: 4000 });
+  try {
+    const out = await api.pluginsRun({ pluginId, pluginName: plugin.manifest.name, source: st.optimized || st.path, from: a, to: b, fps: m.fps || p.fps, params, outDir: projectFolders.value?.media || projectFolders.value?.root, name: (clip.name || m.name).replace(/\.[^.]+$/, '') });
+    const { items } = await api.importMedia([out]);
+    const nm = items?.[0];
+    if (!nm) throw new Error('Could not read the result.');
+    addMediaRecords([nm]);
+    commit((q) => {
+      const c = q.clips[clipId];
+      // Originalen huskes, så klippet kan settes tilbake.
+      c.props.pluginOriginal = { mediaId: c.mediaId, in: c.in, plugin: plugin.manifest.name };
+      c.mediaId = nm.id;
+      c.in = Math.max(0, c.in - a);
+    });
+    toast(`${plugin.manifest.name} is done. The clip now uses the result.`, { kind: 'success', timeout: 6000 });
+  } catch (err) {
+    toast(`${plugin.manifest.name} failed: ${err.message}`, { kind: 'error', timeout: 12000 });
+  }
+}
+
+export function revertPlugin(clipId) {
+  commit((q) => {
+    const c = q.clips[clipId];
+    const o = c?.props?.pluginOriginal;
+    if (!o) return;
+    c.mediaId = o.mediaId;
+    c.in = o.in;
+    delete c.props.pluginOriginal;
+  });
 }
 
 /* Lydeffekter */

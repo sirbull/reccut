@@ -49,6 +49,9 @@ function copyStatic() {
   const kitOut = path.join(out, 'template-kit');
   fs.mkdirSync(kitOut, { recursive: true });
   if (fs.existsSync(kit)) for (const f of fs.readdirSync(kit)) fs.copyFileSync(path.join(kit, f), path.join(kitOut, f));
+  // Tillegg som følger med (eksempler og maler).
+  const plugins = path.join(root, 'assets/plugins');
+  if (fs.existsSync(plugins)) fs.cpSync(plugins, path.join(out, 'plugins'), { recursive: true });
   // Whisper kjører med onnxruntime-web, som trenger wasm-filene lokalt.
   const ort = path.join(root, 'node_modules/onnxruntime-web/dist');
   const ortOut = path.join(out, 'ort');

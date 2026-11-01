@@ -26,6 +26,7 @@ const packager = require('./packager');
 const { createRecordUI } = require('./recordui');
 const updates = require('./updates');
 const plate = require('./plate');
+const plugins = require('./plugins');
 const { InputTracker, ZOOM_KEYS } = require('./input');
 
 const isMac = process.platform === 'darwin';
@@ -352,6 +353,25 @@ ipcMain.handle('updates:download', (_e, asset) => {
 // Bakgrunnsbilde for Remove Background (i bakgrunnen, med fremdrift).
 ipcMain.handle('media:plate', (_e, args) => {
   const { done } = jobs.add({ kind: 'analyze', title: `Finding the background in ${path.basename(args.path)}`, queue: 'heavy', run: (ctx) => plate.analyzePlate(args, ctx) });
+  return done;
+});
+// Tillegg (plugins)
+ipcMain.handle('plugins:list', () => plugins.list());
+ipcMain.handle('plugins:bundled', () => plugins.bundled());
+ipcMain.handle('plugins:install', async (_e, srcDir) => {
+  let d = srcDir;
+  if (!d) {
+    const r = await dialog.showOpenDialog(win, { title: 'Choose a plugin folder (with plugin.json)', properties: ['openDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    d = r.filePaths[0];
+  }
+  return plugins.install(d);
+});
+ipcMain.handle('plugins:remove', (_e, id) => plugins.remove(id));
+ipcMain.handle('plugins:settings', (_e, id, values) => plugins.saveSettings(id, values));
+ipcMain.handle('plugins:openFolder', () => plugins.openFolder());
+ipcMain.handle('plugins:run', (_e, job) => {
+  const { done } = jobs.add({ kind: 'plugin', title: `${job.pluginName}: ${job.name}`, queue: 'heavy', run: (ctx) => plugins.run(job, ctx) });
   return done;
 });
 ipcMain.handle('app:version', () => app.getVersion());

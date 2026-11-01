@@ -1,0 +1,16 @@
+{
+  "id": "denoise-example",
+  "name": "Denoise (example)",
+  "version": "1.0",
+  "type": "clip-processor",
+  "description": "An example plugin that removes video noise with FFmpeg. Use it as a starting point for your own plugins.",
+  "input": { "format": "video", "extension": "mov" },
+  "output": { "format": "video", "extension": "mov" },
+  "params": [
+    { "id": "strength", "label": "Strength", "type": "number", "min": 1, "max": 20, "default": 6 }
+  ],
+  "run": {
+    "program": "{ffmpeg}",
+    "args": ["-y", "-i", "{input}", "-vf", "hqdn3d={strength}", "-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le", "{output}"]
+  }
+}

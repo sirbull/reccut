@@ -1,0 +1,20 @@
+{
+  "id": "corridorkey",
+  "name": "CorridorKey",
+  "version": "1.0",
+  "type": "clip-processor",
+  "description": "AI green screen keying with CorridorKey from Corridor Digital. Install CorridorKey on your computer first (it needs Python and a graphics card), then set the command below.",
+  "homepage": "https://github.com/nikopueringer/CorridorKey",
+  "input": { "format": "png-sequence" },
+  "output": { "format": "png-sequence", "pattern": "frame_%05d.png" },
+  "settings": [
+    { "id": "commandLine", "label": "Command", "type": "text", "default": "\"{python}\" \"{corridorkeyDir}/corridorkey_cli.py\" --input \"{inputDir}\" --output \"{outputDir}\"" },
+    { "id": "python", "label": "Python", "type": "file", "default": "python3" },
+    { "id": "corridorkeyDir", "label": "CorridorKey folder", "type": "folder", "default": "" }
+  ],
+  "run": {
+    "shell": true,
+    "command": "{commandLine}",
+    "cwd": "{corridorkeyDir}"
+  }
+}
