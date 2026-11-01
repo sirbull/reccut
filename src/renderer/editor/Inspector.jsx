@@ -6,6 +6,7 @@ import { signal } from '@preact/signals';
 import { ArrowDown, ArrowUp, Captions, ChevronLeft, ChevronRight, Circle, Diamond, EyeOff, Film, PenTool, RectangleHorizontal, SquareDashed, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
 import {
   audioComponents,
+  FRAME_RATES,
   CLIP_COLORS,
   componentVolumeProp,
   ANIMATION_PRESETS,
@@ -37,12 +38,13 @@ import {
   valueAt,
 } from '../../shared/model.js';
 import { setClipDuration, setSpeed, setTransition } from '../../shared/ops.js';
-import { GRADE_PROPS } from '../../shared/grade.js';
+import { GRADE_PROPS, CAMERA_LOGS } from '../../shared/grade.js';
+import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { beginTransient, commit, endTransient, getWave, motionVersion, project, selectedClips, selectedTransition, tasks, timeSig, updateTransient, waveVersion } from './store.js';
+import { beginTransient, commit, endPreview, endTransient, getWave, mirror, previewEdit, motionVersion, project, selectedClips, selectedTransition, tasks, timeSig, updateTransient, waveVersion } from './store.js';
 import { seek } from './playback.js';
 import { setKeyframe } from './keyframes.js';
-import { addMaskToSelected, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
+import { addMaskToSelected, applyFilm, previewFilm, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
 import { prefs } from '../prefs.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
@@ -60,22 +62,7 @@ export function Inspector() {
   if (transId?.startsWith('ax:') && p.clips[transId.slice(3)]?.axfade) return <CrossfadeInspector clip={p.clips[transId.slice(3)]} />;
   const transition = parseTransitionSelection(transId);
   if (transId && p.clips[transition.id]?.[transition.key]) return <TransitionInspector clip={p.clips[transition.id]} edge={transition.edge} />;
-  if (clips.length === 1) return <ClipInspector clip={clips[0]} />;
-  if (clips.length > 1)
-    return (
-      <div class="inspector panel">
-        <div class="insp-head">
-          <b>{clips.length} clips selected</b>
-        </div>
-        <div class="insp-body">
-          <Section title="Selection">
-            <Row label="Enabled">
-              <Toggle checked={clips.every((c) => c.enabled)} onChange={(v) => commit((q) => clips.forEach((c) => q.clips[c.id] && (q.clips[c.id].enabled = v)))} />
-            </Row>
-          </Section>
-        </div>
-      </div>
-    );
+  if (clips.length) return <ClipInspector clip={clips[0]} clips={clips} />;
   return <ProjectInspector />;
 }
 
@@ -136,12 +123,29 @@ function tabsFor(clip, media) {
   return tabs;
 }
 
-function ClipInspector({ clip }) {
+// Fanene som gir mening for flere klipp samtidig. Endringene i dem kopieres til alle (mirror i store.js).
+const MULTI_TABS = ['video', 'color', 'effects', 'audio'];
+
+function ClipInspector({ clip, clips = [clip] }) {
   const p = project.value;
   const media = p.media[clip.mediaId];
-  const tabs = tabsFor(clip, media);
-  const tab = tabs.find((t) => t.id === inspectorTab.value) ? inspectorTab.value : tabs[0].id;
-  const title = clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? redactLabel(clip) : clip.type === 'caption' ? 'Caption' : clip.type === 'gap' ? 'Gap' : clip.name || media?.name || 'Clip';
+  const multi = clips.length > 1;
+  const tabs = multi
+    ? tabsFor(clip, media).filter((t) => MULTI_TABS.includes(t.id) && clips.every((c) => tabsFor(c, p.media[c.mediaId]).some((x) => x.id === t.id)))
+    : tabsFor(clip, media);
+  const tab = tabs.find((t) => t.id === inspectorTab.value) ? inspectorTab.value : tabs[0]?.id;
+  const title = multi ? `${clips.length} clips selected` : clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? redactLabel(clip) : clip.type === 'caption' ? 'Caption' : clip.type === 'gap' ? 'Gap' : clip.name || media?.name || 'Clip';
+  const ids = clips.map((c) => c.id).join();
+  useEffect(() => {
+    if (!multi) return;
+    mirror.from = clip.id;
+    mirror.to = clips.slice(1).map((c) => c.id);
+    return () => {
+      mirror.from = null;
+      mirror.to = [];
+    };
+  }, [ids]);
+  const mediaIds = [...new Set(clips.map((c) => c.mediaId).filter((id) => p.media[id] && p.media[id].kind !== 'audio'))];
 
   return (
     <div class="inspector panel">
@@ -156,18 +160,19 @@ function ClipInspector({ clip }) {
       <div class="insp-head">
         <span class={`type-dot t-${clip.type}`} style={clip.colorLabel ? { background: CLIP_COLORS.find((c) => c.id === clip.colorLabel)?.color } : undefined} />
         <b title={title}>{title}</b>
-        <Toggle checked={clip.enabled} onChange={(v) => commit((q) => (q.clips[clip.id].enabled = v))} />
+        <Toggle checked={clips.every((c) => c.enabled)} onChange={(v) => commit((q) => clips.forEach((c) => q.clips[c.id] && (q.clips[c.id].enabled = v)))} />
       </div>
       <div class="insp-body">
+        {multi && <p class="hint">{tabs.length ? 'Changes apply to all selected clips. The values shown are from the first clip.' : 'These clips have no settings in common.'}</p>}
         {tab === 'text' && <TextTab clip={clip} />}
         {tab === 'caption' && <CaptionTab clip={clip} />}
         {tab === 'recording' && <RecordingTab clip={clip} media={media} />}
         {tab === 'video' && <VideoTab clip={clip} />}
         {tab === 'redact' && <RedactTab clip={clip} />}
         {tab === 'masks' && <MasksTab clip={clip} />}
-        {tab === 'effects' && <EffectsTab clip={clip} />}
+        {tab === 'effects' && <EffectsTab clip={clip} multi={multi} />}
         {tab === 'audio' && <AudioTab clip={clip} />}
-        {tab === 'color' && <ColorTab clip={clip} />}
+        {tab === 'color' && <ColorTab clip={clip} mediaIds={multi ? mediaIds : null} />}
         {tab === 'speed' && <SpeedTab clip={clip} />}
         {tab === 'info' && <InfoTab clip={clip} media={media} />}
       </div>
@@ -736,7 +741,7 @@ function StabilizeSection({ clip }) {
   );
 }
 
-function EffectsTab({ clip }) {
+function EffectsTab({ clip, multi }) {
   const active = EFFECTS.filter((fx) => (clip.props.fx || []).includes(fx.id) || clip.props[fx.prop] || clip.kf?.[fx.prop]?.length);
   const available = EFFECTS.filter((fx) => !active.includes(fx));
   const add = (id) =>
@@ -756,7 +761,7 @@ function EffectsTab({ clip }) {
   return (
     <>
       <VideoEffects clip={clip} />
-      <ProcessorEffects clip={clip} />
+      {!multi && <ProcessorEffects clip={clip} />}
       <Section title="Effects">
         {active.length === 0 && <p class="hint">No effects yet. Add one below, or drag one from the Effects browser.</p>}
         {active.map((fx) => (
@@ -1071,31 +1076,44 @@ function CrossfadeInspector({ clip }) {
   );
 }
 
-function ColorTab({ clip }) {
+const lookEdit = (id, l) => (q) => {
+  const c = q.clips[id];
+  for (const [k, v] of Object.entries(l.v)) {
+    c.props[k] = v;
+    delete c.kf[k];
+  }
+};
+
+function ColorTab({ clip, mediaIds }) {
   const look = COLOR_LOOKS.find((l) => Object.entries(l.v).every(([k, v]) => Math.abs((clip.props[k] || 0) - v) < 1e-3 && !clip.kf?.[k]));
+  const p = project.value;
   return (
     <>
+      {mediaIds?.length > 0 && (
+        <Section title="Camera LUT">
+          <CameraLutRow media={p.media[mediaIds[0]]} ids={mediaIds} />
+          <p class="hint">Applies to every clip from the selected files.</p>
+        </Section>
+      )}
       <Section title="Looks">
-        <div class="looks" data-section="looks">
+        <div class="looks" data-section="looks" onPointerLeave={endPreview}>
           {COLOR_LOOKS.map((l) => (
             <button
               key={l.id}
               class={`look look-${l.id}${look?.id === l.id ? ' active' : ''}`}
-              onClick={() =>
-                commit((q) => {
-                  const c = q.clips[clip.id];
-                  for (const [k, v] of Object.entries(l.v)) {
-                    c.props[k] = v;
-                    delete c.kf[k];
-                  }
-                })
-              }
+              onPointerEnter={() => previewEdit(lookEdit(clip.id, l))}
+              onClick={() => commit(lookEdit(clip.id, l))}
             >
               <span class="swatch" />
               {l.label}
             </button>
           ))}
         </div>
+      </Section>
+      <Section title="Film Looks">
+        <FilmPicker clip={clip} />
+        {clip.props.film && <Param clip={clip} prop="filmMix" label="Strength" min={0} max={100} scale={100} />}
+        <p class="hint">Simulated film stocks, black and white filters and creative styles, applied on top of the correction below. Point at a look to see it in the viewer, and click to use it.</p>
       </Section>
       <Section title="Light">
         <Param clip={clip} prop="exposure" label="Exposure" min={-100} max={100} scale={100} center={0} />
@@ -1125,6 +1143,7 @@ function ColorTab({ clip }) {
                 c.props[k] = 0;
                 delete c.kf[k];
               }
+              delete c.props.film;
             })
           }
         >
@@ -1132,6 +1151,27 @@ function ColorTab({ clip }) {
         </Button>
       </Section>
     </>
+  );
+}
+
+// Filmlookene i grupper. Musa over en look viser den i seeren, klikk velger den.
+function FilmPicker({ clip }) {
+  const ids = [clip.id];
+  const item = (id, label) => (
+    <button key={id} class={`film-item${(clip.props.film || '') === id ? ' active' : ''}`} onPointerEnter={() => previewFilm(id, ids)} onClick={() => applyFilm(id, ids)}>
+      {label}
+    </button>
+  );
+  return (
+    <div class="film-list" onPointerLeave={endPreview}>
+      {item('', 'None')}
+      {[...new Set(FILM_LOOKS.map((f) => f.group))].flatMap((g) => [
+        <div key={g} class="film-group">
+          {g}
+        </div>,
+        ...FILM_LOOKS.filter((f) => f.group === g).map((f) => item(f.id, f.label)),
+      ])}
+    </div>
   );
 }
 
@@ -1641,7 +1681,7 @@ function CaptionTab({ clip }) {
 function MediaColorRows({ media }) {
   const st = Object.values(media.streams).find((x) => x.hasVideo);
   const color = st?.color;
-  const working = st?.optimized ? 'Optimized media' : st?.proxy && media.kind !== 'image' ? (color?.hdr ? 'Tone mapped copy' : 'Playable copy') : 'Original';
+  const working = st?.optimized ? 'Optimized media' : st?.proxy && media.kind !== 'image' ? (color?.hdr ? 'Tone mapped proxy, original on export' : 'Proxy, original on export') : 'Original';
   return (
     <>
       {color && (
@@ -1651,6 +1691,7 @@ function MediaColorRows({ media }) {
           </span>
         </Row>
       )}
+      {st && media.kind !== 'audio' && <CameraLutRow media={media} />}
       {media.raw && (
         <Row label="RAW">
           <span class="value">Embedded full size camera preview</span>
@@ -1662,6 +1703,28 @@ function MediaColorRows({ media }) {
         </Row>
       )}
     </>
+  );
+}
+
+// Kamera-LUT: gjør LOG-opptak om til vanlige farger. Gjelder alle klipp fra filen, i visningen og eksporten.
+function CameraLutRow({ media, ids = [media.id] }) {
+  const v = media.cameraLut || '';
+  const custom = v && !CAMERA_LOGS.some((x) => x.id === v);
+  const set = (cameraLut) => commit((q) => ids.forEach((id) => (q.media[id].cameraLut = cameraLut || undefined)));
+  const choose = async () => {
+    const file = await window.api.openFileDialog({ title: 'Choose a LUT', filters: [{ name: '3D LUT', extensions: ['cube'] }] });
+    if (file) set(file);
+  };
+  const options = [
+    { value: '', label: 'None' },
+    ...CAMERA_LOGS.map((x) => ({ value: x.id, label: x.label })),
+    ...(custom ? [{ value: v, label: v.split(/[\\/]/).pop() }] : []),
+    { value: 'choose', label: 'Choose LUT File…' },
+  ];
+  return (
+    <Row label="Camera LUT">
+      <Select value={v} options={options} title={custom ? v : undefined} onChange={(x) => (x === 'choose' ? choose() : set(x))} />
+    </Row>
   );
 }
 
@@ -1800,6 +1863,7 @@ function TransitionInspector({ clip, edge = 'start' }) {
 }
 
 export const FORMATS = [
+  { value: '7680x4320', label: '8K UHD (7680 × 4320)' },
   { value: '3840x2160', label: '4K UHD (3840 × 2160)' },
   { value: '2560x1440', label: '1440p (2560 × 1440)' },
   { value: '1920x1080', label: '1080p HD (1920 × 1080)' },
@@ -1809,14 +1873,14 @@ export const FORMATS = [
   { value: '1080x1080', label: 'Square (1080 × 1080)' },
 ];
 
-export function ProjectSettings() {
+export function ProjectSettings({ name = true }) {
   const p = project.value;
   const current = `${p.width}x${p.height}`;
   const fmt = !p.customFormat && FORMATS.some((f) => f.value === current) ? current : 'custom';
-  const fpsList = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+  const fpsList = FRAME_RATES;
   return (
     <>
-      <Row label="Name" stacked>
+      {name && <Row label="Name" stacked>
         <input
           class="text-input"
           value={p.name}
@@ -1829,7 +1893,7 @@ export function ProjectSettings() {
             if (name) commit((q) => (q.name = name));
           }}
         />
-      </Row>
+      </Row>}
       <Row label="Format" stacked>
         <Select
           value={fmt}

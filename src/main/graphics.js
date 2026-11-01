@@ -118,6 +118,7 @@ async function renderGraphic(req, ctx, outputDir) {
     await job.promise;
     return { file: output, previews };
   } catch (err) {
+    job?.promise.catch(() => {}); // It was stopped on purpose; the reason is the error below.
     job?.kill();
     fs.rmSync(output, { force: true });
     throw err;

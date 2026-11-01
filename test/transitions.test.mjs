@@ -129,3 +129,36 @@ test('whole frame effects share the same range, duration and lane for preview an
   const hinted = libraryDropTarget(p, { kind: 'frameFx', id: 'blur' }, 2, 4);
   assert.deepEqual([hinted.a, hinted.b, hinted.lane], [4, 8, 2]);
 });
+
+test('connected clips fade in and out over the lanes below, video and audio', () => {
+  const p = setup();
+  const id = addMediaClip(p, p.media.a, 'connect', 4, 1, { dur: 4 });
+  const start = libraryDropTarget(p, item, 1, 4.5, { transitionDur: 1 });
+  const end = libraryDropTarget(p, item, 1, 7.5, { transitionDur: 1 });
+  assert.deepEqual([start.id, start.edge, start.a, start.b], [id, 'start', 4, 5]);
+  assert.deepEqual([end.edge, end.a, end.b], ['end', 7, 8]);
+  setTransition(p, id, 'dissolve', 1, 'start', true);
+  setTransition(p, id, 'dissolve', 1, 'end', true);
+  const layerAt = (T) => computeFrame(p, T).layers.find((l) => (l.b || l)?.clip?.id === id);
+  const mid = layerAt(4.5);
+  assert.equal(mid.overlay, true);
+  assert.equal(mid.a, null);
+  assert.equal(mid.transition.p, 0.5);
+  assert.equal(layerAt(7.75).transition.p, 0.25, 'the end is the opening played backwards');
+  assert.equal(layerAt(6).transition, undefined);
+  assert.ok(computeFrame(p, 6).layers[0].clip, 'the storyline below is drawn as before');
+  const gain = (T) => computeAudio(p, T).filter((a) => a.clip.id === id).reduce((s, a) => s + a.gain, 0);
+  assert.ok(gain(4.1) < gain(6));
+});
+
+test('whole frame effects like Pixelate can fade in with a transition', () => {
+  const p = setup();
+  const fx = makeClip('redact', { start: 2, dur: 4, lane: 1, props: { mode: 'pixelate', shape: 'full' } });
+  p.clips[fx.id] = fx;
+  const target = libraryDropTarget(p, item, 1, 2.2, { transitionDur: 1 });
+  assert.deepEqual([target.id, target.edge], [fx.id, 'start']);
+  setTransition(p, fx.id, 'dissolve', 1, 'start');
+  const layer = computeFrame(p, 2.5).layers.find((l) => l.b?.clip.id === fx.id);
+  assert.equal(layer.overlay, true);
+  assert.equal(layer.transition.p, 0.5);
+});

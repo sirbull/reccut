@@ -5,6 +5,7 @@ import { addMediaClip, autoFormat, bladeAt, deleteClips, moveClip, placeFree, se
 import { CAPTION_LANE, TITLE_TEMPLATES, TRANSITIONS, deepClone, makeClip, primaryAt, round, titleText, uid } from './model.js';
 import { BUILTIN_TEMPLATES, TEMPLATE_FORMAT, templateDefaults, validateTemplate } from './titletemplates.js';
 import { fitCaptions } from './srt.js';
+import { FILM_IDS } from './filmLooks.js';
 const PROPERTY_RANGES = {
   exposure: [-1, 1],
   contrast: [-1, 1],
@@ -14,6 +15,7 @@ const PROPERTY_RANGES = {
   highlights: [-1, 1],
   shadows: [-1, 1],
   ...Object.fromEntries(['lift', 'gamma', 'gain'].flatMap((w) => ['X', 'Y', 'L'].map((k) => [w + k, [-1, 1]]))),
+  filmMix: [0, 1],
   opacity: [0, 1],
   volume: [-60, 12],
   micVolume: [-60, 12],
@@ -345,7 +347,7 @@ export const TOOLS = [
   {
     name: 'set_clip_properties',
     description:
-      'Change properties on one or many clips in one undo step. Any simple property shown by get_clip can be set with a value of the same type (for example x, y, scale, rotation, title font, size, color, showCamera, pipSize). Colour (all -1..1, 0 is neutral): exposure (1 is +2 stops), contrast, highlights (negative recovers bright areas), shadows (positive lifts dark areas), saturation, temperature (positive warmer), tint (positive magenta, negative green). Colour wheels: liftX/liftY/liftL for shadows, gammaX/gammaY/gammaL for midtones, gainX/gainY/gainL for highlights; L is brightness, X/Y push the colour towards a hue at amount a: orange (0.5a, 0.87a), teal (-0.87a, -0.5a), red (0.87a, 0.5a), blue (0, -a), green (-0.87a, 0.5a), magenta (0.87a, -0.5a); a is usually 0.05 to 0.3. Other: opacity 0..1; volume, micVolume, sysVolume in dB -60..12 (0 unchanged; recordings: micVolume is camera/mic audio, sysVolume screen audio); blur 0..100 px; vFadeIn, vFadeOut, aFadeIn, aFadeOut in seconds; name; enabled (false hides and mutes); text and subtext for plain titles and captions.',
+      `Change properties on one or many clips in one undo step. Any simple property shown by get_clip can be set with a value of the same type (for example x, y, scale, rotation, title font, size, color, showCamera, pipSize). Colour (all -1..1, 0 is neutral): exposure (1 is +2 stops), contrast, highlights (negative recovers bright areas), shadows (positive lifts dark areas), saturation, temperature (positive warmer), tint (positive magenta, negative green). Colour wheels: liftX/liftY/liftL for shadows, gammaX/gammaY/gammaL for midtones, gainX/gainY/gainL for highlights; L is brightness, X/Y push the colour towards a hue at amount a: orange (0.5a, 0.87a), teal (-0.87a, -0.5a), red (0.87a, 0.5a), blue (0, -a), green (-0.87a, 0.5a), magenta (0.87a, -0.5a); a is usually 0.05 to 0.3. Other: opacity 0..1; volume, micVolume, sysVolume in dB -60..12 (0 unchanged; recordings: micVolume is camera/mic audio, sysVolume screen audio); blur 0..100 px; film: a film look id, or "" for none (${FILM_IDS.join(', ')}; ortho is red-blind black and white like The Lighthouse, bw* are black and white with a lens filter), with filmMix 0..1 for its strength (1 if not set); vFadeIn, vFadeOut, aFadeIn, aFadeOut in seconds; name; enabled (false hides and mutes); text and subtext for plain titles and captions.`,
     parameters: obj(
       {
         edits: {
@@ -364,7 +366,10 @@ export const TOOLS = [
           props = e.properties && typeof e.properties === 'object' ? e.properties : {};
         for (const [k, v] of Object.entries(props)) {
           if (Object.hasOwn(PROPERTY_RANGES, k)) numeric.push({ type: 'setProperty', clipId: c.id, property: k, value: v });
-          else if (k === 'name') numeric.push({ type: 'rename', clipId: c.id, name: v });
+          else if (k === 'film') {
+            if (v !== '' && !FILM_IDS.includes(v)) throw new Error(`Unknown film look ${JSON.stringify(v)}.`);
+            other.push([c, k, v || undefined]);
+          } else if (k === 'name') numeric.push({ type: 'rename', clipId: c.id, name: v });
           else if (k === 'enabled' && typeof v === 'boolean') other.push([c, k, v]);
           else if (k === 'template') throw new Error('Add a new title to change its template.');
           else if (c.kf?.[k]?.length) throw new Error(`${k} on clip ${c.id} has keyframes. Edit those in the inspector.`);
@@ -419,6 +424,49 @@ export const TOOLS = [
       if (tpl.layers.length > 60 || !tpl.fields.every((f) => /^[\w-]{1,40}$/.test(f.id))) throw new Error('Use at most 60 layers and simple field ids.');
       p.templates = { ...(p.templates || {}), [id]: tpl };
       return { templateId: id, fields: tpl.fields.map((f) => f.id), colors: tpl.colors.map((c) => c.id) };
+    },
+  },
+  {
+    name: 'get_story',
+    description:
+      'Read the story saved in the project: the brief (purpose, audience, length, tone), the outline or paper edit, notes about each media item, and the attached documents such as a script, storyboard or interview questions. Give document to read one in full (from is a character offset for long ones).',
+    parameters: obj({ document: { type: 'string' }, from: { type: 'integer' } }),
+    read(p, a) {
+      const st = p.story || {};
+      const docs = st.documents || [];
+      if (a.document != null) {
+        const d = docs.find((x) => x.name === a.document);
+        if (!d) throw new Error('No document with that name.');
+        const from = Number.isInteger(a.from) && a.from > 0 ? a.from : 0;
+        return { name: d.name, from, text: d.text.slice(from, from + 30000), ...(d.text.length > from + 30000 ? { next: from + 30000 } : {}) };
+      }
+      return {
+        brief: st.brief || '',
+        outline: st.outline || '',
+        mediaNotes: st.mediaNotes || {},
+        documents: docs.map((d) => ({ name: d.name, characters: d.text.length, start: d.text.slice(0, 300) })),
+      };
+    },
+  },
+  {
+    name: 'set_story',
+    description:
+      'Save the story to the project so it is kept for later requests: brief (what the video is for, audience, length, tone, must-have moments), outline (the paper edit: beats in order with the chosen takes and why), and mediaNotes (a short log of what each media item contains, by media id, so long footage need not be inspected again). Fields you leave out are kept.',
+    parameters: obj({ brief: { type: 'string' }, outline: { type: 'string' }, mediaNotes: { type: 'object', additionalProperties: { type: 'string' } } }),
+    edit(p, a) {
+      const st = { brief: '', outline: '', documents: [], mediaNotes: {}, ...(p.story || {}) };
+      if (a.brief != null) st.brief = text(a.brief, 'brief', 20000);
+      if (a.outline != null) st.outline = text(a.outline, 'outline', 60000);
+      if (a.mediaNotes != null) {
+        if (typeof a.mediaNotes !== 'object') throw new Error('mediaNotes must be an object.');
+        st.mediaNotes = { ...st.mediaNotes };
+        for (const [id, note] of Object.entries(a.mediaNotes)) {
+          if (!Object.hasOwn(p.media, id)) throw new Error(`Unknown media id ${id}.`);
+          st.mediaNotes[id] = text(note, 'note', 4000);
+        }
+      }
+      p.story = st;
+      return { saved: true };
     },
   },
   {
@@ -611,3 +659,10 @@ export const BUILD_SEQUENCE_SCHEMA = obj(
   },
   [],
 );
+
+// Documents the user attaches in the chat are kept with the project story, so later requests can use them.
+export function addStoryDocument(p, name, body) {
+  const st = { brief: '', outline: '', documents: [], mediaNotes: {}, ...(p.story || {}) };
+  st.documents = [...st.documents.filter((d) => d.name !== name), { name: String(name).slice(0, 200), text: String(body).slice(0, 300000) }].slice(-20);
+  p.story = st;
+}

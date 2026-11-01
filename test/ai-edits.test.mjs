@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateAIActions, applyAIActions, TOOL_MAP, TOOLS, lookStats, checkPatch, buildSequence, snapToPauses } from '../src/shared/aiEdits.js';
+import { validateAIActions, applyAIActions, TOOL_MAP, TOOLS, lookStats, checkPatch, buildSequence, snapToPauses, addStoryDocument } from '../src/shared/aiEdits.js';
 import { fitCaptions } from '../src/shared/srt.js';
 function project() {
   return {
@@ -217,4 +217,17 @@ test('the agent designs its own animated title template and uses it', () => {
   assert.equal(p.templates[made.templateId].name, 'Speaker 2');
   assert.throws(() => edit(p, 'create_title_template', { template: { name: 'Empty', layers: [] } }));
   assert.throws(() => edit(p, 'create_title_template', { replaceId: 'lt-bar', template: { layers: [{ type: 'text' }] } }));
+});
+
+test('the story (brief, outline, documents, media notes) is saved in the project', () => {
+  const p = project();
+  addStoryDocument(p, 'script.docx', 'ANNA\nHello there.');
+  edit(p, 'set_story', { brief: 'A 60 s ad for young parents, warm tone.', mediaNotes: { m: 'Actor, three takes of the intro.' } });
+  edit(p, 'set_story', { outline: '1. Hook: take 3 of the intro.' });
+  const story = TOOL_MAP.get('get_story').read(p, {});
+  assert.equal(story.brief, 'A 60 s ad for young parents, warm tone.');
+  assert.equal(story.outline, '1. Hook: take 3 of the intro.');
+  assert.deepEqual(story.documents.map((d) => d.name), ['script.docx']);
+  assert.equal(TOOL_MAP.get('get_story').read(p, { document: 'script.docx' }).text, 'ANNA\nHello there.');
+  assert.throws(() => edit(p, 'set_story', { mediaNotes: { nope: 'x' } }));
 });

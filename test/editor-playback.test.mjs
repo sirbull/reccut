@@ -20,7 +20,8 @@ const bundle = (await build({
         export const setTime = t => state.time = t;
         export const getSourceTime = () => state.sourceTime;
         export const setSourceTime = t => { state.sourceTime = t; browserPlayhead.value = {mediaId: sourceMediaId.value, t}; };
-        export const loadMotion = () => {};`,
+        export const loadMotion = () => {};
+        export const loadLut = () => {};`,
       prefs: `export const prefs = state.prefs;`,
       player: `export const fileUrl = p => p;
         export function createPlayer(options) {

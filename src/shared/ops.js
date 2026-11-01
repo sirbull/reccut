@@ -1,6 +1,7 @@
 // Redigeringsoperasjoner på tidslinjen. Alle muterer et prosjektobjekt direkte;
 // redigeringsvisningen kloner før og lagrer historikk for angre.
 import {
+  FRAME_RATES,
   deepClone,
   CAPTION_LANE,
   avgSpeed,
@@ -17,6 +18,7 @@ import {
   speedOf,
   sourceTime,
   isVisual,
+  hasFreeTransitions,
   makeClip,
   mediaClipType,
   relayoutPrimary,
@@ -176,10 +178,20 @@ export function lanesOverlap(project, clip, lane) {
 }
 
 // Finn nærmeste ledige spor i samme retning, slik at klipp aldri overlapper.
+// Over hovedsporet faller klippet ned til laveste ledige spor, som i Final Cut Pro, så det aldri svever over tomme spor.
 export function resolveLane(project, clip) {
   if (clip.lane === 0 || clip.lane === CAPTION_LANE) return;
   const dir = clip.lane > 0 ? 1 : -1;
-  while (lanesOverlap(project, clip, clip.lane)) clip.lane += dir;
+  if (dir > 0) clip.lane = 1;
+  while (lanesOverlap(project, clip, clip.lane) || (dir > 0 && project.lanes?.[clip.lane]?.locked)) clip.lane += dir;
+}
+
+// Et klipp som starter etter slutten av hovedsporet har ingenting under seg å kobles til.
+// Da legges det i hovedsporet i stedet, som i Final Cut Pro. Sladding hører ikke hjemme der.
+function storylineIfAlone(project, clip) {
+  if (clip.lane <= 0 || clip.lane === CAPTION_LANE || !isVisual(clip) || clip.type === 'redact') return;
+  const last = project.clips[project.primary.at(-1)];
+  if (clip.start >= (last ? last.start + last.dur : 0) - 1e-6) moveClip(project, clip.id, { lane: 0 });
 }
 
 export function splitClip(project, id, T) {
@@ -353,23 +365,50 @@ export function placeFree(project, clip, start, lane) {
 
 // Legger til media på tidslinjen: append (E), insert (W) eller connect (Q).
 // opts: { in, dur, includeAudio } for et utvalg fra biblioteket.
-export function addMediaClip(project, media, mode, T, laneHint, opts = {}) {
+export function mediaClip(media, opts = {}) {
   const type = mediaClipType(media);
   const clip = makeClip(type, { media, ...(opts.in != null ? { in: opts.in } : {}), ...(opts.dur ? { dur: opts.dur } : {}) });
   if (type !== 'audio' && (opts.includeAudio ?? media.includeAudio) === false) {
     clip.props.audioOff = { ...clip.props.audioOff, ...Object.fromEntries(Object.entries(media.streams).filter(([, stream]) => stream.hasAudio).map(([key]) => [key, true])) };
   }
-  const audioOnly = type === 'audio';
+  return clip;
+}
+
+export function addMediaClip(project, media, mode, T, laneHint, opts = {}) {
+  const clip = mediaClip(media, opts);
+  const audioOnly = clip.type === 'audio';
   if (mode === 'overwrite' && !audioOnly) {
     overwritePrimary(project, clip, T ?? 0);
   } else if (audioOnly || mode === 'connect') {
     placeFree(project, clip, T ?? 0, laneHint ?? (audioOnly ? -1 : 1));
+    storylineIfAlone(project, clip);
   } else if (mode === 'append') {
     insertIntoPrimary(project, [clip], null);
   } else {
     insertIntoPrimary(project, [clip], T ?? 0);
   }
   return clip.id;
+}
+
+// Erstatter et klipp: det nye klippet tar plassen (og overgangene) til det gamle.
+// Bilde erstatter bilde og lyd erstatter lyd, ellers skjer ingenting.
+export function replaceClip(project, targetId, clip) {
+  const old = project.clips[targetId];
+  if (!old || old.type === 'gap' || project.lanes?.[old.lane]?.locked || isVisual(old) !== isVisual(clip)) return false;
+  if (old.lane === 0) {
+    withSync(project, () => {
+      clip.lane = 0;
+      if (old.transition) clip.transition = old.transition;
+      if (old.transitionOut) clip.transitionOut = old.transitionOut;
+      project.clips[clip.id] = clip;
+      project.primary[project.primary.indexOf(targetId)] = clip.id;
+      delete project.clips[targetId];
+    });
+  } else {
+    delete project.clips[targetId];
+    placeFree(project, clip, old.start, old.lane);
+  }
+  return true;
 }
 
 // Flytter et klipp mellom hovedspor og frie spor.
@@ -399,11 +438,12 @@ export function moveClip(project, id, { start, lane, primaryIndex }) {
   c.lane = lane;
   resolveLane(project, c);
   updateDuration(project);
+  storylineIfAlone(project, c);
 }
 
 export function setTransition(project, id, type, dur = 1, edge = 'start', audio) {
   const c = project.clips[id];
-  if (!c || c.lane !== 0) return;
+  if (!c || (c.lane !== 0 && !hasFreeTransitions(c))) return;
   const idx = project.primary.indexOf(id);
   const prev = edge === 'start' && idx > 0 ? project.clips[project.primary[idx - 1]] : null;
   const maxDur = Math.min(c.dur, prev ? prev.dur : c.dur, 4);
@@ -458,8 +498,9 @@ export function autoFormat(project, media) {
     project.height = media.height - (media.height % 2);
   }
   if (media.fps && media.kind !== 'image') {
-    const common = [24, 25, 30, 50, 60];
-    project.fps = common.reduce((best, f) => (Math.abs(f - media.fps) < Math.abs(best - media.fps) ? f : best), 30);
+    // Nær en vanlig frekvens (også variabel frekvens fra mobil): bruk den. Ellers klippets egen.
+    const near = FRAME_RATES.find((f) => Math.abs(f - media.fps) / f < 0.03);
+    project.fps = near ?? Math.min(120, Math.round(media.fps * 100) / 100);
   }
   project.autoFormat = false;
 }

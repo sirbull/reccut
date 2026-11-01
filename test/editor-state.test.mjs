@@ -14,7 +14,7 @@ function setup() {
     module, exports: module.exports,
     window: { addEventListener() {}, api: { onTasks() {}, onFlush() {}, onAnalyzed() {}, listTasks: async () => [] } },
     localStorage: { getItem: () => null, setItem() {} },
-    performance: { now: () => 0 }, setTimeout: () => 0, clearTimeout() {},
+    performance: { now: () => 0 }, setTimeout: () => 0, clearTimeout() {}, structuredClone,
   });
   const store = module.exports;
   const caption = store.makeCaptionClip(2, 'Original');
@@ -52,9 +52,46 @@ test('caption time changes update duration live and can be cancelled', () => {
 test('an empty video track goes away when its last clip leaves it', () => {
   const { store: s } = setup();
   s.commit(p => { p.tracks = { video: 2, audio: 1 }; });
-  assert.equal(s.project.value.tracks.video, 2, 'a track added with + Video stays until clips change');
+  assert.equal(s.project.value.tracks.video, 2, 'an empty track stays until clips change');
   const other = s.makeCaptionClip(5, 'B');
   s.commit(p => { p.clips[other.id] = { ...other, lane: 2 }; });
   s.commit(p => { p.clips[other.id].lane = 1; });
   assert.equal(s.project.value.tracks.video, 1);
+});
+
+test('hover preview shows an edit without an undo step, and a click commits from the original', () => {
+  const { store: s, id } = setup();
+  const before = s.project.value;
+  s.previewEdit(p => { p.clips[id].props.film = 'ortho'; });
+  s.previewEdit(p => { p.clips[id].props.film = 'trix400'; });
+  assert.equal(s.project.value.clips[id].props.film, 'trix400');
+  s.endPreview();
+  assert.equal(s.project.value, before);
+  s.previewEdit(p => { p.clips[id].props.film = 'ortho'; });
+  s.commit(p => { p.clips[id].props.film = 'velvia50'; });
+  s.undo();
+  assert.equal(s.project.value, before);
+});
+
+test('edits in the multi clip inspector are copied to the other selected clips', () => {
+  const { store: s, id } = setup();
+  const other = s.makeCaptionClip(6, 'Other');
+  s.commit(p => { p.clips[other.id] = other; p.clips[other.id].props.keep = 1; });
+  s.mirror.from = id;
+  s.mirror.to = [other.id];
+  s.commit(p => { p.clips[id].props.film = 'kodak'; p.clips[id].props.vfx = [{ id: 'a', p: { x: 1 } }]; });
+  const o = s.project.value.clips[other.id].props;
+  assert.equal(o.film, 'kodak');
+  assert.deepEqual(o.vfx, [{ id: 'a', p: { x: 1 } }]);
+  assert.equal(o.text, 'Other');
+  assert.equal(o.keep, 1);
+  s.commit(p => { delete p.clips[id].props.film; });
+  assert.equal(s.project.value.clips[other.id].props.film, undefined);
+  s.mirror.paused = true;
+  s.commit(p => { p.clips[id].props.film = 'fuji'; });
+  assert.equal(s.project.value.clips[other.id].props.film, undefined);
+  s.undo();
+  s.undo();
+  s.undo();
+  assert.equal(s.project.value.clips[other.id].props.film, undefined);
 });

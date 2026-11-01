@@ -41,6 +41,7 @@ const DEFAULTS = {
   importCopy: true,
   importOptimize: false,
   syncGroup: true,
+  askSequenceSettings: true,
 };
 
 function load() {

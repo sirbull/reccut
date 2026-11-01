@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
-const invoke = (channel) => (...args) => ipcRenderer.invoke(channel, ...args);
+// Errors from the main process arrive as "Error invoking remote method 'x': Error: message"; show only the message.
+const invoke = (channel) => (...args) =>
+  ipcRenderer.invoke(channel, ...args).catch((err) => {
+    throw new Error(String(err?.message || err).replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, ''));
+  });
 const on = (channel) => (cb) => {
   const fn = (_e, payload) => cb(payload);
   ipcRenderer.on(channel, fn);
@@ -15,6 +19,11 @@ contextBridge.exposeInMainWorld('api', {
   mediaScenes: invoke('media:scenes'),
   aiReadDocument: invoke('ai:readDocument'),
   pluginsDraft: invoke('plugins:draft'),
+  pluginsReadFile: invoke('plugins:readFile'),
+  pluginsInstallPackage: invoke('plugins:installPackage'),
+  pluginsExport: invoke('plugins:export'),
+  pluginsPendingOpen: invoke('plugins:pendingOpen'),
+  onOpenPlugin: on('plugin:open'),
   genConfig: invoke('gen:config'),
   genSave: invoke('gen:save'),
   genEstimate: invoke('gen:estimate'),
@@ -76,6 +85,8 @@ contextBridge.exposeInMainWorld('api', {
 
   importMedia: invoke('media:import'),
   importRecording: invoke('media:importRecording'),
+  importSequence: invoke('media:importSequence'),
+  locateDecoder: invoke('decoders:locate'),
   reanalyze: invoke('media:reanalyze'),
   readWave: invoke('media:wave'),
   reverseMedia: invoke('media:reverse'),
@@ -94,6 +105,9 @@ contextBridge.exposeInMainWorld('api', {
   writeText: invoke('file:write'),
 
   openMediaDialog: invoke('dialog:openMedia'),
+  browseDir: invoke('browse:dir'),
+  browseThumb: invoke('browse:thumb'),
+  browsePlaces: invoke('browse:places'),
   openFileDialog: invoke('dialog:openFile'),
   saveFileDialog: invoke('dialog:saveFile'),
   chooseDir: invoke('dialog:chooseDir'),

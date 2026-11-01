@@ -122,6 +122,9 @@ const EASE_FN = {
   hold: () => 0,
 };
 
+// Bildefrekvensene en sekvens kan velge mellom (andre kan skrives inn).
+export const FRAME_RATES = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+
 // Prosjektmaler for nye prosjekter.
 export const PROJECT_TEMPLATES = [
   { id: 'auto', label: 'Automatic', desc: 'Matches the first video you add', w: 1920, h: 1080, fps: 30, auto: true },
@@ -307,6 +310,93 @@ export function newProject(name = 'Untitled Project') {
     captionStyle: { ...DEFAULT_CAPTION_STYLE },
     duration: 0,
   };
+}
+
+/* Sekvenser: flere tidslinjer i samme prosjekt, med felles media.
+   Den åpne sekvensen ligger øverst i prosjektet (p.clips, p.primary ...), så all kode som leser
+   tidslinjen viser den åpne. De andre ligger med feltene sine i p.sequences[id]. */
+export const SEQUENCE_FIELDS = ['clips', 'primary', 'markers', 'range', 'lanes', 'tracks', 'captionStyle', 'width', 'height', 'fps', 'autoFormat', 'customFormat', 'duration'];
+
+export function currentSequence(p) {
+  return p.sequence || { id: 'main', name: 'Sequence 1', created: 0 };
+}
+
+// Alle sekvensene sortert etter når de ble laget. Den åpne har active: true.
+export function sequenceList(p) {
+  const cur = { ...currentSequence(p), duration: p.duration, width: p.width, height: p.height, fps: p.fps, clipCount: Object.keys(p.clips).length, active: true };
+  const rest = Object.values(p.sequences || {}).map((s) => ({ id: s.id, name: s.name, created: s.created || 0, duration: s.duration, width: s.width, height: s.height, fps: s.fps, clipCount: Object.keys(s.clips || {}).length }));
+  return [cur, ...rest].sort((a, b) => (a.created || 0) - (b.created || 0));
+}
+
+// Tidslinjene i prosjektet, den åpne først. Hver har clips, primary og lanes.
+export function timelines(p) {
+  return [p, ...Object.values(p.sequences || {})];
+}
+
+// Legger den åpne sekvensen bort i p.sequences. Virker på immer-utkast.
+function stashSequence(p) {
+  const cur = { ...currentSequence(p) };
+  for (const k of SEQUENCE_FIELDS) if (p[k] !== undefined) cur[k] = p[k];
+  for (const k of SEQUENCE_FIELDS) delete p[k];
+  p.sequences ||= {};
+  p.sequences[cur.id] = cur;
+}
+
+function showSequence(p, seq) {
+  const { id, name, created, ...data } = seq;
+  Object.assign(p, data);
+  p.sequence = { id, name, created: created || 0 };
+}
+
+// Åpner en annen sekvens. Gir false hvis den ikke finnes.
+export function openSequence(p, id) {
+  if (currentSequence(p).id === id) return true;
+  const next = p.sequences?.[id];
+  if (!next) return false;
+  delete p.sequences[id];
+  stashSequence(p);
+  showSequence(p, next);
+  return true;
+}
+
+// Ny sekvens (tom, eller en kopi av en annen), som blir den åpne. Gir id-en.
+export function addSequence(p, { name, from } = {}) {
+  const base = from ? sequenceData(p, from) : null;
+  const created = Date.now();
+  const copy = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, deepClone(v)]));
+  const seq = base
+    ? { ...copy(base), id: uid(), name: name || `${base.name} copy`, created }
+    : { id: uid(), name: name || `Sequence ${sequenceList(p).length + 1}`, created, clips: {}, primary: [], markers: [], range: null, lanes: {}, captionStyle: deepClone(p.captionStyle || DEFAULT_CAPTION_STYLE), width: p.width, height: p.height, fps: p.fps, autoFormat: false, duration: 0 };
+  // Den første sekvensen får et fast tidspunkt, så den blir stående først.
+  if (!p.sequence) p.sequence = { ...currentSequence(p) };
+  stashSequence(p);
+  showSequence(p, seq);
+  return seq.id;
+}
+
+// Feltene til en sekvens, enten den er åpen eller ikke.
+function sequenceData(p, id) {
+  if (currentSequence(p).id !== id) return p.sequences?.[id];
+  const out = { ...currentSequence(p) };
+  for (const k of SEQUENCE_FIELDS) if (p[k] !== undefined) out[k] = p[k];
+  return out;
+}
+
+export function renameSequence(p, id, name) {
+  if (currentSequence(p).id === id) p.sequence = { ...currentSequence(p), name };
+  else if (p.sequences?.[id]) p.sequences[id].name = name;
+}
+
+// Sletter en sekvens. Er den åpen, åpnes den neste først. Den siste kan ikke slettes.
+export function deleteSequence(p, id) {
+  const list = sequenceList(p);
+  if (list.length < 2) return false;
+  if (currentSequence(p).id === id) {
+    const i = list.findIndex((s) => s.id === id);
+    openSequence(p, (list[i + 1] || list[i - 1]).id);
+  }
+  delete p.sequences[id];
+  return true;
 }
 
 export function defaultProps(type, media) {
@@ -697,6 +787,22 @@ export function transitionWindow(clip, hasPrev = true, prev = null, edge = 'star
   return hasPrev ? [clip.start - d / 2, clip.start + d / 2] : [clip.start, clip.start + d];
 }
 
+// Klipp over hovedsporet kan også ha overganger. De tones inn fra og ut til det som ligger under.
+// Effekter (Pixelate, Blur, sladding) også: effekten toner, tørker eller glir inn over bildet.
+export function hasFreeTransitions(clip) {
+  return clip.lane > 0 && clip.lane < CAPTION_LANE && isVisual(clip);
+}
+
+export function freeTransitionAt(clip, T) {
+  for (const edge of ['start', 'end']) {
+    const t = clip[edge === 'end' ? 'transitionOut' : 'transition'];
+    if (!t) continue;
+    const [a, b] = transitionWindow(clip, false, null, edge);
+    if (T >= a && T < b) return { type: t.type, p: clamp((T - a) / (b - a), 0, 1), audio: t.audio !== false, edge };
+  }
+  return null;
+}
+
 export const transitionSelection = (id, edge = 'start') => edge === 'end' ? `out:${id}` : id;
 export function parseTransitionSelection(value) {
   return value?.startsWith('out:') ? { id: value.slice(4), edge: 'end', key: 'transitionOut' } : { id: value, edge: 'start', key: 'transition' };
@@ -835,7 +941,12 @@ export function computeFrame(project, T, { captions = true } = {}) {
     }
   }
   free.sort((a, b) => a.lane - b.lane || a.start - b.start);
-  for (const c of free) layers.push({ clip: c, T });
+  for (const c of free) {
+    const tr = hasFreeTransitions(c) ? freeTransitionAt(c, T) : null;
+    // Utgangen er inngangen spilt baklengs, så alle overgangene tegner klippet som B.
+    if (!tr) layers.push({ clip: c, T });
+    else layers.push({ transition: tr.edge === 'end' ? { ...tr, p: 1 - tr.p } : tr, overlay: true, a: null, b: { clip: c, T } });
+  }
 
   const caps = [];
   if (captions && !laneHidden(project, CAPTION_LANE)) {
@@ -905,7 +1016,10 @@ export function computeAudio(project, T) {
     if (c.lane === CAPTION_LANE || factors.has(c.id)) continue;
     const [a, b] = audioWindow(c);
     const inside = T >= c.start && T < c.start + c.dur;
-    if ((c.lane !== 0 && inside) || (!inside && T >= a && T < b)) set(c, 1);
+    if (c.lane !== 0 && inside) {
+      const tr = hasFreeTransitions(c) ? freeTransitionAt(c, T) : null;
+      set(c, tr?.audio ? (tr.edge === 'end' ? fadeOutGain(tr.p) : fadeInGain(tr.p)) : 1);
+    } else if (!inside && T >= a && T < b) set(c, 1);
   }
   for (const c of near) {
     if (c.lane === 0 || c.lane === CAPTION_LANE) continue;

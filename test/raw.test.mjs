@@ -8,7 +8,7 @@ import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const raw = require('../src/main/raw.js');
-const ffmpeg = require('ffmpeg-static');
+const ffmpeg = require('../src/main/ffmpeg-path.js');
 
 function jpeg(w, h, extra = []) {
   return execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `testsrc=size=${w}x${h}`, '-frames:v', '1', ...extra, '-f', 'mjpeg', '-']);

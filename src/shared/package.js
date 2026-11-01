@@ -1,7 +1,7 @@
 // Pakking av prosjekter for arkiv, som Collect Files og Reduce Project i After Effects.
 // Først ryddes prosjektet (det som er slått av eller ikke brukes, fjernes), så listes alle
 // filene som trengs. Selve kopieringen skjer i hovedprosessen.
-import { relayoutPrimary, sourceTime } from './model.js';
+import { relayoutPrimary, sourceTime, timelines } from './model.js';
 
 /**
  * Lager en ryddet kopi av prosjektet. Valg:
@@ -14,23 +14,25 @@ import { relayoutPrimary, sourceTime } from './model.js';
 export function reduceProject(src, opts = {}) {
   const p = structuredClone(src);
   const removed = { clips: [], media: [], streams: [] };
-  const hiddenLane = (lane) => Boolean(p.lanes?.[lane]?.hidden);
-  for (const c of Object.values(p.clips)) {
-    const off = (opts.removeDisabled && c.enabled === false) || (opts.removeHidden && c.lane !== 0 && hiddenLane(c.lane));
-    if (!off) continue;
-    removed.clips.push(c.name || c.type);
-    if (c.lane === 0) {
-      // Et mellomrom med samme lengde, så resten av redigeringen står der den står.
-      p.clips[c.id] = { id: c.id, type: 'gap', mediaId: null, lane: 0, start: c.start, in: 0, dur: c.dur, enabled: true, props: {}, kf: {}, name: 'Gap' };
-    } else delete p.clips[c.id];
-  }
-  // Grupper med bare ett klipp igjen løses opp.
-  const count = new Map();
-  for (const c of Object.values(p.clips)) if (c.group) count.set(c.group, (count.get(c.group) || 0) + 1);
-  for (const c of Object.values(p.clips)) if (c.group && count.get(c.group) < 2) delete c.group;
-
+  // Alle sekvensene ryddes, og media regnes som brukt hvis en av dem bruker det.
   const usedBy = new Map();
-  for (const c of Object.values(p.clips)) if (c.mediaId) usedBy.set(c.mediaId, [...(usedBy.get(c.mediaId) || []), c]);
+  for (const t of timelines(p)) {
+    const hiddenLane = (lane) => Boolean(t.lanes?.[lane]?.hidden);
+    for (const c of Object.values(t.clips)) {
+      const off = (opts.removeDisabled && c.enabled === false) || (opts.removeHidden && c.lane !== 0 && hiddenLane(c.lane));
+      if (!off) continue;
+      removed.clips.push(c.name || c.type);
+      if (c.lane === 0) {
+        // Et mellomrom med samme lengde, så resten av redigeringen står der den står.
+        t.clips[c.id] = { id: c.id, type: 'gap', mediaId: null, lane: 0, start: c.start, in: 0, dur: c.dur, enabled: true, props: {}, kf: {}, name: 'Gap' };
+      } else delete t.clips[c.id];
+    }
+    // Grupper med bare ett klipp igjen løses opp.
+    const count = new Map();
+    for (const c of Object.values(t.clips)) if (c.group) count.set(c.group, (count.get(c.group) || 0) + 1);
+    for (const c of Object.values(t.clips)) if (c.group && count.get(c.group) < 2) delete c.group;
+    for (const c of Object.values(t.clips)) if (c.mediaId) usedBy.set(c.mediaId, [...(usedBy.get(c.mediaId) || []), c]);
+  }
 
   if (opts.removeUnused) {
     for (const id of Object.keys(p.media)) {
@@ -55,7 +57,7 @@ export function reduceProject(src, opts = {}) {
       }
     }
   }
-  relayoutPrimary(p);
+  for (const t of timelines(p)) relayoutPrimary(t);
   return { project: p, removed };
 }
 
@@ -106,19 +108,24 @@ export function mediaFiles(p, { includeOptimized = false } = {}) {
 export function usedRanges(p, handles = 2) {
   handles = Number.isFinite(handles) ? Math.max(0, handles) : 2;
   const out = {};
-  const pads = new Map();
-  for (let i = 1; i < (p.primary || []).length; i++) {
-    const c = p.clips[p.primary[i]], prev = p.clips[p.primary[i - 1]];
-    if (!c?.transition || !prev) continue;
-    const half = Math.min(c.transition.dur, c.dur, prev.dur) / 2;
-    pads.set(c.id, { ...pads.get(c.id), lead: half });
-    pads.set(prev.id, { ...pads.get(prev.id), tail: half });
+  // Sekvensene kan ha klipp med samme id, så hver sekvens har sine egne kanter.
+  const clips = [];
+  for (const t of timelines(p)) {
+    const pads = new Map();
+    for (let i = 1; i < (t.primary || []).length; i++) {
+      const c = t.clips[t.primary[i]], prev = t.clips[t.primary[i - 1]];
+      if (!c?.transition || !prev) continue;
+      const half = Math.min(c.transition.dur, c.dur, prev.dur) / 2;
+      pads.set(c.id, { ...pads.get(c.id), lead: half });
+      pads.set(prev.id, { ...pads.get(prev.id), tail: half });
+    }
+    for (const c of Object.values(t.clips)) clips.push([c, pads.get(c.id)]);
   }
-  for (const c of Object.values(p.clips)) {
+  for (const [c, pad] of clips) {
     const m = c.mediaId && p.media[c.mediaId];
     if (!m) continue;
-    const lead = Math.max(0, c.props?.aLead || 0, pads.get(c.id)?.lead || 0);
-    const tail = Math.max(0, c.props?.aTail || 0, pads.get(c.id)?.tail || 0);
+    const lead = Math.max(0, c.props?.aLead || 0, pad?.lead || 0);
+    const tail = Math.max(0, c.props?.aTail || 0, pad?.tail || 0);
     // Kildetiden ved start og slutt (fart, ramper og baklengs er tatt med i sourceTime).
     const s0 = sourceTime(c, c.start - lead);
     const s1 = sourceTime(c, c.start + c.dur + tail);
@@ -182,7 +189,7 @@ export function trimProject(src, { handles = 2, minSaving = 0.25 } = {}) {
     });
     for (const part of parts) p.media[part.id] = part.media;
     // Klippene flyttes til delen som inneholder dem, og tidene i kilden forskyves.
-    for (const c of Object.values(p.clips)) {
+    for (const c of timelines(p).flatMap((t) => Object.values(t.clips))) {
       if (c.mediaId !== id) continue;
       const s = Math.min(sourceTime(c, c.start), sourceTime(c, c.start + c.dur));
       const part = parts.find((x) => s >= x.a - 1e-6 && s <= x.b + 1e-6) || parts[0];

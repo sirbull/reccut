@@ -3,7 +3,9 @@ import { signal, computed, effect } from '@preact/signals';
 import { produce, setAutoFreeze } from 'immer';
 import {
   CAPTION_LANE,
+  currentSequence,
   deepClone,
+  openSequence,
   sealProject,
   TITLE_TEMPLATES,
   makeClip,
@@ -15,6 +17,8 @@ import {
 import { addMediaClip, autoFormat } from '../../shared/ops.js';
 import { templateDefaults } from '../../shared/titletemplates.js';
 import { hasMotion, setMotion } from '../../shared/stabilize.js';
+import { CAMERA_LOGS, hasLut, setLut } from '../../shared/grade.js';
+import { couldNotRead } from '../../shared/formats.js';
 import { prefs } from '../prefs.js';
 
 // Objektene i prosjektet endres bare gjennom commit, så de trenger ikke fryses.
@@ -27,6 +31,8 @@ export const project = signal(newProject());
 // Hver versjon av prosjektet endres aldri etter at den er laget, så tidsindeksen kan gjenbrukes.
 effect(() => sealProject(project.value));
 export const projectPath = signal(null);
+// Sekvensinnstillinger: null, {} fra menyen, eller { mediaId } når første klipp nettopp satte formatet.
+export const sequenceSettingsOpen = signal(null);
 export const selection = signal([]);
 export const selectedTransition = signal(null);
 // Valgt lydkomponent i utvidet lyd: { clipId, key }. V slår den av og på.
@@ -129,8 +135,7 @@ function withDuration(p) {
   return end === p.duration ? p : { ...p, duration: end };
 }
 
-// Tomme spor forsvinner når klippene endres, også spor lagt til med + Video og + Audio.
-// ponytail: et nytt tomt spor lever til neste klippendring; det ekstra slippsporet dekker resten.
+// Tomme spor forsvinner når klippene endres. Nye spor lages ved å slippe et klipp på det ekstra slippsporet.
 function pruneTracks(prev, p) {
   if (!p.tracks || prev.clips === p.clips) return p;
   let lo = -1, hi = 1;
@@ -152,30 +157,73 @@ export const usedMedia = computed(() => {
   return set;
 });
 
+// Flere klipp i Properties: det som endres i props på klippet som vises (from), kopieres til de andre (to).
+// Tidslinjen setter paused mens den drar, så volum og fades der bare gjelder klippet man drar i.
+// ponytail: nøkkelbilder (kf) kopieres ikke, tidene gjelder bare kilden til ett klipp.
+export const mirror = { from: null, to: [], paused: false };
+function copyChanges(before, after, targets) {
+  for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const a = before[k], b = after[k];
+    if (a === b) continue;
+    const plain = (v) => v && typeof v === 'object' && !Array.isArray(v);
+    if (plain(a) && plain(b)) {
+      copyChanges(a, b, targets.map((t) => (plain(t[k]) ? t[k] : (t[k] = {}))));
+      continue;
+    }
+    for (const t of targets) b === undefined ? delete t[k] : (t[k] = deepClone(b));
+  }
+}
+function mirrored(base, next) {
+  const { from, to, paused } = mirror;
+  const a = base.clips[from], b = next.clips[from];
+  if (paused || !a || !b || a.props === b.props) return next;
+  return produce(next, (d) => copyChanges(a.props, b.props, to.map((id) => d.clips[id]?.props).filter(Boolean)));
+}
+
+// Forhåndsvisning: viser en endring i seeren mens musa er over et valg, uten angresteg eller lagring.
+// Alt som endrer prosjektet på ordentlig, avslutter forhåndsvisningen først.
+let previewBase = null;
+export function previewEdit(mutator) {
+  if (transientBase) return;
+  previewBase ??= project.value;
+  project.value = withDuration(mirrored(previewBase, produce(previewBase, (d) => void mutator(d))));
+}
+export function endPreview() {
+  if (previewBase) project.value = previewBase;
+  previewBase = null;
+}
+
 export function commit(mutator) {
+  endPreview();
   const prev = project.value;
   let result;
-  const next = pruneTracks(prev, withDuration(
+  const next = pruneTracks(prev, withDuration(mirrored(prev,
     produce(prev, (d) => {
       result = mutator(d);
     })
-  ));
+  )));
   pushUndo(prev);
   project.value = next;
   pruneSelection();
   scheduleSave();
+  // autoFormat har nettopp gitt et tomt prosjekt formatet til første klipp.
+  if (prev.autoFormat && !next.autoFormat && prefs.value.askSequenceSettings) {
+    const first = Object.values(next.clips).find((c) => !prev.clips[c.id] && c.mediaId && next.media[c.mediaId]?.kind !== 'audio');
+    if (first) sequenceSettingsOpen.value = { mediaId: first.mediaId };
+  }
   return result;
 }
 
 let transientBase = null;
 export function beginTransient() {
+  endPreview();
   transientBase = project.value;
 }
 export function updateTransient(mutator) {
   if (!transientBase) beginTransient();
-  project.value = withDuration(produce(transientBase, (d) => {
+  project.value = withDuration(mirrored(transientBase, produce(transientBase, (d) => {
     mutator(d);
-  }));
+  })));
 }
 export function endTransient(keep = true) {
   if (!transientBase) return;
@@ -189,19 +237,25 @@ export function endTransient(keep = true) {
 }
 
 export function undo() {
+  endPreview();
   if (!undoStack.length) return;
+  const prevId = currentSequence(project.value).id;
   redoStack.push(project.value);
   project.value = undoStack.pop();
   historyVersion.value++;
+  if (currentSequence(project.value).id !== prevId) afterSequenceChange(prevId);
   pruneSelection();
   scheduleSave();
 }
 
 export function redo() {
+  endPreview();
   if (!redoStack.length) return;
+  const prevId = currentSequence(project.value).id;
   undoStack.push(project.value);
   project.value = redoStack.pop();
   historyVersion.value++;
+  if (currentSequence(project.value).id !== prevId) afterSequenceChange(prevId);
   pruneSelection();
   scheduleSave();
 }
@@ -221,6 +275,44 @@ function pruneSelection() {
   }
 }
 
+/* Sekvenser (se model.js). Å åpne en sekvens er ikke et angresteg: historikken skrives om,
+   så Angre fortsetter i den nye sekvensen. Steg fra før sekvensen fantes, forsvinner. */
+
+const sequenceTimes = new Map();
+
+function afterSequenceChange(prevId) {
+  sequenceTimes.set(prevId, getTime());
+  selection.value = [];
+  selectedTransition.value = null;
+  selectedComponent.value = null;
+  skim.value = null;
+  setTime(sequenceTimes.get(currentSequence(project.value).id) || 0, { force: true });
+}
+
+export function switchSequence(id) {
+  const prevId = currentSequence(project.value).id;
+  if (prevId === id || !project.value.sequences?.[id]) return;
+  endTransient(true);
+  playing.value = false;
+  const swap = (p) => (currentSequence(p).id === id ? p : p.sequences?.[id] ? produce(p, (d) => void openSequence(d, id)) : null);
+  project.value = swap(project.value);
+  const remapped = undoStack.map(swap);
+  const cut = remapped.lastIndexOf(null);
+  undoStack.splice(0, undoStack.length, ...remapped.slice(cut + 1));
+  redoStack.length = 0;
+  historyVersion.value++;
+  afterSequenceChange(prevId);
+  scheduleSave();
+}
+
+// Ny, duplisert eller slettet sekvens er vanlige angresteg.
+export function commitSequence(mutator) {
+  const prevId = currentSequence(project.value).id;
+  const r = commit(mutator);
+  if (currentSequence(project.value).id !== prevId) afterSequenceChange(prevId);
+  return r;
+}
+
 /* Lagring */
 
 let saveTimer = null;
@@ -238,7 +330,7 @@ export async function saveNow() {
   }
   saveState.value = 'saving';
   try {
-    const p = { ...project.value, modified: Date.now() };
+    const p = { ...(previewBase || project.value), modified: Date.now() };
     projectPath.value = await api.saveProject(p, projectPath.value);
     localStorage.setItem('lastProject', projectPath.value);
     saveState.value = 'saved';
@@ -255,6 +347,7 @@ export function setProject(p, path = null) {
   skim.value = null;
   undoStack.length = 0;
   redoStack.length = 0;
+  sequenceTimes.clear();
   historyVersion.value++;
   relayoutPrimary(p);
   project.value = p;
@@ -470,6 +563,21 @@ export function loadMotion(path) {
     .finally(() => motionLoading.delete(path));
 }
 
+// Kamera-LUT-er (.cube) lastes når et medium bruker dem. Tegnes på nytt via motionVersion.
+const lutLoading = new Set();
+export function loadLut(path) {
+  if (!path || CAMERA_LOGS.some((x) => x.id === path) || hasLut(path) || lutLoading.has(path)) return;
+  lutLoading.add(path);
+  api
+    .readText(path)
+    .then((t) => {
+      setLut(path, t);
+      motionVersion.value++;
+    })
+    .catch((err) => import('../ui.jsx').then(({ toast }) => toast(`Could not load the LUT ${path.split(/[\\/]/).pop()}: ${err.message}`, { kind: 'error' })))
+    .finally(() => lutLoading.delete(path));
+}
+
 const waveCache = new Map();
 export function getWave(path) {
   if (!path) return null;
@@ -486,11 +594,15 @@ export function getWave(path) {
   return null;
 }
 
-function reportFailed(failed) {
-  if (!failed?.length) return;
-  import('../ui.jsx').then(({ toast }) =>
-    toast(`Could not read ${failed.join(', ')}. The file may be damaged or in an unsupported format.`, { kind: 'error', timeout: 9000 })
-  );
+// Locate: brukeren peker på dekoderen, og filene importeres på nytt.
+export function reportFailed(failed, missing = []) {
+  if (!failed?.length && !missing?.length) return;
+  const { text, links, locate } = couldNotRead(failed || [], missing || []);
+  const actions = [
+    ...locate.map((l) => ({ label: l.label, primary: true, onClick: async () => (await api.locateDecoder(l.tool)) && importPaths(l.files, null, { copy: false }) })),
+    ...links.map((l) => ({ label: l.label, onClick: () => api.openExternal(l.url) })),
+  ];
+  import('../ui.jsx').then(({ toast }) => toast(text, { kind: 'error', timeout: actions.length ? 0 : 12000, actions }));
 }
 
 // Import: filene kopieres til prosjektmappen eller blir liggende der de er (valg i Import Options).
@@ -513,8 +625,8 @@ export async function importPaths(paths, placement, opts = {}) {
       return [];
     }
   }
-  const { items, failed } = await api.importMedia(paths);
-  reportFailed(failed);
+  const { items, failed, missing } = await api.importMedia(paths);
+  reportFailed(failed, missing);
   addMediaRecords(items, placement);
   if (opts.optimize ?? prefs.value.importOptimize) import('./commands.js').then((m) => m.optimizeMedia(items.map((x) => x.id)));
   // Analyse for stabilisering i bakgrunnen, så Stabilize Clip virker med en gang.

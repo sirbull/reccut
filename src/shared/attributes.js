@@ -9,7 +9,7 @@ const isMask = (k) => k.startsWith('mask.') || k === 'masks';
 
 export const ATTRIBUTE_GROUPS = [
   { id: 'effects', kind: 'video', label: 'Effects', desc: 'Blur, vignette, shadow and the other video effects', keys: (k) => k === 'fx' || k === 'vfx' || k in EFFECT_DEFAULTS },
-  { id: 'color', kind: 'video', label: 'Color', desc: 'Color correction and looks', keys: (k) => k in GRADE_PROPS },
+  { id: 'color', kind: 'video', label: 'Color', desc: 'Color correction and looks', keys: (k) => k in GRADE_PROPS || k === 'film' },
   { id: 'transform', kind: 'video', label: 'Transform', desc: 'Position, scale and rotation', keys: (k) => ['x', 'y', 'scale', 'rotation'].includes(k) },
   { id: 'crop', kind: 'video', label: 'Crop', desc: 'Crop edges', keys: (k) => ['cropL', 'cropR', 'cropT', 'cropB'].includes(k) },
   { id: 'compositing', kind: 'video', label: 'Compositing', desc: 'Opacity', keys: (k) => k === 'opacity' },

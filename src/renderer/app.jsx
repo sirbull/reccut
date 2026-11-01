@@ -1,4 +1,5 @@
 import { AIChat, aiChatOpen } from './Extensions.jsx';
+import { PluginWindows, PluginsButton } from './Plugins.jsx';
 import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import {
@@ -15,6 +16,7 @@ import {
   Redo2,
   Settings,
   Share,
+  Sparkles,
   Undo2,
   Video,
   X,
@@ -39,18 +41,19 @@ import {
   room,
   tasks,
   undo,
+  sequenceSettingsOpen,
 } from './editor/store.js';
 import * as commands from './editor/commands.js';
 import { startExport } from './editor/ExportDialog.jsx';
 import { ExportRoom } from './export/ExportRoom.jsx';
-import { formatDuration } from '../shared/model.js';
+import { currentSequence, formatDuration } from '../shared/model.js';
 import { Button, IconButton, Modal, Toasts, toast } from './ui.jsx';
-import { HistoryDialog, NewProjectDialog, PackageDialog, ProjectsDialog, SaveAsDialog } from './ProjectDialogs.jsx';
+import { HistoryDialog, NewProjectDialog, PackageDialog, ProjectsDialog, SaveAsDialog, SequenceSettingsDialog } from './ProjectDialogs.jsx';
 import { CommandPalette, HelpCenter } from './help/Help.jsx';
 import { SettingsWindow } from './Settings.jsx';
 import { prefs } from './prefs.js';
 import { helpOpen, paletteOpen } from './registry.js';
-import { isTyping } from './keyboard.js';
+import { isTyping, writingText } from './keyboard.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -165,14 +168,19 @@ function TitleBar() {
           Export
         </button>
       </div>
-      <button class="project-btn" title={`${project.value.name}. Click to open or create projects.`} onClick={() => (commands.projectsOpen.value = true)}>
+      <button class="project-btn" title={`${project.value.name}. Click for project info, or to open or create projects.`} onClick={() => (commands.projectsOpen.value = true)}>
         <FolderOpen size={14} />
         <span>{project.value.name}</span>
+        {project.value.sequences && Object.keys(project.value.sequences).length > 0 && <span class="dim">/ {currentSequence(project.value).name}</span>}
       </button>
       <div class="spacer" />
       <TasksIndicator />
-      <button class="btn secondary small" onClick={() => aiChatOpen.value = true}>AI Chat</button>
-      {aiChatOpen.value && <AIChat key={project.value.id} />}
+      <PluginsButton />
+      <button class="btn secondary small ai-btn" onClick={() => (aiChatOpen.value = true)} title="AI agent: describe an edit and it does it. The first time, it helps you set it up.">
+        <Sparkles size={14} />
+        AI
+      </button>
+
       <IconButton icon={CircleHelp} class="help-btn" title={`Help and command search (${isMac ? '⌘K' : 'Ctrl+K'})`} onClick={() => (paletteOpen.value = true)} />
       {r === 'edit' ? (
         <div class="actions">
@@ -235,6 +243,17 @@ function Notice() {
 
 // Tastetrykk går gjennom kommandoregisteret. Taster i tekstfelt og åpne dialoger røres ikke.
 function onKeyDownCapture(e) {
+  // Mellomrom spiller av uansett hvor fokus er, bortsett fra der man skriver tekst. Et tallfelt lagres og slippes.
+  if (e.code === 'Space' && !e.isComposing && !writingText(e) && !document.querySelector('.modal-backdrop, .help-window, .palette')) {
+    const cmd = commandForEvent(e, room.value);
+    if (cmd?.id === 'play' || cmd?.id === 'playReverse') {
+      e.preventDefault();
+      e.stopPropagation();
+      document.activeElement?.blur?.();
+      runCommand(cmd);
+      return;
+    }
+  }
   if (isTyping(e) || e.isComposing || e.defaultPrevented) return;
   if (document.querySelector('.help-window') || document.querySelector('.palette')) return;
   const any = commandForEvent(e, room.value);
@@ -324,8 +343,11 @@ function App() {
       {(commands.newProjectOpen.value || needsProject.value) && <NewProjectDialog />}
       {commands.projectsOpen.value && !needsProject.value && <ProjectsDialog />}
       {commands.saveAsOpen.value && <SaveAsDialog />}
+      {sequenceSettingsOpen.value && <SequenceSettingsDialog />}
       {commands.packageOpen.value && <PackageDialog />}
       {commands.historyOpen.value && <HistoryDialog />}
+      {aiChatOpen.value && <AIChat key={project.value.id} />}
+      <PluginWindows />
       {commands.prefsOpen.value && <SettingsWindow />}
       {helpOpen.value && <HelpCenter />}
       {paletteOpen.value && <CommandPalette />}

@@ -19,6 +19,7 @@ import {
   snapping,
   tool,
   undo,
+  sequenceSettingsOpen,
 } from './editor/store.js';
 import * as commands from './editor/commands.js';
 import * as playback from './editor/playback.js';
@@ -94,6 +95,9 @@ export const COMMANDS = [
   { id: 'history', label: 'Project History…', menu: 'File', keys: 'Shift+Alt+CmdOrCtrl+H', rooms: ALL, run: () => (commands.historyOpen.value = true), help: 'history', keywords: 'versions autosave auto save backup restore revert earlier older crash', desc: 'Go back to an earlier version of the project. Reccut saves a copy every few minutes and when you close it.' },
   { id: 'package', label: 'Package Project…', menu: 'File', keys: 'Alt+Shift+CmdOrCtrl+P', rooms: ALL, run: () => (commands.packageOpen.value = true), help: 'package', keywords: 'collect files archive reduce consolidate backup hand over export project media', desc: 'Copy the project and every file it uses into one folder, for archiving or handing over. Unused and disabled material can be left out.' },
   { id: 'revealProject', label: isMac ? 'Reveal Project in Finder' : 'Show Project in Explorer', menu: 'File', keys: 'Shift+CmdOrCtrl+R', rooms: ALL, run: () => projectPath.value && api.reveal(projectPath.value), help: 'projects' },
+  { id: 'newSequence', label: 'New Sequence', menu: 'File', group: 'sequence', keys: 'Alt+CmdOrCtrl+N', rooms: ALL, run: () => commands.newSequence(), help: 'projects', keywords: 'timeline add another version cut edit', desc: 'Add an empty timeline to the project. All sequences share the same media. Double click a sequence in the Media browser to open it.' },
+  { id: 'duplicateSequence', label: 'Duplicate Sequence', menu: 'File', group: 'sequence', rooms: ALL, run: () => commands.duplicateSequence(), help: 'projects', keywords: 'copy timeline version clone', desc: 'Make a copy of the open sequence and open it, for example to make a vertical or shorter version.' },
+  { id: 'sequenceSettings', label: 'Sequence Settings…', menu: 'File', group: 'sequence', keys: 'CmdOrCtrl+J', rooms: ALL, run: () => (sequenceSettingsOpen.value = {}), help: 'projects', keywords: 'project properties format resolution size frame rate fps width height aspect', desc: 'Change the size and frame rate of the open sequence. Clips scale to fit the new size.' },
   { id: 'import', label: 'Import Media', menu: 'File', group: 'media', keys: 'CmdOrCtrl+I', register: true, rooms: ALL, run: () => ((room.value = 'edit'), commands.importDialog()), help: 'import', desc: 'Import video, audio and images. Choose to copy them into the project folder or leave them in place.' },
   { id: 'optimize', label: 'Optimize Media', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+O', run: () => commands.optimizeMedia(), help: 'optimize', desc: 'Convert the selected clips to a high quality format that is smooth to edit. Runs in the background.' },
   { id: 'syncAudio', label: 'Synchronize Audio', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+G', run: () => commands.autoSyncAudio(), help: 'sync', keywords: 'auto sync audio merge external microphone recorder', desc: 'In the browser: merge audio files into the video clips they belong to. On the timeline: place audio clips under the matching video.' },

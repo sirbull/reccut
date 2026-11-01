@@ -383,3 +383,20 @@ test('fartsrampe beholder kildeområdet og endrer farten jevnt', () => {
   setRamp(p, right, null);
   assert.ok(p.clips[right].speed > 0);
 });
+
+test('autoFormat gives an empty project the size and frame rate of the first video', async () => {
+  const { autoFormat } = await import('../src/shared/ops.js');
+  const fmt = (fps, w = 3840, h = 2160) => {
+    const p = newProject('t');
+    autoFormat(p, { kind: 'video', width: w, height: h, fps });
+    return [p.width, p.height, p.fps, p.autoFormat];
+  };
+  assert.deepEqual(fmt(29.97002997), [3840, 2160, 29.97, false]);
+  assert.deepEqual(fmt(23.976), [3840, 2160, 23.976, false]);
+  assert.deepEqual(fmt(29.6), [3840, 2160, 29.97, false], 'variable frame rate from a phone');
+  assert.deepEqual(fmt(15, 1281, 721), [1280, 720, 15, false], 'odd sizes are made even');
+  const p = newProject('t');
+  p.autoFormat = false;
+  autoFormat(p, { kind: 'video', width: 640, height: 480, fps: 25 });
+  assert.equal(p.width, 1920, 'a chosen format is kept');
+});

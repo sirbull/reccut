@@ -10,7 +10,7 @@ import { build } from 'esbuild';
 import { mediaFiles, trimProject } from '../src/shared/package.js';
 import { newProject } from '../src/shared/model.js';
 const require = createRequire(import.meta.url),
-  ffmpeg = require('ffmpeg-static');
+  ffmpeg = require('../src/main/ffmpeg-path.js');
 const bundled = (
   await build({
     entryPoints: ['src/main/packager.js'],
@@ -18,7 +18,7 @@ const bundled = (
     write: false,
     format: 'cjs',
     platform: 'node',
-    external: ['electron', 'ffmpeg-static'],
+    external: ['electron', './ffmpeg-path'],
   })
 ).outputFiles[0].text;
 function setup(t) {
@@ -28,7 +28,7 @@ function setup(t) {
   vm.runInNewContext(bundled, {
     module,
     exports: module.exports,
-    require: (name) => (name === 'electron' ? { app: { getPath: () => dir }, shell: {} } : require(name)),
+    require: (name) => (name === 'electron' ? { app: { getPath: () => dir }, shell: {} } : name === './ffmpeg-path' ? ffmpeg : require(name)),
     Buffer,
     process,
     console,

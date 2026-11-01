@@ -4,9 +4,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-let ffmpegPath = require('ffmpeg-static');
-// I en pakket app ligger binærfilen utenfor asar-arkivet.
-if (ffmpegPath) ffmpegPath = ffmpegPath.replace('app.asar', 'app.asar.unpacked');
+const ffmpegPath = require('./ffmpeg-path');
 
 function getFfmpegPath() {
   return ffmpegPath;
@@ -108,22 +106,47 @@ function hasFilter(name) {
  * HDR tonemappes til Rec. 709, så bildet ser riktig ut i redigeringen og eksporten.
  * quality 'optimized' gir høy kvalitet, 'proxy' går raskere.
  */
-function transcode(file, output, { color, duration, quality = 'optimized', audio = true, alpha = false, interlaced = false, hasVideo = true, safe = false }, onProgress) {
+// Filtrene som gjør en kilde klar for appen. Brukes både til kopier og når eksporten dekoder originalen.
+// maxSide gir en mindre kopi (proxy) for redigering.
+function videoFilters({ color, interlaced, maxSide = 0 } = {}) {
+  const vf = [];
+  // Linjeflettet video (TV, DV, eldre kameraer) avflettes, ellers blir bevegelser hakkete.
+  if (interlaced) vf.push('bwdif=mode=send_frame:deint=interlaced');
+  if (color?.hdr) {
+    if (hasFilter('zscale') && hasFilter('tonemap')) {
+      const tin = color.hdr === 'pq' ? 'smpte2084' : 'arib-std-b67';
+      vf.push(`zscale=tin=${tin}:min=bt2020nc:pin=bt2020:t=linear:npl=203`, 'format=gbrpf32le', 'zscale=p=bt709', 'tonemap=tonemap=hable:desat=0', 'zscale=t=bt709:m=bt709:r=tv', 'format=yuv444p10le');
+    }
+  } else if (hasFilter('zscale')) {
+    // SDR i et annet fargerom (PAL, full range fra JPEG) gjøres om til BT.709 med begrenset område.
+    // Da tolker forhåndsvisningen (Chromium) og eksportens dekoder bildet likt (se decodeFilters).
+    const known = (v) => v && v !== 'unknown' && v !== 'unspecified';
+    const z = [];
+    if (known(color?.space) && color.space !== 'bt709') z.push('m=bt709');
+    if (known(color?.primaries) && known(color?.transfer) && (color.primaries !== 'bt709' || color.transfer !== 'bt709')) z.push('p=bt709', 't=bt709');
+    if (color?.range === 'pc') z.push('r=tv');
+    if (z.length) vf.push(`zscale=${z.join(':')}`);
+  }
+  // Koderne krever partall bredde og høyde, og firkantede piksler gjør resten av appen enklere.
+  const k = maxSide ? `min(1,${maxSide}/max(iw*sar,ih))*` : '';
+  vf.push(`scale='trunc(${k}iw*sar/2)*2':'trunc(${k}ih/2)*2'`, 'setsar=1');
+  return vf;
+}
+
+// Eksportens dekoder for originaler: samme filtre som kopien, og så til RGB med BT.709 og begrenset
+// område, slik Chromium viser kopien. Uten faste verdier gjetter FFmpeg annerledes enn Chromium.
+function decodeFilters(stream) {
+  return [...videoFilters(stream), 'scale=in_color_matrix=bt709:in_range=tv:out_range=pc'].join(',');
+}
+
+function transcode(file, output, { color, duration, quality = 'optimized', audio = true, alpha = false, interlaced = false, hasVideo = true, safe = false, maxSide = 0 }, onProgress) {
   const tenBit = (color?.bits || 8) > 8 || Boolean(color?.hdr);
   // Gjennomsiktig video (ProRes 4444, animasjoner med alfa) blir VP9 med alfa, som Chromium viser.
   const vp9 = tenBit || alpha;
   const fast = quality === 'proxy';
   const args = ['-fflags', '+genpts', ...(safe ? ['-err_detect', 'ignore_err'] : []), '-i', file, '-map', '0:v:0?', ...(audio ? ['-map', '0:a:0?'] : []), '-map_metadata', '-1'];
   if (hasVideo) {
-    const vf = [];
-    // Linjeflettet video (TV, DV, eldre kameraer) avflettes, ellers blir bevegelser hakkete.
-    if (interlaced) vf.push('bwdif=mode=send_frame:deint=interlaced');
-    if (color?.hdr && hasFilter('zscale') && hasFilter('tonemap')) {
-      const tin = color.hdr === 'pq' ? 'smpte2084' : 'arib-std-b67';
-      vf.push(`zscale=tin=${tin}:min=bt2020nc:pin=bt2020:t=linear:npl=203`, 'format=gbrpf32le', 'zscale=p=bt709', 'tonemap=tonemap=hable:desat=0', 'zscale=t=bt709:m=bt709:r=tv');
-    }
-    // Koderne krever partall bredde og høyde, og firkantede piksler gjør resten av appen enklere.
-    vf.push("scale='trunc(iw*sar/2)*2':'trunc(ih/2)*2'", 'setsar=1');
+    const vf = videoFilters({ color, interlaced, maxSide });
     vf.push(alpha ? 'format=yuva420p' : tenBit ? 'format=yuv420p10le' : 'format=yuv420p');
     args.push('-vf', vf.join(','));
   }
@@ -317,5 +340,5 @@ async function convertImage(file, output) {
 }
 
 module.exports = {
-  transcode, transcodeRobust, scanDuration, transcodeExt, hasFilter, details,
+  transcode, transcodeRobust, videoFilters, decodeFilters, scanDuration, transcodeExt, hasFilter, details,
   convertImage, getFfmpegPath, run, probe, remux, thumbnails, waveform, optimize, decodePcm };

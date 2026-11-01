@@ -2,11 +2,13 @@
 // Vises over alle rommene, siden både opptak og redigering hører til et prosjekt.
 import { useEffect, useState } from 'preact/hooks';
 import { FilePlus2, FolderOpen, FolderSearch, MoreHorizontal } from 'lucide-preact';
-import { PROJECT_TEMPLATES, formatDuration } from '../shared/model.js';
-import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, restoreProject, saveNow, saveProjectAs } from './editor/store.js';
+import { PROJECT_TEMPLATES, formatDuration, sequenceList, timelines } from '../shared/model.js';
+import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, restoreProject, saveNow, saveProjectAs, sequenceSettingsOpen } from './editor/store.js';
+import { ProjectSettings } from './editor/Inspector.jsx';
+import { prefs, setPrefs } from './prefs.js';
 import { mediaFiles, reduceProject, trimProject } from '../shared/package.js';
 import * as commands from './editor/commands.js';
-import { Button, IconButton, Modal, Row, toast } from './ui.jsx';
+import { Button, IconButton, Modal, Row, Toggle, toast } from './ui.jsx';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -117,6 +119,60 @@ export function NewProjectDialog() {
   );
 }
 
+// Fakta om det åpne prosjektet, øverst i prosjektlisten.
+function ProjectInfo() {
+  const p = project.value;
+  const seqs = sequenceList(p);
+  const media = Object.values(p.media);
+  const kinds = [['video', 'video'], ['recording', 'recording'], ['audio', 'audio'], ['image', 'image']]
+    .map(([k, label]) => [media.filter((m) => m.kind === k).length, label])
+    .filter(([n]) => n)
+    .map(([n, label]) => `${n} ${label}${n > 1 ? 's' : ''}`);
+  const offline = media.filter((m) => m.offline).length;
+  const clips = timelines(p).reduce((n, t) => n + Object.keys(t.clips).length, 0);
+  const date = (t) => new Date(t).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+  return (
+    <div class="project-info">
+      <div class="project-info-head">
+        <b>{p.name}</b>
+        {projectPath.value && (
+          <Button variant="ghost" icon={FolderOpen} onClick={() => api.reveal(projectPath.value)}>
+            {isMac ? 'Reveal in Finder' : 'Show in Explorer'}
+          </Button>
+        )}
+      </div>
+      <Row label="Location">
+        <span class="value path" title={projectPath.value || ''}>{projectPath.value || 'Not saved yet'}</span>
+      </Row>
+      <Row label="Format">
+        <span class="value">
+          {p.width} × {p.height} · {p.fps} fps
+        </span>
+      </Row>
+      <Row label="Duration">
+        <span class="value">{formatDuration(p.duration)}</span>
+      </Row>
+      <Row label={seqs.length > 1 ? 'Sequences' : 'Sequence'}>
+        <span class="value">{seqs.map((s) => (s.active ? `${s.name} (open)` : s.name)).join(', ')}</span>
+      </Row>
+      <Row label="Media">
+        <span class="value">
+          {media.length ? kinds.join(', ') : 'None'}
+          {offline > 0 && `, ${offline} offline`}
+        </span>
+      </Row>
+      <Row label="Clips">
+        <span class="value">{clips}</span>
+      </Row>
+      {p.modified && (
+        <Row label="Last saved">
+          <span class="value">{date(p.modified)}</span>
+        </Row>
+      )}
+    </div>
+  );
+}
+
 export function ProjectsDialog() {
   const [list, setList] = useState(null);
   const load = () => api.listProjects().then(setList);
@@ -171,6 +227,7 @@ export function ProjectsDialog() {
         </>
       }
     >
+      {!needsProject.value && <ProjectInfo />}
       <div class="project-list">
         {list === null && <p class="dim">Loading</p>}
         {list?.length === 0 && <p class="dim">No projects yet.</p>}
@@ -197,6 +254,39 @@ export function ProjectsDialog() {
           </div>
         ))}
       </div>
+    </Modal>
+  );
+}
+
+/* Sekvensinnstillinger: størrelse og bildefrekvens for den åpne sekvensen. Vises også når
+   første klipp legges i et tomt prosjekt, og da har sekvensen allerede fått klippets format. */
+
+export function SequenceSettingsDialog() {
+  const { mediaId } = sequenceSettingsOpen.value;
+  const m = project.value.media[mediaId];
+  const close = () => (sequenceSettingsOpen.value = null);
+  return (
+    <Modal
+      title="Sequence Settings"
+      width={440}
+      onClose={close}
+      footer={
+        <Button variant="primary" onClick={close}>
+          Done
+        </Button>
+      }
+    >
+      {m && (
+        <p class="hint">
+          The sequence now matches {m.name}
+          {m.width ? ` (${m.width} × ${m.height}${m.fps ? `, ${Math.round(m.fps * 100) / 100} fps` : ''})` : ''}. Keep it, or choose another format.
+        </p>
+      )}
+      <ProjectSettings name={false} />
+      <p class="hint">Clips with another size are scaled to fit, and clips with another frame rate keep their speed. You can change this later with File › Sequence Settings.</p>
+      <Row label="Ask when adding the first clip">
+        <Toggle checked={prefs.value.askSequenceSettings} onChange={(v) => setPrefs({ askSequenceSettings: v })} />
+      </Row>
     </Modal>
   );
 }

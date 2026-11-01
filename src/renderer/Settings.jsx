@@ -1,8 +1,9 @@
 // Innstillinger (Cmd ,), bygd som i Final Cut Pro: faner med ikoner øverst, og en kommandoeditor
 // for hurtigtaster. Alle valg lagres med en gang og gjelder hele appen.
 import { ExtensionsPane } from './Extensions.jsx';
+import { PluginsPane } from './Plugins.jsx';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AudioLines, Download, FolderOpen, Keyboard, Play, RotateCcw, Scissors, Search, Settings2, Share, Upload, X } from 'lucide-preact';
+import { AudioLines, Download, FolderOpen, Keyboard, Play, Puzzle, RotateCcw, Scissors, Search, Settings2, Share, Sparkles, Upload, X } from 'lucide-preact';
 import { PREVIEW_RESOLUTIONS, prefs, setPrefs } from './prefs.js';
 import { settings as recordingSettings, saveSettings } from './recorder/settings.js';
 import { audioSkimming, skimming, snapping } from './editor/store.js';
@@ -33,7 +34,8 @@ const PANES = [
   { id: 'import', label: 'Import', icon: Download },
   { id: 'audio', label: 'Audio', icon: AudioLines },
   { id: 'export', label: 'Export', icon: Share },
-  { id: 'extensions', label: 'AI & Plugins', icon: Settings2 },
+  { id: 'extensions', label: 'AI', icon: Sparkles },
+  { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard },
 ];
 
@@ -94,6 +96,7 @@ function GeneralPane() {
           }}
         />
         {toggle('reopenLast', 'Open the last project when Reccut starts')}
+        {toggle('askSequenceSettings', 'Ask for sequence settings when adding the first clip')}
         <p class="hint">Projects are saved automatically after every change, and earlier versions are kept in Project History.</p>
       </Section>
       <Section title="Updates" collapsible={false}>
@@ -486,6 +489,7 @@ export function SettingsWindow() {
           {current.id === 'export' && <ExportPane />}
           {current.id === 'keyboard' && <KeyboardPane />}
           {current.id === 'extensions' && <ExtensionsPane />}
+          {current.id === 'plugins' && <PluginsPane />}
         </div>
       </div>
     </div>

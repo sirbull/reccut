@@ -324,8 +324,16 @@ export function ShapeEditor({ clip, prefix, shape, smooth, canvasRef, label }) {
           const du = dx * c0 + dy * s0;
           const dv = -dx * s0 + dy * c0;
           const alt = ev.altKey;
-          const w = hx ? Math.max(8, g0.w + (alt ? 2 : 1) * hx * du) : g0.w;
-          const h = hy ? Math.max(8, g0.h + (alt ? 2 : 1) * hy * dv) : g0.h;
+          let w = hx ? Math.max(8, g0.w + (alt ? 2 : 1) * hx * du) : g0.w;
+          let h = hy ? Math.max(8, g0.h + (alt ? 2 : 1) * hy * dv) : g0.h;
+          // Shift beholder formen: den aksen som endres mest bestemmer skalaen.
+          if (ev.shiftKey) {
+            const fw = w / g0.w;
+            const fh = h / g0.h;
+            const f = Math.max(hx && hy ? (Math.abs(fw - 1) > Math.abs(fh - 1) ? fw : fh) : hx ? fw : fh, 8 / g0.w, 8 / g0.h);
+            w = g0.w * f;
+            h = g0.h * f;
+          }
           const sx = alt ? 0 : (hx * (w - g0.w)) / 2;
           const sy = alt ? 0 : (hy * (h - g0.h)) / 2;
           putValue(c, prefix + 'x', Math.round(g0.cx + sx * c0 - sy * s0 - W / 2), Tc);

@@ -7,6 +7,13 @@ function ts(t) {
   return `${p(Math.floor(ms / 3600000))}:${p(Math.floor(ms / 60000) % 60)}:${p(Math.floor(ms / 1000) % 60)},${p(ms % 1000, 3)}`;
 }
 
+// Undertekstene som er med i utsnittet a–b, med tider regnet fra a.
+export function captionItems(project, a, b) {
+  return Object.values(project.clips)
+    .filter((c) => c.lane === CAPTION_LANE && c.enabled && c.start < b && c.start + c.dur > a && String(c.props.text || '').trim())
+    .map((c) => ({ start: Math.max(0, c.start - a), end: Math.min(b, c.start + c.dur) - a, text: c.props.text || '' }));
+}
+
 export function toSrt(items) {
   return items
     .slice()

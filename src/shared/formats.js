@@ -12,6 +12,67 @@ export const VIDEO_FORMATS = [
   { id: 'gif', label: 'GIF (animated)', ext: 'gif', container: 'gif', codec: null, ffCodec: 'gif', audio: null, note: 'No audio, short clips' },
 ];
 
+// Avansert: container, videokodek og lydkodek hver for seg. Formatet lagres som "custom:mov/prores-hq/pcm".
+export const CONTAINERS = [
+  { id: 'mp4', label: 'MP4' },
+  { id: 'mov', label: 'MOV (QuickTime)' },
+  { id: 'mkv', label: 'MKV (Matroska)' },
+  { id: 'webm', label: 'WebM' },
+];
+
+export const VIDEO_CODECS = [
+  { id: 'h264', label: 'H.264', codec: 'avc', ffCodec: 'libx264', in: ['mp4', 'mov', 'mkv'] },
+  { id: 'hevc', label: 'HEVC / H.265', codec: 'hevc', ffCodec: 'libx265', in: ['mp4', 'mov', 'mkv'] },
+  { id: 'av1', label: 'AV1', codec: 'av1', ffCodec: 'libaom-av1', in: ['mp4', 'mkv', 'webm'] },
+  { id: 'vp9', label: 'VP9', codec: 'vp9', ffCodec: 'libvpx-vp9', in: ['mp4', 'mkv', 'webm'] },
+  { id: 'prores-proxy', label: 'ProRes 422 Proxy', codec: null, ffCodec: 'prores_ks', profile: 0, rate: 0.3, in: ['mov', 'mkv'] },
+  { id: 'prores-lt', label: 'ProRes 422 LT', codec: null, ffCodec: 'prores_ks', profile: 1, rate: 0.7, in: ['mov', 'mkv'] },
+  { id: 'prores', label: 'ProRes 422', codec: null, ffCodec: 'prores_ks', profile: 2, rate: 1, in: ['mov', 'mkv'] },
+  { id: 'prores-hq', label: 'ProRes 422 HQ', codec: null, ffCodec: 'prores_ks', profile: 3, rate: 1.5, in: ['mov', 'mkv'] },
+];
+
+export const AUDIO_CODECS = [
+  { id: 'aac', label: 'AAC', in: ['mp4', 'mov', 'mkv'] },
+  { id: 'opus', label: 'Opus', in: ['mp4', 'mkv', 'webm'] },
+  { id: 'pcm', label: 'PCM (uncompressed)', in: ['mov', 'mkv'] },
+  { id: 'none', label: 'No audio', in: ['mp4', 'mov', 'mkv', 'webm'] },
+];
+
+// Lager en gyldig kombinasjon: kodeker containeren ikke støtter byttes mot den første som passer.
+export function customFormatId(container, video, audio) {
+  const c = CONTAINERS.find((x) => x.id === container) || CONTAINERS[0];
+  const fit = (list, id) => list.find((x) => x.id === id && x.in.includes(c.id)) || list.find((x) => x.in.includes(c.id));
+  return `custom:${c.id}/${fit(VIDEO_CODECS, video).id}/${fit(AUDIO_CODECS, audio).id}`;
+}
+
+export function parseCustom(id) {
+  const [container, video, audio] = String(id).replace(/^custom:/, '').split('/');
+  return { container, video, audio };
+}
+
+// Formatobjektet for en id, enten et av de faste formatene eller en egen kombinasjon.
+export function videoFormat(id) {
+  const fixed = VIDEO_FORMATS.find((f) => f.id === id);
+  if (fixed) return fixed;
+  if (!String(id).startsWith('custom:')) return VIDEO_FORMATS[0];
+  const want = parseCustom(id);
+  const clamped = customFormatId(want.container, want.video, want.audio);
+  const { container, video, audio } = parseCustom(clamped);
+  const v = VIDEO_CODECS.find((x) => x.id === video);
+  const a = AUDIO_CODECS.find((x) => x.id === audio);
+  const c = CONTAINERS.find((x) => x.id === container);
+  return { id: clamped, label: `${c.label}, ${v.label}, ${a.label}`, ext: container, container, codec: v.codec, ffCodec: v.ffCodec, profile: v.profile, rate: v.rate, audio: a.id === 'none' ? null : a.id, note: 'Custom' };
+}
+
+// Motsatt vei: et fast format som egen kombinasjon, når man bytter til avansert.
+export function toCustom(id) {
+  if (String(id).startsWith('custom:')) return id;
+  const f = videoFormat(id);
+  if (f.container === 'gif') return customFormatId('mp4', 'h264', 'aac');
+  const v = VIDEO_CODECS.find((x) => x.ffCodec === f.ffCodec && (x.profile ?? 2) === (f.profile ?? 2));
+  return customFormatId(f.container, v?.id, f.audio || 'none');
+}
+
 export const AUDIO_FORMATS = [
   { id: 'mp3', label: 'MP3', ext: 'mp3', ffCodec: 'libmp3lame', note: 'Plays everywhere' },
   { id: 'm4a', label: 'AAC (M4A)', ext: 'm4a', ffCodec: 'aac', note: 'Good quality, small file' },
@@ -170,8 +231,8 @@ export function estimateSize(settings, duration, w, h) {
     const kbps = fmt.id === 'wav' ? 1536 : fmt.id === 'flac' ? 800 : akbps;
     bits = kbps * 1000 * duration;
   } else {
-    const fmt = VIDEO_FORMATS.find((f) => f.id === settings.format) || VIDEO_FORMATS[0];
-    if (fmt.id === 'mov-prores') bits = w * h * settings.fps * 4.4 * duration * 0.5;
+    const fmt = videoFormat(settings.format);
+    if (fmt.ffCodec === 'prores_ks') bits = w * h * settings.fps * 4.4 * duration * 0.5 * (fmt.rate ?? 1);
     else if (fmt.id === 'gif') bits = w * h * settings.fps * 0.6 * duration * 0.3;
     else {
       const v = videoBitrate(fmt, settings.quality, w, h, settings.fps, settings.bitrate);
@@ -185,4 +246,88 @@ export function formatBytes(b) {
   if (b < 1e6) return `${Math.max(1, Math.round(b / 1e3))} kB`;
   if (b < 1e9) return `${(b / 1e6).toFixed(b < 1e7 ? 1 : 0)} MB`;
   return `${(b / 1e9).toFixed(1)} GB`;
+}
+
+// Kamera-RAW-video trenger produsentens dekoder. Er den installert, gjør appen klippet om til ProRes ved import
+// (src/main/decoders.js). Mangler den, kommer et varsel med lenke og Locate. tool er id-en i decoders.js.
+// Canon har verken kommandolinjeverktøy eller SDK, så Cinema RAW Light må konverteres i Canons program.
+export const RAW_DECODERS = [
+  { ext: /\.braw$/i, name: 'Blackmagic RAW', vendor: 'Blackmagic Design', app: 'Blackmagic RAW', tool: 'braw', url: 'https://www.blackmagicdesign.com/developer/products/braw/sdk-and-software' },
+  { ext: /\.r3d$/i, name: 'RED R3D', vendor: 'RED', app: 'REDCINE-X PRO', tool: 'redline', url: 'https://www.red.com/downloads' },
+  { ext: /\.nev$/i, name: 'Nikon N-RAW', vendor: 'RED', app: 'REDCINE-X PRO', tool: 'redline', url: 'https://www.red.com/downloads' },
+  { ext: /\.(ari|arx|mxf)$/i, name: 'ARRIRAW', vendor: 'ARRI', app: 'ARRI Reference Tool', tool: 'artcmd', url: 'https://www.arri.com/en/learn-help/learn-help-camera-system/tools/arri-reference-tool' },
+  { ext: /\.crm$/i, name: 'Canon Cinema RAW Light', vendor: 'Canon', app: 'Cinema RAW Development', tool: null, url: null },
+];
+
+export const rawDecoderFor = (file, tool) => RAW_DECODERS.find((d) => d.ext.test(file) && (tool === undefined || d.tool === tool)) || null;
+const base = (p) => p.split(/[\\/]/).pop();
+
+// Gir { text, links, locate } for filene som ikke kunne leses.
+// failed: filnavn som ikke kunne leses. missing: [{ tool, file }] fra importen, der dekoderen ikke er installert.
+// links: [{ label, url }] til produsentene. locate: [{ label, tool, files }] for å peke på verktøyet selv.
+export function couldNotRead(failed, missing = []) {
+  const canon = failed.filter((f) => rawDecoderFor(f)?.vendor === 'Canon');
+  const other = failed.filter((f) => !canon.includes(f));
+  const groups = new Map();
+  for (const m of missing) {
+    const d = rawDecoderFor(m.file, m.tool) || RAW_DECODERS.find((x) => x.tool === m.tool);
+    if (!groups.has(d)) groups.set(d, []);
+    groups.get(d).push(m.file);
+  }
+  const text = [
+    other.length && `Could not read ${other.join(', ')}. The file may be damaged or in an unsupported format.`,
+    canon.length && `${canon.join(', ')} ${canon.length > 1 ? 'are' : 'is'} Canon Cinema RAW Light. Canon has no decoder other apps can use, so export the clip to ProRes in Cinema RAW Development first.`,
+    ...[...groups].map(([d, files]) => `${files.map(base).join(', ')} ${files.length > 1 ? 'are' : 'is'} ${d.name}. Install ${d.app} from ${d.vendor}, or locate it if it is installed somewhere else, and Reccut converts the clip to ProRes when you import it.`),
+  ].filter(Boolean).join(' ');
+  const decoders = [...groups.keys()];
+  return {
+    text,
+    links: decoders.filter((d) => d.url).map((d) => ({ label: `Get ${d.app}`, url: d.url })),
+    locate: [...groups].map(([d, files]) => ({ label: `Locate ${d.app}…`, tool: d.tool, files })),
+  };
+}
+
+/* Bildefrekvens som ikke går opp: et klipp med 25 fps i en 30 fps-eksport får noen bilder vist to ganger,
+   og bevegelsen hakker. Farten regnes med, så 60 fps på 50 % passer i 30 fps. */
+const fitsEvenly = (rate, fps) => {
+  const r = rate >= fps ? rate / fps : fps / rate;
+  return Math.abs(r - Math.round(r)) < 0.02;
+};
+
+// Gir klippene som vil hakke ved fps, og en frekvens blant candidates der færrest hakker (eller null).
+export function frameRateCheck(project, fps, candidates) {
+  const clips = new Map();
+  const used = [];
+  for (const c of Object.values(project.clips)) {
+    if (c.enabled === false || c.ramp || (c.type !== 'video' && c.type !== 'recording')) continue;
+    const m = project.media[c.mediaId];
+    const src = Object.values(m?.streams || {}).find((s) => s.hasVideo)?.fps || m?.fps;
+    const rate = src * Math.abs(c.speed ?? 1);
+    if (!rate) continue;
+    used.push({ rate, dur: c.dur });
+    if (!fitsEvenly(rate, fps)) clips.set(`${m.id}:${rate}`, { name: m.name, fps: Math.round(rate * 100) / 100 });
+  }
+  const bad = (f) => used.reduce((sum, u) => sum + (fitsEvenly(u.rate, f) ? 0 : u.dur), 0);
+  let best = bad(fps);
+  let suggest = null;
+  // Ved likt resultat vinner den laveste, som gir mindre filer.
+  for (const f of [...candidates].sort((x, y) => x - y)) if (bad(f) < best) [best, suggest] = [bad(f), f];
+  return { clips: [...clips.values()], suggest };
+}
+
+// Hvilke kopier sekvensen bruker: optimalisert media, og proxyer (høyst 1920 piksler) uten optimalisert media.
+// Avgjør om eksporten skal tilby valget mellom originalene og kopiene.
+export function mediaCopies(project) {
+  const seen = new Set();
+  let optimized = 0;
+  let proxies = 0;
+  for (const c of Object.values(project.clips)) {
+    const m = project.media[c.mediaId];
+    if (!m || m.kind === 'image' || seen.has(m.id)) continue;
+    seen.add(m.id);
+    const st = Object.values(m.streams || {}).find((s) => s.hasVideo);
+    if (st?.optimized) optimized++;
+    else if (st?.proxy && st.needsProxy) proxies++;
+  }
+  return { optimized, proxies };
 }

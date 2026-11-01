@@ -307,3 +307,14 @@ test('changing resolution during playback preserves playback and the playhead', 
   s.tick(500);
   assert.equal(s.getTime(), time + 0.5);
 });
+
+test('et område på ett bilde stopper ikke avspillingen', () => {
+  const p = project();
+  p.range = { in: 0, out: 1 / 30 };
+  const s = setup(p, 5);
+  s.player.play();
+  assert.equal(s.getTime(), 5, 'hopper ikke til starten av området');
+  s.tick(500);
+  assert.equal(s.playing.value, true);
+  assert.ok(s.getTime() > 5);
+});

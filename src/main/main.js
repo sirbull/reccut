@@ -20,6 +20,8 @@ const path = require('path');
 const ff = require('./ffmpeg');
 const jobs = require('./jobs');
 const media = require('./media');
+const sequence = require('./sequence');
+const decoders = require('./decoders');
 const projects = require('./projects');
 const psd = require('./psd');
 const area = require('./area');
@@ -370,7 +372,7 @@ ipcMain.handle('updates:download', (_e, asset) => {
 ipcMain.handle('app:version', () => app.getVersion());
 // Bare nettadresser til GitHub åpnes i nettleseren.
 ipcMain.handle('shell:openExternal', (_e, url) => {
-  if (/^https:\/\/(github\.com|aistudio\.google\.com|console\.anthropic\.com|platform\.openai\.com|console\.higgsfield\.ai|ollama\.com|lmstudio\.ai|openrouter\.ai|console\.mistral\.ai|console\.groq\.com|www\.python\.org)\//.test(String(url))) return shell.openExternal(url);
+  if (/^https:\/\/(github\.com|aistudio\.google\.com|console\.anthropic\.com|platform\.openai\.com|console\.higgsfield\.ai|ollama\.com|lmstudio\.ai|openrouter\.ai|console\.mistral\.ai|console\.groq\.com|www\.python\.org|www\.blackmagicdesign\.com|www\.red\.com|www\.arri\.com|imaging\.nikon\.com)\//.test(String(url))) return shell.openExternal(url);
 });
 ipcMain.handle('history:list', (_e, file) => projects.historyList(file));
 ipcMain.handle('history:load', (_e, snap, file) => projects.historyLoad(snap, file));
@@ -535,6 +537,14 @@ ipcMain.handle('rec:finish', async (_e, meta) => {
 const notifyAnalyzed = (payload) => send('media:analyzed', payload);
 
 ipcMain.handle('media:import', (_e, files) => media.importFiles(files, notifyAnalyzed));
+// Bildesekvens: videoen lages i bakgrunnen og importeres så som vanlig video.
+// outDir: prosjektets mediemappe når filene kopieres inn, ellers ved siden av bildene.
+ipcMain.handle('media:importSequence', async (_e, file, fps, outDir) => {
+  const dirs = [outDir || path.dirname(file), path.join(media.cacheRoot(), 'sequences')];
+  const { done } = jobs.add({ kind: 'sequence', title: `Creating video from ${path.basename(file)}`, queue: 'optimize', run: (ctx) => sequence.render(file, fps, dirs, ctx) });
+  return media.importFiles([await done], notifyAnalyzed);
+});
+ipcMain.handle('decoders:locate', (_e, tool) => decoders.locate(tool, win));
 ipcMain.handle('media:importRecording', (_e, dir) => media.recordingMedia(dir, notifyAnalyzed));
 ipcMain.handle('media:reanalyze', async (_e, items) => {
   // Kjøres når et prosjekt åpnes, slik at bufrede analyser hentes inn igjen.
@@ -647,6 +657,10 @@ ipcMain.handle('file:read', async (_e, file) => fs.promises.readFile(file, 'utf8
 ipcMain.handle('file:write', async (_e, file, data) => fs.promises.writeFile(file, data));
 
 /* Dialoger og filsystem */
+
+ipcMain.handle('browse:dir', (_e, dir) => media.browseDir(dir));
+ipcMain.handle('browse:thumb', (_e, file) => media.browseThumb(file).catch(() => null));
+ipcMain.handle('browse:places', () => media.browsePlaces());
 
 ipcMain.handle('dialog:openMedia', async () => {
   const r = await dialog.showOpenDialog(win, {
@@ -792,6 +806,11 @@ ipcMain.handle('export:start', (_e, payload) => {
       const p = payload.project;
       // Media som mangler, eksporteres som testkortet Media Offline.
       for (const m of Object.values(p.media)) m.offline = media.isOffline(m);
+      // Originaler WebCodecs ikke kan lese (ProRes, DNxHD ...) dekodes av FFmpeg i eksporten, med samme filtre som kopien.
+      for (const m of Object.values(p.media)) {
+        if (m.kind === 'image') continue;
+        for (const st of Object.values(m.streams)) if (st.hasVideo && st.needsProxy) st.decodeFilters = ff.decodeFilters(st);
+      }
       for (const c of Object.values(p.clips)) {
         const m = c.reverse && !p.media[c.mediaId]?.offline && p.media[c.mediaId];
         if (!m) continue;
@@ -868,7 +887,14 @@ ipcMain.handle('modelcache:put', async (_e, key, data) => {
 
 // Prosjektfiler som åpnes fra Finder eller Utforsker (dobbeltklikk på en .reccut-fil).
 let pendingOpen = process.argv.find((a) => a.endsWith('.reccut')) || null;
+// Plugin files (.reccut-plugin) opened from Finder or Explorer are shown for review, never installed directly.
+let pendingPlugin = process.argv.find((a) => a.endsWith('.reccut-plugin')) || null;
 function openProjectFromOS(file) {
+  if (file?.endsWith('.reccut-plugin')) {
+    if (win && !win.webContents.isLoading()) send('plugin:open', file);
+    else pendingPlugin = file;
+    return;
+  }
   if (!file || !file.endsWith('.reccut')) return;
   if (win && !win.webContents.isLoading()) send('project:open', file);
   else pendingOpen = file;
@@ -876,7 +902,7 @@ function openProjectFromOS(file) {
 // Bare én Reccut om gangen: åpnes en prosjektfil mens appen kjører, åpnes den i vinduet.
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', (_e, argv) => {
-  openProjectFromOS(argv.find((a) => a.endsWith('.reccut')));
+  openProjectFromOS(argv.find((a) => a.endsWith('.reccut') || a.endsWith('.reccut-plugin')));
   if (win) {
     if (win.isMinimized()) win.restore();
     win.focus();
@@ -885,6 +911,11 @@ app.on('second-instance', (_e, argv) => {
 app.on('open-file', (e, file) => {
   e.preventDefault();
   openProjectFromOS(file);
+});
+ipcMain.handle('plugins:pendingOpen', () => {
+  const f = pendingPlugin;
+  pendingPlugin = null;
+  return f;
 });
 ipcMain.handle('project:pendingOpen', () => {
   const f = pendingOpen;
@@ -960,11 +991,20 @@ extensionHandler('gfx:render', (req) => {
   return done;
 });
 extensionHandler('plugins:list', () => extensions.listPlugins());
-extensionHandler('plugins:install', (manifest) => extensions.installPlugin(manifest));
+extensionHandler('plugins:install', (manifest, opts) => extensions.installPlugin(manifest, opts));
+extensionHandler('plugins:readFile', (file) => extensions.readPluginFile(String(file)));
+extensionHandler('plugins:installPackage', (pkg, opts) => extensions.installPackage(pkg, opts));
+extensionHandler('plugins:export', async (id, opts) => {
+  const pkg = extensions.exportPlugin(id, opts);
+  const r = await dialog.showSaveDialog(win, { title: 'Export Plugin', defaultPath: path.join(app.getPath('documents'), `${pkg.name.replace(/[\\/:*?"<>|]+/g, '')}.reccut-plugin`), filters: [{ name: 'Reccut Plugin', extensions: ['reccut-plugin'] }] });
+  if (r.canceled || !r.filePath) return null;
+  await fs.promises.writeFile(r.filePath, JSON.stringify(pkg, null, 2));
+  return r.filePath;
+});
 extensionHandler('plugins:remove', (id) => extensions.removePlugin(id));
 extensionHandler('plugins:process', (request) => {
   const { done } = jobs.add({ kind: 'processor', title: 'External video processor', queue: 'heavy', run: async (ctx) => {
-    const result = await extensions.processFile({ id: request.id, input: request.input, outputDir: path.join(baseDir(), 'Processed') }, ctx);
+    const result = await extensions.processFile({ id: request.id, input: request.input, params: request.params, outputDir: path.join(baseDir(), 'Processed') }, ctx);
     const imported = await media.importFiles([result.output], notifyAnalyzed);
     if (!imported.items?.[0]?.streams?.main?.hasVideo) throw new Error('The processor output must be a readable video file.');
     if (ctx.isCanceled()) throw new Error('Canceled');

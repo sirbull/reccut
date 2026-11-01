@@ -56,9 +56,12 @@ export function drawFrame(ctx, project, frame, getSource, { scale = 1, matrix = 
 function drawTransition(ctx, project, layer, getSource) {
   const W = project.width;
   const H = project.height;
-  const { type, p } = layer.transition;
+  const { p } = layer.transition;
+  // ponytail: over andre spor blir dip en vanlig toning, ellers ville svart/hvitt dekke sporene under.
+  const type = layer.overlay && layer.transition.type.startsWith('dip') ? 'dissolve' : layer.transition.type;
   const drawSide = (side, alpha) => {
     if (side) return drawClip(ctx, project, side.clip, side.T, getSource, alpha);
+    if (layer.overlay) return;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#000';
@@ -156,11 +159,12 @@ function zoomAround(ctx, W, H, s) {
 }
 
 // Fargekorrigering på skjermkortet når det finnes. Uten WebGL2 brukes enkle 2D-filtre.
-function graded(clip, T, src, target = 'main') {
+function graded(clip, T, src, target = 'main', media = null) {
   src = applyVideoEffects(src, clip, target);
   const g = gradeParams(clip, T);
-  if (!g) return src;
-  const cv = gradeImage(src.img, src.w, src.h, g);
+  const cam = media?.cameraLut || null;
+  if (!g && !cam) return src;
+  const cv = gradeImage(src.img, src.w, src.h, g, cam);
   return cv ? { img: cv, w: src.w, h: src.h } : src;
 }
 
@@ -283,7 +287,7 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmaske
   }
   if (clip.type === 'video' || clip.type === 'image') {
     let src = getSource(clip, 'main', s);
-    if (src) src = graded(clip, T, src);
+    if (src) src = graded(clip, T, src, 'main', media);
     if (src) {
       const full = containRect(src.w, src.h, W, H);
       // Beskjæring (Crop): kantene trimmes, og bildet blir stående der det er.
@@ -484,7 +488,7 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
   const screen = media.streams.screen;
   if (screen) {
     let src = getSource(clip, 'screen', s - (screen.offset || 0));
-    if (src) src = graded(clip, T, src, 'screen');
+    if (src) src = graded(clip, T, src, 'screen', media);
     if (src) {
       const r = (screenRect = containRect(src.w, src.h, W, H));
       drawWithEffects(ctx, clip, T, r, H, () => {
@@ -508,7 +512,7 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
   if (camera?.hasVideo && showCamera) {
     const rect = screen ? cameraRectAt(clip, s, W, H) : { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
     let src = rect.a > 0.01 ? getSource(clip, 'camera', s - (camera.offset || 0)) : null;
-    if (src) src = graded(clip, T, src, 'camera');
+    if (src) src = graded(clip, T, src, 'camera', media);
     if (src) {
       ctx.save();
       ctx.globalAlpha *= rect.a;

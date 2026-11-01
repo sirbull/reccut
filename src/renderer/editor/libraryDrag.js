@@ -31,6 +31,13 @@ export function startLibraryDrag(e, item) {
     // for that capture, then remove the source box while the native image moves.
     const captured = dragImage;
     setTimeout(() => captured.remove(), 0);
+  } else if (item.kind === 'media') {
+    // Tidslinjen viser klippet selv (den blå boksen), så det gule området skal ikke henge med.
+    const blank = document.createElement('div');
+    blank.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';
+    document.body.append(blank);
+    e.dataTransfer.setDragImage(blank, 0, 0);
+    setTimeout(() => blank.remove(), 0);
   }
   document.addEventListener('dragend', endLibraryDrag, { once: true });
 }

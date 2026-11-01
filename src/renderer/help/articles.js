@@ -98,7 +98,7 @@ Thumbnails, waveforms and proxies are not included. They are made again automati
     section: 'Getting Started',
     title: 'Projects and Folders',
     summary: 'Every project gets its own folder with all its files.',
-    keywords: 'new open save location folder trash',
+    keywords: 'new open save location folder trash sequence sequences timeline duplicate info',
     body: `
 When you create a project, you give it a name and choose where it should be saved. Reccut creates a folder with that name, containing:
 
@@ -110,7 +110,18 @@ When you create a project, you give it a name and choose where it should be save
 
 ![New Project: name, location and format.](newproject.jpg)
 
-The open project is shown at the top of the window. Click it to open another project. The Projects window lists recent projects; use Open Other to open a project file from anywhere, and the ⋯ button to reveal a project, remove it from the list or move it to the Trash. You can also double click a .reccut file in Finder or Explorer to open it.
+The open project is shown at the top of the window. Click it to see facts about the project (location, format, duration, sequences and media) and to open another project. The Projects window lists recent projects; use Open Other to open a project file from anywhere, and the ⋯ button to reveal a project, remove it from the list or move it to the Trash. You can also double click a .reccut file in Finder or Explorer to open it.
+
+## Sequences
+
+A project can hold several sequences, which are separate timelines that share the same media. Use them for a long and a short cut, or a vertical version of the same video.
+
+- **New Sequence** ({{key:newSequence}}), the sequence button in the Media browser, or right click an empty spot in the browser. The new sequence gets the format of the open one.
+- **Duplicate Sequence** copies the open sequence, or right click any sequence and choose Duplicate.
+
+When a project has more than one sequence, they are listed at the top of the Media browser. Double click one to open it in the timeline. Right click to rename, duplicate or delete it. Format, frame rate and captions style belong to each sequence, so changing them in the Inspector only changes the open one. Export exports the open sequence.
+
+In a project made with the Automatic template, the first video you add sets the size and frame rate of the sequence, and Sequence Settings opens so you can keep that or choose another format. Turn off **Ask when adding the first clip** to skip the window; turn it back on in Settings › General. Change the format at any time with File › Sequence Settings (Cmd J), or in the Inspector when no clip is selected. Clips with another size are scaled to fit, and clips with another frame rate or codec play at their normal speed. If a clip's frame rate does not divide evenly into the export frame rate (25 fps in 30, for example), motion stutters slightly; the export window warns about this and suggests a better frame rate. Speed counts: a 60 fps clip at 50% fits a 30 fps sequence and gives smooth slow motion.
 
 ## Save As
 
@@ -228,13 +239,14 @@ Choose Import Media ({{key:import}}) and select files, or drag files into the br
 
 - **Video:** MP4, MOV, MKV, WebM, AVI, MXF, MPEG 1 and 2, MPEG-TS, M2TS and AVCHD (.mts) from cameras, DV, FLV, WMV, 3GP, OGV, Y4M and raw H.264 or HEVC streams. Codecs include H.264 and HEVC (also 10-bit and 4:2:2), ProRes (also 4444 with alpha), DNxHD and DNxHR, AV1, VP8, VP9, FFV1, MJPEG and Theora.
 - **Audio:** WAV, AIFF, FLAC, MP3, AAC and M4A, ALAC, Ogg, Opus, WMA, AC-3, E-AC-3, DTS, AMR, CAF, WavPack, TTA, Speex, MP2 and more.
-- **Images:** JPEG, PNG, GIF, WebP, TIFF, BMP, TGA, EXR, HDR, DPX, JPEG 2000, QOI and camera RAW photos, plus layered PSD and SVG files.
+- **Images:** JPEG, PNG, GIF, WebP, HEIC, JPEG XL, AVIF, TIFF, BMP, TGA, EXR, HDR, DPX, JPEG 2000, QOI and camera RAW photos, plus layered PSD and SVG files. Animated GIF and WebP become video clips.
+- **Image sequences:** numbered frames (render_0001.png, render_0002.png …) from animation and 3D programs. Turn on **Import numbered images as one video** in the import window and choose the frame rate. One frame is enough: the whole numbered sequence becomes one video clip. Frames with transparency keep it, and EXR, DPX and 16-bit frames keep their extra precision.
 
 Interlaced video (from TV and older cameras) is deinterlaced, video with transparency keeps its alpha, and damaged files are read as far as possible.
 
 ![Import options.](import.jpg)
 
-The import window opens first. Click **Choose Files…** or drag files into the window, then pick how they are imported:
+The import window works like the Finder. Pick a place or a drive on the left, open folders, and see the clips as thumbnails. Click a clip to preview it on the right. Check the box on each clip you want, or double click it. Space checks the clip you are previewing, and **Select All** checks every file in the folder. You can check clips from several folders, and drag files in from the Finder. Then choose how they are imported:
 
 - **Copy to project folder** copies the files into the Media folder of the project. The project keeps working if the originals are moved or a drive is disconnected.
 - **Leave files in place** refers to the files where they are, which saves disk space.
@@ -297,9 +309,11 @@ Camera files are often hard to decode, which makes skimming and playback heavy. 
 - 8-bit clips become H.264 with a keyframe every half second, at very high quality.
 - 10-bit and HDR clips become 10-bit VP9, so the extra precision is kept for color correction.
 
-The files are saved in the Optimized Media folder of the project and used for playback and export from then on. Progress is shown at the top of the window, where you can also cancel it. The original files are never changed.
+The files are saved in the Optimized Media folder of the project and used for playback from then on. Progress is shown at the top of the window, where you can also cancel it. The original files are never changed.
 
 You can also choose Create optimized media when you import.
+
+**Proxies and export.** Formats the preview cannot play directly, such as ProRes, DNxHD, MPEG-2, interlaced and HDR video, get a proxy when you import them: a copy of at most 1920 pixels that is light to edit. H.264, HEVC, VP9 and AV1 play directly. By default the export reads the original files, also ProRes, so the proxy never limits the quality. The proxy and the export prepare the picture the same way (HDR is tone mapped, other color spaces become Rec. 709), so color corrections look the same in the export as in the preview. Choose **Source media › Optimized media** in the export settings for a faster export from the copies you edit with; files that only have a proxy are then at most 1920 pixels. If an original is missing, the export uses the proxy or optimized media.
 
 [[run:optimize|Optimize Selected Media]]
 `,
@@ -310,13 +324,23 @@ You can also choose Create optimized media when you import.
     section: 'Media',
     title: 'HDR, 10-bit and RAW',
     summary: 'How Reccut handles HDR video, 10-bit clips and camera RAW photos.',
-    keywords: 'hdr pq hlg 10 bit raw dng cr2 nef arw tone mapping',
+    keywords: 'hdr pq hlg 10 bit raw dng cr2 nef arw tone mapping log lut cube apple log slog s-log3 vlog flog logc braw r3d prores raw',
     body: `
 **HDR video** (PQ and HLG, for example from iPhones and mirrorless cameras) is detected when you import it, and marked HDR in the browser. Reccut shows and exports it tone mapped to normal SDR, so it looks right on every screen, and keeps 10 bits in the working copy for color correction. Exporting in HDR is not supported yet.
 
 **10-bit clips** keep their precision: optimized media stays 10-bit, and color correction is calculated in 16-bit floating point.
 
-**Camera RAW photos** (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 and more) are imported using the full size JPEG the camera stores inside the file, with the camera's white balance and the right orientation. The RAW data itself is not developed. RAW video formats such as Blackmagic RAW, R3D and ProRes RAW are not supported.
+**Camera RAW photos** (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2 and more) are imported using the full size JPEG the camera stores inside the file, with the camera's white balance and the right orientation. The RAW data itself is not developed.
+
+**RAW video** is decoded with the camera maker's own software. When it is installed, Reccut converts the clip to ProRes 4444 when you import it, next to the original file, and uses that file from then on:
+- **Blackmagic RAW:** Blackmagic RAW from Blackmagic Design (or DaVinci Resolve).
+- **RED R3D and Nikon N-RAW:** REDCINE-X PRO from RED.
+- **ARRIRAW:** ARRI Reference Tool (command line) from ARRI. The clip becomes Rec. 709.
+- **ProRes RAW** on a Mac: Apple's own decoder (Pro Video Formats, or Final Cut Pro).
+
+If the software is missing, Reccut shows a link to the maker's page, and **Locate** if it is installed somewhere else. Canon Cinema RAW Light has no decoder other apps can use, so export those clips to ProRes in Canon's Cinema RAW Development first.
+
+**LOG footage** (Apple Log, S-Log3, V-Log, F-Log, LogC3) looks flat until it is converted to normal colors. Choose the camera in **Camera LUT** in the Info tab, or choose a .cube LUT file from the camera maker. It applies to every clip from the file, in the viewer and the export, before the color correction.
 
 The Info tab in the inspector shows the bit depth, HDR format and which file is used for playback.
 
@@ -409,7 +433,7 @@ The main row is the **storyline**. Clips in it always sit next to each other, so
 
 ![The timeline with track headers on the left.](timeline.jpg)
 
-- The track headers hide a track, mute it or lock it. Use + Video and + Audio to add tracks, or drop a clip on the empty row at the top or bottom.
+- The track headers hide a track, mute it or lock it. To add a track, drop a clip on the empty row at the top or bottom.
 - Lift from Storyline ({{key:lift}}) moves a clip up so you can place it freely; Overwrite to Storyline ({{key:overwriteDown}}) brings it back.
 - Insert Gap ({{key:insertGap}}) adds an empty space at the playhead.
 - Zoom with {{key:zoomIn}} and {{key:zoomOut}}, or {{key:zoomFit}} to fit everything.
@@ -667,6 +691,8 @@ The same correction is used in the viewer and in exports. How it works: Reccut f
     body: `
 Add Cross Dissolve ({{key:addTransition}}) adds a dissolve at the selected edit. More transitions are in the Transitions browser ({{key:browser:transitions}}); hold the pointer over one to preview it, and drag it to an edit.
 
+Clips above the storyline can have a transition at the start and the end, and so can effects like Pixelate and Blur. Drag a transition to the start of an effect to fade, wipe or slide the effect in.
+
 A transition covers only the picture part of the clips, so you can still drag the audio fade handles below it. By default it also crossfades the audio. Turn that off for one transition in the inspector (Crossfade audio), or for new transitions in Preferences > Editing; the audio then cuts at the edit.
 
 Select two audio clips that touch and press {{key:addTransition}} to add an audio crossfade. The default length is set in Preferences.
@@ -765,7 +791,7 @@ Captions keep their own timing when video clips are moved, trimmed or deleted. Y
 A mask decides which part of a clip is visible. On a Blur, Pixelate or other effect clip, the mask decides where the effect works. Use it to cut out a person, frame a detail, make a spotlight, blend two clips, or hide part of the picture.
 
 - Select a video, image, recording or title clip and choose **Add Rectangle Mask** ({{key:mask:rect}}), **Add Ellipse Mask** ({{key:mask:ellipse}}) or **Add Freeform Mask** in the Edit menu, or use the buttons in the **Masks** tab of the inspector.
-- Click **Edit in Viewer** to show the shape in the viewer. Drag it to move it, and drag the handles to resize it. Hold Option (Alt) to resize from the center.
+- Click **Edit in Viewer** to show the shape in the viewer. Drag it to move it, and drag the handles to resize it. Hold Shift to keep the shape, and Option (Alt) to resize from the center.
 - **Freeform** masks have points: drag a point to move it, double click the outline to add a point, and Option (Alt) click a point to remove it. Turn on **Smooth curve** for soft curves through the points.
 
 ## Draw with the pen
@@ -797,7 +823,7 @@ Use a redaction to hide something in the picture, such as a password, an email a
 
 - Choose **Add Pixelate** ({{key:redact:pixelate}}) or **Add Blur** ({{key:redact:blur}}) in the Edit menu, or drag Pixelate, Blur, Solid or Frosted from the **Redact** section of the Effects browser ({{key:browser:effects}}) to the timeline.
 - It is placed above everything at the playhead. If a range is marked ({{key:setIn}} and {{key:setOut}}), it covers the range; otherwise it lasts to the end of the clip below.
-- Drag the box in the viewer to move it, and drag its corners and edges to resize it. Hold Option (Alt) to resize from the center. Drag outside the box to draw a new area.
+- Drag the box in the viewer to move it, and drag its corners and edges to resize it. Hold Shift to keep the shape, and Option (Alt) to resize from the center. Drag outside the box to draw a new area.
 
 ## Effects for the whole frame
 
@@ -859,25 +885,35 @@ On recordings, choose Camera or Screen before adding an effect. Preview and expo
     summary: 'Let an AI model edit for you, with a cloud provider or a local model, or connect a local video processor.',
     keywords: 'ai chat agent model api key openai anthropic claude gemini mistral openrouter ollama lm studio llama local plugins corridorkey ofx processor',
     body: `
-Open **Settings → AI & Plugins** and choose a provider: OpenAI, Anthropic Claude, Google Gemini, Mistral, OpenRouter, Groq, xAI, DeepSeek, or a local server such as Ollama, LM Studio or llama.cpp. **Other server or gateway** takes any OpenAI-compatible or Anthropic-compatible address, also on your local network. Choose **Fetch models** to pick an exact model ID. The model must support tool calling. Turn off **Model can see images** for text-only models.
+Open **Settings → AI** and choose a provider: OpenAI, Anthropic Claude, Google Gemini, Mistral, OpenRouter, Groq, xAI, DeepSeek, or a local server such as Ollama, LM Studio or llama.cpp. **Other server or gateway** takes any OpenAI-compatible or Anthropic-compatible address, also on your local network. Choose **Fetch models** to pick an exact model ID. The model must support tool calling. Turn off **Model can see images** for text-only models.
 
 Cloud providers need your own API key and bill you for usage. Keys use encrypted operating system storage when available, otherwise session memory only. Changing the provider or address removes the previous key. Local servers need no key, and nothing leaves your computer.
 
 ## The editing agent
 
-Open **AI Chat** at the top of the app and describe the result you want. The agent reads the timeline and library, places and cuts clips, trims, moves and deletes, adds titles, captions and transitions, sets volume, fades, colour and stack effects, imports files you name, and looks up this manual. It renders frames from the timeline to check its work.
+Choose **AI** in the toolbar. The first time, a short setup lets you choose a model on this computer, Google Gemini, Claude or OpenAI. Choose **? What can I ask** for tips and examples. Describe the result you want. The agent reads the timeline and library, places and cuts clips, trims, moves and deletes, adds titles, captions and transitions, sets volume, fades, colour and stack effects, imports files you name, and looks up this manual. It renders frames from the timeline to check its work.
 
 - **Subtitles and translation:** "Subtitle this video in Finnish." The agent transcribes the speech with the local speech model, translates and condenses it, and replaces the captions in one step. Reccut fits the timing to common subtitle rules: at least one second on screen, no more than 17 characters per second, two lines of 42 characters, a short gap between captions and no overlaps. The agent rewrites captions that break the rules. Read through the result before you publish it.
 - **Colour and exposure:** "Adjust colour and exposure on every clip so they look good." The agent measures brightness, clipping, saturation and colour cast in each clip, corrects them with the colour controls and wheels, and makes clips from the same scene match.
 - **Edit raw footage:** "Make a tutorial from my talking head and the screen recordings." The agent transcribes each clip with word times, finds pauses from the audio level, keeps the best take of each sentence, finds what happens in long screen recordings from scene changes, clicks, shortcuts and contact sheets, and builds the whole edit in one step with the screen parts timed to the narration. Cuts are placed between words with a short natural pause.
 - **Your own titles:** describe a lower third, callout or end card and the agent designs an animated title template for it, adds it to the Titles library and places it.
+- **Tell a story:** attach a script (PDF, Typeloom project, Word, Final Draft, Fountain, RTF or text), storyboard images or a short brief with **Attach…**. The agent finds every take of every line, picks the best one and builds the edit. Without a script or brief it asks what the video is for, its length and tone before it cuts, or proposes a structure from the footage. The brief, the paper edit and the documents are saved with the project.
+- **Graphics and intros:** ask for an infographic, animated chart, intro, chapter card or logo animation. The agent writes and renders it as a video clip (with transparency when it goes over footage), adds it to the library and places it.
+- **AI video:** **Higgsfield AI Video** comes with Reccut as a plugin. Open it from **Plugins** in the toolbar, set up your Higgsfield key once, describe a shot and generate it, optionally starting from the frame at the playhead. The agent can use it too. You see the estimated price and confirm each generation.
+- **Plugins:** ask the agent for a tool, for example "a plugin that reduces noise with a strength slider". It makes a plugin with its own icon and settings (an FFmpeg command or a Python script) and shows it to you in full. Nothing runs until you choose **Install processor**. Installed plugins are listed under **Plugins** in the toolbar and open as small tool windows you can move anywhere; choose a clip and **Apply to selected clip**. When you ask the agent to change a plugin, it updates the same plugin to a new version instead of adding another one.
+
+## Managing and sharing plugins
+
+In **Settings → Plugins**, each plugin has **Open**, **Settings**, **Share…** and **Remove**. The gear in a plugin's window opens the same settings. A plugin's settings are the values it starts with, also when the AI agent uses it; you can still change them in its window each time. Higgsfield's settings hold your account, the models and whether to ask before each generation. Share saves a .reccut-plugin file; others install it by double-clicking it. Sharing is free, and you may also sell your plugins on your own terms; you accept the sharing terms when you export. Installing any plugin, from the agent or from a file, asks you to confirm that you use it at your own risk: a plugin runs on your computer with your permissions and can change files and projects. Install only plugins you trust and keep backups.
+
+Scripts from **Typeloom**: export the project as a Typeloom project file (.typeloom) and attach it. The binder order, scene headings, character cues, dialogue and the corkboard synopsis of each document are kept, so the agent can follow the acts and scenes. A screenplay exported as PDF works too.
 - **Anything in the menus:** the agent can find and run every command in Reccut, select clips, move the playhead, change any inspector property, the project format and caption style, Settings, recording settings and keyboard shortcuts.
 - **Help:** ask "where do I change the frame rate?" or "how do I stabilize a clip?" and the agent answers with the menu and shortcut, and can open the panel or help article for you. It does not change anything when you only ask.
 - **Match a style:** attach an image with **Image…**, by pasting or by dropping it on the message field, and ask the agent to make the clips look like it.
 
 Each change is an undo step, and **Undo this request** reverts everything the agent did in its last request. **Stop** ends a request between steps.
 
-The agent cannot yet create voice-over, images or video clips, or export. What is sent to the provider: your messages and attached images, what the agent reads from the project (clip names, timings, captions, the transcript and look measurements) and, if the model can see images, rendered frames. Media files, audio and local paths are not uploaded. The speech model runs on your computer and is downloaded the first time.
+The agent cannot yet create voice-over or music, or export. What is sent to the provider: your messages and attached images, what the agent reads from the project (clip names, timings, captions, the transcript and look measurements) and, if the model can see images, rendered frames. Media files, audio and local paths are not uploaded. The speech model runs on your computer and is downloaded the first time.
 
 **External video processors** install from a Reccut JSON manifest pointing to a trusted local executable. On a video clip, open Effects → External processing to process the full source and apply the result to that clip. The source timing must be preserved; original audio and media remain available. Cancel through Background tasks.
 
@@ -1012,13 +1048,14 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
     section: 'Look',
     title: 'Color Correction',
     summary: 'Light, color and color wheels, calculated in high precision.',
-    keywords: 'color correction grade exposure contrast highlights shadows saturation temperature tint wheels lift gamma gain looks',
+    keywords: 'color correction grade exposure contrast highlights shadows saturation temperature tint wheels lift gamma gain looks film stock lut emulation kodak fuji black white orthochromatic filter sepia',
     body: `
 Select a clip and show Color ({{key:inspector:color}}).
 
 ![Color wheels for shadows, midtones and highlights.](color.jpg)
 
 - **Looks** apply a ready made style in one click.
+- **Film Looks** simulate film stocks (Kodak Portra, Ektar, Kodachrome, Fujifilm Velvia, Tri-X, Double-X and more), black and white with colour filters, toned prints and creative styles. **Strength** blends the look with the corrected picture, and can have keyframes. **Orthochromatic** is red-blind black and white film, as in The Lighthouse: skin and lips turn dark, skies turn light. The **red filter** does the opposite: dark skies and smooth, light skin.
 - **Light**: exposure, contrast, highlights and shadows.
 - **Color**: saturation, temperature (warm or cool) and tint (green or magenta).
 - **Color wheels**: drag the dot in Shadows, Midtones or Highlights to tint that part of the picture, and use the slider below to make it lighter or darker. Double click a wheel to reset it.

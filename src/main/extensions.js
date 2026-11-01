@@ -4,6 +4,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { randomUUID } = require('crypto');
 const zlib = require('zlib');
+const TERMS = require('../shared/pluginTerms.json');
 
 function validatePlugin(raw) {
   if (raw?.format !== 'reccut-processor-v1' || !/^[a-z0-9][a-z0-9._-]{0,79}$/.test(raw.id || ''))
@@ -22,6 +23,10 @@ function validatePlugin(raw) {
     throw new Error('Processor args must include {input} and {output}.');
   if (!['.mov', '.webm', '.mp4', '.mkv'].includes(raw.outputExtension))
     throw new Error('Output must be .mov, .webm, .mp4 or .mkv. Use an alpha-capable format for keying.');
+  const params = validateParams(raw.params);
+  for (const a of raw.args)
+    for (const [, id] of a.matchAll(/\{param:([\w-]+)\}/g))
+      if (!params.some((p) => p.id === id)) throw new Error(`Argument uses {param:${id}}, which is not defined in params.`);
   return {
     format: raw.format,
     id: raw.id,
@@ -29,7 +34,56 @@ function validatePlugin(raw) {
     executable: raw.executable,
     args: raw.args,
     outputExtension: raw.outputExtension,
+    ...(typeof raw.description === 'string' && raw.description.trim() ? { description: raw.description.trim().slice(0, 1000) } : {}),
+    ...(raw.icon != null ? { icon: validateIcon(raw.icon) } : {}),
+    ...(params.length ? { params } : {}),
+    ...(raw.kind === 'ffmpeg' || raw.kind === 'python' ? { kind: raw.kind } : {}),
+    version: Number.isInteger(raw.version) && raw.version > 0 ? raw.version : 1,
+    ...(typeof raw.author === 'string' && raw.author.trim() ? { author: raw.author.trim().slice(0, 120) } : {}),
   };
+}
+// The icon is shown with <img>, where SVG cannot run scripts; it is still kept small and plain.
+function validateIcon(svg) {
+  if (typeof svg !== 'string' || svg.length > 20000 || !/^\s*<svg[\s>]/i.test(svg) || /<script|<foreignObject|\son\w+\s*=|javascript:|<image|href\s*=\s*["'](?!#)/i.test(svg))
+    throw new Error('The icon must be a small, plain SVG without scripts, links or images.');
+  return svg.trim();
+}
+// Settings shown as controls in the plugin's window. {param:id} in args becomes the chosen value.
+function validateParams(list) {
+  if (list == null) return [];
+  if (!Array.isArray(list) || list.length > 12) throw new Error('A processor can have up to 12 params.');
+  return list.map((p) => {
+    if (!/^[a-z][\w-]{0,30}$/i.test(p?.id || '') || typeof p.label !== 'string' || !p.label.trim()) throw new Error('Each param needs an id and a label.');
+    const base = { id: p.id, label: p.label.trim().slice(0, 60), ...(typeof p.hint === 'string' ? { hint: p.hint.slice(0, 200) } : {}) };
+    if (p.type === 'number') {
+      const [min, max] = [Number(p.min), Number(p.max)];
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min >= max) throw new Error(`Param ${p.id} needs a min below max.`);
+      const def = Number.isFinite(p.default) ? Math.min(max, Math.max(min, p.default)) : min;
+      return { ...base, type: 'number', min, max, step: Number(p.step) > 0 ? Number(p.step) : (max - min) / 100, default: def, ...(typeof p.unit === 'string' ? { unit: p.unit.slice(0, 10) } : {}) };
+    }
+    if (p.type === 'choice') {
+      const options = Array.isArray(p.options) ? p.options.filter((o) => typeof o?.value === 'string' && /^[\w.:=,+#-]{1,60}$/.test(o.value)).slice(0, 30) : [];
+      if (!options.length) throw new Error(`Param ${p.id} needs options with simple values.`);
+      return { ...base, type: 'choice', options: options.map((o) => ({ value: o.value, label: String(o.label || o.value).slice(0, 60) })), default: options.some((o) => o.value === p.default) ? p.default : options[0].value };
+    }
+    if (p.type === 'boolean') return { ...base, type: 'boolean', default: Boolean(p.default), on: String(p.on ?? '1').slice(0, 60), off: String(p.off ?? '0').slice(0, 60) };
+    throw new Error(`Param ${p.id} must be a number, choice or boolean.`);
+  });
+}
+// The value of each param for one run, checked against its definition (never free text, so no option injection).
+function paramValues(plugin, given = {}) {
+  const out = {};
+  for (const p of plugin.params || []) {
+    const v = Object.hasOwn(given, p.id) ? given[p.id] : p.default;
+    if (p.type === 'number') {
+      if (typeof v !== 'number' || !Number.isFinite(v) || v < p.min || v > p.max) throw new Error(`${p.label} must be between ${p.min} and ${p.max}.`);
+      out[p.id] = String(Math.round(v * 1e6) / 1e6);
+    } else if (p.type === 'choice') {
+      if (!p.options.some((o) => o.value === v)) throw new Error(`Choose a value for ${p.label}.`);
+      out[p.id] = v;
+    } else out[p.id] = v ? p.on : p.off;
+  }
+  return out;
 }
 // Local servers (Ollama, LM Studio, llama.cpp) may use plain HTTP on this machine or the local network.
 const LOCAL_HOST =
@@ -162,51 +216,147 @@ function fromCompatible(data) {
 }
 
 // Scripts and storyboards attached in the AI chat, as plain text. PDF is not read: ask for text, Word or Fountain.
-function unzipEntry(buf, name) {
+// The files in a zip (Word documents and Typeloom projects are zips), read on demand.
+function zipEntries(buf, what = 'file') {
   let eocd = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--)
     if (buf.readUInt32LE(i) === 0x06054b50) {
       eocd = i;
       break;
     }
-  if (eocd < 0) throw new Error('The file is not a valid Word document.');
+  if (eocd < 0) throw new Error(`The ${what} is damaged or not a zip file.`);
+  const entries = new Map();
   let p = buf.readUInt32LE(eocd + 16);
-  for (let n = buf.readUInt16LE(eocd + 10); n > 0; n--) {
-    if (buf.readUInt32LE(p) !== 0x02014b50) break;
+  for (let n = buf.readUInt16LE(eocd + 10); n > 0 && buf.readUInt32LE(p) === 0x02014b50; n--) {
     const method = buf.readUInt16LE(p + 10),
       size = buf.readUInt32LE(p + 20),
       nameLen = buf.readUInt16LE(p + 28),
-      extra = buf.readUInt16LE(p + 30),
-      comment = buf.readUInt16LE(p + 32),
       local = buf.readUInt32LE(p + 42);
-    if (buf.toString('utf8', p + 46, p + 46 + nameLen) === name) {
+    entries.set(buf.toString('utf8', p + 46, p + 46 + nameLen), () => {
       const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
       const data = buf.subarray(start, start + size);
       return (method === 8 ? zlib.inflateRawSync(data) : data).toString('utf8');
-    }
-    p += 46 + nameLen + extra + comment;
+    });
+    p += 46 + nameLen + buf.readUInt16LE(p + 30) + buf.readUInt16LE(p + 32);
   }
-  throw new Error('The Word document has no text.');
+  return entries;
+}
+// Typeloom (.typeloom): binder.json gives the order, documents/<id>.json the TipTap content.
+// Written out like Fountain, so scene headings, character cues and dialogue keep their meaning.
+function readTypeloom(buf) {
+  const zip = zipEntries(buf, 'Typeloom project');
+  const json = (name) => {
+    const read = zip.get(name);
+    try {
+      return read ? JSON.parse(read()) : null;
+    } catch {
+      return null;
+    }
+  };
+  const nodes = (json('binder.json') || []).filter((n) => n && !n.trashedAt && n.type !== 'file');
+  if (!nodes.length) throw new Error('The Typeloom project has no documents.');
+  const inline = (n) => (n.type === 'text' ? n.text || '' : n.type === 'hardBreak' ? '\n' : (n.content || []).map(inline).join(''));
+  const out = [];
+  const block = (n) => {
+    const t = inline(n).trim();
+    switch (n.type) {
+      case 'screenplaySceneHeading':
+        return out.push('', t.toUpperCase(), '');
+      case 'screenplayCharacter':
+        return out.push('', t.toUpperCase());
+      case 'screenplayParenthetical':
+        return out.push(t.startsWith('(') ? t : `(${t})`);
+      case 'screenplayDialogue':
+        return out.push(t);
+      case 'screenplayTransition':
+        return out.push('', `> ${t.toUpperCase()}`, '');
+      case 'heading':
+        return out.push('', `# ${t}`, '');
+      case 'paragraph':
+      case 'screenplayAction':
+        return out.push('', t);
+      default:
+        return (n.content || []).forEach(block);
+    }
+  };
+  const walk = (parentId, depth) => {
+    for (const n of nodes.filter((x) => (x.parentId ?? null) === parentId).sort((a, b) => a.order - b.order)) {
+      out.push('', `${'#'.repeat(Math.min(6, depth))} ${n.title || 'Untitled'}`);
+      const doc = n.type === 'document' && json(`documents/${n.id}.json`);
+      if (doc?.synopsis) out.push(`= ${String(doc.synopsis).replace(/\s+/g, ' ')}`);
+      if (doc?.contentJson) block(doc.contentJson);
+      walk(n.id, depth + 1);
+    }
+  };
+  walk(null, 1);
+  const name = json('manifest.json')?.project?.name;
+  return `${name ? `Title: ${name}\n` : ''}${out.join('\n')}`;
+}
+// PDF text with its layout: lines from the text positions, blank lines where the gap is large, so
+// screenplay PDFs keep character cues and dialogue blocks apart. Scanned PDFs have no text.
+async function readPdf(buf) {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const task = pdfjs.getDocument({ data: new Uint8Array(buf), isEvalSupported: false, disableFontFace: true, verbosity: 0 });
+  const doc = await task.promise;
+  const pages = [];
+  try {
+    for (let n = 1; n <= Math.min(doc.numPages, 600); n++) {
+      const { items } = await (await doc.getPage(n)).getTextContent();
+      const rows = [];
+      for (const it of items) {
+        if (!it.str?.trim()) continue;
+        const [, , , d, x, y] = it.transform;
+        const h = Math.abs(d) || it.height || 10;
+        let row = rows.find((r) => Math.abs(r.y - y) <= h * 0.4);
+        if (!row) rows.push((row = { y, h, parts: [] }));
+        row.parts.push({ x, w: it.width || 0, str: it.str });
+      }
+      rows.sort((a, b) => b.y - a.y);
+      const lines = [];
+      let prev = null;
+      for (const r of rows) {
+        let text = '',
+          end = -Infinity;
+        for (const part of r.parts.sort((a, b) => a.x - b.x)) {
+          text += (text && part.x - end > r.h * 0.15 && !/\s$/.test(text) ? ' ' : '') + part.str;
+          end = part.x + part.w;
+        }
+        if (prev && prev.y - r.y > r.h * 1.8) lines.push('');
+        lines.push(text.replace(/\s+/g, ' ').trim());
+        prev = r;
+      }
+      pages.push(lines.join('\n'));
+    }
+  } finally {
+    await task.destroy();
+  }
+  const text = pages.join('\n\n');
+  if (!text.trim()) throw new Error('This PDF has no text, it may be scanned. Export the script as text, Word or Typeloom instead.');
+  return text;
 }
 const xmlText = (s) => s.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
-function readDocument(file) {
+async function readDocument(file) {
   const ext = path.extname(file).toLowerCase();
   const buf = fs.readFileSync(file);
-  if (buf.length > 30e6) throw new Error('The document is too large.');
+  if (buf.length > 60e6) throw new Error('The document is too large.');
   let text;
-  if (ext === '.docx') text = [...unzipEntry(buf, 'word/document.xml').matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)].map((m) => xmlText(m[0].replace(/<w:tab\/>/g, '\t').replace(/<w:br\/>/g, '\n'))).join('\n');
+  if (ext === '.docx') {
+    const xml = zipEntries(buf, 'Word document').get('word/document.xml');
+    if (!xml) throw new Error('The Word document has no text.');
+    text = [...xml().matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)].map((m) => xmlText(m[0].replace(/<w:tab\/>/g, '\t').replace(/<w:br\/>/g, '\n'))).join('\n');
+  } else if (ext === '.typeloom') text = readTypeloom(buf);
+  else if (ext === '.pdf') text = await readPdf(buf);
   else if (ext === '.fdx')
     text = [...buf.toString('utf8').matchAll(/<Paragraph[^>]*Type="([^"]*)"[^>]*>([\s\S]*?)<\/Paragraph>/g)].map(([, type, body]) => {
       const t = xmlText(body).trim();
-      return type === 'Character' ? `\n${t.toUpperCase()}` : type === 'Scene Heading' ? `\n${t.toUpperCase()}\n` : t;
+      return type === 'Character' ? `\n${t.toUpperCase()}` : type === 'Scene Heading' ? `\n${t.toUpperCase()}\n` : type === 'Dialogue' || type === 'Parenthetical' ? t : `\n${t}`;
     }).join('\n');
   else if (ext === '.rtf')
     text = buf.toString('latin1').replace(/\\par[d]?/g, '\n').replace(/\{\\\*[^{}]*\}/g, '').replace(/\\'([0-9a-f]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16))).replace(/\\[a-z]+-?\d* ?/gi, '').replace(/[{}]/g, '');
   else if (['.txt', '.md', '.fountain', '.srt', '.vtt', '.csv', '.json', '.html', '.htm', ''].includes(ext)) text = buf.toString('utf8');
-  else if (ext === '.pdf') throw new Error('PDF cannot be read. Save the script as Word (.docx), text or Fountain, or paste the text into the chat.');
-  else throw new Error('Attach a text, Word, Final Draft, Fountain or RTF document.');
+  else throw new Error('Attach a PDF, Typeloom, Word, Final Draft, Fountain, RTF or text document.');
   if (ext === '.html' || ext === '.htm') text = xmlText(text.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '').replace(/<\/(p|div|h\d|li|tr)>/gi, '\n'));
-  return { name: path.basename(file), text: text.replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 300000) };
+  return { name: path.basename(file), text: text.replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 300000) };
 }
 // Python for scripts the agent writes. GUI apps on macOS get a short PATH, so also look where installers put it.
 function findPython() {
@@ -266,7 +416,7 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
   }
   function connection(config = read('ai.json', {}), apiKey = key(config)) {
     const c = validateAI(config);
-    if (!apiKey && !isLocal(c.endpoint)) throw new Error('Add your API key in AI settings first.');
+    if (!apiKey && !isLocal(c.endpoint)) throw new Error('Paste your API key first. Cloud providers need a key; local model servers do not.');
     const anthropic = c.provider === 'anthropic';
     const headers = {
       'Content-Type': 'application/json',
@@ -310,11 +460,21 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
     return [...new Set((data.data || data.models || []).map((m) => m.id || m.name).filter((id) => typeof id === 'string'))].sort().slice(0, 500);
   }
   // The agent may write a processor, but only the user installs it, after reviewing the script and command.
+  // The agent may write a plugin, but only the user installs it, after reviewing the script and command.
+  // Changing a plugin keeps its id, so it is updated in place instead of added again.
+  const drafts = new Map();
   function draftProcessor(raw) {
     const kind = raw?.kind === 'python' ? 'python' : 'ffmpeg';
     const name = String(raw?.name || '').trim().slice(0, 80);
-    if (!name) throw new Error('A processor needs a name.');
-    const id = `ai-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'processor'}-${randomUUID().slice(0, 6)}`;
+    if (!name) throw new Error('A plugin needs a name.');
+    const installed = listPlugins();
+    let base = null;
+    if (raw.replaceId != null) {
+      base = installed.find((p) => p.id === raw.replaceId) || drafts.get(raw.replaceId);
+      if (!base) throw new Error('replaceId must be a plugin you made earlier. Its id is in the earlier result.');
+    } else base = installed.find((p) => p.id.startsWith('ai-') && p.name.toLowerCase() === name.toLowerCase()) || null;
+    const id = base?.id || `ai-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'plugin'}-${randomUUID().slice(0, 6)}`;
+    const current = installed.find((p) => p.id === id);
     let executable = ffmpegPath,
       args = Array.isArray(raw.args) ? raw.args : [],
       script = '';
@@ -323,14 +483,80 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
       if (!executable) throw new Error('Python 3 was not found. Install it from python.org, then ask again.');
       script = String(raw.script || '');
       if (!script.trim() || script.length > 200000) throw new Error('Give the Python script, up to 200 kB.');
+      // A new file per version: the installed version keeps working until the user installs this one.
       const folder = path.join(dir, 'scripts', id);
       fs.mkdirSync(folder, { recursive: true });
-      const file = path.join(folder, 'processor.py');
+      const file = path.join(folder, `${randomUUID().slice(0, 8)}.py`);
       fs.writeFileSync(file, script, { mode: 0o600 });
       args = [file, ...args];
     }
-    const manifest = validatePlugin({ format: 'reccut-processor-v1', id, name, executable, args, outputExtension: raw.outputExtension });
-    return { manifest, kind, script, description: String(raw.description || '').slice(0, 2000) };
+    const manifest = validatePlugin({ format: 'reccut-processor-v1', id, name, kind, executable, args, outputExtension: raw.outputExtension, description: raw.description, icon: raw.icon, params: raw.params, version: current ? (current.version || 1) + 1 : 1, author: current?.author });
+    drafts.set(id, manifest);
+    return { manifest, kind, script, description: String(raw.description || '').slice(0, 2000), ...(current ? { updates: current.version || 1 } : {}) };
+  }
+  const accepted = (o) => {
+    if (o?.accepted !== true) throw new Error('Accept the plugin terms first.');
+  };
+  const scriptFolder = (id) => path.join(dir, 'scripts', id);
+  // Remove script versions no installed plugin uses any more.
+  function tidyScripts(id) {
+    const keep = new Set((listPlugins().find((p) => p.id === id)?.args || []).map((a) => path.resolve(a)));
+    const folder = scriptFolder(id);
+    if (!fs.existsSync(folder)) return;
+    for (const f of fs.readdirSync(folder)) if (!keep.has(path.resolve(folder, f))) fs.rmSync(path.join(folder, f), { force: true });
+  }
+  // A .reccut-plugin file: everything needed to install the plugin on another computer, without paths.
+  function exportPlugin(id, opts = {}) {
+    accepted(opts);
+    const p = validatePlugin(listPlugins().find((x) => x.id === id));
+    if (!p.kind) throw new Error('Only plugins made with FFmpeg or Python can be shared. This one runs a program on your computer.');
+    const script = p.kind === 'python' ? fs.readFileSync(p.args[0], 'utf8') : undefined;
+    const author = typeof opts.author === 'string' && opts.author.trim() ? opts.author.trim().slice(0, 120) : p.author;
+    return {
+      format: 'reccut-plugin-v1',
+      id: p.id,
+      name: p.name,
+      version: p.version || 1,
+      ...(author ? { author } : {}),
+      ...(p.description ? { description: p.description } : {}),
+      ...(p.icon ? { icon: p.icon } : {}),
+      kind: p.kind,
+      args: p.kind === 'python' ? p.args.slice(1) : p.args,
+      ...(p.params ? { params: p.params } : {}),
+      outputExtension: p.outputExtension,
+      ...(script != null ? { script } : {}),
+      terms: { version: TERMS.version, acceptedAt: new Date().toISOString(), ...(author ? { by: author } : {}) },
+    };
+  }
+  // Reads a plugin file and prepares it for review. Nothing is installed or written yet.
+  function readPluginFile(file) {
+    if (fs.statSync(file).size > 1e6) throw new Error('The plugin file is too large.');
+    try {
+      return checkPackage(JSON.parse(fs.readFileSync(file, 'utf8')));
+    } catch (err) {
+      throw err instanceof SyntaxError ? new Error('This is not a Reccut plugin file.') : err;
+    }
+  }
+  function checkPackage(pkg) {
+    if (pkg?.format !== 'reccut-plugin-v1' || !['ffmpeg', 'python'].includes(pkg.kind) || !/^[a-z0-9][a-z0-9._-]{0,79}$/.test(pkg.id || '')) throw new Error('This is not a Reccut plugin file.');
+    if (pkg.kind === 'python' && (typeof pkg.script !== 'string' || !pkg.script.trim() || pkg.script.length > 200000)) throw new Error('The plugin file has no script.');
+    const executable = pkg.kind === 'python' ? findInterpreter() : ffmpegPath;
+    if (!executable) throw new Error('This plugin needs Python 3. Install it from python.org, then open the plugin file again.');
+    // {script} marks where the script goes; it gets its real path when the user installs.
+    const manifest = validatePlugin({ ...pkg, format: 'reccut-processor-v1', executable, args: pkg.kind === 'python' ? ['{script}', ...(pkg.args || [])] : pkg.args });
+    const current = listPlugins().find((p) => p.id === pkg.id);
+    return { pkg, manifest, script: pkg.script || '', ...(current ? { updates: current.version || 1 } : {}) };
+  }
+  function installPackage(pkg, opts = {}) {
+    accepted(opts);
+    const { manifest } = checkPackage(pkg);
+    if (manifest.kind === 'python') {
+      fs.mkdirSync(scriptFolder(manifest.id), { recursive: true });
+      const file = path.join(scriptFolder(manifest.id), `${randomUUID().slice(0, 8)}.py`);
+      fs.writeFileSync(file, pkg.script, { mode: 0o600 });
+      manifest.args = [file, ...manifest.args.slice(1)];
+    }
+    return installPlugin(manifest, opts);
   }
 
   // Higgsfield video generation. Credentials are stored like the AI key; requests run in the main process.
@@ -373,7 +599,7 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
   async function hf(url, init = {}) {
     const c = read('generation.json', {});
     const cred = hfSession || (c.secret && encrypted() ? safeStorage.decryptString(Buffer.from(c.secret, 'base64')) : '');
-    if (!cred) throw new Error('Add your Higgsfield key in Settings → AI & Plugins first.');
+    if (!cred) throw new Error('Set up Higgsfield in Settings → Plugins first.');
     if (!url.startsWith(`${HF}/`)) throw new Error('Unexpected Higgsfield address.');
     const res = await fetchImpl(url, { ...init, redirect: 'error', headers: { Authorization: `Key ${cred}`, 'Content-Type': 'application/json', ...(init.headers || {}) } });
     if (!res.ok) {
@@ -442,9 +668,14 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
     return { file, model, requestId: id };
   }
   const listPlugins = () => read('processors.json', []);
-  function installPlugin(raw) {
+  // Installing replaces a plugin with the same id, so a plugin is updated in place, never duplicated.
+  function installPlugin(raw, opts = {}) {
+    accepted(opts);
     const p = validatePlugin(raw);
+    if (p.args.some((a) => a.includes('{script}'))) throw new Error('The plugin script is missing.');
     write('processors.json', [...listPlugins().filter((x) => x.id !== p.id), p]);
+    drafts.delete(p.id);
+    tidyScripts(p.id);
     return listPlugins();
   }
   function removePlugin(id) {
@@ -452,16 +683,19 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
       'processors.json',
       listPlugins().filter((x) => x.id !== id),
     );
+    if (/^[a-z0-9][a-z0-9._-]{0,79}$/.test(id)) fs.rmSync(scriptFolder(id), { recursive: true, force: true });
     return listPlugins();
   }
-  async function processFile({ id, input, outputDir }, ctx) {
+  async function processFile({ id, input, outputDir, params }, ctx) {
     const plugin = validatePlugin(listPlugins().find((p) => p.id === id));
+    const values = paramValues(plugin, params && typeof params === 'object' ? params : {});
+    if (plugin.kind === 'ffmpeg' && ffmpegPath) plugin.executable = ffmpegPath; // The app's own FFmpeg, also after updates.
     if (!path.isAbsolute(input) || !fs.statSync(input).isFile()) throw new Error('Source file is missing.');
     const folder = path.join(outputDir, `processed-${randomUUID()}`);
     fs.mkdirSync(folder, { recursive: true });
     const output = path.join(folder, `result${plugin.outputExtension}`);
     const args = plugin.args.map((a) =>
-      a.replace(/\{(input|output)\}/g, (_match, name) => (name === 'input' ? input : output)),
+      a.replace(/\{(input|output|param:([\w-]+))\}/g, (_match, name, param) => (param ? values[param] : name === 'input' ? input : output)),
     );
     try {
       if (ctx.isCanceled()) throw new Error('Canceled');
@@ -493,6 +727,6 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
       throw err;
     }
   }
-  return { aiConfig, saveAI, complete, listModels, draftProcessor, genConfig, saveGen, estimateVideo, generateVideo, listPlugins, installPlugin, removePlugin, processFile };
+  return { aiConfig, saveAI, complete, listModels, draftProcessor, exportPlugin, readPluginFile, installPackage, genConfig, saveGen, estimateVideo, generateVideo, listPlugins, installPlugin, removePlugin, processFile };
 }
 module.exports = { createExtensionHost, validatePlugin, validateAI, toAnthropic, toCompatible, fromCompatible, readDocument };

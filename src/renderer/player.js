@@ -194,11 +194,14 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     const entry = pool.get(`${clip.id}:${key}`);
     const el = entry?.el;
     if (!el) return null;
+    // En proxy er mindre enn originalen. Effekter i piksler (blur) skaleres, så de ser ut som i eksporten.
+    const sh = m?.streams?.[key]?.height;
+    const proxyScale = sh && el.videoHeight ? el.videoHeight / sh : 1;
     if (!el.seeking && el.readyState >= 2 && el.videoWidth) {
       entry.hasFrame = true;
-      return previewSource({ img: el, w: el.videoWidth, h: el.videoHeight });
+      return previewSource({ img: el, w: el.videoWidth, h: el.videoHeight, pixelScale: proxyScale });
     }
-    return entry.frame ? previewSource({ img: entry.frame, w: entry.frame.width, h: entry.frame.height, pixelScale: entry.frame.width / (el.videoWidth || entry.frame.width) }) : null;
+    return entry.frame ? previewSource({ img: entry.frame, w: entry.frame.width, h: entry.frame.height, pixelScale: (proxyScale * entry.frame.width) / (el.videoWidth || entry.frame.width) }) : null;
   }
 
   function upcomingAt(p, T) {
@@ -361,13 +364,14 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     dirty = true;
   }
 
-  function resizeCanvas(cssW, cssH) {
+  // cap: høyeste skala mot prosjektet, så eksportvisningen ikke tegner skarpere enn filen blir.
+  function resizeCanvas(cssW, cssH, cap = 1) {
     if (!canvas) return;
     const p = getProject();
     const dpr = window.devicePixelRatio || 1;
     const fit = Math.min(cssW / p.width, cssH / p.height);
     // Reduser etter at full oppløsning er begrenset, også i fullskjerm på Retina.
-    const scale = Math.min(1, fit * dpr) * previewResolutionScale();
+    const scale = Math.min(1, fit * dpr, cap) * previewResolutionScale();
     const W = Math.max(2, Math.round(p.width * scale));
     const H = Math.max(2, Math.round(p.height * scale));
     if (canvas.width !== W || canvas.height !== H) {
@@ -415,6 +419,12 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     return true;
   }
 
+  // Området avspillingen holder seg innenfor. Et område på et par bilder (O helt i starten gir ett)
+  // ville hoppet til start og stoppet med en gang, så det gjelder ikke for avspilling.
+  function playRange(p) {
+    return p.range && p.range.out - p.range.in > 0.05 ? p.range : { in: 0, out: p.duration };
+  }
+
   function loop() {
     raf = requestAnimationFrame(loop);
     const p = getProject();
@@ -423,11 +433,12 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       const now = performance.now();
       T = clockBase + ((now - clockStart) / 1000) * rate;
       if (rate > 0) {
-        const end = p.range ? p.range.out : p.duration;
+        const r = playRange(p);
+        const end = r.out;
         if (T >= end) {
           if (prefs.value.loopPlayback && end > 0) {
             // Avspilling i løkke: tilbake til starten av området eller tidslinjen.
-            T = p.range ? p.range.in : 0;
+            T = r.in;
             clockBase = T;
             clockStart = now;
           } else {
@@ -464,8 +475,8 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     audioCtx.resume();
     const p = getProject();
     let T = getTime();
-    const end = p.range ? p.range.out : p.duration;
-    if (r > 0 && T >= end - 0.05) T = p.range ? p.range.in : 0;
+    const range = playRange(p);
+    if (r > 0 && T >= range.out - 0.05) T = range.in;
     rate = r;
     clockBase = T;
     clockStart = performance.now();

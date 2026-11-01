@@ -22,7 +22,7 @@ app.setPath('userData', path.join(dir, 'profile'));
 const timeout = setTimeout(() => {
   console.error('Render verification timed out');
   app.exit(1);
-}, 45000);
+}, 90000);
 app
   .whenReady()
   .then(async () => {
@@ -78,7 +78,7 @@ app
       ui.webContents.on('console-message', (event) => console.error('UI:', event.message));
       await ui.loadFile(path.join(dir, 'ui.html'));
       const sourceFile = path.join(dir, 'source.webm');
-      require('child_process').execFileSync(require('ffmpeg-static'), [
+      require('child_process').execFileSync(require('../src/main/ffmpeg-path.js'), [
         '-hide_banner',
         '-loglevel',
         'error',
@@ -93,7 +93,7 @@ app
         sourceFile,
       ]);
       await ui.webContents.executeJavaScript(`window.sourceFile = ${JSON.stringify(sourceFile)}`);
-      for (const name of ['verifyUI', 'verifySource', 'showSettings', 'verifyChat', 'verifyLook', 'verifyCommands', 'verifyFootage', 'verifyProcessor']) {
+      for (const name of ['verifyUI', 'verifySource', 'showSettings', 'verifyChat', 'verifyLook', 'verifyCommands', 'verifyFootage', 'verifySetup', 'verifyCreative', 'verifyBuiltinPlugins', 'verifyProcessor']) {
         const result = await ui.webContents.executeJavaScript(
           `uiVerification.${name}().catch(error=>({error:error.message,stack:error.stack}))`,
         );
@@ -101,12 +101,38 @@ app
         console.log(JSON.stringify({ ui: name, ...result }));
         if (name === 'verifyUI')
           fs.writeFileSync(path.join(os.tmpdir(), 'reccut-keyer-ui.png'), (await ui.webContents.capturePage()).toPNG());
+        if (name === 'verifySetup' || name === 'verifyCreative' || name === 'verifyBuiltinPlugins')
+          fs.writeFileSync(path.join(os.tmpdir(), `reccut-${name}.png`), (await ui.webContents.capturePage()).toPNG());
         if (name === 'showSettings')
           fs.writeFileSync(
             path.join(os.tmpdir(), 'reccut-extensions-ui.png'),
             (await ui.webContents.capturePage()).toPNG(),
           );
       }
+      // The agent's motion graphics: real rendering in the sandboxed window, alpha, errors and no network.
+      const { renderGraphic } = require('../src/main/graphics.js');
+      const ctx = { isCanceled: () => false, progress() {}, setCancel() {} };
+      const code = `let net = 'pending'; fetch('https://example.com').then(() => (net = 'open'), () => (net = 'blocked'));
+        function draw(ctx, t) { ctx.fillStyle = net === 'blocked' ? '#00ff00' : '#ff0000'; ctx.fillRect(0, 0, W * progress(t, 0, 0.5), H); }`;
+      const g = await renderGraphic({ code, width: 64, height: 48, fps: 10, duration: 1, name: 'Check' }, ctx, dir);
+      const last = (await require('electron').nativeImage.createFromDataURL(g.previews.at(-1).url)).toBitmap();
+      if (!(last[1] > 200 && last[2] < 50) || !fs.existsSync(g.file)) throw new Error('Graphic must render and the network must be blocked');
+      const alpha = await renderGraphic({ code: 'function draw(ctx){ctx.fillRect(0,0,10,10);}', width: 32, height: 32, fps: 5, duration: 1, transparent: true, name: 'Alpha' }, ctx, dir);
+      if (!alpha.file.endsWith('.mov')) throw new Error('Transparent graphics must be ProRes 4444 .mov');
+      const failed = await renderGraphic({ code: 'function draw(){ missing(); }', width: 32, height: 32, fps: 5, duration: 1 }, ctx, dir).catch((e) => e.message);
+      if (!/missing is not defined/.test(failed)) throw new Error(`Code errors must reach the agent: ${failed}`);
+      const hung = await renderGraphic({ code: 'function draw(){ for(;;){} }', width: 32, height: 32, fps: 5, duration: 1 }, ctx, dir).catch((e) => e.message);
+      if (!/too long/.test(hung)) throw new Error('An endless loop must stop the render');
+      console.log(JSON.stringify({ graphics: 'passed', checks: 4 }));
+      // Scripts as PDF are read in the main process with pdf.js (a PDF that Chromium makes, like a printed script).
+      const { readDocument } = require('../src/main/extensions.js');
+      const pdfWin = new BrowserWindow({ show: false });
+      await pdfWin.loadURL(`data:text/html,${encodeURIComponent('<p>INT. STUDIO - DAY</p><p style="margin-left:2in">ANNA</p><p style="margin-left:1in">Welcome to the show.</p>')}`);
+      fs.writeFileSync(path.join(dir, 'script.pdf'), await pdfWin.webContents.printToPDF({}));
+      pdfWin.destroy();
+      const pdfText = (await readDocument(path.join(dir, 'script.pdf'))).text;
+      if (!/ANNA\s+Welcome to the show\./.test(pdfText)) throw new Error(`PDF text was not read: ${pdfText}`);
+      console.log(JSON.stringify({ pdf: 'passed', checks: 1 }));
       clearTimeout(timeout);
       app.exit(0);
     } catch (err) {

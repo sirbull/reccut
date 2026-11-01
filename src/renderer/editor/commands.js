@@ -1,6 +1,6 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
-import { CAPTION_LANE, CLIP_COLORS, EFFECTS, parseTransitionSelection, transitionSelection, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, componentVolumeProp, kfTime, valueAt } from '../../shared/model.js';
+import { addSequence, currentSequence, deleteSequence, sequenceList, hasFreeTransitions, CAPTION_LANE, CLIP_COLORS, EFFECTS, parseTransitionSelection, transitionSelection, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, componentVolumeProp, kfTime, valueAt } from '../../shared/model.js';
 import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates.js';
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
 import { addMask, canMask, removeMask } from '../../shared/shapes.js';
@@ -34,7 +34,11 @@ import {
   trimClip,
 } from '../../shared/ops.js';
 import {
+  addMediaRecords,
+  reportFailed,
   commit,
+  commitSequence,
+  previewEdit,
   endTransient,
   updateTransient,
   browserPlayhead,
@@ -74,6 +78,30 @@ export const prefsOpen = signal(false);
 export const saveAsOpen = signal(false);
 export const packageOpen = signal(false);
 export const historyOpen = signal(false);
+// Sekvensen som får nytt navn i biblioteket (id).
+export const renamingSequence = signal(null);
+
+/* Sekvenser: flere tidslinjer i samme prosjekt (se model.js) */
+
+export function newSequence() {
+  room.value = 'edit';
+  browserTab.value = 'media';
+  const id = commitSequence((p) => addSequence(p));
+  renamingSequence.value = id;
+}
+
+export function duplicateSequence(id = currentSequence(project.value).id) {
+  room.value = 'edit';
+  browserTab.value = 'media';
+  commitSequence((p) => addSequence(p, { from: id }));
+  toast(`Duplicated. You are now editing ${currentSequence(project.value).name}.`, { timeout: 3000 });
+}
+
+export function removeSequence(id) {
+  const s = sequenceList(project.value).find((x) => x.id === id);
+  if (!s || !confirm(`Delete the sequence "${s.name}"? Media stays in the project. You can undo this.`)) return;
+  commitSequence((p) => deleteSequence(p, id));
+}
 // Valg når et lydklipp passer under flere videoklipp: { audioId, matches }.
 export const syncDialog = signal(null);
 
@@ -173,24 +201,48 @@ export function finishPen(points, smooth) {
 }
 
 // Effekt fra effektbiblioteket: legges på valgte klipp, eller klippet den slippes på.
-export function addEffect(id, clipId = null) {
+const selectedOf = (types) => selection.value.filter((cid) => types.includes(project.value.clips[cid]?.type));
+const effectEdit = (id, ids) => (q) => {
   const fx = EFFECTS.find((x) => x.id === id);
-  const p = project.value;
-  const ids = clipId ? [clipId] : selection.value.filter((cid) => ['video', 'image', 'recording', 'title'].includes(p.clips[cid]?.type));
+  for (const cid of ids) {
+    const c = q.clips[cid];
+    c.props.fx = [...new Set([...(c.props.fx || []), id])];
+    if (!c.props[fx.prop]) c.props[fx.prop] = fx.def;
+  }
+};
+export function addEffect(id, clipId = null) {
+  const ids = clipId ? [clipId] : selectedOf(['video', 'image', 'recording', 'title']);
   if (!ids.length) {
     toast('Select a video, image or title clip first, or drag the effect onto a clip.');
     return;
   }
-  commit((q) => {
-    for (const cid of ids) {
-      const c = q.clips[cid];
-      c.props.fx = [...new Set([...(c.props.fx || []), id])];
-      if (!c.props[fx.prop]) c.props[fx.prop] = fx.def;
-    }
-  });
+  commit(effectEdit(id, ids));
   selection.value = ids;
   inspectorTab.value = 'effects';
 }
+// Viser effekten på de valgte klippene i seeren mens musa er over den (se previewEdit).
+export const previewEffect = (id) => {
+  const ids = selectedOf(['video', 'image', 'recording', 'title']);
+  if (ids.length) previewEdit(effectEdit(id, ids));
+};
+
+// Filmlook (filmLooks.js) på klipp. Ny look får full styrke, ellers beholdes styrken.
+export function setFilm(c, id) {
+  if (!id) {
+    delete c.props.film;
+    c.props.filmMix = 0;
+    delete c.kf.filmMix;
+  } else {
+    if (!c.props.film) c.props.filmMix = 1;
+    c.props.film = id;
+  }
+}
+const filmEdit = (id, ids) => (q) => ids.forEach((cid) => setFilm(q.clips[cid], id));
+export function applyFilm(id, ids = selectedOf(['video', 'image', 'recording'])) {
+  if (!ids.length) return toast('Select a video or image clip first.');
+  commit(filmEdit(id, ids));
+}
+export const previewFilm = (id, ids = selectedOf(['video', 'image', 'recording'])) => ids.length && previewEdit(filmEdit(id, ids));
 
 export function addCaption(T = getTime(), text = '') {
   // Avslutt eventuell pågående tekstredigering før det nye klippet opprettes.
@@ -303,6 +355,15 @@ export function addTransition(type = 'dissolve') {
         else c.props.aFadeOut = prefs.value.audioCrossfadeDur;
       }
     });
+    return;
+  }
+  // Klipp over hovedsporet tones inn og ut.
+  const free = selection.value.filter((id) => p.clips[id] && hasFreeTransitions(p.clips[id]) && !p.lanes?.[p.clips[id].lane]?.locked);
+  if (free.length) {
+    commit((q) => {
+      for (const id of free) for (const edge of ['start', 'end']) setTransition(q, id, type, dur, edge, prefs.value.transitionAudio);
+    });
+    selectedTransition.value = transitionSelection(free[0]);
     return;
   }
   let ids = selection.value.filter((id) => p.clips[id]?.lane === 0);
@@ -599,11 +660,38 @@ export function addImportPaths(paths) {
   if (req) importOptions.value = { ...req, paths: [...new Set([...req.paths, ...paths])] };
 }
 
+// Nummererte bilder (render_0001.png) kan importeres som én video. Valgt i importvinduet.
+export const FPS_PRESETS = [12, 15, 23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 120];
+export const isNumberedImage = (p) => /\d+\.(png|jpe?g|tiff?|exr|dpx|cin|tga|bmp|webp|jp2|j2k|sgi|rgb|pcx|ppm|pgm|hdr|qoi|avif|heic|jxl)$/i.test(p);
+
+// Én video per sekvens, også når flere bilder fra samme sekvens er valgt.
+async function importSequences(paths, fps, placement, copy) {
+  const firsts = new Map(paths.map((p) => [p.replace(/\d+(\.[^.\\/]+)$/, '#$1'), p]));
+  const folders = projectFolders.value;
+  const items = [];
+  for (const file of firsts.values()) {
+    try {
+      const r = await api.importSequence(file, fps, copy && folders?.own ? folders.media : null);
+      reportFailed(r.failed, r.missing);
+      items.push(...r.items);
+    } catch (err) {
+      toast(err.message, { kind: 'error', timeout: 9000 });
+    }
+  }
+  addMediaRecords(items, placement);
+  return items;
+}
+
 export async function confirmImport(opts) {
   const req = importOptions.value;
   importOptions.value = null;
   if (!req?.paths.length) return;
-  const items = await importPaths(req.paths, req.placement, opts);
+  const frames = opts.sequenceFps ? req.paths.filter(isNumberedImage) : [];
+  const copy = opts.copy ?? prefs.value.importCopy;
+  const items = [
+    ...(frames.length ? await importSequences(frames, opts.sequenceFps, req.placement, copy) : []),
+    ...(await importPaths(req.paths.filter((p) => !frames.includes(p)), req.placement, opts)),
+  ];
   if (opts.sync && items.length > 1) syncMediaAudio(items.map((m) => m.id));
 }
 
@@ -1064,7 +1152,7 @@ export async function handleDrop(dt, lane, T, options = {}) {
       }
       let added = [];
       commit((p) => {
-        added = applyMediaDrop(p, item, lane, T);
+        added = applyMediaDrop(p, item, lane, T, options.replace);
       });
       if (added.length) {
         selection.value = added;
@@ -1111,7 +1199,7 @@ export async function clipContextMenu(clipId, T) {
     { id: 'cut', label: 'Cut', accelerator: 'CmdOrCtrl+X' },
     { separator: true },
   ];
-  if (c.lane === 0 && isVisual(c)) {
+  if ((c.lane === 0 && isVisual(c)) || hasFreeTransitions(c)) {
     items.push({ id: 'transition', label: 'Add Cross Dissolve', accelerator: 'CmdOrCtrl+T' });
     if (c.transition) items.push({ id: 'removeTransition', label: 'Remove Transition' });
     if (c.transitionOut) items.push({ id: 'removeTransitionOut', label: 'Remove End Transition' });

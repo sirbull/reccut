@@ -11,6 +11,7 @@ import {
   Film,
   Image as ImageIcon,
   LayoutGrid,
+  ListVideo,
   Plus,
   Rows3,
   Search,
@@ -22,12 +23,13 @@ import {
   Wand2,
 } from 'lucide-preact';
 import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { CAPTION_LANE, EFFECTS, REDACT_MODES, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject } from '../../shared/model.js';
+import { renameSequence, sequenceList, timelines, CAPTION_LANE, EFFECTS, REDACT_MODES, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { parseSrt, speechSources, toSrt, toVtt } from '../../shared/srt.js';
-import { addMediaRecords, usedMedia, projectFolders, audioSkimming, commit, getWave, importPaths, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
+import { addMediaRecords, switchSequence, usedMedia, projectFolders, audioSkimming, commit, endPreview, getWave, importPaths, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
 import { fileUrl, mediaPreviewProject, openSource, scrubAudio, seek } from './playback.js';
 import * as commands from './commands.js';
+import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { startLibraryDrag } from './libraryDrag.js';
 import { CaptionStyleEditor } from './Inspector.jsx';
 import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
@@ -137,6 +139,16 @@ function MediaTab() {
     <div
       class={`media-tab${over ? ' drop' : ''}`}
       onPointerDown={() => (commands.browserFocus.value = true)}
+      onContextMenu={async (e) => {
+        if (e.defaultPrevented) return;
+        e.preventDefault();
+        const id = await api.popupMenu([
+          { id: 'sequence', label: 'New Sequence', accelerator: 'Alt+CmdOrCtrl+N' },
+          { id: 'import', label: 'Import Media…', accelerator: 'CmdOrCtrl+I' },
+        ]);
+        if (id === 'sequence') commands.newSequence();
+        else if (id === 'import') commands.importDialog();
+      }}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
           e.preventDefault();
@@ -159,6 +171,7 @@ function MediaTab() {
           Recordings
         </Button>
         <span class="spacer" />
+        <IconButton icon={ListVideo} title={`New Sequence (${isMac ? '⌥⌘N' : 'Ctrl+Alt+N'})`} onClick={() => commands.newSequence()} />
         <IconButton icon={Rows3} title="Filmstrip view" active={mode === 'filmstrip'} onClick={() => setView('filmstrip')} />
         <IconButton icon={LayoutGrid} title="Grid view" active={mode === 'grid'} onClick={() => setView('grid')} />
       </div>
@@ -181,6 +194,7 @@ function MediaTab() {
           <input placeholder="Search media" value={query} onInput={(e) => setQuery(e.currentTarget.value)} onKeyDown={(e) => e.stopPropagation()} />
         </div>
       )}
+      <Sequences />
       {Object.keys(p.media).length === 0 ? (
         <div class="empty">
           <Film size={28} />
@@ -205,6 +219,69 @@ function MediaTab() {
       <p class="hint small">
         Skim a clip and press I and O to mark a range, or drag across it. Press E to append, W to insert, Q to connect or D to overwrite at the playhead, or drag the range to the timeline.
       </p>
+    </div>
+  );
+}
+
+/* Sekvenser vises når prosjektet har mer enn én. Dobbeltklikk åpner. */
+
+function Sequences() {
+  const list = sequenceList(project.value);
+  if (list.length < 2) return null;
+  return (
+    <div class="seq-list">
+      {list.map((s) => (
+        <SequenceItem key={s.id} s={s} />
+      ))}
+    </div>
+  );
+}
+
+function SequenceItem({ s }) {
+  const renaming = commands.renamingSequence.value === s.id;
+  const finish = (name) => {
+    commands.renamingSequence.value = null;
+    name = name.trim();
+    if (name && name !== s.name) commit((p) => renameSequence(p, s.id, name));
+  };
+  const menu = async (e) => {
+    e.preventDefault();
+    const id = await api.popupMenu([
+      { id: 'open', label: 'Open Sequence', enabled: !s.active },
+      { id: 'rename', label: 'Rename' },
+      { id: 'duplicate', label: 'Duplicate Sequence' },
+      { separator: true },
+      { id: 'delete', label: 'Delete Sequence' },
+    ]);
+    if (id === 'open') switchSequence(s.id);
+    else if (id === 'rename') commands.renamingSequence.value = s.id;
+    else if (id === 'duplicate') commands.duplicateSequence(s.id);
+    else if (id === 'delete') commands.removeSequence(s.id);
+  };
+  return (
+    <div class={`seq-item${s.active ? ' active' : ''}`} title={s.active ? 'Open in the timeline' : 'Double click to open'} onDblClick={() => !renaming && switchSequence(s.id)} onContextMenu={menu}>
+      <ListVideo size={16} />
+      <div class="seq-text">
+        {renaming ? (
+          <input
+            class="text-input"
+            value={s.name}
+            autoFocus
+            onFocus={(e) => e.currentTarget.select()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') commands.renamingSequence.value = null;
+            }}
+            onBlur={(e) => commands.renamingSequence.value === s.id && finish(e.currentTarget.value)}
+          />
+        ) : (
+          <b>{s.name}</b>
+        )}
+        <span>
+          {formatDuration(s.duration || 0)} · {s.width} × {s.height} · {s.fps} fps
+        </span>
+      </div>
     </div>
   );
 }
@@ -501,7 +578,7 @@ async function mediaContextMenu(e, m, used) {
   const hasVideo = picked.some((x) => x.kind === 'video' || x.kind === 'recording');
   const hasAudio = picked.some((x) => x.kind === 'audio');
   const synced = picked.some((x) => Object.values(x.streams).some((st) => st.syncedFrom));
-  const inUse = picked.some((x) => Object.values(project.value.clips).some((c) => c.mediaId === x.id));
+  const inUse = picked.some((x) => timelines(project.value).some((t) => Object.values(t.clips).some((c) => c.mediaId === x.id)));
   const id = await api.popupMenu([
     { id: 'append', label: 'Append to Storyline', accelerator: 'E' },
     { id: 'insert', label: 'Insert at Playhead', accelerator: 'W' },
@@ -770,6 +847,12 @@ function effectFrameAt(fx) {
   return fxFrames.get(fx.id);
 }
 
+const filmFrames = new Map();
+function filmFrameAt(id) {
+  if (!filmFrames.has(id)) filmFrames.set(id, (t) => ({ project: { ...PREVIEW_PROJECT }, frame: { layers: [{ clip: imageClip('scene', 0, 2, { film: id, filmMix: 1 }), T: t }], captions: [] } }));
+  return filmFrames.get(id);
+}
+
 // Sladding: et passordfelt som pikseleres, gjøres uskarpt eller dekkes til.
 const redactFrames = new Map();
 function redactFrameAt(mode) {
@@ -825,15 +908,29 @@ function EffectsTab() {
       </div>
       <p class="hint small">Hide passwords, faces and other private details. Move and resize the box in the viewer.</p>
       <div class="sub-head">Effects</div>
-      <div class="card-grid">
+      <div class="card-grid" onPointerLeave={endPreview}>
         {EFFECTS.map((fx) => (
-          <button key={fx.id} class="gen-card" draggable onDragStart={(e) => dragData(e, { kind: 'effect', id: fx.id })} onClick={() => commands.addEffect(fx.id)} title="Click to add to the selected clips, or drag onto a clip">
+          <button key={fx.id} class="gen-card" draggable onDragStart={(e) => dragData(e, { kind: 'effect', id: fx.id })} onPointerEnter={() => commands.previewEffect(fx.id)} onClick={() => commands.addEffect(fx.id)} title="Point to preview on the selected clips. Click to add, or drag onto a clip">
             <MiniPreview frameAt={effectFrameAt(fx)} duration={1} still={1} label={fx.label} />
             <span>{fx.label}</span>
           </button>
         ))}
       </div>
       <p class="hint small">Effect amounts can be keyframed in the Effects tab of the inspector.</p>
+      {[...new Set(FILM_LOOKS.map((f) => f.group))].map((g) => (
+        <div key={g}>
+          <div class="sub-head">Film Looks: {g}</div>
+          <div class="card-grid" onPointerLeave={endPreview}>
+            {FILM_LOOKS.filter((f) => f.group === g).map((f) => (
+              <button key={f.id} class="gen-card" data-film={f.id} onPointerEnter={() => commands.previewFilm(f.id)} onClick={() => commands.applyFilm(f.id)} title="Point to preview on the selected clips, and click to use it. Strength is in the Color tab of the inspector.">
+                <MiniPreview frameAt={filmFrameAt(f.id)} duration={1} still={1} label={f.label} />
+                <span>{f.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <p class="hint small">Select clips and point at an effect or a film look to see it in the viewer before you click.</p>
     </>
   );
 }

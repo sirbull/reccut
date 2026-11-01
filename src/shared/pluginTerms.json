@@ -1,0 +1,15 @@
+{
+  "version": "2026-11-01",
+  "share": [
+    "You may share this plugin free of charge, or sell it on your own terms. Reccut does not take a fee and is not a party to any sale, licence or support agreement between you and the people who get it.",
+    "You confirm that you have the right to share everything in the plugin, including its code, icon and any tools or models it uses, and that it does not contain malware or code meant to harm, spy on or take over other people's computers or data.",
+    "You alone are responsible for the plugin, for what it does, and for any claims from people who use it. The makers of Reccut give no warranty for plugins and accept no liability for them.",
+    "The plugin file records that you accepted these terms, with the date and, if you give it, your name."
+  ],
+  "install": [
+    "Plugins are made by other people or by an AI model, not by the makers of Reccut, and they are not reviewed or approved by them.",
+    "A plugin runs on your computer with your permissions. It can read, change or delete files, including your media and projects, and it can use the network.",
+    "Install only plugins from sources you trust, and keep backups of important projects.",
+    "You install and use plugins at your own risk. The makers of Reccut accept no responsibility for loss, damage or other consequences caused by a plugin."
+  ]
+}

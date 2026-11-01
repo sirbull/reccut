@@ -3,7 +3,7 @@
 import { computed, effect } from '@preact/signals';
 import { makeClip, mediaClipType, newProject, primaryAt } from '../../shared/model.js';
 import { createPlayer, fileUrl } from '../player.js';
-import { browserPlayhead, getSourceTime, getTime, loadMotion, motionVersion, playing, project, setSourceTime, setTime, skim, skimming, sourceMediaId } from './store.js';
+import { browserPlayhead, getSourceTime, getTime, loadLut, loadMotion, motionVersion, playing, project, setSourceTime, setTime, skim, skimming, sourceMediaId } from './store.js';
 import { prefs } from '../prefs.js';
 
 export { fileUrl };
@@ -118,6 +118,7 @@ effect(() => {
     const path = p.media[c.mediaId]?.streams?.main?.motion;
     if (path) loadMotion(path);
   }
+  for (const m of Object.values(p.media)) if (m.cameraLut) loadLut(m.cameraLut);
 });
 
 export function currentClipAtPlayhead() {

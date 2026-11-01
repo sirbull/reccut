@@ -2,10 +2,11 @@
 import { useMemo, useState } from 'preact/hooks';
 import { Apple, Feather, FileVideo, Film, FolderOpen, Gem, Globe, Image as ImageIcon, Music } from 'lucide-preact';
 import { CAPTION_LANE, formatDuration } from '../../shared/model.js';
-import { AUDIO_FORMATS, CAPTION_EXPORT, CAPTION_EXPORT_AUDIO, PRESETS, QUALITIES, VIDEO_FORMATS, estimateSize, formatBytes, outputSize } from '../../shared/formats.js';
+import { AUDIO_FORMATS, CAPTION_EXPORT, CAPTION_EXPORT_AUDIO, PRESETS, QUALITIES, VIDEO_FORMATS, estimateSize, formatBytes, frameRateCheck, mediaCopies, outputSize } from '../../shared/formats.js';
 import { project, projectFolders, room } from './store.js';
 import { prefs } from '../prefs.js';
 import { exportOpen } from './commands.js';
+import { captionItems, toSrt, toVtt } from '../../shared/srt.js';
 import { Button, Modal, Row, Segmented, Select, toast } from '../ui.jsx';
 
 const api = window.api;
@@ -30,6 +31,23 @@ export async function defaultExportDir() {
   return projectFolders.value?.exports || `${await api.baseDir()}${api.platform === 'win32' ? '\\' : '/'}Exports`;
 }
 
+// Bare undertekstfila, uten å rendre video. VTT når det er valgt alene, ellers SRT.
+export async function exportCaptionsOnly(p, { range, captions, name, dir }) {
+  const items = captionItems(p, range ? range.in : 0, range ? range.out : p.duration);
+  if (!items.length) {
+    toast('There are no captions in the part you are exporting.');
+    return;
+  }
+  const kind = captions.includes('vtt') && !captions.includes('srt') ? 'vtt' : 'srt';
+  const filters = [{ name: 'SRT', extensions: ['srt'] }, { name: 'WebVTT', extensions: ['vtt'] }];
+  const sep = api.platform === 'win32' ? '\\' : '/';
+  const safe = (name || p.name).replace(/[\\/:*?"<>|]/g, '_');
+  const file = await api.saveFileDialog({ title: 'Export Captions', defaultPath: `${dir || (await defaultExportDir())}${sep}${safe}.${kind}`, filters: kind === 'vtt' ? filters.reverse() : filters });
+  if (!file) return;
+  await api.writeText(file, /\.vtt$/i.test(file) ? toVtt(items) : toSrt(items));
+  toast('Captions saved.', { actions: [{ label: api.platform === 'darwin' ? 'Reveal' : 'Show', onClick: () => api.reveal(file) }] });
+}
+
 api.onExportDone(({ file }) => {
   toast(`Export finished: ${file.split(/[\\/]/).pop()}`, {
     kind: 'success',
@@ -41,6 +59,45 @@ api.onExportDone(({ file }) => {
   });
 });
 
+// Varsel når klipp har en bildefrekvens som ikke går opp i eksportens, med forslag til en bedre.
+export function FrameRateWarning({ project: p, fps, candidates, onUse }) {
+  const { clips, suggest } = useMemo(() => frameRateCheck(p, fps, candidates), [p, fps]);
+  if (!clips.length) return null;
+  const names = clips.slice(0, 3).map((c) => `${c.name} (${c.fps} fps)`).join(', ') + (clips.length > 3 ? ` and ${clips.length - 3} more` : '');
+  return (
+    <div class="callout" role="status">
+      <p>
+        Motion may stutter in {names}. The frame rate does not divide evenly into {fps} fps, so some frames are shown twice or skipped.
+        {!suggest && ' No other frame rate suits the clips better.'}
+      </p>
+      {suggest && (
+        <Button class="small" onClick={() => onUse(suggest)}>
+          Use {suggest} fps
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// Originalene eller kopiene (optimalisert media og proxyer). Vises bare når sekvensen har kopier.
+export function SourceMediaChoice({ project: p, value, onChange }) {
+  const { optimized, proxies } = useMemo(() => mediaCopies(p), [p]);
+  if (!optimized && !proxies) return null;
+  const clips = (n) => `${n} file${n > 1 ? 's' : ''}`;
+  return (
+    <>
+      <Row label="Source media">
+        <Segmented value={value} onChange={onChange} options={[{ value: 'original', label: 'Originals' }, { value: 'optimized', label: 'Optimized media' }]} />
+      </Row>
+      <p class="hint">
+        {value === 'original'
+          ? 'Full quality from the original files. ProRes, DNxHD and similar formats are decoded during the export, so it takes longer. Colors match the preview, also for HDR, which is tone mapped the same way.'
+          : `Faster, using the copies you edit with.${optimized ? ` ${clips(optimized)} use optimized media, at full resolution.` : ''}${proxies ? ` ${clips(proxies)} only have a proxy of at most 1920 pixels and will be softer in a larger export. Use Optimize Media first to avoid this.` : ''}`}
+      </p>
+    </>
+  );
+}
+
 export function ExportDialog() {
   const p = project.value;
   const last = loadLast();
@@ -51,6 +108,7 @@ export function ExportDialog() {
   const [quality, setQuality] = useState(last?.quality || base.quality);
   const [res, setRes] = useState(last?.res ?? base.res ?? 0);
   const [fps, setFps] = useState(base.fps || p.fps);
+  const [sourceMedia, setSourceMedia] = useState(last?.sourceMedia || 'original');
   const [useRange, setUseRange] = useState(Boolean(p.range));
   const hasCaptions = Object.values(p.clips).some((c) => c.lane === CAPTION_LANE);
   const [captions, setCaptions] = useState(hasCaptions ? 'burn' : 'none');
@@ -74,7 +132,7 @@ export function ExportDialog() {
   const a = useRange && p.range ? p.range.in : 0;
   const b = useRange && p.range ? p.range.out : p.duration;
   const duration = Math.max(0, b - a);
-  const settingsObj = { preset, format, audioFormat, quality, res, fps, audioOnly };
+  const settingsObj = { preset, format, audioFormat, quality, res, fps, audioOnly, sourceMedia };
   const size = useMemo(() => estimateSize(settingsObj, duration, w, h), [preset, format, audioFormat, quality, res, fps, duration, w, h]);
   const ext = audioOnly ? afmt.ext : fmt.ext;
 
@@ -128,6 +186,11 @@ export function ExportDialog() {
           <Button variant="secondary" onClick={() => (exportOpen.value = false)}>
             Cancel
           </Button>
+          {hasCaptions && (
+            <Button variant="secondary" onClick={() => exportCaptionsOnly(p, { range: useRange && p.range ? p.range : null, captions, name, dir })}>
+              Captions Only
+            </Button>
+          )}
           <Button variant="primary" onClick={doExport}>
             Export
           </Button>
@@ -184,6 +247,8 @@ export function ExportDialog() {
               <Row label="Frame rate">
                 <Select value={String(fps)} options={[...new Set([p.fps, 15, 24, 25, 30, 50, 60])].sort((x, y) => x - y).map((f) => ({ value: String(f), label: f === p.fps ? `${f} (project)` : String(f) }))} onChange={(v) => setFps(Number(v))} />
               </Row>
+              <FrameRateWarning project={p} fps={fps} candidates={[p.fps, 24, 25, 30, 50, 60]} onUse={setFps} />
+              <SourceMediaChoice project={p} value={sourceMedia} onChange={setSourceMedia} />
             </>
           )}
           {!(audioOnly && (audioFormat === 'wav' || audioFormat === 'flac')) && format !== 'mov-prores' && (

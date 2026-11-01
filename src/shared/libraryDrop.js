@@ -1,13 +1,22 @@
 // Shared by the hover preview and the drop command so both choose the same target.
-import { CAPTION_LANE, clipHasAudio, isVisual, primaryAt, round, transitionWindow } from './model.js';
+import { CAPTION_LANE, clipHasAudio, hasFreeTransitions, isVisual, primaryAt, round, transitionWindow } from './model.js';
 import { Immer } from 'immer';
-import { addMediaClip, autoFormat } from './ops.js';
+import { addMediaClip, autoFormat, mediaClip, replaceClip } from './ops.js';
 
 const previewProject = new Immer({ autoFreeze: false });
 
 // The native drag carries a snapshot of the source range and audio choice.
 // Use the actual insertion operations for both the preview and the drop.
-export function applyMediaDrop(project, item, lane, T) {
+// replaceId: media holdt over et klipp erstatter det (bare første element i draget).
+export function applyMediaDrop(project, item, lane, T, replaceId = null) {
+  if (replaceId) {
+    const source = item.clips?.[0] || { id: item.ids?.[0] ?? item.id };
+    const media = project.media[source.id];
+    if (!media) return [];
+    autoFormat(project, media);
+    const clip = mediaClip(media, source.opts || {});
+    return replaceClip(project, replaceId, clip) ? [clip.id] : [];
+  }
   const added = [];
   let t = T;
   for (const source of item.clips || (item.ids || [item.id]).map((id) => ({ id }))) {
@@ -25,9 +34,9 @@ export function applyMediaDrop(project, item, lane, T) {
   return added;
 }
 
-export function mediaDropPreview(project, item, lane, T) {
+export function mediaDropPreview(project, item, lane, T, replaceId = null) {
   let ids = [];
-  const preview = previewProject.produce(project, (draft) => { ids = applyMediaDrop(draft, item, lane, T); });
+  const preview = previewProject.produce(project, (draft) => { ids = applyMediaDrop(draft, item, lane, T, replaceId); });
   return ids.map((id) => {
     const clip = preview.clips[id];
     return { a: clip.start, b: clip.start + clip.dur, lane: clip.lane, label: clip.name };
@@ -52,7 +61,17 @@ export function frameEffectPlacement(project, T, laneHint = null) {
 export function libraryDropTarget(project, item, lane, T, { transitionDur = 1, tolerance = 0 } = {}) {
   if (!item) return null;
   if (item.kind === 'transition') {
-    if (lane !== 0 || project.lanes?.[lane]?.locked) return null;
+    if (project.lanes?.[lane]?.locked) return null;
+    if (lane !== 0) {
+      // Over hovedsporet: inn i starten eller ut i slutten av klippet, avhengig av hvilken halvdel.
+      const c = Object.values(project.clips).find((c) => c.lane === lane && hasFreeTransitions(c) && T >= c.start - tolerance && T <= c.start + c.dur + tolerance);
+      if (!c) return null;
+      const edge = T > c.start + c.dur / 2 ? 'end' : 'start';
+      const dur = round(Math.min(c.dur, 4, Math.max(0.1, transitionDur)));
+      const key = edge === 'end' ? 'transitionOut' : 'transition';
+      const [a, b] = transitionWindow({ ...c, [key]: { type: item.id, dur } }, false, null, edge);
+      return { kind: 'transition', id: c.id, edge, dur, a, b, lane, label: item.label };
+    }
     const clips = project.primary.map((id) => project.clips[id]).filter(Boolean);
     const hit = clips.find((c) => T >= c.start && T < c.start + c.dur) || clips.find((c) => T >= c.start - tolerance && T <= c.start + c.dur + tolerance);
     if (!hit || hit.type === 'gap') return null;

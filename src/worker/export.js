@@ -1,11 +1,12 @@
 // Eksport i et skjult vindu. Hvert bilde tegnes med samme kode som forhåndsvisningen,
 // kodes med WebCodecs (maskinvare) eller FFmpeg, og lyden mikses med nøkkelbilder.
 import { setMotion } from '../shared/stabilize.js';
+import { CAMERA_LOGS, setLut } from '../shared/grade.js';
 import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOutputFormat, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, WebMOutputFormat, canEncodeVideo } from 'mediabunny';
 import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sealProject, sourceTime, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
-import { AUDIO_FORMATS, QUALITIES, VIDEO_FORMATS, audioKbps, outputGeometry, videoBitrate } from '../shared/formats.js';
-import { toSrt, toVtt } from '../shared/srt.js';
+import { AUDIO_FORMATS, QUALITIES, audioKbps, outputGeometry, videoBitrate, videoFormat } from '../shared/formats.js';
+import { captionItems, toSrt, toVtt } from '../shared/srt.js';
 import { activeEffects, createChain } from '../shared/audiofx.js';
 
 const { ipcRenderer } = require('electron');
@@ -18,7 +19,7 @@ const canceled = new Set();
 
 ipcRenderer.on('worker:job', async (_e, { jobId, payload }) => {
   try {
-    const result = await runExport(jobId, payload);
+    const result = payload.task === 'animated' ? await encodeAnimated(jobId, payload) : await runExport(jobId, payload);
     ipcRenderer.send('worker:done', { jobId, result });
   } catch (err) {
     console.error(err);
@@ -28,6 +29,50 @@ ipcRenderer.on('worker:job', async (_e, { jobId, payload }) => {
   }
 });
 ipcRenderer.on('worker:cancel', (_e, jobId) => canceled.add(jobId));
+
+// Animert WebP som FFmpeg ikke kan dekode: Chromium dekoder bildene, FFmpeg koder dem til VP9 med alfa.
+// Bildene får ulik varighet i filen, så de samples til 30 fps.
+async function encodeAnimated(jobId, { file, output, type, ffmpeg: bin }) {
+  const FPS = 30;
+  const decoder = new ImageDecoder({ data: fs.readFileSync(file), type });
+  await decoder.tracks.ready;
+  await decoder.completed;
+  const count = decoder.tracks.selectedTrack.frameCount;
+  let frame = (await decoder.decode({ frameIndex: 0 })).image;
+  const w = frame.displayWidth;
+  const h = frame.displayHeight;
+  const canvas = new OffscreenCanvas(w, h);
+  const g = canvas.getContext('2d', { willReadFrequently: true });
+  const proc = spawn(bin, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w}x${h}`, '-r', String(FPS), '-i', 'pipe:0', '-vf', "scale='trunc(iw/2)*2':'trunc(ih/2)*2',format=yuva420p", '-c:v', 'libvpx-vp9', '-crf', '18', '-b:v', '0', '-auto-alt-ref', '0', '-row-mt', '1', '-deadline', 'good', '-cpu-used', '4', output], { stdio: ['pipe', 'ignore', 'pipe'], windowsHide: true });
+  let stderr = '';
+  proc.stderr.on('data', (d) => (stderr += d));
+  const closed = new Promise((res, rej) => proc.on('close', (code) => (code === 0 ? res() : rej(new Error(stderr.trim() || `FFmpeg exited with ${code}`)))));
+  let index = 0;
+  let end = (frame.duration || 100000) / 1e6;
+  try {
+    for (let t = 0; ; t += 1 / FPS) {
+      checkCancel(jobId);
+      while (t >= end && index + 1 < count) {
+        frame.close();
+        frame = (await decoder.decode({ frameIndex: ++index })).image;
+        end += (frame.duration || 100000) / 1e6;
+      }
+      if (t >= end) break;
+      g.clearRect(0, 0, w, h);
+      g.drawImage(frame, 0, 0);
+      if (!proc.stdin.write(Buffer.from(g.getImageData(0, 0, w, h).data.buffer))) await new Promise((r) => proc.stdin.once('drain', r));
+      ipcRenderer.send('worker:progress', { jobId, progress: index / count });
+    }
+  } catch (err) {
+    proc.kill();
+    throw err;
+  }
+  frame.close();
+  decoder.close();
+  proc.stdin.end();
+  await closed;
+  return output;
+}
 
 function checkCancel(jobId) {
   if (canceled.has(jobId)) throw new Error('Canceled');
@@ -68,10 +113,16 @@ function writeAsync(stream, buf) {
 
 /* Lydmiks */
 
-function streamInfo(project, clip, key) {
+// Eksporten bruker originalfilen når den finnes og kan leses. Arbeidskopier og optimalisert
+// media er for jevn avspilling under redigering. FFmpeg leser lyden fra alle formater.
+const exists = (file) => Boolean(file) && fs.existsSync(file);
+// Med copies (valget Optimized media ved eksport) brukes kopiene som under redigering.
+const direct = (st, copies) => !(copies && (st.optimized || st.proxy)) && !st.tsFallback && exists(st.path) && (!st.needsProxy || st.decodeFilters);
+
+function streamInfo(project, clip, key, copies) {
   const m = project.media[clip.mediaId];
   const s = m?.streams?.[key];
-  return s ? { path: workPath(s), offset: s.offset || 0 } : null;
+  return s ? { path: exists(s.path) && !(copies && (s.optimized || s.proxy)) ? s.path : workPath(s), offset: s.offset || 0 } : null;
 }
 
 // Tempo-filter for endret fart. atempo støtter 0.5 til 100, så små verdier lenkes.
@@ -156,7 +207,7 @@ async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
     const s0 = sourceTime(c, t0);
     const s1 = sourceTime(c, t1);
     for (const key of keys) {
-      const info = streamInfo(project, c, key);
+      const info = streamInfo(project, c, key, ctx.copies);
       if (!info || !fs.existsSync(info.path)) continue;
       const from = Math.max(0, Math.min(s0, s1) - info.offset);
       const to = Math.max(s0, s1) - info.offset;
@@ -344,7 +395,102 @@ class Reader {
   }
 }
 
-function neededFrames(project, frame) {
+// Originaler WebCodecs ikke kan lese (ProRes, DNxHD, MPEG-2 ...): FFmpeg dekoder dem til RGBA-bilder
+// med samme filtre som arbeidskopien, så eksporten får full kvalitet mens redigeringen bruker proxyen.
+class FfmpegReader {
+  constructor(bin, file, { vf, duration }) {
+    Object.assign(this, { bin, file, vf, first: 0, end: duration || Infinity, ready: Promise.resolve(), cur: null, next: null, iter: null });
+  }
+
+  restart(t) {
+    this.close();
+    // Litt før t, så bildet som vises ved t også kommer med.
+    this.iter = ffmpegFrames(this.bin, this.file, this.vf, Math.max(0, t - 0.1));
+  }
+
+  close() {
+    this.iter?.return?.();
+    this.cur?.close();
+    if (this.next && this.next !== 'end') this.next.close();
+    this.cur = this.next = null;
+  }
+}
+FfmpegReader.prototype.frameAt = Reader.prototype.frameAt;
+
+// Bildene fra FFmpeg kommer på stdout, tidspunktene fra showinfo på stderr, i samme rekkefølge.
+async function* ffmpegFrames(bin, file, vf, start) {
+  const args = ['-hide_banner', '-nostdin', '-ss', start.toFixed(6), '-i', file, '-map', '0:v:0', '-an', '-sn', '-dn', '-vf', `${vf},format=rgba,showinfo`, '-fps_mode', 'passthrough', '-f', 'rawvideo', 'pipe:1'];
+  const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  let size = null;
+  let err = '';
+  const times = [];
+  const chunks = [];
+  let buffered = 0;
+  let ended = false;
+  let wake = null;
+  const poke = () => (wake?.(), (wake = null));
+  proc.stderr.on('data', (d) => {
+    const s = d.toString();
+    err = (err + s).slice(-8000);
+    if (!size) {
+      const m = /Output #0[\s\S]*?Video: rawvideo[^\n]*?, (\d+)x(\d+)/.exec(err);
+      if (m) size = { w: Number(m[1]), h: Number(m[2]) };
+    }
+    for (const m of s.matchAll(/pts_time:\s*(-?[\d.]+)/g)) times.push(start + Number(m[1]));
+    poke();
+  });
+  proc.stdout.on('data', (d) => {
+    chunks.push(d);
+    buffered += d.length;
+    // Høyst noen få bilder i minnet (et 8K-bilde er over 130 MB).
+    if (size && buffered > size.w * size.h * 4 * 2) proc.stdout.pause();
+    poke();
+  });
+  const exit = new Promise((resolve) => {
+    proc.on('close', resolve);
+    proc.on('error', () => resolve(-1));
+  });
+  exit.then(() => ((ended = true), poke()));
+  let yielded = false;
+  const take = (n) => {
+    const out = Buffer.allocUnsafe(n);
+    let at = 0;
+    while (at < n) {
+      const c = chunks[0];
+      const k = Math.min(c.length, n - at);
+      c.copy(out, at, 0, k);
+      at += k;
+      if (k === c.length) chunks.shift();
+      else chunks[0] = c.subarray(k);
+    }
+    buffered -= n;
+    return out;
+  };
+  try {
+    while (true) {
+      const bytes = size ? size.w * size.h * 4 : Infinity;
+      if (buffered >= bytes && times.length) {
+        const buf = take(bytes);
+        if (buffered < bytes * 2) proc.stdout.resume();
+        const timestamp = times.shift();
+        yielded = true;
+        const frame = new VideoFrame(buf, { format: 'RGBA', codedWidth: size.w, codedHeight: size.h, timestamp: Math.round(timestamp * 1e6) });
+        yield { timestamp, rotation: 0, displayWidth: size.w, displayHeight: size.h, toCanvasImageSource: () => frame, close: () => frame.close() };
+        continue;
+      }
+      if (ended) {
+        const code = await exit;
+        if (!yielded && (code !== 0 || !size)) throw new Error(`FFmpeg could not decode ${path.basename(file)}: ${err.split('\n').slice(-3).join(' ')}`);
+        return;
+      }
+      await new Promise((r) => (wake = r));
+    }
+  } finally {
+    if (!ended) proc.kill('SIGKILL');
+  }
+}
+
+function neededFrames(project, frame, copies) {
   const out = [];
   const add = (clip, T) => {
     const m = project.media[clip.mediaId];
@@ -358,7 +504,9 @@ function neededFrames(project, frame) {
         out.push({ clip, key, path: st.reversed, image: false, t: st.duration - t, rev: true });
         continue;
       }
-      out.push({ clip, key, path: m.kind === 'image' ? st.proxy || m.path : workPath(st), image: m.kind === 'image', t });
+      if (m.kind === 'image') out.push({ clip, key, path: st.proxy || m.path, image: true, t });
+      else if (direct(st, copies)) out.push({ clip, key, path: st.path, decode: st.needsProxy ? { vf: st.decodeFilters, duration: st.duration } : null, t });
+      else out.push({ clip, key, path: workPath(st), t });
     }
   };
   for (const l of frame.layers) {
@@ -407,7 +555,7 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
         if (embedPath) args.push(...subtitleArgs(fmt, hasAudio ? 2 : 1));
         args.push('-c:v', 'copy', '-t', String(b - a));
         if (fmt.container === 'mp4' || fmt.container === 'mov') args.push('-movflags', '+faststart');
-        if (fmt.codec === 'hevc') args.push('-tag:v', 'hvc1');
+        if (fmt.codec === 'hevc' && fmt.container !== 'mkv') args.push('-tag:v', 'hvc1');
         args.push(output);
         await ffmpeg(ffmpegBin, args).done;
       },
@@ -440,7 +588,7 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
       checkCancel(jobId);
       const T = a + i / fps;
       const frame = computeFrame(project, T, { captions: burnCaptions });
-      const needed = neededFrames(project, frame);
+      const needed = neededFrames(project, frame, ctx.copies);
       const ready = new Map();
       await Promise.all(
         needed.map(async (n) => {
@@ -455,7 +603,7 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
           const rid = `${id}|${n.path}`;
           let r = readers.get(rid);
           if (!r) {
-            r = new Reader(n.path);
+            r = n.decode ? new FfmpegReader(ffmpegBin, n.path, n.decode) : new Reader(n.path);
             readers.set(rid, r);
           }
           r.lastUsed = T;
@@ -479,7 +627,9 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
           s.draw(c.getContext('2d'), 0, 0, c.width, c.height);
           return { img: c, w: c.width, h: c.height };
         }
-        return { img: s.toCanvasImageSource(), w: s.displayWidth, h: s.displayHeight };
+        // Er originalen borte, brukes proxyen, og effekter i piksler skaleres etter den.
+        const sh = project.media[clip.mediaId]?.streams?.[key]?.height;
+        return { img: s.toCanvasImageSource(), w: s.displayWidth, h: s.displayHeight, pixelScale: sh ? s.displayHeight / sh : 1 };
       };
       drawFrame(g, project, frame, getSource, { matrix });
       await encoder.add(i);
@@ -530,13 +680,13 @@ function videoArgsCrf(fmt, q) {
     case 'libx264':
       return ['-c:v', 'libx264', '-preset', 'medium', '-crf', String(q.crf), '-pix_fmt', 'yuv420p'];
     case 'libx265':
-      return ['-c:v', 'libx265', '-preset', 'medium', '-crf', String(q.crf + 4), '-pix_fmt', 'yuv420p', '-tag:v', 'hvc1'];
+      return ['-c:v', 'libx265', '-preset', 'medium', '-crf', String(q.crf + 4), '-pix_fmt', 'yuv420p', ...(fmt.container === 'mkv' ? [] : ['-tag:v', 'hvc1'])];
     case 'libaom-av1':
       return ['-c:v', 'libaom-av1', '-cpu-used', '6', '-row-mt', '1', '-crf', String(q.crf + 12), '-b:v', '0', '-pix_fmt', 'yuv420p'];
     case 'libvpx-vp9':
       return ['-c:v', 'libvpx-vp9', '-deadline', 'good', '-cpu-used', '4', '-row-mt', '1', '-crf', String(q.crf + 10), '-b:v', '0', '-pix_fmt', 'yuv420p'];
     case 'prores_ks':
-      return ['-c:v', 'prores_ks', '-profile:v', '2', '-pix_fmt', 'yuv422p10le', '-vendor', 'apl0'];
+      return ['-c:v', 'prores_ks', '-profile:v', String(fmt.profile ?? 2), '-pix_fmt', 'yuv422p10le', '-vendor', 'apl0'];
     case 'gif':
       return ['-vf', 'split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=4', '-loop', '0'];
     default:
@@ -551,11 +701,14 @@ async function runExport(jobId, payload) {
   const tmp = path.join(payload.tmpDir, `job-${Date.now()}-${jobId}`);
   fs.mkdirSync(tmp, { recursive: true });
   fs.mkdirSync(path.dirname(settings.output), { recursive: true });
-  const ctx = { project, ffmpegBin, tmp };
+  const ctx = { project, ffmpegBin, tmp, copies: settings.sourceMedia === 'optimized' };
   // Bevegelsesanalyser for stabiliserte klipp.
   for (const c of Object.values(project.clips)) {
     const p = c.props?.stabilize && project.media[c.mediaId]?.streams?.main?.motion;
     if (p && fs.existsSync(p)) setMotion(p, JSON.parse(fs.readFileSync(p, 'utf8')));
+  }
+  for (const m of Object.values(project.media)) {
+    if (m.cameraLut && !CAMERA_LOGS.some((x) => x.id === m.cameraLut)) setLut(m.cameraLut, fs.readFileSync(m.cameraLut, 'utf8'));
   }
   const a = settings.range ? settings.range.in : 0;
   const b = settings.range ? settings.range.out : project.duration;
@@ -579,7 +732,7 @@ async function runExport(jobId, payload) {
       return settings.output;
     }
 
-    const fmt = VIDEO_FORMATS.find((x) => x.id === settings.format) || VIDEO_FORMATS[0];
+    const fmt = videoFormat(settings.format);
     const { w, h, matrix } = outputGeometry(project, settings);
     const fps = settings.fps || project.fps;
     const hasAudio = Boolean(fmt.audio);
@@ -618,12 +771,6 @@ function captionMode(v) {
   const parts = new Set(String(v || 'none').split('+'));
   if (parts.has('both')) parts.add('burn').add('srt');
   return { burn: parts.has('burn'), srt: parts.has('srt'), vtt: parts.has('vtt'), embed: parts.has('embed') };
-}
-
-function captionItems(project, a, b) {
-  return Object.values(project.clips)
-    .filter((c) => c.lane === CAPTION_LANE && c.enabled && c.start < b && c.start + c.dur > a && String(c.props.text || '').trim())
-    .map((c) => ({ start: Math.max(0, c.start - a), end: Math.min(b, c.start + c.dur) - a, text: c.props.text || '' }));
 }
 
 // Myk undertekst: kan slås av og på i avspilleren.

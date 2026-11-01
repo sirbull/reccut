@@ -33,15 +33,23 @@ import {
   PRESETS,
   QUALITIES,
   SIZE_PRESETS,
+  AUDIO_CODECS,
+  CONTAINERS,
+  VIDEO_CODECS,
   VIDEO_FORMATS,
   cropForAspect,
+  customFormatId,
+  parseCustom,
+  toCustom,
+  videoFormat,
   estimateSize,
   formatBytes,
+  mediaCopies,
   outputGeometry,
 } from '../../shared/formats.js';
 import { createPlayer } from '../player.js';
 import { tasks } from '../editor/store.js';
-import { defaultExportDir } from '../editor/ExportDialog.jsx';
+import { FrameRateWarning, SourceMediaChoice, defaultExportDir, exportCaptionsOnly } from '../editor/ExportDialog.jsx';
 import { Button, IconButton, NumberField, Row, Section, Segmented, Select, toast } from '../ui.jsx';
 import {
   PROJECT_SOURCE,
@@ -66,6 +74,8 @@ const ICONS = { film: Film, globe: Globe, feather: Feather, apple: Apple, gem: G
 /* Egen spiller for forhåndsvisningen i eksportfanen */
 const previewPlaying = signal(false);
 const previewTime = signal(0);
+// 'output' viser bildet slik eksporten blir, 'source' viser hele bildet med beskjæringsrammen.
+const previewView = signal('output');
 let previewT = 0;
 const player = createPlayer({
   getProject: () => selectedProject.value,
@@ -93,13 +103,20 @@ function resolvedSettings(id) {
     fit: s.fit,
     crop: so.crop,
     fps: s.fpsMode === 'source' ? p.fps : s.fps,
+    sourceMedia: s.sourceMedia,
     range: so.range,
     captions: hasCaptions(p) ? (s.audioOnly ? (s.captions.includes('srt') ? 'srt' : s.captions === 'vtt' ? 'vtt' : 'none') : s.captions) : 'none',
   };
 }
 
+// Tilbake til enkel: det faste formatet med samme container og kodeker, ellers MP4 H.264.
+function simpleFormat(id) {
+  const f = videoFormat(id);
+  return VIDEO_FORMATS.find((x) => x.container === f.container && x.ffCodec === f.ffCodec && (x.audio || null) === f.audio && (x.profile ?? 2) === (f.profile ?? 2))?.id || 'mp4-h264';
+}
+
 function extFor(s) {
-  return s.audioOnly ? AUDIO_FORMATS.find((f) => f.id === s.audioFormat).ext : VIDEO_FORMATS.find((f) => f.id === s.format).ext;
+  return s.audioOnly ? AUDIO_FORMATS.find((f) => f.id === s.audioFormat).ext : videoFormat(s.format).ext;
 }
 
 async function exportSource(id, name) {
@@ -125,6 +142,15 @@ export function ExportRoom({ active }) {
   const so = sourceOptions(id);
   const rs = resolvedSettings(id);
   const geo = useMemo(() => outputGeometry(p, rs), [p, s, so]);
+  const fmt = videoFormat(s.format);
+  const advanced = s.format.startsWith('custom:');
+  const custom = advanced ? parseCustom(fmt.id) : null;
+  // Kodeker containeren ikke kan holde, velger customFormatId bort; de vises ikke i listen.
+  const codecOptions = (list) => list.filter((x) => x.in.includes(custom.container)).map((x) => ({ value: x.id, label: x.label }));
+  const setCustom = (patch) => {
+    const c = { ...custom, ...patch };
+    setSettings({ format: customFormatId(c.container, c.video, c.audio), preset: 'custom' });
+  };
   const a = so.range ? so.range.in : 0;
   const b = so.range ? so.range.out : p.duration;
   const duration = Math.max(0, b - a);
@@ -212,7 +238,7 @@ export function ExportRoom({ active }) {
       </aside>
 
       <section class="ex-stage">
-        <CropPreview project={p} id={id} crop={so.crop} aspect={s.cropAspect} />
+        <CropPreview project={p} id={id} crop={so.crop} aspect={s.cropAspect} geo={geo} view={s.audioOnly ? 'source' : previewView.value} />
         <div class="ex-transport">
           <button class="play-btn small" onClick={player.toggle} title="Play or pause">
             {previewPlaying.value ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
@@ -228,6 +254,16 @@ export function ExportRoom({ active }) {
             onInput={(e) => player.seek(Number(e.currentTarget.value))}
           />
           <span class="tc">{formatTimecode(previewTime.value, p.fps)}</span>
+          {!s.audioOnly && (
+            <Segmented
+              value={previewView.value}
+              onChange={(v) => (previewView.value = v)}
+              options={[
+                { value: 'output', label: 'Output', title: 'Show the picture as it will be exported' },
+                { value: 'source', label: 'Source', title: 'Show the whole picture and the crop frame' },
+              ]}
+            />
+          )}
         </div>
         <div class="ex-out">
           <span>
@@ -273,16 +309,50 @@ export function ExportRoom({ active }) {
                 <Select value={s.audioFormat} options={AUDIO_FORMATS.map((f) => ({ value: f.id, label: `${f.label}, ${f.note.toLowerCase()}` }))} onChange={(v) => setSettings({ audioFormat: v, preset: 'custom' })} />
               </Row>
             ) : (
-              <Row label="Format and codec" stacked>
-                <Select value={s.format} options={VIDEO_FORMATS.map((f) => ({ value: f.id, label: `${f.label}, ${f.note.toLowerCase()}` }))} onChange={(v) => setSettings({ format: v, preset: 'custom' })} />
-              </Row>
+              <>
+                <Row label="Mode">
+                  <Segmented
+                    value={advanced}
+                    onChange={(v) => setSettings({ format: v ? toCustom(s.format) : simpleFormat(s.format), preset: 'custom' })}
+                    options={[
+                      { value: false, label: 'Simple' },
+                      { value: true, label: 'Advanced' },
+                    ]}
+                  />
+                </Row>
+                {advanced ? (
+                  <>
+                    <Row label="Container">
+                      <Select value={custom.container} options={CONTAINERS.map((c) => ({ value: c.id, label: c.label }))} onChange={(v) => setCustom({ container: v })} />
+                    </Row>
+                    <Row label="Video codec">
+                      <Select value={custom.video} options={codecOptions(VIDEO_CODECS)} onChange={(v) => setCustom({ video: v })} />
+                    </Row>
+                    <Row label="Audio codec">
+                      <Select value={custom.audio} options={codecOptions(AUDIO_CODECS)} onChange={(v) => setCustom({ audio: v })} />
+                    </Row>
+                  </>
+                ) : (
+                  <Row label="Format and codec" stacked>
+                    <Select value={s.format} options={VIDEO_FORMATS.map((f) => ({ value: f.id, label: `${f.label}, ${f.note.toLowerCase()}` }))} onChange={(v) => setSettings({ format: v, preset: 'custom' })} />
+                  </Row>
+                )}
+              </>
             )}
           </Section>
 
           {!s.audioOnly && (
             <>
               <Section title="Size">
-                <Segmented value={s.size.preset} size="wrap" onChange={(v) => setSettings({ size: { ...s.size, preset: v, ...(v === 'custom' ? { w: geo.w, h: geo.h } : {}) }, preset: 'custom' })} options={SIZE_PRESETS} />
+                <Segmented
+                  value={s.size.preset}
+                  size="wrap"
+                  onChange={(v) => {
+                    previewView.value = 'output';
+                    setSettings({ size: { ...s.size, preset: v, ...(v === 'custom' ? { w: geo.w, h: geo.h } : {}) }, preset: 'custom' });
+                  }}
+                  options={SIZE_PRESETS}
+                />
                 {s.size.preset === 'custom' && (
                   <div class="wh-row">
                     <NumberField
@@ -318,7 +388,14 @@ export function ExportRoom({ active }) {
                   </div>
                 )}
                 <Row label="Fit">
-                  <Segmented value={s.fit} onChange={(v) => setSettings({ fit: v })} options={FIT_MODES} />
+                  <Segmented
+                    value={s.fit}
+                    onChange={(v) => {
+                      previewView.value = 'output';
+                      setSettings({ fit: v });
+                    }}
+                    options={FIT_MODES}
+                  />
                 </Row>
               </Section>
 
@@ -327,13 +404,15 @@ export function ExportRoom({ active }) {
                   value={s.cropAspect}
                   size="wrap"
                   onChange={(v) => {
+                    // Rammen dras i kildevisningen; uten beskjæring er resultatet det interessante.
+                    previewView.value = v === null ? 'output' : 'source';
                     setSettings({ cropAspect: v });
                     setSourceOptions(id, { crop: v === null ? null : v === 'free' ? so.crop || { x: 0.1, y: 0.1, w: 0.8, h: 0.8 } : cropForAspect(p, v) });
                   }}
                   options={CROP_ASPECTS}
                 />
                 {so.crop && <CropFields project={p} id={id} crop={so.crop} />}
-                <p class="hint">Drag the frame in the preview to move or resize the crop.</p>
+                <p class="hint">Drag the frame in the Source view to move or resize the crop.</p>
               </Section>
 
               <Section title="Frame rate">
@@ -348,12 +427,18 @@ export function ExportRoom({ active }) {
                     <NumberField value={s.fps} min={1} max={120} step={1} onChange={(v) => setSettings({ fps: Math.round(v) })} />
                   </Row>
                 )}
+                <FrameRateWarning project={p} fps={rs.fps} candidates={[p.fps, 24, 25, 30, 50, 60]} onUse={(f) => setSettings(f === p.fps ? { fpsMode: 'source' } : { fpsMode: 'custom', fps: f })} />
               </Section>
+              {Object.values(mediaCopies(p)).some(Boolean) && (
+                <Section title="Source media">
+                  <SourceMediaChoice project={p} value={s.sourceMedia} onChange={(v) => setSettings({ sourceMedia: v })} />
+                </Section>
+              )}
             </>
           )}
 
           <Section title="Quality">
-            {!s.audioOnly && s.format !== 'mov-prores' && (
+            {!s.audioOnly && fmt.ffCodec !== 'prores_ks' && (
               <>
                 <Segmented
                   value={s.quality}
@@ -411,7 +496,7 @@ export function ExportRoom({ active }) {
               <Select
                 value={s.captions}
                 onChange={(v) => setSettings({ captions: v })}
-                options={s.audioOnly ? CAPTION_EXPORT_AUDIO : s.format === 'gif' ? CAPTION_EXPORT.filter((o) => !o.value.includes('embed')) : CAPTION_EXPORT}
+                options={s.audioOnly ? CAPTION_EXPORT_AUDIO : fmt.container === 'gif' ? CAPTION_EXPORT.filter((o) => !o.value.includes('embed')) : CAPTION_EXPORT}
               />
             </Section>
           )}
@@ -441,6 +526,11 @@ export function ExportRoom({ active }) {
           <Button variant="primary" class="big" onClick={doExport}>
             {id === PROJECT_SOURCE ? 'Export Project' : 'Convert File'}
           </Button>
+          {hasCaptions(p) && (
+            <Button variant="secondary" onClick={() => exportCaptionsOnly(p, { range: so.range, captions: s.captions, name, dir: s.dir })}>
+              Export Captions Only
+            </Button>
+          )}
           {files.value.length > 1 && (
             <Button variant="secondary" onClick={exportAll}>
               Convert All {files.value.length} Files
@@ -479,22 +569,43 @@ function CropFields({ project: p, id, crop }) {
   );
 }
 
-// Forhåndsvisning med beskjæringsramme som kan flyttes og skaleres.
-function CropPreview({ project: p, id, crop, aspect }) {
+// Forhåndsvisning. Kilde: hele bildet med beskjæringsramme som kan flyttes og skaleres.
+// Resultat: utdatarammen med beskjæring, fit og oppløsning slik eksporten tegner dem.
+function CropPreview({ project: p, id, crop, aspect, geo, view }) {
   const boxRef = useRef(null);
   const canvasRef = useRef(null);
   const hostRef = useRef(null);
   const [cssSize, setCssSize] = useState({ w: 0, h: 0 });
 
+  const layout = () => {
+    const r = boxRef.current.getBoundingClientRect();
+    const bw = r.width - 32;
+    const bh = r.height - 32;
+    const cv = canvasRef.current;
+    if (view === 'source') {
+      player.resizeCanvas(bw, bh);
+      Object.assign(cv.style, { position: '', left: '', top: '' });
+      setCssSize({ w: cv.offsetWidth, h: cv.offsetHeight });
+    } else {
+      // Samme matrise som eksporten: prosjektpiksler til utdatapiksler, så skalert ned til skjermen.
+      const [sx, sy, tx, ty] = geo.matrix;
+      const k = Math.min(bw / geo.w, bh / geo.h);
+      const w = p.width * sx * k;
+      const h = p.height * sy * k;
+      // Lerretet får aldri flere piksler enn filen, så 480p ser like mykt ut her som i eksporten.
+      player.resizeCanvas(w, h, Math.max(sx, sy));
+      Object.assign(cv.style, { position: 'absolute', left: `${tx * k}px`, top: `${ty * k}px`, width: `${w}px`, height: `${h}px` });
+      setCssSize({ w: Math.round(geo.w * k), h: Math.round(geo.h * k) });
+    }
+    player.invalidate();
+  };
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+
   useEffect(() => {
     player.attachCanvas(canvasRef.current);
     player.start();
-    const resize = () => {
-      const r = boxRef.current.getBoundingClientRect();
-      player.resizeCanvas(r.width - 32, r.height - 32);
-      setCssSize({ w: canvasRef.current.offsetWidth, h: canvasRef.current.offsetHeight });
-    };
-    const ro = new ResizeObserver(resize);
+    const ro = new ResizeObserver(() => layoutRef.current());
     ro.observe(boxRef.current);
     return () => {
       ro.disconnect();
@@ -502,12 +613,8 @@ function CropPreview({ project: p, id, crop, aspect }) {
     };
   }, []);
 
-  useEffect(() => {
-    const r = boxRef.current.getBoundingClientRect();
-    player.resizeCanvas(r.width - 32, r.height - 32);
-    setCssSize({ w: canvasRef.current.offsetWidth, h: canvasRef.current.offsetHeight });
-    player.invalidate();
-  }, [p.width, p.height, id]);
+  // geo lages på nytt ved hver tegning, så avhengigheten er verdiene, ikke objektet.
+  useEffect(layout, [p.width, p.height, id, view, geo.w, geo.h, geo.matrix.join()]);
 
   const onPointerDown = (e) => {
     const handle = e.target.dataset.h;
@@ -568,7 +675,7 @@ function CropPreview({ project: p, id, crop, aspect }) {
     <div class="ex-preview" ref={boxRef}>
       <div class="crop-host" ref={hostRef} style={{ width: cssSize.w, height: cssSize.h }} onPointerDown={onPointerDown}>
         <canvas ref={canvasRef} />
-        {crop && (
+        {crop && view === 'source' && (
           <div class="crop-box" data-h="move" style={{ left: `${crop.x * 100}%`, top: `${crop.y * 100}%`, width: `${crop.w * 100}%`, height: `${crop.h * 100}%` }}>
             <div class="thirds" />
             {handles.map((h) => (

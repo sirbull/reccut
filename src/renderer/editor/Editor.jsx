@@ -7,11 +7,12 @@ import { Viewer } from './Viewer.jsx';
 import { Inspector } from './Inspector.jsx';
 import { Timeline } from './Timeline.jsx';
 import { ExportDialog } from './ExportDialog.jsx';
+import { ImportBrowser } from './ImportBrowser.jsx';
 import { audioSkimming, commit, makeCaptionClip, project, skimming, snapping } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
 import { cancelLayerImport, finish as finishLayers, layerImport } from './layers.js';
-import { Button, Modal, NumberField, Row, Section, Segmented, Toggle, toast } from '../ui.jsx';
+import { Button, Modal, NumberField, Row, Section, Segmented, Select, Toggle, toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
 import { toggleViewerFullscreen } from './fullscreen.js';
 
@@ -40,6 +41,7 @@ api.onTranscribeError(({ error, payload }) => {
 
 export function Editor({ active }) {
   const [split, setSplit] = useState(() => Number(localStorage.getItem('editorSplit')) || 0.56);
+  const [sides, setSides] = useState(() => ({ browser: Number(localStorage.getItem('editorBrowserW')) || 300, inspector: Number(localStorage.getItem('editorInspectorW')) || 320 }));
   const ref = useRef(null);
   const browserVisible = prefs.value.editorBrowserVisible;
   const inspectorVisible = prefs.value.editorInspectorVisible;
@@ -67,15 +69,35 @@ export function Editor({ active }) {
     window.addEventListener('pointerup', up);
   };
 
+  // Biblioteket og inspektøren kan dras bredere. Visningen i midten blir smalere, men aldri under 320 px.
+  const onSideDown = (side) => (e) => {
+    e.preventDefault();
+    const top = e.currentTarget.closest('.editor-top').getBoundingClientRect();
+    const other = side === 'browser' ? (inspectorVisible ? sides.inspector : 0) : browserVisible ? sides.browser : 0;
+    const move = (ev) => {
+      const w = Math.round(Math.min(top.width - other - 320, Math.max(220, side === 'browser' ? ev.clientX - top.left : top.right - ev.clientX)));
+      setSides((s) => ({ ...s, [side]: w }));
+      localStorage.setItem(side === 'browser' ? 'editorBrowserW' : 'editorInspectorW', String(w));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
   return (
     <div class="editor" ref={ref} style={{ gridTemplateRows: `${split * 100}% 6px 1fr` }}>
-      <div class="editor-top" style={{ gridTemplateColumns: [browserVisible && '300px', 'minmax(0, 1fr)', inspectorVisible && '320px'].filter(Boolean).join(' ') }}>
+      <div class="editor-top" style={{ gridTemplateColumns: [browserVisible && `${sides.browser}px`, 'minmax(320px, 1fr)', inspectorVisible && `${sides.inspector}px`].filter(Boolean).join(' ') }}>
         <div class="editor-side" hidden={!browserVisible}>
           <Browser />
+          <div class="side-resize right" onPointerDown={onSideDown('browser')} />
         </div>
         <Viewer />
         <div class="editor-side" hidden={!inspectorVisible}>
           <Inspector />
+          <div class="side-resize left" onPointerDown={onSideDown('inspector')} />
         </div>
       </div>
       <div class="divider" onPointerDown={onDividerDown} />
@@ -172,80 +194,89 @@ function LayerImportDialog() {
   );
 }
 
-// Importvinduet: velg filer (eller slipp dem her), kopier til prosjektmappen eller la dem ligge, optimaliser og synk lyd.
+// Importvinduet: en filbrowser der filene krysses av (eller slippes inn fra Finder), og valgene for importen ved siden av.
 function ImportOptionsDialog() {
   const { paths } = commands.importOptions.value;
   const p = prefs.value;
   const [sync, setSync] = useState(false);
+  const [sequence, setSequence] = useState(false);
+  const [fps, setFps] = useState(project.value.fps || 30);
   const close = () => (commands.importOptions.value = null);
-  const go = () => commands.confirmImport({ copy: p.importCopy, optimize: p.importOptimize, sync });
-  const choose = async () => commands.addImportPaths(await api.openMediaDialog());
-  const remove = (x) => (commands.importOptions.value = { ...commands.importOptions.value, paths: paths.filter((y) => y !== x) });
-  const name = (x) => x.split(/[\\/]/).pop();
+  const go = () => commands.confirmImport({ copy: p.importCopy, optimize: p.importOptimize, sync, sequenceFps: sequence ? fps : null });
+  const setPaths = (next) => (commands.importOptions.value = { ...commands.importOptions.value, paths: next });
   const onDrop = (e) => {
     e.preventDefault();
     commands.addImportPaths([...e.dataTransfer.files].map((f) => api.pathForFile(f)).filter(Boolean));
   };
   return (
     <Modal
-      title={paths.length === 1 ? `Import ${name(paths[0])}` : paths.length ? `Import ${paths.length} Files` : 'Import Media'}
-      width={500}
+      title="Import Media"
+      width={1180}
+      class="import-modal"
       onClose={close}
       footer={
         <>
           <Button onClick={close}>Cancel</Button>
           <Button variant="primary" disabled={!paths.length} onClick={go}>
-            Import
+            {paths.length > 1 ? `Import ${paths.length} Files` : 'Import'}
           </Button>
         </>
       }
     >
       <div onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()} onDrop={onDrop}>
-        <Section title="Files" collapsible={false}>
-          {paths.length > 0 && (
-            <div class="layer-list">
-              {paths.map((x) => (
-                <div key={x} class="layer-row on" title={x}>
-                  <span class="layer-name">{name(x)}</span>
-                  <button class="link" onClick={() => remove(x)}>
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <Button onClick={choose}>{paths.length ? 'Add Files…' : 'Choose Files…'}</Button>
-          <p class="hint">Or drag files from Finder into this window.</p>
-        </Section>
-        <Section title="Location" collapsible={false}>
-          <Segmented
-            value={p.importCopy ? 'copy' : 'keep'}
-            onChange={(v) => setPrefs({ importCopy: v === 'copy' })}
-            options={[
-              { value: 'copy', label: 'Copy to project folder' },
-              { value: 'keep', label: 'Leave files in place' },
-            ]}
-          />
-          <p class="hint">
-            {p.importCopy
-              ? 'The files are copied into the Media folder of the project, so the project keeps working if the originals are moved or the drive is disconnected.'
-              : 'The project refers to the files where they are now. This saves disk space, but the project needs the files to stay in the same place.'}
-          </p>
-        </Section>
-        <Section title="Transcoding" collapsible={false}>
-          <Row label="Create optimized media">
-            <Toggle checked={p.importOptimize} onChange={(v) => setPrefs({ importOptimize: v })} />
-          </Row>
-          <p class="hint">Converts the clips to a high quality format that is smooth to edit. 10-bit and HDR clips keep their 10 bits. Runs in the background.</p>
-        </Section>
-        {paths.length > 1 && (
-          <Section title="Audio" collapsible={false}>
-            <Row label="Synchronize audio files with video">
-              <Toggle checked={sync} onChange={setSync} />
-            </Row>
-            <p class="hint">Finds audio files that match the sound of the video clips, and adds them to the clips as an extra audio track. The camera audio is switched off but kept.</p>
+        <ImportBrowser paths={paths} onChange={setPaths}>
+          <Section title="Location" collapsible={false}>
+            <Segmented
+              value={p.importCopy ? 'copy' : 'keep'}
+              onChange={(v) => setPrefs({ importCopy: v === 'copy' })}
+              options={[
+                { value: 'copy', label: 'Copy to project' },
+                { value: 'keep', label: 'Leave in place' },
+              ]}
+            />
+            <p class="hint">
+              {p.importCopy
+                ? 'The files are copied into the Media folder of the project, so the project keeps working if the originals are moved or the drive is disconnected.'
+                : 'The project refers to the files where they are now. This saves disk space, but the project needs the files to stay in the same place.'}
+            </p>
           </Section>
-        )}
+          <Section title="Transcoding" collapsible={false}>
+            <Row label="Create optimized media">
+              <Toggle checked={p.importOptimize} onChange={(v) => setPrefs({ importOptimize: v })} />
+            </Row>
+            <p class="hint">Converts the clips to a high quality format that is smooth to edit. 10-bit and HDR clips keep their 10 bits. Runs in the background.</p>
+          </Section>
+          {paths.some(commands.isNumberedImage) && (
+            <Section title="Image Sequence" collapsible={false}>
+              <Row label="Import numbered images as one video">
+                <Toggle checked={sequence} onChange={setSequence} />
+              </Row>
+              {sequence && (
+                <Row label="Frame rate">
+                  <Select
+                    value={commands.FPS_PRESETS.includes(fps) ? String(fps) : 'custom'}
+                    options={[...commands.FPS_PRESETS.map((v) => ({ value: String(v), label: `${v} fps` })), { value: 'custom', label: 'Custom' }]}
+                    onChange={(v) => v !== 'custom' && setFps(Number(v))}
+                  />
+                  <NumberField value={fps} onChange={setFps} min={1} max={240} step={1} precision={fps % 1 ? 3 : 0} unit="fps" />
+                </Row>
+              )}
+              <p class="hint">
+                {sequence
+                  ? 'All the frames in each numbered sequence become one video clip, also the ones you did not tick. One frame is enough. Frames with transparency keep it.'
+                  : 'Each image is imported as a still image.'}
+              </p>
+            </Section>
+          )}
+          {paths.length > 1 && (
+            <Section title="Audio" collapsible={false}>
+              <Row label="Synchronize audio files with video">
+                <Toggle checked={sync} onChange={setSync} />
+              </Row>
+              <p class="hint">Finds audio files that match the sound of the video clips, and adds them to the clips as an extra audio track. The camera audio is switched off but kept.</p>
+            </Section>
+          )}
+        </ImportBrowser>
       </div>
     </Modal>
   );
