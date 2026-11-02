@@ -30,6 +30,11 @@ export function drawDesign(ctx, design, getImage, { scale = 1, transparent = fal
         ctx.drawImage(image, sw * c.x, sh * c.y, sw * c.w, sh * c.h, box.x, box.y, box.w, box.h);
       } else {
         ctx.fillStyle = '#3f3f46'; ctx.fillRect(0, 0, l.w, l.h);
+        const cell = Math.max(8, Math.max(l.w, l.h) / 32);
+        ctx.fillStyle = '#52525b';
+        for (let y = 0, row = 0; y < l.h; y += cell, row++) for (let x = 0, col = 0; x < l.w; x += cell, col++) {
+          if ((row + col) % 2 === 0) ctx.fillRect(x, y, Math.min(cell, l.w - x), Math.min(cell, l.h - y));
+        }
         ctx.fillStyle = '#d4d4d8'; ctx.font = `${Math.min(24, l.w / 10)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('Missing file', l.w / 2, l.h / 2);
       }

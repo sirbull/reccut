@@ -515,11 +515,11 @@ Files: `src/renderer/design/FramePicker.jsx`, `assets.js`.
 
 1. A panel (left panel tab "Video") with its own `createPlayer` instance (copy the setup from `ExportRoom.jsx` line 80), showing the current sequence.
 2. A scrubber with a filmstrip (reuse the existing thumbnail strip data from media if available; otherwise just a plain slider) and the timecode. Left/Right arrow keys step one frame when the picker has focus, Shift+arrow steps one second.
-3. A "Use This Frame" button: captures the frame at the design's aspect in full sequence resolution through the path from task 0.4 into `Designs/Frames/<project> <timecode>.png`, then adds an asset (`origin: 'frame'`) and an image layer that covers the design (`fit: 'cover'`), placed at the bottom of the stack (above the background). The button shows a spinner while the export job runs.
+3. A "Use This Frame" button: captures the complete frame in full sequence resolution through the path from task 0.4 into `Designs/Frames/<project> <timecode>.png`, then adds an asset (`origin: 'frame'`) and an image layer fitted inside the design without cropping, with its original aspect ratio (`fit: 'contain'`), placed at the bottom of the stack (above the background). The button shows a spinner while the export job runs.
 4. Empty timeline or audio only: the picker shows "Add video to the timeline in Edit to pick a frame. You can still place your own images." and the button is disabled.
 5. Also allow picking from any video media in the project (dropdown "Sequence / <media name>"): render that media alone using `mediaPreviewProject(m)` from `src/renderer/editor/playback.js`.
 
-Acceptance: picking a frame in a 1080p project for a 1280×720 design gives a sharp layer; for a 1080×1920 design the layer covers it with a center crop that can be moved; deleting the source clip afterwards leaves the design intact.
+Acceptance: picking a frame in a 1080p project for a 1280×720 design gives a sharp layer; for a 1080×1920 design the whole frame remains visible and can be moved and scaled; deleting the source clip afterwards leaves the design intact.
 
 ### Task 1.7: Placing images
 
@@ -1048,3 +1048,70 @@ Tests added: four capture regressions for square, portrait, matching 16:9 and wi
 Manual checks done: in the actual Electron app, captured a 1080x1080 test video with blue and red markers at the top and bottom into a 16:9 design. Both edge markers remained visible on the editor canvas, the saved layer was 720x720 with contain fit, and dragging the layer preserved its aspect ratio and full source crop. Used the same isolated QA profile/native-hook workaround documented above.
 Validation: all 371 tests passed. Production build and whitespace checks passed. No version change.
 Not done / open questions: this does not undo cropping already applied on the Edit timeline. Use a source video in the picker when the sequence itself is intentionally cropped.
+
+
+### Phase 1 completion
+Date: 2026-11-02
+Status: tasks 1.1 through 1.11 are implemented and functionally verified for the development build. The complete acceptance matrix and remaining environment/release limitations are in [DESIGN-PHASE1-QA.md](DESIGN-PHASE1-QA.md). This does not complete the model spikes, later Design phases or the final distribution review.
+Tests: all 384 tests pass, none skipped. Production build and whitespace checks pass. No dependencies or version change.
+Manual/application checks: all preset dialogs, custom sizes, list actions and undo; 32 rotated/flipped handle combinations; center/aspect modifiers and rotation; selection, Smart Guides, zoom/pan; on-canvas Unicode type and rectangles; placement, PSD/SVG, native drop and clipboard, relink and shared Edit images; layer selection, native reordering and context actions; every phase 1 property category; empty/audio/offline video cases; synthetic screen/camera recording, trim, capture and export; transparency pixels, exact renderer comparison, size limits and a read-only destination; history, unsaved Save As, moved packages with original files unavailable and both undo histories.
+Environment: the native keyboard-hook crash remains an existing startup issue, so the temporary QA-only hook workaround was used. Existing Edit ResizeObserver notifications were reproduced without any designs and documented separately. No distinct older installed release was available; both found apps were 0.9.0. Physical devices, other operating systems and distribution builds remain release checks.
+
+### 1.1 Completion: persistence and history
+Date: 2026-11-02
+Files changed: `src/renderer/editor/store.js`, `src/renderer/design/assets.js`, state and asset tests.
+Checks: old-file load/save, folder reset during project switches, base folders for unsaved projects, Save As, reopen, snapshot restoration and moved asset paths passed. Snapshot restoration clears stale Design history while preserving room-specific undo semantics.
+Open: none for phase 1 implementation; optional older-version run unavailable as described in the matrix.
+
+### 1.2 Completion: command isolation
+Date: 2026-11-02
+Files changed: `src/renderer/registry.js`, `src/renderer/design/store.js`, `test/design-commands.test.mjs`.
+Checks: Design refuses Edit-only commands and native menu actions; shared clipboard/delete/history commands route by room; Mac/Windows key conflicts, room buttons and native arrow movement passed. Timeline-specific sequence settings no longer conflict with Duplicate Layer in Design. D1 remains intentionally unresolved; 100% has no shortcut because Record owns Cmd/Ctrl 1.
+Open: none beyond the planned shortcut decision.
+
+### 1.3 Completion: new designs and list
+Date: 2026-11-02
+Files changed: `src/renderer/design/DesignRoom.jsx`, `NewDesignDialog.jsx`.
+Checks: every preset, 333x777 custom, aspect lock, swap, validation, rename, duplicate, confirmed delete, Canvas Size and undo passed in the running application.
+Open: none for phase 1.
+
+### 1.4 and 1.5 Completion: canvas and tools
+Date: 2026-11-02
+Files changed: `src/renderer/design/Canvas.jsx`, `src/renderer/design/store.js`, `src/shared/designRender.js`, render/state tests.
+Checks: all eight handles on rotated images with four flip combinations, fixed anchors, one-step undo, aspect/center modifiers, snapped rotation, guides and bypass, selection/marquee, native arrow movement, Hand Tool, Space-pan, wheel zoom/scroll, Unicode type editing, empty-type deletion and Shift-square drawing passed. Missing images use a bounded checkerboard. Select All includes hidden unlocked layers and excludes locked ones.
+Open: phase 3 performance budgets are outside this scope.
+
+### 1.6 Completion: independent video picker
+Date: 2026-11-02
+Files changed: `src/renderer/design/FramePicker.jsx`, `assets.js`, `src/shared/design.js`, design/asset tests.
+Checks: existing thumbnail reuse, slider, frame/second stepping, native source aspect, full-frame placement, original-resolution capture, offline warning/card and disabled empty/audio states passed. The picker schedules canvas resizing outside ResizeObserver delivery. User-requested uncropped placement supersedes the old cover default in the task text.
+Open: physical camera permissions were not exercised; a synthetic camera passed the real recording/import/capture pipeline.
+
+### 1.7 Completion: embedded/linked placement and clipboard
+Date: 2026-11-02
+Files changed: `src/renderer/design/assets.js`, `DesignRoom.jsx`, `LayersPanel.jsx`, `src/main/design.js`, `main.js`, `preload.js`, asset/files tests.
+Checks: Place Embedded/Linked, preference/Alt drop behaviour, link indicators, native clipboard PNG, same-project layer Cut/Copy/Paste, PSD flattening, SVG, From Project, relink, corrupt files and a 50 MP JPEG passed. The installed Electron 45 clipboard API uses asynchronous ClipboardItems, with a tested main-process adapter.
+Open: HEIC decoding is unsupported in the checked environment and excluded conditionally. Cross-project layer clipboard transfer remains phase 3.
+
+### 1.8 and 1.9 Completion: Layers and Properties
+Date: 2026-11-02
+Files changed: `src/renderer/design/LayersPanel.jsx`, `Properties.jsx`, UI styles.
+Checks: range/toggle selection, rename, visibility, locks, native drag order and context actions passed. Position/size/rotation, flips, opacity, font/weight/size, Tracking/Leading, caps, autofit, paragraph settings, fill, mixed selection, design settings and image fit/reset crop updated live and undid in one step. Labels follow section 5.8.
+Open: none for phase 1.
+
+### 1.10 Completion: Export As and Quick PNG
+Date: 2026-11-02
+Files changed: `src/renderer/design/export.js`, `ExportDesignDialog.jsx`, shared export/files tests.
+Checks: the real dialog exported JPEG below 2 MB and transparent PNG/WebP. PNG matched the shared renderer exactly. JPEG flattened transparency correctly. Quick PNG retained the canvas background. Unique/emoji names and a read-only destination passed. Custom scale mode and limits have explicit validation.
+Open: physical disk-full simulation was not required for phase 1; it remains in phase 7's test list.
+
+### 1.11 Completion: packaging and handoff
+Date: 2026-11-02
+Files changed: packaging implementation from the first round, extended application validation and this acceptance matrix.
+Checks: actual recording bundle, independent frame, embedded asset, Design-only Edit image and Arial font report packaged through the UI. Originals and the recording directory were made unavailable, the package was moved and reopened, all images decoded, media remained online and Design history was empty. Filesystem tests also cover cutout masks, unused assets, relative paths and trim protection.
+Open: font installation on another machine and cross-platform distribution builds belong to release review.
+
+
+### QA cleanup note
+Date: 2026-11-02
+The real system clipboard was used for the native clipboard tests. Restoring its original snapshot failed because Electron 45 does not accept read-only ClipboardItems directly in clipboard.write(). The QA process closed before conversion to new writable ClipboardItems, so the original content could not be recovered. The user was informed. This affects test cleanup, not the production layer-copy adapter, which uses writeText, or image paste, which only reads ClipboardItems.

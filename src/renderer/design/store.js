@@ -126,7 +126,7 @@ export function orderSelection(direction) {
     if (next.some((l, i) => l.id !== d.layers[i].id)) d.layers = next;
   });
 }
-export function selectAll() { selection.value = currentDesign.value?.layers.filter((l) => !l.locked && !l.hidden).map((l) => l.id) || []; }
+export function selectAll() { selection.value = currentDesign.value?.layers.filter((l) => !l.locked).map((l) => l.id) || []; }
 export function setZoom(value) {
   zoom.value = value === 'fit' ? value : Math.min(8, Math.max(0.02, value));
   if (value === 'fit') pan.value = { x: 0, y: 0 };

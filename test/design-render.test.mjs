@@ -31,3 +31,12 @@ test('image crop and contain geometry use source pixels and text can be omitted 
   assert.deepEqual(calls.find((c)=>c[0]==='drawImage'),['drawImage',image,100,0,200,100,0,25,100,50]);
   assert.ok(!calls.some((c)=>c[0]==='text' || c[0]==='fillRect'));
 });
+
+test('unreadable images draw a bounded gray checkerboard and a missing-file label', () => {
+  const d = newDesign(); d.background = null; d.layers = [newLayer('image', { w: 65536, h: 1 })];
+  const {ctx,calls} = context(); drawDesign(ctx,d,()=>null);
+  const checks=calls.filter((c)=>c[0]==='fillRect'&&c[1]==='#52525b');
+  assert.ok(checks.length>1&&checks.length<=1024);
+  assert.ok(calls.some((c)=>c[0]==='text'&&c[1]==='Missing file'));
+  assert.ok(checks.every(c=>c.slice(2).every(Number.isFinite)));
+});

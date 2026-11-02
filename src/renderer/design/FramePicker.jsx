@@ -28,9 +28,15 @@ export function FramePicker({ active }) {
   useEffect(() => {
     if (!active) { player.stopLoop(); return; }
     player.attachCanvas(cv.current); player.start();
-    const resize = () => { if (host.current) player.resizeCanvas(host.current.clientWidth, 170); };
+    let resizeFrame = 0, previousWidth = -1;
+    const resize = () => {
+      if (!host.current || host.current.clientWidth === previousWidth) return;
+      previousWidth = host.current.clientWidth;
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => player.resizeCanvas(previousWidth, 170));
+    };
     const observer = new ResizeObserver(resize); observer.observe(host.current); resize();
-    return () => { observer.disconnect(); player.stopLoop(); };
+    return () => { observer.disconnect(); cancelAnimationFrame(resizeFrame); player.stopLoop(); };
   }, [active, sourceProject.width, sourceProject.height]);
   useEffect(() => () => player.dispose(), []);
   const useFrame = async () => {

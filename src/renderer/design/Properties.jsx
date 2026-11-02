@@ -41,6 +41,6 @@ export function Properties() {
     {text && <Section title="Paragraph">      <Row label="Align"><Segmented value={l.align} options={['left','center','right'].map((value) => ({ value, label: value }))} onChange={(align) => patch({ align })} /></Row>
       <Row label="Vertical"><Select value={l.valign} options={['top','middle','bottom'].map((value) => ({ value, label: value }))} onChange={(valign) => patch({ valign })} /></Row>
     </Section>}
-    {image && <Section title="Image"><Row label="Fit"><Select value={l.fit} options={['cover','contain','stretch'].map((value) => ({ value, label: value }))} onChange={(fit) => patch({ fit })} /></Row><Button onClick={() => patch({ crop: { x: 0, y: 0, w: 1, h: 1 } })}>Reset Crop</Button>{imageMissing(l) && <p class="warn">Missing linked image. <button class="link" onClick={() => locateImage(l)}>Relink…</button></p>}</Section>}
+    {image && <Section title="Image"><Row label="Fit"><Select value={l.fit} options={['cover','contain','stretch'].map((value) => ({ value, label: value }))} onChange={(fit) => patch({ fit })} /></Row><Button onClick={() => patch({ crop: { x: 0, y: 0, w: 1, h: 1 } })}>Reset Crop</Button>{imageMissing(l) && <p class="warn">Missing image. <button class="link" onClick={() => locateImage(l)}>Relink…</button></p>}</Section>}
   </>;
 }

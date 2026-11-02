@@ -63,3 +63,9 @@ test('restoring a project snapshot includes designs and clears stale Design hist
   assert.equal(s.canDesignUndo(), false);
   e.undo(); assert.equal(e.project.value.designs[d.id].layers[0].text, snapshot.designs[d.id].layers[0].text);
 });
+
+test('Select All includes hidden unlocked layers and leaves locked layers alone', () => {
+  const { design: s } = setup(); s.addDesign(); s.addText();
+  s.changeDesign((d) => { d.layers.push({ ...d.layers[0], id: 'hidden', hidden: true }, { ...d.layers[0], id: 'locked', locked: true }); });
+  s.selectAll(); assert.equal(s.selection.value.length, 2); assert.ok(s.selection.value.includes('hidden')); assert.ok(!s.selection.value.includes('locked'));
+});
