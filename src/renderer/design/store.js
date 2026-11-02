@@ -12,7 +12,6 @@ export const viewScale = signal(1);
 export const pan = signal({ x: 0, y: 0 });
 export const newDesignOpen = signal(false);
 export const exportDesignOpen = signal(false);
-export const placeRequest = signal(null);
 export const historyVersion = signal(0);
 export const currentDesign = computed(() => project.value.designs?.[currentDesignId.value] || null);
 const undoStack = [], redoStack = [];
@@ -37,7 +36,7 @@ effect(() => {
   batch(() => {
     undoStack.length = redoStack.length = 0; transient = null;
     currentDesignId.value = null; selection.value = []; tool.value = 'select'; zoom.value = 'fit'; pan.value = { x: 0, y: 0 };
-    newDesignOpen.value = exportDesignOpen.value = false; placeRequest.value = null; historyVersion.value = historyVersion.peek() + 1;
+    newDesignOpen.value = exportDesignOpen.value = false; historyVersion.value = historyVersion.peek() + 1;
   });
 });
 export function openDesign(id) {

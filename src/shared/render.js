@@ -521,6 +521,8 @@ function drawRedact(ctx, clip, T, W, H, alpha) {
   const src = ctx.canvas;
   const { block, blur } = redactStrength(pr.amount, H);
   const { c: P, g } = scratchCanvas(0, bw, bh);
+  let sw = 0;
+  let sh = 0;
   if (mode === 'solid') {
     g.fillStyle = pr.color || '#000';
     g.fillRect(0, 0, bw, bh);
@@ -543,8 +545,8 @@ function drawRedact(ctx, clip, T, W, H, alpha) {
     // Pikselering (og frostet glass: mindre blokker som gjøres myke).
     const frosted = mode === 'frosted';
     const blk = Math.max(2, block * k * (frosted ? 0.6 : 1));
-    const sw = Math.max(1, Math.ceil(bw / blk));
-    const sh = Math.max(1, Math.ceil(bh / blk));
+    sw = Math.max(1, Math.ceil(bw / blk));
+    sh = Math.max(1, Math.ceil(bh / blk));
     const { c: S, g: sg } = scratchCanvas(1, sw, sh);
     sg.imageSmoothingQuality = 'high';
     sg.drawImage(src, bx, by, bw, bh, 0, 0, sw, sh);
@@ -553,23 +555,48 @@ function drawRedact(ctx, clip, T, W, H, alpha) {
     g.drawImage(S, 0, 0, sw, sh, 0, 0, bw, bh);
     g.filter = 'none';
   }
-  // Masken: formen (eller alt utenfor den), med myk kant om ønsket.
-  g.setTransform(1, 0, 0, 1, -bx, -by);
-  g.globalCompositeOperation = pr.invert ? 'destination-out' : 'destination-in';
-  if (feather > 0.5) g.filter = `blur(${(feather / 2).toFixed(1)}px)`;
-  g.fillStyle = '#000';
-  if (geom.shape !== 'full') g.fill(devPath);
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.filter = 'none';
-  g.globalCompositeOperation = 'source-over';
-  // Masker på effekten (tegnet med pennen eller som former): bare der virker den.
-  if (maskList(clip).length) {
-    const { c: Mk, g: mg } = scratchCanvas(2, cw, ch);
-    paintMask(mg, clip, T, W, H, m, cw, ch);
+  // Masken: formen (eller alt utenfor den), med myk kant om ønsket, og maskene på effekten
+  // (tegnet med pennen eller som former): bare der virker den.
+  const cut = (t, soft) => {
+    t.setTransform(1, 0, 0, 1, -bx, -by);
+    t.globalCompositeOperation = pr.invert ? 'destination-out' : 'destination-in';
+    if (soft > 0.5) t.filter = `blur(${(soft / 2).toFixed(1)}px)`;
+    t.fillStyle = '#000';
+    if (geom.shape !== 'full') t.fill(devPath);
+    t.setTransform(1, 0, 0, 1, 0, 0);
+    t.filter = 'none';
+    t.globalCompositeOperation = 'source-over';
+    if (maskList(clip).length) {
+      const { c: Mk, g: mg } = scratchCanvas(2, cw, ch);
+      paintMask(mg, clip, T, W, H, m, cw, ch);
+      t.globalCompositeOperation = 'destination-in';
+      t.drawImage(Mk, bx, by, bw, bh, 0, 0, bw, bh);
+      t.globalCompositeOperation = 'source-over';
+    }
+  };
+  if (mode === 'pixelate' && pr.wholeBlocks && sw) {
+    // Hele blokker: masken regnes per blokk, så blokkene langs kanten ikke kuttes. En blokk er med
+    // når litt av den er innenfor, så kanten kan gå litt utenfor formen, men ikke innenfor.
+    const { c: M, g: mg } = scratchCanvas(3, bw, bh);
+    mg.fillStyle = '#000';
+    mg.fillRect(0, 0, bw, bh);
+    cut(mg, 0);
+    const { c: Q, g: qg } = scratchCanvas(1, sw, sh);
+    qg.imageSmoothingQuality = 'high';
+    qg.drawImage(M, 0, 0, bw, bh, 0, 0, sw, sh);
+    const d = qg.getImageData(0, 0, sw, sh);
+    // ponytail: terskelen 10/255 tar med blokker med noen få prosent av formen, men ikke naboene
+    // som bare får litt fra nedskaleringen.
+    for (let i = 3; i < d.data.length; i += 4) d.data[i] = d.data[i] > 10 ? 255 : 0;
+    qg.putImageData(d, 0, 0);
     g.globalCompositeOperation = 'destination-in';
-    g.drawImage(Mk, bx, by, bw, bh, 0, 0, bw, bh);
+    g.imageSmoothingEnabled = false;
+    if (feather > 0.5) g.filter = `blur(${(feather / 2).toFixed(1)}px)`;
+    g.drawImage(Q, 0, 0, sw, sh, 0, 0, bw, bh);
+    g.filter = 'none';
+    g.imageSmoothingEnabled = true;
     g.globalCompositeOperation = 'source-over';
-  }
+  } else cut(g, feather);
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = alpha;

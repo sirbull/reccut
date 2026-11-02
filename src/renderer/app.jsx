@@ -211,7 +211,7 @@ function TitleBar() {
         <div class="actions">
           <IconButton icon={Undo2} title="Undo Design" disabled={!canDesignUndo()} onClick={designUndo} />
           <IconButton icon={Redo2} title="Redo Design" disabled={!canDesignRedo()} onClick={designRedo} />
-          <Button variant="primary" disabled={!currentDesign.value} onClick={() => (exportDesignOpen.value = true)}>Export Design…</Button>
+          <Button variant="primary" disabled={!currentDesign.value} onClick={() => (exportDesignOpen.value = true)}>Export As…</Button>
         </div>
       ) : r === 'export' ? (
         <div class="actions" />

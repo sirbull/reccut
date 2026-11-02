@@ -4728,6 +4728,7 @@ kbd.keycap {
 .plugin-item { display: flex; gap: 10px; align-items: flex-start; width: 100%; padding: 8px 6px; border: 0; border-radius: 6px; background: none; color: inherit; text-align: left; cursor: pointer; }
 .plugin-item:hover { background: #ffffff10; }
 .plugin-item small { display: block; color: #a6a6ad; margin-top: 2px; line-height: 1.35; }
+.plugin-empty { margin: 4px 6px 8px; }
 .plugin-actions { display: flex; justify-content: space-between; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; }
 .plugin-actions .link { display: inline-flex; align-items: center; gap: 4px; }
 .plugin-icon { flex: none; border-radius: 4px; }
@@ -5126,3 +5127,9 @@ kbd.keycap {
 .dz-room .warn { color: #ffb45b; }
 @media (max-width: 1150px) { .dz-room { grid-template-columns: 220px minmax(0, 1fr) 270px; } .dz-tabs .segmented button { padding: 5px 3px; font-size: 9px; } }
 .dz-layer-preview { flex-shrink: 0; border-radius: 2px; background: var(--bg-0); }
+.dz-place { display: flex; width: 100%; gap: 2px; }
+.dz-place > .btn:first-child { flex: 1; }
+.dz-place > .btn:last-child { width: 30px; flex-shrink: 0; }
+.dz-filmstrip { display: flex; height: 34px; overflow: hidden; border-radius: 3px; gap: 1px; }
+.dz-filmstrip button { flex: 1; min-width: 0; padding: 0; border: 0; background: var(--bg-0); }
+.dz-filmstrip img { width: 100%; height: 34px; object-fit: cover; }

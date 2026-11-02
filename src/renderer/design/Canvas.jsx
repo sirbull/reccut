@@ -4,6 +4,7 @@ import { drawDesign } from '../../shared/designRender.js';
 import { designFont, layoutDesignText } from '../../shared/designText.js';
 import { currentDesign, selection, tool, zoom, viewScale, pan, setZoom, addText, beginDesignTransient, updateDesignTransient, endDesignTransient } from './store.js';
 import { imageVersion, getImage, loadDesignImages, requestPlace } from './assets.js';
+import { toast } from '../ui.jsx';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
 
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
@@ -176,7 +177,7 @@ export function DesignCanvas({ active }) {
       onKeyDown={(e) => { if (e.key === 'Escape' && drag.current) { e.stopPropagation(); up(e, false); } }}
       onDblClick={(e) => { const hit = d && hitTest(d, point(e).x, point(e).y); if (hit?.type === 'text') startText(hit.id); }}
       onDragOver={(e) => { if (hasFiles(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }}
-      onDrop={(e) => { if (!hasFiles(e.dataTransfer)) return; e.preventDefault(); e.stopPropagation(); requestPlace(droppedPaths(e.dataTransfer, window.api.pathForFile), point(e)); }}>
+      onDrop={(e) => { if (!hasFiles(e.dataTransfer)) return; e.preventDefault(); e.stopPropagation(); requestPlace(droppedPaths(e.dataTransfer, window.api.pathForFile), point(e), e.altKey).catch((err) => toast(err.message, { kind: 'error' })); }}>
       {d && <div class="dz-checker" style={{ left: offset.x, top: offset.y, width: d.width * scale, height: d.height * scale }} />}
       <canvas class="dz-canvas" ref={canvas} style={{ width: size.w, height: size.h }} />
       {text && <textarea ref={textRef} class="dz-text-edit" value={text.text} spellcheck={false}

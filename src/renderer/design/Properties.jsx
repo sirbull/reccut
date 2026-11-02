@@ -17,10 +17,10 @@ export function Properties() {
   if (!l) return <Section title="Design" collapsible={false}>
     {ids.length > 0 && <p class="hint">Unlock a selected layer to edit it.</p>}
     <Row label="Name" stacked><input key={d.id} class="text-input" value={d.name} onFocus={beginDesignTransient} onInput={(e) => { const name = e.currentTarget.value; updateDesignTransient((p) => { p.designs[d.id].name = name; }); }} onBlur={end} /></Row>
-    <Row label="Canvas"><span>{d.width} × {d.height}</span><Button class="small" onClick={() => (newDesignOpen.value = { designId: d.id })}>Resize…</Button></Row>
+    <Row label="Canvas"><span>{d.width} × {d.height}</span><Button class="small" onClick={() => (newDesignOpen.value = { designId: d.id })}>Canvas Size…</Button></Row>
     <Row label="Transparent"><Toggle checked={!d.background} onChange={(v) => changeDesign((d) => { d.background = v ? null : solidFill('#18181b'); })} /></Row>
     {d.background && <Row label="Background"><input type="color" aria-label="Background color" value={d.background.color} onFocus={beginDesignTransient} onInput={(e) => { const color = e.currentTarget.value; updateDesignTransient((p) => { p.designs[d.id].background = solidFill(color); }); }} onChangeCapture={end} onBlur={end} /></Row>}
-    <p class="hint">V selects, T adds text and U draws a rectangle. Drag handles to resize or rotate. Space and drag pans the canvas.</p>
+    <p class="hint">V selects the Move Tool, T the Type Tool and U the Rectangle Tool. Drag handles to resize or rotate. Space and drag pans the canvas.</p>
   </Section>;
   const text = layers.every((l) => l.type === 'text'), image = layers.every((l) => l.type === 'image'), hasFill = layers.every((l) => l.type !== 'image');
   return <>
@@ -29,17 +29,18 @@ export function Properties() {
       <Row label="Flip"><IconButton icon={FlipHorizontal} title="Flip horizontally" active={l.flipX} onClick={() => changeLayers((l) => { l.flipX = !l.flipX; })} /><IconButton icon={FlipVertical} title="Flip vertically" active={l.flipY} onClick={() => changeLayers((l) => { l.flipY = !l.flipY; })} /></Row>
       <Row label="Opacity"><Slider min={0} max={1} value={l.opacity} onStart={beginDesignTransient} onInput={(opacity) => live({ opacity })} onCommit={end} /><span>{Math.round(l.opacity * 100)}%</span></Row>
     </Section>
-    {hasFill && <Section title="Fill"><Row label="Enabled"><Toggle checked={Boolean(l.fill)} onChange={(v) => patch({ fill: v ? solidFill() : null })} /></Row>{l.fill && <Row label="Color"><input type="color" aria-label="Fill color" value={l.fill.color} onFocus={beginDesignTransient} onInput={(e) => live({ fill: solidFill(e.currentTarget.value) })} onChangeCapture={end} onBlur={end} /></Row>}</Section>}
-    {text && <Section title="Text">
+    {hasFill && <Section title="Color Fill"><Row label="Enabled"><Toggle checked={Boolean(l.fill)} onChange={(v) => patch({ fill: v ? solidFill() : null })} /></Row>{l.fill && <Row label="Color"><input type="color" aria-label="Fill color" value={l.fill.color} onFocus={beginDesignTransient} onInput={(e) => live({ fill: solidFill(e.currentTarget.value) })} onChangeCapture={end} onBlur={end} /></Row>}</Section>}
+    {text && <Section title="Character">
       <Row label="Content" stacked><textarea class="text-input" value={l.text} rows={3} onFocus={beginDesignTransient} onInput={(e) => live({ text: e.currentTarget.value })} onBlur={end} /></Row>
       <Row label="Font" stacked><FontSelect value={l.font} onChange={(font) => patch({ font })} /></Row>
       <Row label="Weight"><Select value={String(l.weight)} options={[100,200,300,400,500,600,700,800,900].map((v) => ({ value: String(v), label: String(v) }))} onChange={(v) => patch({ weight: Number(v) })} /></Row>
-      {number('size', 'Size', 6, 4096)}{number('lineHeight', 'Line height', 0.5, 5, 0.05, 2)}
-      <Row label="Align"><Segmented value={l.align} options={['left','center','right'].map((value) => ({ value, label: value }))} onChange={(align) => patch({ align })} /></Row>
-      <Row label="Vertical"><Select value={l.valign} options={['top','middle','bottom'].map((value) => ({ value, label: value }))} onChange={(valign) => patch({ valign })} /></Row>
-      <Row label="Uppercase"><Toggle checked={l.uppercase} onChange={(uppercase) => patch({ uppercase })} /></Row>
+      {number('size', 'Size', 6, 4096)}{number('tracking', 'Tracking', -100, 500)}{number('lineHeight', 'Leading', 0.5, 5, 0.05, 2)}
+      <Row label="All Caps"><Toggle checked={l.uppercase} onChange={(uppercase) => patch({ uppercase })} /></Row>
       <Row label="Fit text in box"><Toggle checked={l.autofit} onChange={(autofit) => patch({ autofit })} /></Row>
     </Section>}
-    {image && <Section title="Image"><Row label="Fit"><Select value={l.fit} options={['cover','contain','stretch'].map((value) => ({ value, label: value }))} onChange={(fit) => patch({ fit })} /></Row><Button onClick={() => patch({ crop: { x: 0, y: 0, w: 1, h: 1 } })}>Reset Crop</Button>{imageMissing(l) && <p class="warn">Missing image. <button class="link" onClick={() => locateImage(l)}>Locate…</button></p>}</Section>}
+    {text && <Section title="Paragraph">      <Row label="Align"><Segmented value={l.align} options={['left','center','right'].map((value) => ({ value, label: value }))} onChange={(align) => patch({ align })} /></Row>
+      <Row label="Vertical"><Select value={l.valign} options={['top','middle','bottom'].map((value) => ({ value, label: value }))} onChange={(valign) => patch({ valign })} /></Row>
+    </Section>}
+    {image && <Section title="Image"><Row label="Fit"><Select value={l.fit} options={['cover','contain','stretch'].map((value) => ({ value, label: value }))} onChange={(fit) => patch({ fit })} /></Row><Button onClick={() => patch({ crop: { x: 0, y: 0, w: 1, h: 1 } })}>Reset Crop</Button>{imageMissing(l) && <p class="warn">Missing linked image. <button class="link" onClick={() => locateImage(l)}>Relink…</button></p>}</Section>}
   </>;
 }

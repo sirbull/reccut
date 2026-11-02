@@ -44,3 +44,13 @@ test('old project files gain empty design fields and missing assets are marked f
   p.designAssets.a = { path: path.join(dir,'missing.png'), missing: false }; await api.save(null,p,file, { history: false });
   assert.equal((await api.load(file)).designAssets.a.missing, true);
 });
+
+test('Electron clipboard items are decoded asynchronously without renderer permission requests', async () => {
+  const { readClipboard } = require('../src/main/design.js');
+  const items = [{ types: ['image/png','text/plain'], getType: async (type) => type === 'image/png' ? new Blob([new Uint8Array([1,2,3])],{type}) : new Blob(['Layers']) }];
+  const data = await readClipboard({ read:async()=>items }, () => { throw new Error('PNG should not be re-encoded'); });
+  assert.deepEqual([...data.image],[1,2,3]); assert.equal(data.text,'Layers');
+  const other = await readClipboard({read:async()=>[{types:['image/jpeg'],getType:async()=>new Blob([new Uint8Array([4])])}]},()=>new Uint8Array([5]));
+  assert.deepEqual([...other.image],[5]);
+  assert.deepEqual(await readClipboard({read:async()=>[]},()=>{}),{image:null,text:''});
+});

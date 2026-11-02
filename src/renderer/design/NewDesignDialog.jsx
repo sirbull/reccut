@@ -19,7 +19,7 @@ export function NewDesignDialog({ design = null }) {
     else addDesign({ name: name.trim(), width, height, size: preset });
     close();
   };
-  return <Modal title={design ? 'Resize Design' : 'New Design'} width={670} onClose={close} footer={<><Button onClick={close}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={create}>{design ? 'Resize' : 'Create Design'}</Button></>}>
+  return <Modal title={design ? 'Canvas Size' : 'New Design'} width={670} onClose={close} footer={<><Button onClick={close}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={create}>{design ? 'Apply' : 'Create Design'}</Button></>}>
     <Row label="Name" stacked><input class="text-input" value={name} onInput={(e) => setName(e.currentTarget.value)} /></Row>
     {['Video', 'Social', 'Other'].map((group) => <div key={group}><h3>{group}</h3><div class="dz-size-grid">{DESIGN_SIZES.filter((s) => s.group === group).map((s) => <button key={s.id} class={`dz-size-card${preset === s.id ? ' active' : ''}`} onClick={() => choose(s)}><span class="dz-aspect" style={{ width: 32 * Math.min(1, s.width / s.height), height: 32 * Math.min(1, s.height / s.width) }} /><span><b>{s.label}</b><small>{s.width} × {s.height}</small></span></button>)}</div></div>)}
     <div class="dz-size-grid"><Button onClick={() => choose({ id: 'sequence', width: project.value.width, height: project.value.height })}>Same as Sequence</Button><Button onClick={() => setPreset('custom')}>Custom</Button></div>

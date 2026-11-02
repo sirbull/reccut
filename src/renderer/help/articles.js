@@ -13,27 +13,29 @@ export const ARTICLES = [
 
 ## Add pictures
 
-Place Image opens a photo or a flattened PSD or SVG. Choose Copy into project to keep it in Designs/Assets, or Leave in place to reference the original. Remember this choice skips the question next time. Design pictures stay separate from the Edit media browser. From Project references images already imported in Edit.
+Place Embedded copies a photo or flattened PSD/SVG into Designs/Assets. Place Linked references the original file. The split button offers both choices and its main action follows the import copy preference. Design pictures stay separate from the Edit media browser. From Project references images already imported in Edit.
 
 The Video tab has its own preview and scrubber. Use This Frame saves a full quality PNG of the sequence or selected source video into Designs/Frames. The full frame is placed with its original aspect ratio, fitted inside the design without cropping. Move and resize the layer to compose the thumbnail. Changing the timeline afterwards does not change this image. Arrow keys step one frame in the Video panel; Shift and arrows step one second. An empty or audio only timeline cannot supply a video frame.
 
-Drop files to place them. Cmd/Ctrl V pastes an image from the system clipboard. A missing image has a warning in Layers: click it to locate the file before exporting.
+Drop files to place them using the import copy preference. Hold Alt while dropping to reverse the choice. Cmd/Ctrl V pastes an image from the system clipboard. Cmd/Ctrl C and X copy and cut selected layers, and V pastes them into another design in the same project. Linked images have a link icon. A missing image has a warning in Layers: click Relink to find the file before exporting.
 
 ## Edit layers
 
-V selects, T adds text, U draws a rectangle and H pans. Double click text to edit it directly; Escape finishes editing. Properties also has a text field and the system font picker. Fit text in box shrinks long titles, down to 6 pixels. At the minimum size, extremely long text can still be clipped.
+V selects the Move Tool, T the Type Tool, U the Rectangle Tool and H the Hand Tool. Double click text to edit it directly; Escape finishes editing. Properties has Character and Paragraph sections with content, the system font picker, weight, size, Tracking, Leading, alignment and All Caps. Fit text in box shrinks long titles, down to 6 pixels. At the minimum size, extremely long text can still be clipped.
 
-Click or Shift click to select layers, or drag on empty canvas to make a selection box. Drag the selection to move it; guides snap to edges and centers. Hold Cmd/Ctrl to turn snapping off. Arrow keys move one pixel; Shift and arrows move ten. Backspace deletes; Cmd/Ctrl D duplicates.
+Click or Shift click to select layers, or drag on empty canvas to make a selection box. Drag the selection to move it; guides snap to edges and centers. Hold Cmd/Ctrl to turn snapping off. Arrow keys move one pixel; Shift and arrows move ten. Backspace deletes; Cmd/Ctrl J duplicates a layer. Cmd/Ctrl D or Escape deselects. Cmd/Ctrl T selects Free Transform.
 
-Drag handles to resize and use the handle above the box to rotate. Images keep their aspect ratio by default; Shift frees it. For other layers Shift locks aspect. Alt resizes from the center. Shift snaps rotation to 15 degrees. Space and drag, or scrolling, pans. Cmd/Ctrl and scrolling zooms, Cmd/Ctrl 0 fits, and Alt Cmd/Ctrl 1 shows actual size. Cmd/Ctrl 1 still opens Record.
+Drag handles to resize and use the handle above the box to rotate. Images keep their aspect ratio by default; Shift frees it. For other layers Shift locks aspect. Alt resizes from the center. Shift snaps rotation to 15 degrees. Space and drag, or scrolling, pans. Cmd/Ctrl and scrolling zooms, Cmd/Ctrl 0 fits on screen. Use the 100% command for actual size. Cmd/Ctrl 1 still opens Record, so 100% has no shortcut.
 
 Layers are shown top first. Drag rows to change their order; use eye and lock buttons to hide or protect a layer. Double click a layer name to rename it. Right click for more layer actions. Selecting a locked layer lets you unlock it, but does not allow transforms.
 
 ## Save and export
 
+Canvas Size changes the canvas while keeping layer sizes and positions relative to its center.
+
 Design changes save with the project and have their own Undo and Redo. Undo in Design keeps the timeline intact, and Undo in Edit keeps designs intact. Opening a project clears both histories.
 
-Export Design saves PNG, JPEG or WebP using the same drawing as the canvas. PNG and WebP can omit the canvas background for transparency. JPEG uses an opaque background. Choose a width or scale and an optional file size limit in MB. Zero disables the limit. If a file cannot fit, reduce its width or raise the limit. Existing files get numbered names.
+Export As saves PNG, JPEG or WebP using the same drawing as the canvas. PNG and WebP can omit the canvas background for transparency. JPEG uses an opaque background. Choose a width or scale and an optional file size limit in MB. Zero disables the limit. If a file cannot fit, reduce its width or raise the limit. Existing files get numbered names. Quick Export as PNG uses the current design size and canvas background, retaining transparency when the canvas has no background.
 
 Package Project includes design assets and image media used by designs, even when Remove unused media is enabled. Fonts are listed in the package report and must be installed on the destination computer.
 
@@ -802,6 +804,55 @@ The same correction is used in the viewer and in exports. How it works: Reccut f
     see: ['inspector'],
   },
   {
+    id: 'tracking',
+    section: 'Editing',
+    title: 'Tracking: Attach Clips to Moving Objects',
+    summary: 'Follow a face, a sign or a product in the video, and pin a redaction, title or image to it.',
+    keywords: 'track tracking tracker motion follow attach pin stick object face license plate redact blur pixelate live keyframes parent sporing',
+    body: `
+Tracking follows something that moves in a video or screen recording, and lets other clips follow it. Use it to keep a redaction on a moving face or license plate, or to pin a title, an arrow or an image to an object. It works in two steps, so you can track first and decide later what should follow.
+
+## 1. Track the object
+
+1. Select the video clip and move the playhead to where the object is clearly visible.
+2. In the **Video** tab, under **Tracking**, turn on **Show area**. Drag the dashed box over the object and resize it so it fits tightly.
+3. Press **Track Forward**. Reccut follows the object from the playhead to the end of the clip (progress is shown on the button and at the top).
+
+![Show area over a face in the Video tab, and the finished Track 1 under Tracking.](tracking-area.jpg)
+
+The result is saved on the clip as **Track 1**, **Track 2** and so on, with its length. Delete a track with the trash button. If the object disappears for more than half a second, tracking stops there and tells you when.
+
+Choose an area with detail, such as a face, text or a logo. Plain surfaces, motion blur and things that are covered are hard to follow. If tracking stops early, move the playhead to where it stopped and track again from there.
+
+## 2. Attach a clip
+
+1. Put the clip that should follow on a track above the video, for example a redaction, a title or an image, and place it where it should be relative to the object.
+2. Select it. Under **Follow Track** choose the track and the mode, and press **Attach**.
+
+![A pixelate redaction following the face live. The redaction and the video are grouped (link badge).](tracking-follow.jpg)
+
+The clip keeps the place it has at the playhead relative to the object, also when it is beside it. It is grouped with the video, so they move together on the timeline. Double click a clip in the group to select only that clip.
+
+- **Live** (default): the clip always follows the track as it is now. Track again, or move, scale or stabilize the video, and the clip follows without attaching it again. Drag the clip in the viewer to change where it sits relative to the object.
+- **Keyframes**: writes position, rotation and size keyframes you can adjust one by one. **Tracking keyframes: Remove** deletes only the keyframes tracking wrote; your own keyframes outside the tracked part stay.
+- **Rotation** makes the clip turn with the object.
+- **Scale (experimental)** makes the clip grow and shrink as the object comes closer or moves away. Real perspective, like a sign seen from the side, is not followed.
+
+**Detach** stops a live link. The clip stays grouped with the video; ungroup it with {{key:ungroup}} if you want.
+
+## Redactions in one step
+
+For a redaction, put it over what it should hide and press **Track Forward** under Follow Track. Reccut tracks what the redaction covers in the video below and attaches the redaction to it.
+
+## With the AI agent
+
+Ask the agent, for example "Blur the face of the woman in the pink shirt" or "Put a label that follows the car". It finds the object in the frames, adds the redaction or title, tracks the object and attaches the clip. You can adjust the result as usual.
+
+How it works: Reccut finds corners inside the area, follows them from frame to frame and works out how the area moves, turns and changes size, ignoring points that do not move with the rest. Tracking and following work the same in the viewer and in exports.
+`,
+    see: ['redact', 'grouping', 'keyframes', 'stabilize'],
+  },
+  {
     id: 'transitions',
     section: 'Editing',
     title: 'Transitions',
@@ -950,7 +1001,7 @@ For full manual control, use **Blur**, **Pixelate** or **Frosted Glass** from th
 
 ## Styles
 
-- **Pixelate** turns the area into large blocks. Good for text and faces.
+- **Pixelate** turns the area into large blocks. Good for text and faces. With **Whole blocks at edge** (on for new redactions) the blocks along the edge are kept whole instead of being cut by the shape, so the edge follows the blocks and can reach a little outside the shape. Turn it off for an exact edge.
 - **Blur** makes it soft. Use a high amount for text.
 - **Solid** covers the area with a color. This is the safest for passwords, because nothing of the original is left.
 - **Frosted** combines blur and blocks, like frosted glass.
@@ -959,13 +1010,15 @@ In the Redact tab of the inspector you can choose the shape (rectangle, rounded,
 
 ## Follow something that moves
 
-Position, size and rotation can have keyframes. Go to where the object starts, click the keyframe button next to Position and Size, move the playhead and drag the box to the new place. Reccut moves the box smoothly between the keyframes.
+The quickest way is tracking: put the redaction over the object and press **Track Forward** under **Follow Track** in the Redact tab. Reccut follows the object and keeps the redaction on it. See [[article:tracking|Tracking]].
+
+You can also do it by hand. Position, size and rotation can have keyframes. Go to where the object starts, click the keyframe button next to Position and Size, move the playhead and drag the box to the new place. Reccut moves the box smoothly between the keyframes.
 
 With **Freeform** you can follow any shape: drag the points in the viewer, double click the outline to add a point and Option (Alt) click a point to remove it. Click the keyframe button next to **Shape** to animate the points, so the redaction can change shape over time. See Masks.
 
 Redactions work the same in the viewer and in the exported file.
 `,
-    see: ['keyframes', 'effects'],
+    see: ['tracking', 'keyframes', 'effects'],
   },
   {
     id: 'effects',
@@ -1056,6 +1109,7 @@ Cloud providers need your own API key and bill you for usage. Keys use encrypted
 Choose **AI** in the toolbar. The first time, a short setup lets you choose a model on this computer, Google Gemini, Claude or OpenAI. Choose **? What can I ask** for tips and examples. Describe the result you want. The agent reads the timeline and library, places and cuts clips, trims, moves and deletes, adds titles, captions and transitions, sets volume, fades, colour and stack effects, imports files you name, and looks up this manual. It renders frames from the timeline to check its work.
 
 - **Subtitles and translation:** "Subtitle this video in Finnish." The agent transcribes the speech with the local speech model, translates and condenses it, and replaces the captions in one step. Reccut fits the timing to common subtitle rules: at least one second on screen, no more than 17 characters per second, two lines of 42 characters, a short gap between captions and no overlaps. The agent rewrites captions that break the rules. Read through the result before you publish it.
+- **Hide or follow something that moves:** "Blur the face of the man in the blue jacket." The agent finds the object in the frames, adds a redaction, tracks the object and attaches the redaction to it. It can also pin titles and images to objects, and attach clips to tracks you made yourself.
 - **Colour and exposure:** "Adjust colour and exposure on every clip so they look good." The agent measures brightness, clipping, saturation and colour cast in each clip, corrects them with the colour controls and wheels, and makes clips from the same scene match.
 - **Edit raw footage:** "Make a tutorial from my talking head and the screen recordings." The agent transcribes each clip with word times, finds pauses from the audio level, keeps the best take of each sentence, finds what happens in long screen recordings from scene changes, clicks, shortcuts and contact sheets, and builds the whole edit in one step with the screen parts timed to the narration. Cuts are placed between words with a short natural pause.
 - **Your own titles:** describe a lower third, callout or end card and the agent designs an animated title template for it, adds it to the Titles library and places it.

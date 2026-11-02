@@ -6,10 +6,16 @@ const bundle = (await build({ stdin: { contents: "export * as assets from './src
 function setup(options = {}) {
   const messages = [], images = [], copied = [], exports = [], listeners = new Set();
   const module = { exports: {} };
+  let clipboard = { image: null, text: '' };
+  const written = [];
   const api = { platform:'darwin', onTasks() { return () => {}; }, onFlush() {}, onAnalyzed() {}, listTasks:async()=>[], baseDir:async()=>'/project', copyIntoProject:async(paths,dir,opts)=> { copied.push({paths,dir,opts}); return paths.map((p)=>dir+'/'+p.split('/').pop()); },
     onExportDone(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     async startExport(payload) { exports.push(payload); for(const fn of listeners) fn({id:12,file:'/project/Designs/Frames/frame.png',quiet:true}); return 12; },
-    cancelTask() {},
+    cancelTask() {}, exists: async () => true,
+    readDesignClipboard: async () => clipboard,
+    writeDesignClipboard: async (text) => { clipboard = { text, image: null }; },
+    writeDesignImage: async (path, data) => { written.push({ path, data }); return path; },
+    setClipboard: (value) => { clipboard = value; },
   };
   class FakeImage {
     naturalWidth=options.width || 1920; naturalHeight=options.height || 1080;
@@ -21,7 +27,7 @@ function setup(options = {}) {
   }
   vm.runInNewContext(bundle, { module,exports:module.exports,require:(name)=>name==='qa-player'?{fileUrl:p=>'media://file/'+encodeURIComponent(p)}:{toast:message=>messages.push(message)}, window:{api,addEventListener(){}},localStorage:{getItem:()=>null,setItem(){}},performance:{now:()=>0},setTimeout:()=>0,clearTimeout(){},structuredClone,Image:FakeImage });
   const q=module.exports; q.design.addDesign();
-  return {...q,images,messages,copied,exports,api,listeners};
+  return {...q,images,messages,copied,exports,api,listeners,written};
 }
 test('placed images request CORS-safe pixels, copy uniquely and remain separate from Edit media',async()=>{
   const q=setup(); await q.assets.placeFiles(['/outside/photo.png'],{copy:true});
@@ -79,4 +85,48 @@ for (const [width, height, expected] of [
   assert.deepEqual(JSON.parse(JSON.stringify(moved.crop)), { x: 0, y: 0, w: 1, h: 1 });
   q.design.designUndo();
   assert.equal(q.design.currentDesign.value.layers[0].x, expected.x);
+});
+
+
+test('native clipboard PNG placement is project-owned and undoes in one step', async () => {
+  const q = setup(); q.api.setClipboard({ image: new Uint8Array([1, 2, 3]), text: '' });
+  await q.assets.pasteImage();
+  const layer = q.design.currentDesign.value.layers[0], asset = q.editor.project.value.designAssets[layer.asset];
+  assert.equal(asset.copied, true); assert.match(asset.path, /Designs\/Assets\/Pasted/);
+  assert.equal(q.written.length, 1); assert.equal(Object.keys(q.editor.project.value.media).length, 0);
+  q.design.designUndo(); assert.equal(q.design.currentDesign.value.layers.length, 0); assert.equal(Object.keys(q.editor.project.value.designAssets).length, 0);
+});
+test('copy and cut route Design layers to the clipboard and paste reuses assets in this project', async () => {
+  const q = setup(); await q.assets.placeFiles(['/linked.png'], { copy: false });
+  const original = q.design.currentDesign.value.layers[0];
+  await q.assets.copyLayers(); await q.assets.pasteImage();
+  let layers = q.design.currentDesign.value.layers;
+  assert.equal(layers.length, 2); assert.notEqual(layers[0].id, layers[1].id); assert.equal(layers[1].asset, original.asset);
+  await q.assets.copyLayers(true); assert.equal(q.design.currentDesign.value.layers.length, 1);
+  q.design.designUndo(); assert.equal(q.design.currentDesign.value.layers.length, 2);
+});
+test('linked placement and alternate drop mode respect the current copy preference without a dialog', async () => {
+  const q = setup();
+  await q.assets.requestPlace(['/linked.png'], { x: 100, y: 100 }, true);
+  const a = Object.values(q.editor.project.value.designAssets)[0];
+  assert.equal(a.copied, false); assert.equal(a.path, '/linked.png'); assert.equal(q.copied.length, 0);
+});
+test('missing video sources still capture the offline card and report a warning', async () => {
+  const q = setup(); q.api.exists = async () => false;
+  const source = { ...q.editor.project.value, duration: 1, fps: 30, media: { v: { path: '/missing.mp4' } }, clips: { c: { mediaId: 'v', start: 0, dur: 1 } } };
+  await q.assets.captureFrame(source, 0);
+  assert.equal(q.design.currentDesign.value.layers.length, 1);
+  assert.ok(q.messages.some((m) => m.includes('Media Offline')));
+});
+
+test('switching projects clears old folders before an immediate image placement', async () => {
+  const q = setup();
+  q.editor.projectFolders.value = { designs: '/old/Designs' };
+  q.api.projectFolders = async () => ({ designs: '/new/Designs' });
+  const p = structuredClone(q.editor.project.value);
+  q.editor.setProject(p, '/new/New.reccut');
+  assert.equal(q.editor.projectFolders.value, null);
+  q.design.openDesign(Object.keys(p.designs)[0]);
+  await q.assets.placeFiles(['/outside/image.png'], { copy: true });
+  assert.equal(q.copied[0].dir, '/new/Designs/Assets');
 });

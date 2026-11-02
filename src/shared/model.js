@@ -461,7 +461,7 @@ export function defaultProps(type, media) {
     case 'caption':
       return { text: '', align: null, pos: null };
     case 'redact':
-      return { opacity: 1, vFadeIn: 0, vFadeOut: 0, x: 0, y: 0, w: 480, h: 120, rotation: 0, mode: 'pixelate', shape: 'rounded', amount: 0.5, color: '#000000', invert: false, feather: 0 };
+      return { opacity: 1, vFadeIn: 0, vFadeOut: 0, x: 0, y: 0, w: 480, h: 120, rotation: 0, mode: 'pixelate', shape: 'rounded', amount: 0.5, color: '#000000', invert: false, feather: 0, wholeBlocks: true };
     default:
       return {};
   }

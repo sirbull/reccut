@@ -1,12 +1,12 @@
 import { signal, effect } from '@preact/signals';
-import { project, projectEpoch, projectFolders } from '../editor/store.js';
+import { project, projectEpoch, projectFolders, projectPath } from '../editor/store.js';
 import { prefs } from '../prefs.js';
 import { fileUrl } from '../player.js';
-import { newLayer, fitBox } from '../../shared/design.js';
+import { newLayer, normalizeLayer, fitBox } from '../../shared/design.js';
 import { designFileName } from '../../shared/designExport.js';
 import { frameExportSettings } from '../../shared/frameExport.js';
 import { uid } from '../../shared/model.js';
-import { currentDesignId, currentDesign, designCommit, selection, placeRequest } from './store.js';
+import { currentDesignId, currentDesign, designCommit, selection, selectedLayers } from './store.js';
 import { toast } from '../ui.jsx';
 
 const api = window.api;
@@ -20,7 +20,9 @@ effect(() => {
   images.clear(); imageVersion.value = imageVersion.peek() + 1;
 });
 export async function designDir(sub = 'Assets') {
-  return `${projectFolders.value?.designs || `${await api.baseDir()}${sep}Designs`}${sep}${sub}`;
+  const file = projectPath.value;
+  const folders = projectFolders.value || (file ? await api.projectFolders(file) : null);
+  return `${folders?.designs || `${await api.baseDir()}${sep}Designs`}${sep}${sub}`;
 }
 export function imagePath(layer, p = project.value) {
   if (layer.asset) return p.designAssets?.[layer.asset]?.path;
@@ -70,14 +72,13 @@ export async function loadDesignImages(design, p = project.value) {
   const loaded = await Promise.all(layers.map((l) => ensureImage(imagePath(l, p))));
   return layers.filter((_, i) => !loaded[i]);
 }
-export async function chooseImage() {
-  const epoch = projectEpoch.value;
-  const path = await api.openFileDialog({ title: 'Place Image', filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg', 'psd'] }] });
-  if (path && epoch === projectEpoch.value) requestPlace([path]);
+export async function chooseImage(copy = prefs.value.importCopy) {
+  const epoch = projectEpoch.value, designId = currentDesignId.value;
+  const path = await api.openFileDialog({ title: copy ? 'Place Embedded' : 'Place Linked', filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg', 'psd'] }] });
+  if (path && epoch === projectEpoch.value) await placeFiles([path], { copy, epoch, designId });
 }
-export function requestPlace(paths, point = null) {
-  if (prefs.value.designImportRemember) { placeFiles(paths, { point }).catch((err) => toast(err.message, { kind: 'error' })); return; }
-  placeRequest.value = { paths, point, epoch: projectEpoch.value, designId: currentDesignId.value, copy: prefs.value.importCopy };
+export function requestPlace(paths, point = null, alternate = false) {
+  return placeFiles(paths, { point, copy: alternate ? !prefs.value.importCopy : prefs.value.importCopy });
 }
 export async function placeFiles(paths, { copy = prefs.value.importCopy, point = null, designId = currentDesignId.value, epoch = projectEpoch.value, copied: ownFile = false } = {}) {
   const assets = [];
@@ -121,25 +122,38 @@ export function placeProjectImage(media) {
   const l = newLayer('image', { media: media.id, name: media.name, x: (d.width - b.w) / 2, y: (d.height - b.h) / 2, w: b.w, h: b.h, fit: 'contain' });
   designCommit((p) => { p.designs[d.id].layers.push(l); }); selection.value = [l.id];
 }
+export async function copyLayers(cut = false) {
+  const epoch = projectEpoch.value, design = currentDesign.value, layers = selectedLayers();
+  if (!design || !layers.length) return;
+  await api.writeDesignClipboard(JSON.stringify({ format: 'reccut-design-layers', project: project.value.id, layers }));
+  if (cut && projectEpoch.value === epoch) {
+    const ids = new Set(layers.map((l) => l.id));
+    designCommit((p) => { if (p.designs[design.id]) p.designs[design.id].layers = p.designs[design.id].layers.filter((l) => !ids.has(l.id)); });
+  }
+}
 export async function pasteImage() {
   const epoch = projectEpoch.value, designId = currentDesignId.value;
-  const items = await navigator.clipboard.read();
-  for (const item of items) {
-    const type = item.types.find((t) => t.startsWith('image/'));
-    if (!type) continue;
-    const blob = await item.getType(type), image = await createImageBitmap(blob);
-    const canvas = new OffscreenCanvas(image.width, image.height);
-    canvas.getContext('2d').drawImage(image, 0, 0); image.close();
-    const png = await canvas.convertToBlob({ type: 'image/png' });
-    const path = await api.writeDesignImage(`${await designDir()}${sep}Pasted ${Date.now()}.png`, new Uint8Array(await png.arrayBuffer()));
+  if (!designId) return;
+  const data = await api.readDesignClipboard();
+  if (epoch !== projectEpoch.value) return;
+  if (data.image?.byteLength) {
+    const path = await api.writeDesignImage(`${await designDir()}${sep}Pasted ${Date.now()}.png`, data.image);
     await placeFiles([path], { copy: false, copied: true, epoch, designId });
     return;
   }
-  toast('The clipboard has no image.');
+  let copied;
+  try { copied = JSON.parse(data.text); } catch {}
+  if (copied?.format !== 'reccut-design-layers') { toast('The clipboard has no image or Design layers.'); return; }
+  if (copied.project !== project.value.id) { toast('Paste these layers into a design in the same project.'); return; }
+  if (!Array.isArray(copied.layers) || copied.layers.length > 2000) throw new Error('The copied layers are invalid.');
+  const layers = copied.layers.map(normalizeLayer).filter(Boolean).map((l) => ({ ...l, id: uid(), group: null, locked: false, x: l.x + 20, y: l.y + 20 }));
+  if (!layers.length) return;
+  designCommit((p) => { if (p.designs[designId]) p.designs[designId].layers.push(...layers); });
+  if (currentDesignId.value === designId) selection.value = layers.map((l) => l.id);
 }
 export async function locateImage(layer) {
   const epoch = projectEpoch.value;
-  const path = await api.openFileDialog({ title: 'Locate Image', filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'] }] });
+  const path = await api.openFileDialog({ title: 'Relink Image', filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'] }] });
   if (!path) return;
   images.delete(path);
   const img = await ensureImage(path);
@@ -156,6 +170,9 @@ export async function locateImage(layer) {
 export async function captureFrame(source, time) {
   const epoch = projectEpoch.value, designId = currentDesignId.value;
   const frame = frameExportSettings(source, { time, width: source.width, height: source.height });
+  let offline = false;
+  const used = new Set(Object.values(source.clips || {}).filter((c) => c.enabled !== false && c.start <= frame.time && c.start + c.dur > frame.time).map((c) => c.mediaId));
+  for (const id of used) { const m = source.media?.[id]; if (m?.path && !(await api.exists(m.path))) offline = true; }
   const output = `${await designDir('Frames')}${sep}${designFileName(`${project.value.name} ${frame.time.toFixed(3)}s`)}.png`;
   if (epoch !== projectEpoch.value || !project.value.designs?.[designId]) return;
   const file = await new Promise((resolve, reject) => {
@@ -196,4 +213,5 @@ export async function captureFrame(source, time) {
   const l = newLayer('image', { asset: asset.id, name: 'Video frame', ...box, fit: 'contain' });
   designCommit((p) => { p.designAssets[asset.id] = asset; p.designs[designId].layers.unshift(l); });
   if (currentDesignId.value === designId) selection.value = [l.id];
+  if (offline) toast('This frame includes missing media shown as Media Offline.', { kind: 'error' });
 }

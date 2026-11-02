@@ -5,6 +5,8 @@ const {
   Menu,
   Notification,
   desktopCapturer,
+  clipboard,
+  nativeImage,
   dialog,
   globalShortcut,
   ipcMain,
@@ -671,6 +673,9 @@ ipcMain.handle('file:writeBinary', async (_e, file, data) => {
   await fs.promises.writeFile(file, Buffer.from(data));
 });
 ipcMain.handle('design:writeImage', (_e, file, data) => require('./design').writeImage(file, data));
+ipcMain.handle('design:clipboardRead', () => require('./design').readClipboard(clipboard, (bytes) => nativeImage.createFromBuffer(bytes).toPNG()));
+ipcMain.handle('design:clipboardWrite', (_e, text) => clipboard.writeText(String(text)));
+
 ipcMain.handle('media:analyzeMotion', (_e, m) => {
   media.scheduleMotion(m, notifyAnalyzed);
 });

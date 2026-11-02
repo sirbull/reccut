@@ -387,6 +387,11 @@ function RedactTab({ clip }) {
         ) : (
           <Param clip={clip} prop="amount" label="Amount" min={0} max={100} scale={100} unit="%" keyframes={false} />
         )}
+        {pr.mode === 'pixelate' && (
+          <Row label="Whole blocks at edge">
+            <Toggle checked={Boolean(pr.wholeBlocks)} onChange={(v) => set({ wholeBlocks: v })} />
+          </Row>
+        )}
         {pr.shape !== 'full' && (
           <Row label="Redact outside">
             <Toggle checked={Boolean(pr.invert)} onChange={(v) => set({ invert: v })} />

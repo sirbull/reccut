@@ -84,7 +84,7 @@ export function tracksFor(p, clip) {
 /**
  * Følger et område i videoklippet fra spillehodet til slutten av klippet og lagrer sporet på
  * klippet. region er området i prosjektets bilde (fra en sladd), ellers klippets eget sporingsområde.
- * Gir sporets id, eller null.
+ * Gir { id, seconds, lost } for sporet, eller null.
  */
 export async function trackForward(videoId, region = null, until = Infinity) {
   const p = project.value;
@@ -116,16 +116,16 @@ export async function trackForward(videoId, region = null, until = Infinity) {
   });
   const end = v.start + (res.frames.length - 1) / res.fps;
   toast(res.lost ? `Lost the object at ${formatTimecode(end, p.fps)}. The track ends there.` : 'Tracking done. Select a clip above the video and attach it to the track under Follow Track.', { timeout: 6000 });
-  return id;
+  return { id, seconds: Math.round(((res.frames.length - 1) / res.fps) * 100) / 100, lost: Boolean(res.lost) };
 }
 
-/** Fester klippet til et spor: klippet beholder sin plass i forhold til objektet ved spillehodet. */
+/** Fester klippet til et spor: klippet beholder sin plass i forhold til objektet ved spillehodet. Gir true når det gikk. */
 export function attachToTrack(clipId, videoId, trackId, { rotation = true, scale = false, live = false } = {}) {
   const p = project.value;
   const clip = p.clips[clipId];
   const v = p.clips[videoId];
   const tr = v?.props.tracks?.find((t) => t.id === trackId);
-  if (!clip || !tr) return toast('The track no longer exists.', { kind: 'error' });
+  if (!clip || !tr) return toast('The track no longer exists.', { kind: 'error' }), false;
   const W = p.width;
   const H = p.height;
   const { st, off } = streamOf(p, v);
@@ -137,7 +137,7 @@ export function attachToTrack(clipId, videoId, trackId, { rotation = true, scale
     const r = sample(lo + i / p.fps);
     if (r) rows.push(r);
   }
-  if (rows.length < 2) return toast('The clip and the track do not overlap in time.', { kind: 'error' });
+  if (rows.length < 2) return toast('The clip and the track do not overlap in time.', { kind: 'error' }), false;
   // Referansen: spillehodet hvis sporet finnes der, ellers starten på sporet.
   const ref = sample(Math.min(Math.max(getTime(), lo), hi)) || rows[0];
   const T0 = ref.T;
@@ -149,7 +149,7 @@ export function attachToTrack(clipId, videoId, trackId, { rotation = true, scale
       // Gruppert med videoen, så de flyttes sammen i tidslinjen.
       groupClips(q, [clipId, videoId]);
     });
-    return toast('The clip now follows the track and is grouped with the video, so they move together. Move the clip to change where it sits relative to the object.', { timeout: 5000 });
+    return toast('The clip now follows the track and is grouped with the video, so they move together. Move the clip to change where it sits relative to the object.', { timeout: 5000 }), true;
   }
   const rot0 = valueAt(clip, 'rotation', T0) || 0;
   const da = rows.map((r) => (rotation ? r.a - ref.a : 0));
@@ -185,6 +185,7 @@ export function attachToTrack(clipId, videoId, trackId, { rotation = true, scale
     groupClips(q, [clipId, videoId]);
   });
   toast('The clip now follows the track and is grouped with the video, so they move together. Adjust the keyframes if needed.', { timeout: 5000 });
+  return true;
 }
 
 /** Snarvei for sladding: følg det sladden dekker i videoen under, og fest sladden til sporet. */
@@ -194,8 +195,8 @@ export async function trackRedaction(clipId, opts) {
   const T0 = Math.min(Math.max(getTime(), clip.start), clip.start + clip.dur - 1 / p.fps);
   const v = baseClip(p, clip, T0);
   if (!v) return toast('Put the redaction on a track above a video, and move the playhead to where it should start following.', { kind: 'error' });
-  const id = await trackForward(v.id, regionAt(p, clip, T0), clip.start + clip.dur);
-  if (id) attachToTrack(clipId, v.id, id, opts);
+  const tr = await trackForward(v.id, regionAt(p, clip, T0), clip.start + clip.dur);
+  if (tr) attachToTrack(clipId, v.id, tr.id, opts);
 }
 
 /** Fjerner nøkkelbildene som sporingen har skrevet. Nøkkelbilder utenfor de sporede tidsrommene blir stående. */

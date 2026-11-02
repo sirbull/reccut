@@ -1,4 +1,4 @@
-import { uid } from './model.js';
+import { uid, sourceTime } from './model.js';
 
 // Starting sizes, not upload requirements. YouTube's 2 MB is a conservative mobile limit.
 // https://support.google.com/youtube/answer/72431
@@ -168,4 +168,28 @@ export function reorderLayers(layers, ids, direction) {
     for (let i = out.length - 2; i >= 0; i--) if (picked.has(out[i].id) && !picked.has(out[i + 1].id)) [out[i], out[i + 1]] = [out[i + 1], out[i]];
   } else for (let i = 1; i < out.length; i++) if (picked.has(out[i].id) && !picked.has(out[i - 1].id)) [out[i], out[i - 1]] = [out[i - 1], out[i]];
   return out;
+}
+
+// The source picker keeps a video's native aspect, independent of the timeline.
+export function frameSourceProject(preview, media) {
+  const stream = media?.streams?.main;
+  if (media?.kind !== 'video' || !(stream?.width > 0 && stream?.height > 0)) return preview;
+  const scale = Math.min(1, 8192 / Math.max(stream.width, stream.height));
+  return { ...preview, width: Math.max(1, Math.round(stream.width * scale)), height: Math.max(1, Math.round(stream.height * scale)), fps: stream.fps > 0 ? stream.fps : preview.fps };
+}
+
+export function frameThumbnails(project, count = 6) {
+  if (!(project?.duration > 0) || count < 1) return [];
+  const clips = Object.values(project.clips || {}).filter((c) => c.enabled !== false && ['video', 'recording', 'image'].includes(c.type));
+  return Array.from({ length: count }, (_, i) => {
+    const time = project.duration * (i + 0.5) / count;
+    const clip = clips.find((c) => c.lane === 0 && c.start <= time && c.start + c.dur > time) || clips.find((c) => c.start <= time && c.start + c.dur > time);
+    const media = clip && project.media?.[clip.mediaId];
+    const stream = media?.streams?.main || media?.streams?.screen;
+    const thumbs = stream?.thumbs;
+    if (!thumbs?.files?.length) return null;
+    const at = sourceTime(clip, time) - (stream.offset || 0);
+    const index = Math.max(0, Math.min(thumbs.files.length - 1, Math.floor(at / (thumbs.interval || 1))));
+    return { time, path: thumbs.files[index] };
+  }).filter(Boolean);
 }

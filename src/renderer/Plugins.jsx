@@ -5,7 +5,7 @@ import { computed, signal } from '@preact/signals';
 import { FileUp, Puzzle, Settings2, Sparkles, X } from 'lucide-preact';
 import { Button, IconButton, Modal, Row, Section, Select, Slider, Toggle, toast } from './ui.jsx';
 import TERMS from '../shared/pluginTerms.json';
-import { commit, getTime, importPaths, project, selectedClips } from './editor/store.js';
+import { commit, getTime, importPaths, project, room, selectedClips } from './editor/store.js';
 import { snapshot } from './editor/playback.js';
 import { TOOL_MAP } from '../shared/aiEdits.js';
 import { applyProcessor } from './editor/ProcessorEffects.jsx';
@@ -23,12 +23,16 @@ export const BUILTIN = [
   {
     id: 'higgsfield',
     builtin: true,
+    room: 'edit',
     name: 'Higgsfield AI Video',
     description: 'Generate video shots from a description or a start image, with models like Kling, Seedance, Wan and Hailuo. Needs a Higgsfield account; each video is billed there.',
     icon: HIGGSFIELD_ICON,
   },
 ];
 export const allPlugins = computed(() => [...BUILTIN, ...plugins.value]);
+// Each section has its own plugins. Processors work on video clips, so they belong to Edit.
+const ROOM_NAMES = { record: 'Record', edit: 'Edit', export: 'Export', design: 'Design' };
+export const pluginRoom = (p) => p.room || 'edit';
 
 // Plugin settings: the user's own defaults for a plugin's params, kept with the app preferences.
 // The window starts from them, and the agent uses them unless it chooses other values.
@@ -204,19 +208,26 @@ export function PluginsButton() {
     window.addEventListener('pointerdown', close, true);
     return () => window.removeEventListener('pointerdown', close, true);
   }, [open]);
-  const list = allPlugins.value;
+  const r = room.value;
+  const name = ROOM_NAMES[r] || 'Edit';
+  const list = allPlugins.value.filter((p) => pluginRoom(p) === r);
   return (
     <div class="tasks" ref={ref}>
-      <button class="btn secondary small" aria-expanded={open} onClick={() => setOpen(!open)} title="Plugins: tools you have installed or made with the AI agent">
+      <button class="btn secondary small" aria-expanded={open} onClick={() => setOpen(!open)} title={`${name} plugins: tools for this section, installed or made with the AI agent`}>
         <Puzzle size={14} />
         Plugins
       </button>
       {open && (
         <div class="popover plugins-pop">
           <header>
-            <b>Plugins</b>
+            <b>{name} plugins</b>
           </header>
-          
+          {!list.length && (
+            <p class="hint plugin-empty">
+              No {name} plugins yet.
+              {r !== 'edit' && ' Plugins for this section are not supported yet; they will be listed here when they are.'}
+            </p>
+          )}
           {list.map((p) => (
             <button
               key={p.id}
@@ -234,25 +245,29 @@ export function PluginsButton() {
             </button>
           ))}
           <div class="plugin-actions">
-            <button
-              class="link"
-              onClick={() => {
-                aiDraft.value = 'Make a plugin that ';
-                aiChatOpen.value = true;
-                setOpen(false);
-              }}
-            >
-              <Sparkles size={12} /> Make a plugin with AI…
-            </button>
-            <button
-              class="link"
-              onClick={() => {
-                choosePluginFile();
-                setOpen(false);
-              }}
-            >
-              <FileUp size={12} /> Install file…
-            </button>
+            {r === 'edit' && (
+              <>
+              <button
+                class="link"
+                onClick={() => {
+                  aiDraft.value = 'Make a plugin that ';
+                  aiChatOpen.value = true;
+                  setOpen(false);
+                }}
+              >
+                <Sparkles size={12} /> Make a plugin with AI…
+              </button>
+              <button
+                class="link"
+                onClick={() => {
+                  choosePluginFile();
+                  setOpen(false);
+                }}
+              >
+                <FileUp size={12} /> Install file…
+              </button>
+              </>
+            )}
             <button
               class="link"
               onClick={() => {

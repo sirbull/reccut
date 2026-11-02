@@ -76,3 +76,16 @@ test('reordering preserves the order inside a selection; resizing keeps centers 
   near(r.layers[0].x - d.layers[0].x, (333 - d.width) / 2);
   assert.throws(() => resizeDesign(d, 0, 0), /whole numbers/);
 });
+
+test('source videos retain native geometry and cached thumbnail tiles sample timeline source times', async () => {
+  const { frameSourceProject, frameThumbnails } = await import('../src/shared/design.js');
+  const p = { width: 1920, height: 1080, fps: 30, duration: 4, media: {}, clips: {} };
+  const media = { kind: 'video', streams: { main: { width: 1080, height: 1920, fps: 24, thumbs: { interval: 1, files: ['a','b','c','d'] } } } };
+  const source = frameSourceProject(p, media); assert.equal(source.width, 1080); assert.equal(source.height, 1920); assert.equal(source.fps, 24);
+  assert.equal(p.width, 1920); assert.equal(frameSourceProject(p, { kind: 'recording' }), p);
+  assert.deepEqual(frameThumbnails(p), []);
+  p.media.v = media; p.clips.c = { type: 'video', mediaId: 'v', lane: 0, start: 0, in: 0, dur: 4, props: {} };
+  assert.deepEqual(frameThumbnails(p, 4).map((t) => t.path), ['a','b','c','d']);
+  p.clips.c.in = 1;
+  assert.deepEqual(frameThumbnails(p, 4).map((t) => t.path), ['b','c','d','d']);
+});

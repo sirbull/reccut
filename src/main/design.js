@@ -25,4 +25,17 @@ async function writeImage(file, data) {
     }
   }
 }
-module.exports = { writeImage };
+async function readClipboard(clipboard, toPNG) {
+  const items = await clipboard.read();
+  let image = null, text = '';
+  for (const item of items) {
+    const type = item.types.includes('image/png') ? 'image/png' : item.types.find((t) => t.startsWith('image/'));
+    if (type && !image) {
+      const blob = await item.getType(type), bytes = Buffer.from(await blob.arrayBuffer());
+      image = new Uint8Array(type === 'image/png' ? bytes : toPNG(bytes));
+    }
+    if (item.types.includes('text/plain') && !text) text = await (await item.getType('text/plain')).text();
+  }
+  return { image, text };
+}
+module.exports = { writeImage, readClipboard };

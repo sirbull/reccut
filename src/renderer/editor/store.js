@@ -349,6 +349,8 @@ export async function saveNow() {
 }
 
 export function setProject(p, path = null) {
+  clearTimeout(saveTimer);
+  projectFolders.value = null;
   p = normalizeDesignProject(p);
   transientBase = null;
   previewBase = null;
@@ -402,11 +404,13 @@ export async function openProjectFile(path) {
 
 // Henter tilbake en tidligere versjon som én endring, så Angre tar deg tilbake.
 export function restoreProject(data) {
+  data = normalizeDesignProject(data);
   commit((q) => {
     for (const k of Object.keys(q)) delete q[k];
     Object.assign(q, data);
     relayoutPrimary(q);
   });
+  projectEpoch.value++;
   selection.value = [];
 }
 

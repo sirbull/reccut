@@ -53,3 +53,13 @@ test('timeline hover and transient cancellation preserve Design changes made sin
   assert.equal(e.project.value.designs[d.id].name, 'Design survives');
   e.endTransient(false); assert.equal(e.project.value.name, 'Untitled Project'); assert.equal(e.project.value.designs[d.id].name, 'Design survives');
 });
+
+test('restoring a project snapshot includes designs and clears stale Design history', () => {
+  const { editor: e, design: s } = setup();
+  const d = s.addDesign(); s.addText(); const snapshot = structuredClone(e.project.value);
+  s.changeDesign((d) => { d.layers[0].text = 'Changed'; });
+  e.restoreProject(snapshot);
+  assert.equal(e.project.value.designs[d.id].layers[0].text, snapshot.designs[d.id].layers[0].text);
+  assert.equal(s.canDesignUndo(), false);
+  e.undo(); assert.equal(e.project.value.designs[d.id].layers[0].text, snapshot.designs[d.id].layers[0].text);
+});
