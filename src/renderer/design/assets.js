@@ -17,7 +17,7 @@ let cacheGeneration = 0;
 effect(() => {
   projectEpoch.value; cacheGeneration++;
   for (const entry of images.values()) entry.preview?.close?.();
-  images.clear(); imageVersion.value++;
+  images.clear(); imageVersion.value = imageVersion.peek() + 1;
 });
 export async function designDir(sub = 'Assets') {
   return `${projectFolders.value?.designs || `${await api.baseDir()}${sep}Designs`}${sep}${sub}`;
@@ -30,6 +30,7 @@ export function imagePath(layer, p = project.value) {
 function loadImage(path) {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`Could not read ${path.split(/[\\/]/).pop()}.`));
     img.src = fileUrl(path);
@@ -43,6 +44,7 @@ export function ensureImage(path) {
   images.set(path, entry);
   const generation = cacheGeneration;
   entry.promise = loadImage(path).then(async (img) => {
+    if (!(img.naturalWidth > 0 && img.naturalHeight > 0)) throw new Error('The image has no visible pixels.');
     let preview = img;
     if (Math.max(img.naturalWidth, img.naturalHeight) > 4096) {
       const k = 4096 / Math.max(img.naturalWidth, img.naturalHeight);
@@ -60,7 +62,8 @@ export function getImage(layer, full = false) {
 }
 export function imageMissing(layer) {
   const path = imagePath(layer);
-  return !path || Boolean(images.get(path)?.error);
+  const entry = images.get(path);
+  return !path || Boolean(entry?.error) || (!entry?.image && Boolean(project.value.designAssets?.[layer.asset]?.missing));
 }
 export async function loadDesignImages(design, p = project.value) {
   const layers = design.layers.filter((l) => l.type === 'image' && !l.hidden);
@@ -68,19 +71,20 @@ export async function loadDesignImages(design, p = project.value) {
   return layers.filter((_, i) => !loaded[i]);
 }
 export async function chooseImage() {
+  const epoch = projectEpoch.value;
   const path = await api.openFileDialog({ title: 'Place Image', filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg', 'psd'] }] });
-  if (path) requestPlace([path]);
+  if (path && epoch === projectEpoch.value) requestPlace([path]);
 }
 export function requestPlace(paths, point = null) {
   if (prefs.value.designImportRemember) { placeFiles(paths, { point }).catch((err) => toast(err.message, { kind: 'error' })); return; }
   placeRequest.value = { paths, point, epoch: projectEpoch.value, designId: currentDesignId.value, copy: prefs.value.importCopy };
 }
-export async function placeFiles(paths, { copy = prefs.value.importCopy, point = null, designId = currentDesignId.value, epoch = projectEpoch.value } = {}) {
+export async function placeFiles(paths, { copy = prefs.value.importCopy, point = null, designId = currentDesignId.value, epoch = projectEpoch.value, copied: ownFile = false } = {}) {
   const assets = [];
   for (const original of paths) {
     try {
       if (!/\.(png|jpe?g|webp|gif|bmp|svg|psd)$/i.test(original)) throw new Error('Choose a PNG, JPEG, WebP, GIF, BMP, SVG or PSD image.');
-      let path = original, copied = copy;
+      let path = original, copied = copy || ownFile;
       const name = original.split(/[\\/]/).pop();
       if (/\.psd$/i.test(path)) {
         const doc = await api.psdLayers(path);
@@ -128,8 +132,7 @@ export async function pasteImage() {
     canvas.getContext('2d').drawImage(image, 0, 0); image.close();
     const png = await canvas.convertToBlob({ type: 'image/png' });
     const path = await api.writeDesignImage(`${await designDir()}${sep}Pasted ${Date.now()}.png`, new Uint8Array(await png.arrayBuffer()));
-    await placeFiles([path], { copy: false, epoch, designId });
-    if (epoch === projectEpoch.value) designCommit((p) => { for (const a of Object.values(p.designAssets)) if (a.path === path) a.copied = true; });
+    await placeFiles([path], { copy: false, copied: true, epoch, designId });
     return;
   }
   toast('The clipboard has no image.');
@@ -154,6 +157,7 @@ export async function captureFrame(source, time) {
   const epoch = projectEpoch.value, designId = currentDesignId.value;
   const frame = frameExportSettings(source, { time, width: source.width, height: source.height });
   const output = `${await designDir('Frames')}${sep}${designFileName(`${project.value.name} ${frame.time.toFixed(3)}s`)}.png`;
+  if (epoch !== projectEpoch.value || !project.value.designs?.[designId]) return;
   const file = await new Promise((resolve, reject) => {
     let id, timer, stopped = false;
     const early = [];
@@ -187,7 +191,9 @@ export async function captureFrame(source, time) {
   if (projectEpoch.value !== epoch || !project.value.designs?.[designId]) return;
   const asset = { id: uid(), name: file.split(/[\\/]/).pop(), path: file, copied: true, origin: 'frame', width: image.naturalWidth, height: image.naturalHeight };
   const d = project.value.designs[designId];
-  const l = newLayer('image', { asset: asset.id, name: 'Video frame', w: d.width, h: d.height, fit: 'cover' });
+  // Keep the entire frame visible and give its handles the source aspect ratio.
+  const box = fitBox(asset.width, asset.height, d.width, d.height, 'contain');
+  const l = newLayer('image', { asset: asset.id, name: 'Video frame', ...box, fit: 'contain' });
   designCommit((p) => { p.designAssets[asset.id] = asset; p.designs[designId].layers.unshift(l); });
   if (currentDesignId.value === designId) selection.value = [l.id];
 }

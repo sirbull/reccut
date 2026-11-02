@@ -670,32 +670,19 @@ ipcMain.handle('file:writeBinary', async (_e, file, data) => {
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   await fs.promises.writeFile(file, Buffer.from(data));
 });
-ipcMain.handle('design:writeImage', async (_e, file, data) => {
-  await fs.promises.mkdir(path.dirname(file), { recursive: true });
-  const ext = path.extname(file), stem = file.slice(0, -ext.length);
-  let n = 1;
-  while (true) {
-    const target = n === 1 ? file : `${stem} ${n}${ext}`;
-    let handle;
-    try {
-      handle = await fs.promises.open(target, 'wx');
-    } catch (err) {
-      if (err.code === 'EEXIST') { n++; continue; }
-      throw err;
-    }
-    try {
-      await handle.writeFile(Buffer.from(data));
-      await handle.close();
-      return target;
-    } catch (err) {
-      await handle.close().catch(() => {});
-      await fs.promises.unlink(target).catch(() => {});
-      throw err;
-    }
-  }
-});
+ipcMain.handle('design:writeImage', (_e, file, data) => require('./design').writeImage(file, data));
 ipcMain.handle('media:analyzeMotion', (_e, m) => {
   media.scheduleMotion(m, notifyAnalyzed);
+});
+// Følger et objekt i videoen (se track i motion.js), så et klipp kan festes til det.
+ipcMain.handle('media:track', (_e, file, opts) => {
+  const { done } = jobs.add({
+    kind: 'analyze',
+    title: 'Tracking motion',
+    queue: 'light',
+    run: (ctx) => require('./motion').track(ff.getFfmpegPath(), file, { ...opts, onProgress: (p) => ctx.progress(p), isCanceled: ctx.isCanceled }),
+  });
+  return done;
 });
 ipcMain.handle('media:details', (_e, file) => ff.details(file));
 // Sceneskift (nytt vindu, ny side, kameraklipp) for AI-agenten. Bildet skaleres ned først, så

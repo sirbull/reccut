@@ -15,7 +15,7 @@ export const ARTICLES = [
 
 Place Image opens a photo or a flattened PSD or SVG. Choose Copy into project to keep it in Designs/Assets, or Leave in place to reference the original. Remember this choice skips the question next time. Design pictures stay separate from the Edit media browser. From Project references images already imported in Edit.
 
-The Video tab has its own preview and scrubber. Use This Frame saves a full quality PNG of the sequence or selected source video into Designs/Frames. Changing the timeline afterwards does not change this image. Arrow keys step one frame in the Video panel; Shift and arrows step one second. An empty or audio only timeline cannot supply a video frame.
+The Video tab has its own preview and scrubber. Use This Frame saves a full quality PNG of the sequence or selected source video into Designs/Frames. The full frame is placed with its original aspect ratio, fitted inside the design without cropping. Move and resize the layer to compose the thumbnail. Changing the timeline afterwards does not change this image. Arrow keys step one frame in the Video panel; Shift and arrows step one second. An empty or audio only timeline cannot supply a video frame.
 
 Drop files to place them. Cmd/Ctrl V pastes an image from the system clipboard. A missing image has a warning in Layers: click it to locate the file before exporting.
 
@@ -697,7 +697,7 @@ While Reccut works on a clip in the background, for example analyzing motion for
 Select clips and choose Group Clips ({{key:group}}). Any kind of clip can be grouped: video, audio, images, titles, lower thirds, captions and redactions. Grouped clips have a link badge. If one of the clips is already in a group, the groups are joined into one.
 
 - Moving the video moves the rest of the group too, for example the audio, a lower third and a caption, even if a clip starts before the video.
-- A click selects the whole group; Option (Alt) click selects one clip.
+- A click selects the whole group; Option (Alt) click or double click selects one clip, as if you were inside the group.
 - Deleting the video in the storyline deletes the grouped audio.
 - Copy and paste makes a new group.
 

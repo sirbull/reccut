@@ -3,6 +3,18 @@
 // filene som trengs. Selve kopieringen skjer i hovedprosessen.
 import { relayoutPrimary, sourceTime, timelines } from './model.js';
 
+export function designMediaIds(p) {
+  return new Set(Object.values(p.designs || {}).flatMap((d) => (d.layers || []).filter((l) => l.type === 'image' && l.media).map((l) => l.media)));
+}
+export function designFiles(p, { removeUnused = false } = {}) {
+  const used = new Set();
+  for (const d of Object.values(p.designs || {})) for (const l of d.layers || []) {
+    if (l.asset) used.add(l.asset);
+    if (l.cutout?.asset) used.add(l.cutout.asset);
+  }
+  return Object.entries(p.designAssets || {}).filter(([id]) => !removeUnused || used.has(id)).map(([assetId, a]) => ({ assetId, name: a.name, path: a.path }));
+}
+
 /**
  * Lager en ryddet kopi av prosjektet. Valg:
  *  removeDisabled: klipp som er slått av fjernes (i hovedsporet blir de mellomrom, så ingenting flytter seg)
@@ -34,9 +46,12 @@ export function reduceProject(src, opts = {}) {
     for (const c of Object.values(t.clips)) if (c.mediaId) usedBy.set(c.mediaId, [...(usedBy.get(c.mediaId) || []), c]);
   }
 
+  const designMedia = designMediaIds(p);
   if (opts.removeUnused) {
+    const usedAssets = new Set(designFiles(p, { removeUnused: true }).map((f) => f.assetId));
+    for (const id of Object.keys(p.designAssets || {})) if (!usedAssets.has(id)) delete p.designAssets[id];
     for (const id of Object.keys(p.media)) {
-      if (usedBy.has(id)) continue;
+      if (usedBy.has(id) || designMedia.has(id)) continue;
       removed.media.push(p.media[id].name);
       delete p.media[id];
     }
@@ -162,10 +177,11 @@ const round3 = (v) => Math.round(v * 1000) / 1000;
 export function trimProject(src, { handles = 2, minSaving = 0.25 } = {}) {
   const p = structuredClone(src);
   const ranges = usedRanges(p, handles);
+  const designMedia = designMediaIds(p);
   const trimmed = [];
   for (const [id, list] of Object.entries(ranges)) {
     const m = p.media[id];
-    if (!m || m.kind === 'recording' || m.kind === 'image' || !(m.duration > 0)) continue;
+    if (!m || designMedia.has(id) || m.kind === 'recording' || m.kind === 'image' || !(m.duration > 0)) continue;
     const used = list.reduce((s, [a, b]) => s + (b - a), 0);
     if (used > m.duration * (1 - minSaving) || !m.streams?.main?.path) continue;
     // Never trim a source that cannot be represented by its surviving streams.

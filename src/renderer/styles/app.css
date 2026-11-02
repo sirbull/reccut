@@ -5125,3 +5125,4 @@ kbd.keycap {
 .dz-timecode { text-align: center; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .dz-room .warn { color: #ffb45b; }
 @media (max-width: 1150px) { .dz-room { grid-template-columns: 220px minmax(0, 1fr) 270px; } .dz-tabs .segmented button { padding: 5px 3px; font-size: 9px; } }
+.dz-layer-preview { flex-shrink: 0; border-radius: 2px; background: var(--bg-0); }

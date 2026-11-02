@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { hitTest, layerBounds, layerPoint, selectionBounds, resizeLayer, rotatePoint, snapMove, snapRotation, newLayer } from '../../shared/design.js';
 import { drawDesign } from '../../shared/designRender.js';
 import { designFont, layoutDesignText } from '../../shared/designText.js';
-import { currentDesign, currentDesignId, selection, tool, zoom, pan, setZoom, addText, beginDesignTransient, updateDesignTransient, endDesignTransient } from './store.js';
+import { currentDesign, selection, tool, zoom, viewScale, pan, setZoom, addText, beginDesignTransient, updateDesignTransient, endDesignTransient } from './store.js';
 import { imageVersion, getImage, loadDesignImages, requestPlace } from './assets.js';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
 
@@ -19,6 +19,7 @@ export function DesignCanvas({ active }) {
   const scale = d ? (z === 'fit' ? Math.max(0.001, Math.min((size.w - 100) / d.width, (size.h - 100) / d.height)) : z) : 1;
   const offset = { x: (size.w - (d?.width || 0) * scale) / 2 + p.x, y: (size.h - (d?.height || 0) * scale) / 2 + p.y };
   latest.current = { scale, offset, d, z };
+  useEffect(() => { if (active) viewScale.value = scale; }, [active, scale]);
   const picked = d?.layers.filter((l) => selected.includes(l.id) && !l.locked && !l.hidden) || [];
   const box = picked.length === 1 ? picked[0] : picked.length ? { ...selectionBounds(picked), rotation: 0 } : null;
   const point = (e) => {

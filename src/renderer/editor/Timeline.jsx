@@ -458,8 +458,9 @@ export function Timeline() {
       selection.value = [...set];
       return;
     }
-    // Et klikk velger hele gruppen. Option (Alt) velger bare ett klipp.
-    if (!selection.value.includes(clipId)) selection.value = e.altKey || clip.slideshowParent || clip.slideshowForeground ? [clipId] : groupMembers(proj, clipId);
+    // Et klikk velger hele gruppen. Option (Alt) eller dobbeltklikk velger bare ett klipp, som inne i gruppen.
+    if (e.detail === 2 && clip.group) selection.value = [clipId];
+    else if (!selection.value.includes(clipId)) selection.value = e.altKey || clip.slideshowParent || clip.slideshowForeground ? [clipId] : groupMembers(proj, clipId);
     if (clip.type === 'caption' && (getTime() < clip.start || getTime() >= clip.start + clip.dur)) seek(clip.start);
 
     const base = { x: e.clientX, y: e.clientY, T, clip: deepClone(clip), moved: false };

@@ -6,7 +6,7 @@ import { PROJECT_TEMPLATES, formatDuration, sequenceList, timelines } from '../s
 import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, restoreProject, saveNow, saveProjectAs, sequenceSettingsOpen } from './editor/store.js';
 import { ProjectSettings } from './editor/Inspector.jsx';
 import { prefs, setPrefs } from './prefs.js';
-import { mediaFiles, reduceProject, trimProject } from '../shared/package.js';
+import { designFiles, mediaFiles, reduceProject, trimProject } from '../shared/package.js';
 import * as commands from './editor/commands.js';
 import { Button, IconButton, Modal, Row, Toggle, toast } from './ui.jsx';
 
@@ -378,7 +378,8 @@ export function PackageDialog() {
   const reduced = trimResult ? trimResult.project : reducedResult.project;
   const removed = { ...reducedResult.removed, trimmed: trimResult?.trimmed || [] };
   const files = mediaFiles(reduced, opts);
-  const paths = [...new Set(files.flatMap((f) => ([...(f.dir ? [f.dir] : []), ...f.sources.map((s) => s.path)])))];
+  const designs = designFiles(reduced);
+  const paths = [...new Set([...files.flatMap((f) => ([...(f.dir ? [f.dir] : []), ...f.sources.map((s) => s.path)])), ...designs.map((f) => f.path).filter(Boolean)])];
   // Kuttede deler tar omtrent sin andel av filen.
   const share = new Map();
   for (const f of files) for (const s of f.sources || []) if (s.trim) share.set(s.path, (share.get(s.path) || 0) + (s.trim.to - s.trim.from) / Math.max(0.1, s.trim.total || s.trim.to));
@@ -407,7 +408,7 @@ export function PackageDialog() {
   };
   const start = async () => {
     await saveNow();
-    await api.packageProject({ project: reduced, files, dest, name: name.trim() || project.value.name, removed });
+    await api.packageProject({ project: reduced, files, designFiles: designs, dest, name: name.trim() || project.value.name, removed });
     close();
     toast('Packaging started. Follow the progress at the top of the window.', { timeout: 4000 });
   };
@@ -445,7 +446,7 @@ export function PackageDialog() {
         </button>
       </Row>
       <div class="pkg-opts">
-        {check('removeUnused', 'Remove unused media', 'Media in the browser that is not used on the timeline is left out.')}
+        {check('removeUnused', 'Remove unused media', 'Media in the browser that is not used on a timeline or in a design is left out.')}
         {check('removeDisabled', 'Remove disabled clips', 'Clips that are switched off are removed. In the storyline they become gaps, so nothing moves.')}
         {check('removeOffAudio', 'Remove switched off audio', 'Synced audio that is switched off in every clip is left out.')}
         {check('removeHidden', 'Remove clips on hidden tracks', 'Clips on tracks you have hidden are removed.')}
@@ -461,7 +462,7 @@ export function PackageDialog() {
       </div>
       <div class="pkg-summary">
         <div>
-          <b>{files.length}</b> media, <b>{paths.length}</b> files and folders, {opts.trim ? 'estimated ' : ''}<b>{total === null ? '…' : fmtBytes(total)}</b>
+          <b>{files.length}</b> media, <b>{designs.length}</b> design assets, <b>{paths.length}</b> files and folders, {opts.trim ? 'estimated ' : ''}<b>{total === null ? '…' : fmtBytes(total)}</b>
         </div>
         <div class="muted">
           Removed: {removed.media.length} unused media, {removed.clips.length} clips, {removed.streams.length} audio tracks

@@ -136,3 +136,19 @@ test('part IDs do not overwrite existing media and recording bundles include ext
     ['/rec-other/audio.wav'],
   );
 });
+
+test('Design-only media and masks survive reduction while unused design assets can be removed', async () => {
+  const { reduceProject, designFiles, designMediaIds } = await import('../src/shared/package.js');
+  const p = setup(); p.media.photo = medium('photo', 'image'); p.media.unused = medium('unused', 'image');
+  p.designs.d = { layers: [{ type: 'image', media: 'photo' }, { type: 'image', asset: 'placed', cutout: { asset: 'mask', enabled: false } }] };
+  p.designAssets = { placed: { path: '/placed.png', name: 'Placed' }, mask: { path: '/mask.png' }, unused: { path: '/unused.png' } };
+  assert.ok(designMediaIds(p).has('photo'));
+  assert.equal(designFiles(p).length, 3); assert.equal(designFiles(p, { removeUnused: true }).length, 2);
+  const r = reduceProject(p, { removeUnused: true }).project;
+  assert.ok(r.media.photo); assert.equal(r.media.unused, undefined); assert.equal(r.designAssets.unused, undefined); assert.ok(r.designAssets.mask);
+  assert.ok(p.media.unused && p.designAssets.unused, 'original remains intact');
+});
+test('packaging never trims a source referenced by a design, even in malformed old files', () => {
+  const p = setup(); p.designs.d = { layers: [{ type: 'image', media: 'a' }] };
+  const r = trimProject(p); assert.equal(r.trimmed.length, 0); assert.ok(r.project.media.a);
+});

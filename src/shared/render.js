@@ -1,5 +1,6 @@
 // Tegner ett bilde av prosjektet. Samme kode brukes i forhåndsvisning og eksport,
 // så det du ser i redigeringen er det som havner i filen.
+import { containRect, followed } from './follow.js';
 import { gpuGradeAvailable, gradeImage, gradeParams } from './grade.js';
 import { shadowStyle } from './shadow.js';
 import { applyVideoEffects } from './videoEffectsRender.js';
@@ -328,14 +329,9 @@ function applyTemperature(ctx, clip, T, rect) {
   ctx.restore();
 }
 
-function containRect(sw, sh, W, H) {
-  const s = Math.min(W / sw, H / sh);
-  const w = sw * s;
-  const h = sh * s;
-  return { x: (W - w) / 2, y: (H - h) / 2, w, h };
-}
-
 export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmasked = false) {
+  // Levende kobling til et spor: klippet tegnes der objektet er nå.
+  clip = followed(project, clip, T);
   const W = project.width;
   const H = project.height;
   const alpha = visualOpacity(clip, T) * alphaMul;

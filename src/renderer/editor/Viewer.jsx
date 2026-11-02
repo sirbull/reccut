@@ -3,6 +3,7 @@ import { Activity, Maximize2, Minimize2, Settings2, Pause, Play, SkipBack, SkipF
 import { deepClone, formatTimecode, isVisual, kfTime, valueAt } from '../../shared/model.js';
 import { captionLayout, wrapText } from '../../shared/render.js';
 import { clipMatrix, maskList, shapeAt } from '../../shared/shapes.js';
+import { followMatrix } from '../../shared/follow.js';
 import { beginTransient, browserPlayhead, commit, endTransient, getTime, playing, project, selectedClips, selectedTransition, selection, skim, timeSig, updateTransient } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
@@ -10,6 +11,7 @@ import { IconButton } from '../ui.jsx';
 import { PREVIEW_RESOLUTIONS, prefs, setPrefs } from '../prefs.js';
 import { setKeyframe } from './keyframes.js';
 import { toggleViewerFullscreen } from './fullscreen.js';
+import { trackArea } from './track.js';
 import { VideoScopes } from './VideoScopes.jsx';
 import { commandsBlocked } from '../keyboard.js';
 
@@ -65,9 +67,16 @@ export function Viewer() {
     } else origin = { x: valueAt(sel, 'x', T) || 0, y: valueAt(sel, 'y', T) || 0 };
     beginTransient();
     canvas.setPointerCapture(e.pointerId);
+    // Med levende kobling flyttes klippet i forhold til objektet, så musen roteres og skaleres tilbake.
+    const F = sel.type === 'caption' ? null : followMatrix(p, sel, T);
     const move = (ev) => {
-      const dx = (ev.clientX - start.x) * k;
-      const dy = (ev.clientY - start.y) * k;
+      let dx = (ev.clientX - start.x) * k;
+      let dy = (ev.clientY - start.y) * k;
+      if (F) {
+        const d = F.inverse().transformPoint(new DOMPoint(dx, dy, 0, 0));
+        dx = d.x;
+        dy = d.y;
+      }
       updateTransient((q) => {
         const c = q.clips[base.id];
         if (base.type === 'caption') {
@@ -133,6 +142,7 @@ export function Viewer() {
         <canvas ref={canvasRef} class={draggable ? (sel.type === 'redact' ? 'drawable' : 'movable') : ''} onPointerDown={onCanvasDown} />
         {pen && sel?.id === pen.clipId && <PenOverlay clip={sel} canvasRef={canvasRef} />}
         {sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} label="Redaction. Drag to move, drag the handles to resize." />}
+        {sel && sel.type !== 'redact' && trackArea.value === sel.id && !pen && <ShapeEditor clip={sel} prefix="track." shape="rect" smooth={false} canvasRef={canvasRef} label="Tracking area. Put it over what the clip should follow." />}
         {editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
       </div>
       {prefs.value.videoScopesVisible && !fullscreen && <VideoScopes sourceRef={canvasRef} onClose={() => setPrefs({ videoScopesVisible: false })} />}
@@ -175,6 +185,13 @@ export function Viewer() {
 function putValue(c, prop, v, T) {
   if (c.kf?.[prop]?.length) setKeyframe(c, prop, kfTime(c, T), v);
   else c.props[prop] = v;
+}
+
+// Klippets rom i bildet, med levende kobling til et spor (se follow.js).
+function viewMatrix(p, clip, T) {
+  const M = clipMatrix(clip, T, p.width, p.height);
+  const F = followMatrix(p, clip, T);
+  return F ? F.multiply(M) : M;
 }
 
 function clipTime(clip) {
@@ -266,7 +283,7 @@ export function ShapeEditor({ clip, prefix, shape, smooth, canvasRef, label }) {
   const H = p.height;
   const k = box.width / W;
   const Tc = clipTime(clip);
-  const M = clipMatrix(clip, Tc, W, H);
+  const M = viewMatrix(p, clip, Tc);
   const inv = M.inverse();
   const g = shapeAt(clip, prefix, shape, Tc, W, H);
   const toView = ([x, y]) => {
@@ -466,7 +483,7 @@ function PenOverlay({ clip, canvasRef }) {
   }, []);
   if (!box) return null;
   const k = box.width / W;
-  const M = clipMatrix(clip, clipTime(clip), W, H);
+  const M = viewMatrix(p, clip, clipTime(clip));
   const inv = M.inverse();
   const toClip = (ev, svg) => {
     const b = svg.getBoundingClientRect();

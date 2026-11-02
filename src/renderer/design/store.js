@@ -8,6 +8,7 @@ export const currentDesignId = signal(null);
 export const selection = signal([]);
 export const tool = signal('select');
 export const zoom = signal('fit');
+export const viewScale = signal(1);
 export const pan = signal({ x: 0, y: 0 });
 export const newDesignOpen = signal(false);
 export const exportDesignOpen = signal(false);
@@ -36,7 +37,7 @@ effect(() => {
   batch(() => {
     undoStack.length = redoStack.length = 0; transient = null;
     currentDesignId.value = null; selection.value = []; tool.value = 'select'; zoom.value = 'fit'; pan.value = { x: 0, y: 0 };
-    newDesignOpen.value = exportDesignOpen.value = false; placeRequest.value = null; historyVersion.value++;
+    newDesignOpen.value = exportDesignOpen.value = false; placeRequest.value = null; historyVersion.value = historyVersion.peek() + 1;
   });
 });
 export function openDesign(id) {
@@ -103,10 +104,12 @@ export function addText(x, y) {
 }
 export function deleteSelection() {
   const ids = new Set(selectedLayers().map((l) => l.id));
+  if (!ids.size) return;
   changeDesign((d) => { d.layers = d.layers.filter((l) => !ids.has(l.id)); }); selection.value = [];
 }
 export function duplicateSelection() {
-  const ids = new Set(selection.value), copies = [];
+  const ids = new Set(selectedLayers().map((l) => l.id)), copies = [];
+  if (!ids.size) return;
   changeDesign((d) => {
     d.layers = d.layers.flatMap((l) => {
       if (!ids.has(l.id) || l.locked) return [l];
@@ -116,7 +119,14 @@ export function duplicateSelection() {
   }); selection.value = copies;
 }
 export function moveSelection(dx, dy) { changeLayers((l) => { l.x += dx; l.y += dy; }); }
-export function orderSelection(direction) { changeDesign((d) => { d.layers = reorderLayers(d.layers, selection.value, direction); }); }
+export function orderSelection(direction) {
+  const ids = selectedLayers().map((l) => l.id);
+  if (!ids.length) return;
+  changeDesign((d) => {
+    const next = reorderLayers(d.layers, ids, direction);
+    if (next.some((l, i) => l.id !== d.layers[i].id)) d.layers = next;
+  });
+}
 export function selectAll() { selection.value = currentDesign.value?.layers.filter((l) => !l.locked && !l.hidden).map((l) => l.id) || []; }
 export function setZoom(value) {
   zoom.value = value === 'fit' ? value : Math.min(8, Math.max(0.02, value));

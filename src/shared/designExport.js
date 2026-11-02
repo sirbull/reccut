@@ -1,6 +1,12 @@
 export function designFileName(name) {
   const safe = String(name || '').replace(/[\\/:*?"<>|\x00-\x1f]/g, '').replace(/[. ]+$/g, '').trim();
-  const cut = Array.from(safe).slice(0, 200).join('');
+  let cut = '', bytes = 0;
+  for (const char of safe) {
+    const code = char.codePointAt(0), size = code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4;
+    if (bytes + size > 200) break;
+    cut += char; bytes += size;
+  }
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(cut)) cut = `_${cut}`;
   return cut && cut !== '.' && cut !== '..' ? cut : 'Design';
 }
 export function uniqueDesignName(name, ext, exists) {

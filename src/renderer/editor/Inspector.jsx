@@ -52,6 +52,7 @@ import { setKeyframe } from './keyframes.js';
 import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
 import { prefs } from '../prefs.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
+import { attachToTrack, deleteTrack, detach, removeTrackingKeyframes, trackArea, trackForward, trackRedaction, tracksFor } from './track.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { MASK_MODES, MASK_SHAPES, canMask, defaultPoints, ellipsePoints, maskKey, maskList, setMaskShape } from '../../shared/shapes.js';
 import { Button, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
@@ -347,6 +348,8 @@ function VideoTab({ clip }) {
         <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
         <p class="hint">Tip: drag the clip directly in the viewer to move it.</p>
       </Section>}
+      {(clip.type === 'video' || clip.type === 'recording') && <TrackSection clip={clip} />}
+      {clip.type !== 'adjustment' && clip.lane > 0 && <FollowSection clip={clip} />}
       {clip.type === 'video' && <StabilizeSection clip={clip} />}
       {(clip.type === 'video' || clip.type === 'image') && (
         <Section title="Crop">
@@ -420,13 +423,112 @@ function RedactTab({ clip }) {
         {pr.shape !== 'full' && <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />}
         {pr.shape !== 'full' && <Param clip={clip} prop="feather" label="Soft edge" min={0} max={200} unit="px" />}
         {pr.shape === 'path' && <p class="hint">Drag the points in the viewer. Double click the outline to add a point, and Option (Alt) click a point to remove it.</p>}
-        {pr.shape !== 'full' && <p class="hint">Drag the box in the viewer to move it, and drag its corners and edges to resize it. Add keyframes to make it follow something that moves.</p>}
+        {pr.shape !== 'full' && <p class="hint">Drag the box in the viewer to move it, and drag its corners and edges to resize it. Add keyframes, or use Tracking below, to make it follow something that moves.</p>}
       </Section>
+      {pr.shape !== 'full' && <FollowSection clip={clip} />}
       <Section title="Fade">
         <PlainNumber clip={clip} prop="vFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
         <PlainNumber clip={clip} prop="vFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
       </Section>
     </>
+  );
+}
+
+const trackBusy = () => tasks.value.find((t) => t.title === 'Tracking motion' && (t.state === 'running' || t.state === 'queued'));
+const trackLabel = (job) => (job ? `Tracking ${Math.round((job.progress || 0) * 100)} %` : 'Track Forward');
+
+// Sporing i videoen: et område følges, og sporet lagres på klippet (se track.js).
+function TrackSection({ clip }) {
+  const job = trackBusy();
+  const tracks = clip.props.tracks || [];
+  return (
+    <Section title="Tracking" data-section="tracking">
+      <Row label="Show area">
+        <Toggle checked={trackArea.value === clip.id} onChange={(v) => (trackArea.value = v ? clip.id : null)} />
+      </Row>
+      <Button class="small" disabled={Boolean(job)} onClick={() => trackForward(clip.id)}>
+        {trackLabel(job)}
+      </Button>
+      {tracks.map((t) => (
+        <Row key={t.id} label={t.name}>
+          <span class="value">{((t.frames.length - 1) / t.fps).toFixed(1)} s</span>
+          <IconButton icon={Trash2} title="Delete track" onClick={() => deleteTrack(clip.id, t.id)} />
+        </Row>
+      ))}
+      <p class="hint">Turn on Show area, put the area over what you want to follow, and press Track Forward. It follows from the playhead to the end of the clip. Then select a clip above this video (a redaction, title or image) and attach it under Follow Track.</p>
+    </Section>
+  );
+}
+
+// Fest klippet til et spor i videoen under: posisjon, rotasjon og eventuelt skala blir nøkkelbilder.
+function FollowSection({ clip }) {
+  const p = project.value;
+  const [rotation, setRotation] = useState(true);
+  const [scale, setScale] = useState(false);
+  const [live, setLive] = useState(true);
+  const [picked, setPicked] = useState('');
+  const options = tracksFor(p, clip);
+  const redact = clip.type === 'redact';
+  const follow = clip.props.follow;
+  const tracked = Boolean(clip.props.trackedKeys?.length);
+  if (!options.length && !redact && !follow && !tracked) return null;
+  const value = options.some((o) => o.value === picked) ? picked : options[0]?.value;
+  const job = trackBusy();
+  const opts = { rotation, scale, live };
+  const current = follow && options.find((o) => o.value === `${follow.clipId}/${follow.trackId}`);
+  return (
+    <Section title="Follow Track" data-section="follow">
+      {follow && (
+        <Row label={current ? `Following ${current.label}` : 'The track is gone'}>
+          <Button class="small" onClick={() => detach(clip.id)}>
+            Detach
+          </Button>
+        </Row>
+      )}
+      {tracked && (
+        <Row label="Tracking keyframes">
+          <Button class="small" onClick={() => removeTrackingKeyframes(clip.id)}>
+            Remove
+          </Button>
+        </Row>
+      )}
+      <Row label="Mode">
+        <Segmented
+          value={live ? 'live' : 'keyframes'}
+          onChange={(v) => setLive(v === 'live')}
+          options={[
+            { value: 'live', label: 'Live', title: 'The clip always follows the track as it is now. Move the clip to change where it sits relative to the object.' },
+            { value: 'keyframes', label: 'Keyframes', title: 'Writes keyframes you can adjust one by one. They do not change if you track again.' },
+          ]}
+        />
+      </Row>
+      {options.length > 0 && (
+        <Row label="Track">
+          <Select value={value} options={options} onChange={setPicked} />
+        </Row>
+      )}
+      <Row label="Rotation">
+        <Toggle checked={rotation} onChange={setRotation} />
+      </Row>
+      <Row label="Scale (experimental)">
+        <Toggle checked={scale} onChange={setScale} />
+      </Row>
+      <div class="row">
+        {options.length > 0 && (
+          <Button class="small" onClick={() => attachToTrack(clip.id, ...value.split('/'), opts)}>
+            Attach
+          </Button>
+        )}
+        {redact && (
+          <Button class="small" disabled={Boolean(job)} onClick={() => trackRedaction(clip.id, opts)}>
+            {trackLabel(job)}
+          </Button>
+        )}
+      </div>
+      <p class="hint">
+        Attach makes this clip follow the track, keeping the place it has at the playhead relative to the object. {live ? 'Live always uses the track as it is now, and moving the clip moves it relative to the object. ' : 'Keyframes writes position and rotation keyframes you can adjust one by one. '}{redact ? 'Track Forward follows what the redaction covers in the video below and attaches it in one step. ' : ''}Scale follows the object as it gets closer or further away.
+      </p>
+    </Section>
   );
 }
 

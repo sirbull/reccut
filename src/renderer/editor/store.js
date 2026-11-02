@@ -188,10 +188,10 @@ let previewBase = null;
 export function previewEdit(mutator) {
   if (transientBase) return;
   previewBase ??= project.value;
-  project.value = withDuration(mirrored(previewBase, produce(previewBase, (d) => void mutator(d))));
+  project.value = restoreEditHistory(withDuration(mirrored(previewBase, produce(previewBase, (d) => void mutator(d)))));
 }
 export function endPreview() {
-  if (previewBase) project.value = previewBase;
+  if (previewBase) project.value = restoreEditHistory(previewBase);
   previewBase = null;
 }
 
@@ -223,9 +223,9 @@ export function beginTransient() {
 }
 export function updateTransient(mutator) {
   if (!transientBase) beginTransient();
-  project.value = withDuration(mirrored(transientBase, produce(transientBase, (d) => {
+  project.value = restoreEditHistory(withDuration(mirrored(transientBase, produce(transientBase, (d) => {
     mutator(d);
-  })));
+  }))));
 }
 export function endTransient(keep = true) {
   if (!transientBase) return;
@@ -233,7 +233,7 @@ export function endTransient(keep = true) {
     project.value = pruneTracks(transientBase, project.value);
     pushUndo(transientBase);
     scheduleSave();
-  } else if (!keep) project.value = transientBase;
+  } else if (!keep) project.value = restoreEditHistory(transientBase);
   transientBase = null;
   pruneSelection();
 }
@@ -338,7 +338,7 @@ export async function saveNow() {
   }
   saveState.value = 'saving';
   try {
-    const p = { ...(previewBase || project.value), modified: Date.now() };
+    const p = { ...restoreEditHistory(previewBase || project.value), modified: Date.now() };
     projectPath.value = await api.saveProject(p, projectPath.value);
     localStorage.setItem('lastProject', projectPath.value);
     saveState.value = 'saved';

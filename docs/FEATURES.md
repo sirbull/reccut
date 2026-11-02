@@ -2,7 +2,7 @@
 
 [Back to README](../README.md)
 
-Record, edit and export video in one app, for Mac, Windows and Linux. The app is split into three tabs, **Record**, **Edit** and **Export** (Cmd 1, 2 and 3), which can be used on their own: you can edit without having recorded, and export or convert files without having edited.
+Record, edit and export video in one app, for Mac, Windows and Linux. The app is split into four tabs, **Record**, **Edit**, **Export** and **Design** (Cmd 1, 2 and 3 open the first three), which can be used on their own: you can edit without having recorded, and export or convert files without having edited.
 
 ## Recording
 
@@ -66,7 +66,7 @@ Record, edit and export video in one app, for Mac, Windows and Linux. The app is
 * **Color labels**: select one or more clips, right-click and choose a color under Color (red, orange, yellow, green, blue, purple, pink, brown or gray), or use Control Option 1 to 9 (Ctrl Shift Alt 1 to 9 on Windows). Control Option 0 removes the color. Applies to both video and audio, including the audio part of an expanded clip.
 * **Track height like in Premiere Pro**: drag the bottom edge of the track header at the far left to make the track taller or shorter. Shift changes all video or audio tracks, double-click resets, and Option (Alt) with scrolling over the track header does the same. The height is saved in the project.
 * **Clips being analyzed** get moving turquoise stripes and a progress bar at the bottom, so you can see the machine is working (stabilization, optimized media and reversed copy). Turquoise is never used as a color label.
-* **Group clips** (Cmd G): any kind of clip can be grouped, including titles, lower thirds, subtitles and redactions together with video and audio. When the video moves, the rest of the group follows, including clips that start before the video. If you group a clip that is already in a group, the groups are merged. A click selects the whole group, Option click selects one clip. Shift Cmd G ungroups. Grouped clips have a link badge.
+* **Group clips** (Cmd G): any kind of clip can be grouped, including titles, lower thirds, subtitles and redactions together with video and audio. When the video moves, the rest of the group follows, including clips that start before the video. If you group a clip that is already in a group, the groups are merged. A click selects the whole group, Option click or double click selects one clip, as if you were inside the group. Shift Cmd G ungroups. Grouped clips have a link badge.
 * **Sync in the library**: select video clips and audio files (everything with Cmd A works fine) and choose Synchronize Audio (Option Cmd G). The audio is merged into the videos as an extra audio track, and the camera audio is turned off but kept. When the clip is dragged to the timeline, it has both audio tracks, and you choose which one to use.
 * **Audio components**: a clip can have several audio tracks (camera audio, external recorder, microphone and system audio). Turn them on and off in the Audio tab, in the right-click menu, or click a track in expanded audio and press V. A track that is off stays in place, grayed out.
 * **V** turns a clip on and off. The clip stays on the timeline, but grayed out.
@@ -81,6 +81,7 @@ Record, edit and export video in one app, for Mac, Windows and Linux. The app is
 * Drag clips, titles and subtitles directly in the viewer to position them
 * **Effects**: Blur, Vignette, Sepia, Black & White, Invert, Hue Shift, Rounded Corners, Drop Shadow and Border
 * **Redaction** of passwords, faces and license plates: Pixelate (Option P), Blur (Option Shift P), Solid and Frosted. The redaction is a separate clip above the video and affects everything below. Move and resize it directly in the viewer, or draw a new area. Shape (rectangle, rounded, ellipse or freeform with points), strength, soft edge, rotation and Redact outside (everything outside the area is hidden). Position, size and the points of a freeform shape can be keyframed, so the redaction can follow something that moves and change shape. Identical in the viewer and in export.
+* **Tracking**: attach a redaction, title, image or video to something that moves in the video below. Put the redaction (or the tracking area, for other clips) over the object, and press Track Forward in the inspector. The object is followed from the playhead to the end of the clip, and the clip gets keyframes for position, rotation and, if you want, scale (experimental, follows the object as it gets closer or further away). Works on video and screen recordings, also when they are moved, scaled or stabilized. The keyframes can be adjusted afterwards, and the result is identical in the viewer and in export.
 * **Full-frame effects**: Blur, Pixelate and Frosted Glass cover the whole frame like an adjustment layer, and a mask drawn with the pen decides where they apply. This gives you full manual control over redaction.
 * **The pen** (Option Cmd M), like in Premiere Pro: click points in the viewer, drag a little for smooth curves, and close with a click on the first point, a double-click or Return. Backspace removes the last point.
 * **Masks** on video, images, recordings, titles and effect clips: rectangle, ellipse and freeform (Option M and Option Shift M). The shape is edited directly in the viewer: drag to move, drag the handles to resize, and in a freeform shape you drag the points, double-click the edge to add a point and Option click to remove one. Multiple masks can be added, subtracted or intersected, and each can be inverted, feathered (Feather), expanded or contracted (Expansion) and given transparency. Everything can be animated with keyframes, including the whole freeform shape (point by point, like rotoscoping). The mask follows the clip when it is moved, scaled or rotated.
@@ -242,3 +243,18 @@ npm run dist:mac # or dist:win, builds an installer
 | `src/worker` | Hidden windows for export and automatic subtitling |
 
 Open source used: Electron, Preact, Lucide (icons), Mediabunny (decoding and encoding with WebCodecs), FFmpeg 9 (muxing, transcoding, analysis; fetched with `node scripts/fetch-ffmpeg.mjs`, which also runs after `npm install`), uiohook-napi (global keystrokes) and Transformers.js with Whisper (subtitling). The FFmpeg binaries are GPL licensed, built without `--enable-nonfree`, and ship with the app together with LICENSE-FFmpeg.txt.
+
+
+## Design
+
+* Several independent image designs in each project, with size presets and custom canvases from 1 to 8192 pixels.
+* Image, text and rectangle layers, with selection, marquee, snapping, resize and rotation handles, opacity, flips, layer order, hiding and locking.
+* Text can be edited on the canvas or in Properties, with system fonts, wrapping, automatic fitting, alignment and uppercase.
+* Place images by file dialog, native drop or clipboard. Copy them into Designs/Assets or reference their original location. These assets stay separate from the Edit media browser. Existing Edit images can be referenced in a design.
+* An independent Video preview captures full quality sequence frames or frames from a source video into Designs/Frames. Captured frames keep their full image and original aspect ratio, fitted inside the design without automatic cropping. Move and scale them to compose the thumbnail. Later timeline edits do not change the captured images.
+* Design has its own Undo and Redo, independent of Edit. Designs save inside the existing project format, with relative asset paths for moved projects.
+* Export PNG, JPEG or WebP, with optional transparency, size and quality controls, and a file size limit. Exports get unique names and use the same renderer as the canvas.
+* Package Project includes design assets and protects media used only by designs. The report lists system fonts that need to be installed on another computer.
+* Cmd/Ctrl 4 remains the Video Inspector shortcut. Design currently opens from the title bar, View menu or command search. Alt Cmd/Ctrl 1 shows a design at actual size; Cmd/Ctrl 1 continues to open Record.
+
+Gradients, advanced shapes and text effects, groups, crop tools, background removal, masks, styles, templates, suggestions and feed previews remain scheduled for later Design phases.

@@ -70,14 +70,20 @@ function sample(img, w, h, x, y) {
 
 /* Hjørnepunkter (Shi-Tomasi), spredt over hele bildet */
 
-function corners(p, max = 220) {
+// rect [x0, y0, x1, y1] begrenser søket til et område (sporing av et objekt).
+function corners(p, max = 220, rect = null) {
   const { w, h, gx, gy } = p;
   const R = 3;
   const score = new Float32Array(w * h);
   let best = 0;
   const margin = 10;
-  for (let y = margin; y < h - margin; y++) {
-    for (let x = margin; x < w - margin; x++) {
+  const X0 = rect ? Math.max(margin, Math.floor(rect[0])) : margin;
+  const Y0 = rect ? Math.max(margin, Math.floor(rect[1])) : margin;
+  const X1 = rect ? Math.min(w - margin, Math.ceil(rect[2])) : w - margin;
+  const Y1 = rect ? Math.min(h - margin, Math.ceil(rect[3])) : h - margin;
+  if (X1 - X0 < 4 || Y1 - Y0 < 4) return [];
+  for (let y = Y0; y < Y1; y++) {
+    for (let x = X0; x < X1; x++) {
       let a = 0;
       let b = 0;
       let c = 0;
@@ -99,16 +105,16 @@ function corners(p, max = 220) {
   if (best <= 0) return [];
   // Et rutenett med de beste punktene i hver rute, så punktene ikke samler seg på ett sted.
   const cols = 10;
-  const rows = Math.max(4, Math.round((10 * h) / w));
-  const cw = (w - margin * 2) / cols;
-  const ch = (h - margin * 2) / rows;
+  const rows = Math.max(4, Math.round((10 * (rect ? Y1 - Y0 : h)) / (rect ? X1 - X0 : w)));
+  const cw = (X1 - X0) / cols;
+  const ch = (Y1 - Y0) / rows;
   const per = Math.max(2, Math.ceil(max / (cols * rows)));
   const pts = [];
   for (let gyi = 0; gyi < rows; gyi++) {
     for (let gxi = 0; gxi < cols; gxi++) {
       const cand = [];
-      const x0 = Math.floor(margin + gxi * cw);
-      const y0 = Math.floor(margin + gyi * ch);
+      const x0 = Math.floor(X0 + gxi * cw);
+      const y0 = Math.floor(Y0 + gyi * ch);
       for (let y = y0; y < y0 + ch; y += 2) for (let x = x0; x < x0 + cw; x += 2) {
         const s = score[y * w + x];
         if (s > best * 0.01) cand.push([s, x, y]);
@@ -294,19 +300,15 @@ function estimate(pa, pb) {
   return { dx: m.tx, dy: m.ty, da: Math.atan2(m.b, m.a), ds: Math.hypot(m.a, m.b), ok: true, points: m.inliers };
 }
 
-/**
- * Analyserer en video. fps settes fast, så bilde nummer i hører til tid i / fps.
- * Gir { version, fps, width, height, motions: [[dx, dy, da, ds, ok], ...] } der motions[i] er
- * bevegelsen fra bilde i - 1 til i (første er 0), og dx og dy er brøkdeler av bredden.
- */
-function analyze(ffmpegPath, file, { fps, duration, onProgress, isCanceled }) {
-  const rate = Math.max(1, Math.min(120, Math.round(fps || 30)));
+// Leser videoen som gråtonebilder og kaller onFrame(gray, w, h) for hvert bilde. Gir onFrame
+// false tilbake, stoppes lesingen. args er FFmpeg-argumentene, med rå gråtonebilder til stdout.
+function readFrames(ffmpegPath, args, width, onFrame, isCanceled) {
   return new Promise((resolve, reject) => {
-    const args = ['-hide_banner', '-nostdin', '-i', file, '-map', '0:v:0', '-an', '-vf', `fps=${rate},scale=${WIDTH}:-2:flags=area,format=gray`, '-f', 'rawvideo', '-'];
     const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-    let w = WIDTH;
+    let w = width;
     let h = 0;
     let err = '';
+    let stopped = false;
     proc.stderr.on('data', (d) => {
       err = (err + d.toString()).slice(-4000);
       if (!h) {
@@ -317,12 +319,10 @@ function analyze(ffmpegPath, file, { fps, duration, onProgress, isCanceled }) {
         }
       }
     });
-    const motions = [[0, 0, 0, 1, 1]];
-    let prev = null;
     let pending = Buffer.alloc(0);
     let frames = 0;
-    const total = Math.max(1, Math.round((duration || 1) * rate));
     proc.stdout.on('data', (chunk) => {
+      if (stopped) return;
       if (isCanceled?.()) {
         proc.kill('SIGKILL');
         return;
@@ -331,25 +331,123 @@ function analyze(ffmpegPath, file, { fps, duration, onProgress, isCanceled }) {
       if (!h) return;
       const size = w * h;
       while (pending.length >= size) {
-        const gray = pending.subarray(0, size);
-        const pyr = pyramid(toFloat(gray, w, h), w, h, 3);
-        if (prev) {
-          const m = estimate(prev, pyr);
-          motions.push([m.dx / w, m.dy / w, m.da, m.ds, m.ok ? 1 : 0]);
-        }
-        prev = pyr;
-        pending = pending.subarray(size);
         frames++;
-        if (frames % 10 === 0) onProgress?.(Math.min(0.99, frames / total));
+        if (onFrame(pending.subarray(0, size), w, h) === false) {
+          stopped = true;
+          proc.kill('SIGKILL');
+          return;
+        }
+        pending = pending.subarray(size);
       }
     });
     proc.on('error', reject);
     proc.on('close', (code) => {
       if (isCanceled?.()) return reject(new Error('Canceled'));
-      if (code !== 0 && frames < 2) return reject(new Error(`FFmpeg could not read the video: ${err.split('\n').slice(-3).join(' ')}`));
-      resolve({ version: 1, fps: rate, width: w, height: h, motions: motions.map((m) => m.map((v) => Math.round(v * 1e6) / 1e6)) });
+      if (!stopped && code !== 0 && frames < 2) return reject(new Error(`FFmpeg could not read the video: ${err.split('\n').slice(-3).join(' ')}`));
+      resolve({ w, h, frames });
     });
   });
 }
 
-module.exports = { analyze, estimate, pyramid, toFloat, corners, ransac, fitSimilarity, WIDTH };
+/**
+ * Analyserer en video. fps settes fast, så bilde nummer i hører til tid i / fps.
+ * Gir { version, fps, width, height, motions: [[dx, dy, da, ds, ok], ...] } der motions[i] er
+ * bevegelsen fra bilde i - 1 til i (første er 0), og dx og dy er brøkdeler av bredden.
+ */
+async function analyze(ffmpegPath, file, { fps, duration, onProgress, isCanceled }) {
+  const rate = Math.max(1, Math.min(120, Math.round(fps || 30)));
+  const total = Math.max(1, Math.round((duration || 1) * rate));
+  const motions = [[0, 0, 0, 1, 1]];
+  let prev = null;
+  let frames = 0;
+  const args = ['-hide_banner', '-nostdin', '-i', file, '-map', '0:v:0', '-an', '-vf', `fps=${rate},scale=${WIDTH}:-2:flags=area,format=gray`, '-f', 'rawvideo', '-'];
+  const { w, h } = await readFrames(ffmpegPath, args, WIDTH, (gray, w, h) => {
+    const pyr = pyramid(toFloat(gray, w, h), w, h, 3);
+    if (prev) {
+      const m = estimate(prev, pyr);
+      motions.push([m.dx / w, m.dy / w, m.da, m.ds, m.ok ? 1 : 0]);
+    }
+    prev = pyr;
+    frames++;
+    if (frames % 10 === 0) onProgress?.(Math.min(0.99, frames / total));
+  }, isCanceled);
+  return { version: 1, fps: rate, width: w, height: h, motions: motions.map((m) => m.map((v) => Math.round(v * 1e6) / 1e6)) };
+}
+
+/* Sporing av ett objekt: et område som følges fra bilde til bilde */
+
+const TRACK_WIDTH = 640;
+
+/**
+ * Ett steg: området r = { cx, cy, w, h, a, s } (piksler i analysebildet, a i radianer, s skala)
+ * flyttes fra bilde a til bilde b. Hjørnepunkter inne i området følges, og RANSAC finner
+ * forflytning, rotasjon og skala rundt midten av området. Gir null når objektet er borte.
+ */
+function trackStep(pa, pb, r) {
+  const hw = (r.w * r.s) / 2;
+  const hh = (r.h * r.s) / 2;
+  const c = Math.cos(r.a);
+  const sn = Math.sin(r.a);
+  const ex = Math.abs(hw * c) + Math.abs(hh * sn);
+  const ey = Math.abs(hw * sn) + Math.abs(hh * c);
+  const pts = corners(pa[0], 120, [r.cx - ex, r.cy - ey, r.cx + ex, r.cy + ey]).filter(([x, y]) => {
+    const dx = x - r.cx;
+    const dy = y - r.cy;
+    return Math.abs(dx * c + dy * sn) <= hw && Math.abs(dy * c - dx * sn) <= hh;
+  });
+  const pairs = [];
+  for (const [x, y] of pts) {
+    const f = trackPoint(pa, pb, x, y);
+    if (!f) continue;
+    const back = trackPoint(pb, pa, f[0], f[1]);
+    if (!back || Math.hypot(back[0] - x, back[1] - y) > 1) continue;
+    pairs.push([x, y, f[0], f[1]]);
+  }
+  const m = ransac(pairs, r.cx, r.cy, 1.5);
+  if (m && m.inliers >= 5) {
+    // ponytail: skalaen begrenses, så støy i små områder ikke får området til å vokse uten stopp.
+    const s = Math.max(0.2, Math.min(5, r.s * Math.hypot(m.a, m.b)));
+    return { ...r, cx: r.cx + m.tx, cy: r.cy + m.ty, a: r.a + Math.atan2(m.b, m.a), s };
+  }
+  // Få punkter (lite detaljer): bare forflytningen, som medianen av punktene.
+  if (pairs.length < 3) return null;
+  const med = (k) => pairs.map((p) => p[k + 2] - p[k]).sort((u, v) => u - v)[pairs.length >> 1];
+  return { ...r, cx: r.cx + med(0), cy: r.cy + med(1) };
+}
+
+/**
+ * Følger et område i videoen fra start til end (sekunder i filen). box = { cx, cy, w, h, a } er
+ * området ved start, i brøkdeler av bredden og a i radianer. Gir { fps, start, frames } der
+ * frames[i] = [cx, cy, a, s, ok] hører til tid start + i / fps. Stopper når objektet har vært
+ * borte et halvt sekund.
+ */
+// ponytail: følger fra bilde til bilde, så små feil hoper seg opp over lange klipp. Sammenlign
+// med det første bildet av området hvis det blir et problem.
+async function track(ffmpegPath, file, { start, end, fps, box, onProgress, isCanceled }) {
+  const rate = Math.max(1, Math.min(60, Math.round(fps || 30)));
+  const total = Math.max(1, Math.round((end - start) * rate));
+  const frames = [];
+  let prev = null;
+  let r = null;
+  let lost = 0;
+  const args = ['-hide_banner', '-nostdin', '-ss', String(Math.max(0, start)), '-i', file, '-t', String(Math.max(0.05, end - start)), '-map', '0:v:0', '-an', '-vf', `fps=${rate},scale=${TRACK_WIDTH}:-2:flags=area,format=gray`, '-f', 'rawvideo', '-'];
+  await readFrames(ffmpegPath, args, TRACK_WIDTH, (gray, w, h) => {
+    const pyr = pyramid(toFloat(gray, w, h), w, h, 4);
+    if (!r) r = { cx: box.cx * w, cy: box.cy * w, w: box.w * w, h: box.h * w, a: box.a || 0, s: 1 };
+    else {
+      const next = trackStep(prev, pyr, r);
+      if (next) {
+        r = next;
+        lost = 0;
+      } else lost++;
+    }
+    prev = pyr;
+    frames.push([r.cx / w, r.cy / w, r.a, r.s, lost ? 0 : 1].map((v) => Math.round(v * 1e6) / 1e6));
+    if (frames.length % 10 === 0) onProgress?.(Math.min(0.99, frames.length / total));
+    if (lost > rate / 2) return false;
+  }, isCanceled);
+  while (frames.length && !frames[frames.length - 1][4]) frames.pop();
+  return { fps: rate, start, frames, lost: lost > 0 };
+}
+
+module.exports = { analyze, track, trackStep, estimate, pyramid, toFloat, corners, ransac, fitSimilarity, WIDTH };
