@@ -64,7 +64,7 @@ Choose **Project History** ({{key:history}}) in the File menu to see the copies 
     summary: 'Reccut works offline and can tell you about new versions on GitHub.',
     keywords: 'update new version download github release offline',
     body: `
-Reccut works fully offline. When the computer is online, Reccut checks once a day whether a new version has been released on GitHub. If there is one, you can download the installer for your computer to the Downloads folder, and see what is new. Nothing is installed until you quit Reccut and open the file yourself. Your projects and settings are kept.
+Reccut works fully offline. When the computer is online, Reccut checks once a day whether a new version has been released on GitHub, including while the app stays open. A small update dialog shows the new version and release notes. Choose **Download** to save the installer for your computer in Downloads, or **GitHub** to visit the release page. You can continue working while it downloads, choose **Later**, or **Skip This Version**. Nothing is installed until you quit Reccut and open the file yourself. Your projects and settings are kept.
 
 Choose **Check for Updates** in the Help menu to check right away. Turn off the automatic check under Settings, General.
 

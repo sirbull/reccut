@@ -58,6 +58,8 @@ import { helpOpen, paletteOpen } from './registry.js';
 import wordmark from '../../assets/reccut-wordmark.svg';
 import { isTyping, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } from './keyboard.js';
 import { installFileDrop } from './fileDrop.js';
+import { UpdateDialog } from './UpdateDialog.jsx';
+import { startUpdateChecks } from './updates.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -327,9 +329,22 @@ function App() {
 
   useEffect(() => {
     engine.initSources();
-    loadInitialProject().then(checkRecovery);
+    (async () => {
+      try {
+        await api.startupStage?.('project');
+        await loadInitialProject();
+        await api.startupStage?.('recovery');
+        await checkRecovery();
+      } catch (err) {
+        console.error('Could not restore the workspace', err);
+        toast(`Could not restore the workspace: ${err.message}`, { kind: 'error' });
+      } finally {
+        // Let Preact commit the restored project and paint before replacing the splash.
+        requestAnimationFrame(() => requestAnimationFrame(() => api.startupStage?.('ready')));
+      }
+    })();
     // Nye versjoner sjekkes litt etter start, så det ikke sinker oppstarten.
-    setTimeout(() => import('./updates.js').then((m) => m.checkForUpdates(false)), 8000);
+    const stopUpdateChecks = startUpdateChecks(() => !engine.recording.value && !dialogOwnsKeyboard());
     const offShortcut = api.onShortcut((a) => {
       // Tray/control-bar clicks are explicit actions. Keyboard callbacks must also
       // pass the renderer check in case focus changed before native IPC arrived.
@@ -349,6 +364,7 @@ function App() {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keydown', onKeyDownCapture, true);
     return () => {
+      stopUpdateChecks();
       window.removeEventListener('keydown', onKeyDownCapture, true);
       offShortcut();
       offScope();
@@ -388,6 +404,7 @@ function App() {
       {helpOpen.value && <HelpCenter />}
       {paletteOpen.value && <CommandPalette />}
       {recoverList.value.length > 0 && <RecoverDialog />}
+      <UpdateDialog />
       <Toasts />
       {fileHover && <div class="file-drop-hint" role="status"><FolderOpen size={24} /><span>Drop files to import</span></div>}
     </div>

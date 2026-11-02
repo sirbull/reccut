@@ -25,6 +25,7 @@ const ff = require('./ffmpeg');
 const { finalizeRecordingStream } = require('./recording');
 const jobs = require('./jobs');
 const about = require('./about');
+const { createSplashWindow } = require('./splash');
 const media = require('./media');
 const sequence = require('./sequence');
 const decoders = require('./decoders');
@@ -104,6 +105,8 @@ function serveMedia(request) {
 }
 
 let win = null;
+let splash = null;
+let startupComplete = false;
 const helpWindow = require('./help').createHelpWindow({ BrowserWindow, ipcMain, getMainWindow: () => win, buildDir: path.join(__dirname, '..', '..', 'build') });
 let saveFlushed = false;
 let selectedScreenId = null;
@@ -148,6 +151,22 @@ function migrateFromOldName() {
 migrateFromOldName();
 
 function createWindow() {
+  let painted = false;
+  let workspaceReady = false;
+  const showWorkspace = () => {
+    if (startupComplete || !painted || !workspaceReady || !win || win.isDestroyed()) return;
+    // maximize() can show a hidden window, so wait until the workspace is ready.
+    win.maximize();
+    win.show();
+    splash?.destroy();
+    splash = null;
+    startupComplete = true;
+  };
+  const failStartup = (message) => {
+    if (startupComplete) return;
+    dialog.showErrorBox('Could not start Reccut', message);
+    app.exit(1);
+  };
   win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -158,6 +177,7 @@ function createWindow() {
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 14, y: 16 },
     autoHideMenuBar: true,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -166,7 +186,23 @@ function createWindow() {
       backgroundThrottling: false,
     },
   });
-  win.loadFile(path.join(__dirname, '..', '..', 'build', 'index.html'));
+  win.once('ready-to-show', () => { painted = true; showWorkspace(); });
+  ipcMain.handle('startup:stage', async (event, stage) => {
+    if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame) return;
+    if (stage === 'project') splash?.setStatus('Restoring project…');
+    if (stage === 'recovery') splash?.setStatus('Checking unfinished recordings…');
+    if (stage === 'ready') {
+      splash?.setStatus('Ready — click outside to continue');
+      await splash?.waitForDismissal();
+      workspaceReady = true;
+      showWorkspace();
+    }
+  });
+  win.webContents.on('did-fail-load', (_event, code, description, _url, isMainFrame) => {
+    if (isMainFrame && code !== -3) failStartup(description);
+  });
+  win.webContents.on('render-process-gone', (_event, details) => failStartup(`The workspace stopped loading (${details.reason}).`));
+  win.loadFile(path.join(__dirname, '..', '..', 'build', 'index.html')).catch((err) => failStartup(err.message));
   win.on('focus', () => { pipPreview.hide(); registerShortcuts(); });
   win.on('blur', registerShortcuts);
   const resetKeyboardScope = () => {
@@ -198,6 +234,7 @@ function createWindow() {
     }
   });
   win.on('closed', () => {
+    ipcMain.removeHandler('startup:stage');
     helpWindow.destroy();
     win = null;
     pipPreview.destroy();
@@ -385,9 +422,18 @@ ipcMain.handle('app:flushed', async () => {
 });
 // Nye versjoner på GitHub. Uten nett gir det bare en feil som grensesnittet ignorerer.
 ipcMain.handle('updates:check', () => updates.check());
-ipcMain.handle('updates:download', (_e, asset) => {
-  const { id, done } = jobs.add({ kind: 'download', title: `Downloading ${asset.name}`, queue: 'light', run: (ctx) => updates.download(asset, (p) => ctx.progress(p)) });
-  done.then((file) => send('updates:downloaded', { id, file })).catch((err) => send('updates:downloaded', { id, error: err.message }));
+let updateDownloadId = null;
+ipcMain.handle('updates:download', (_e, requested) => {
+  if (updateDownloadId !== null) return updateDownloadId;
+  const asset = updates.resolveAsset(requested);
+  const { id, done } = jobs.add({ kind: 'download', title: `Downloading ${asset.name}`, queue: 'light', run: (ctx) => {
+    const ctrl = new AbortController();
+    ctx.setCancel(() => ctrl.abort(new Error('Download canceled.')));
+    return updates.download(asset, (p) => ctx.progress(p), ctrl.signal);
+  } });
+  updateDownloadId = id;
+  done.then((file) => send('updates:downloaded', { id, file }), (err) => send('updates:downloaded', { id, error: err.message }))
+    .finally(() => { updateDownloadId = null; });
   return id;
 });
 ipcMain.handle('app:version', () => app.getVersion());
@@ -924,8 +970,7 @@ app.on('second-instance', (_e, argv) => {
   openProjectFromOS(argv.find((a) => a.endsWith('.reccut') || a.endsWith('.reccut-plugin')));
   if (win) {
     if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
+    if (startupComplete) { win.show(); win.focus(); }
   }
 });
 app.on('open-file', (e, file) => {
@@ -943,7 +988,16 @@ ipcMain.handle('project:pendingOpen', () => {
   return f;
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  splash = createSplashWindow({ BrowserWindow, version: app.getVersion() });
+  try {
+    await splash.ready;
+  } catch (err) {
+    console.error(err);
+    splash.destroy();
+    splash = null;
+  }
+  splash?.setStatus('Loading workspace…');
   // Ferdigbygd app får ikonet fra electron-builder; under utvikling viser Docken ellers Electron-ikonet.
   if (!app.isPackaged) app.dock?.setIcon(path.join(__dirname, '../../assets/icon-mac.png'));
   protocol.handle('media', serveMedia);
@@ -978,6 +1032,7 @@ app.whenReady().then(() => {
 });
 
 app.on('will-quit', () => {
+  splash?.destroy();
   area.closeFrame();
   pipPreview.destroy();
   recordUI.destroy();
@@ -986,7 +1041,8 @@ app.on('will-quit', () => {
   jobs.destroyWorkers();
 });
 
-app.on('window-all-closed', () => app.quit());
+// A failed splash may be destroyed before the workspace window is created.
+app.on('window-all-closed', () => { if (!splash) app.quit(); });
 
 // Only the main app frame can configure credentials or launch a local processor.
 function extensionHandler(channel, handler) {

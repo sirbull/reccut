@@ -1925,6 +1925,15 @@ input[type='color'].color::-webkit-color-swatch {
   overflow-y: auto;
   padding: 16px 18px;
 }
+.update-dialog .update-heading { margin: 0 0 6px; font-size: 19px; font-weight: 600; }
+.update-dialog p { line-height: 1.5; }
+.update-notes { margin: 18px 0; }
+.update-notes summary { cursor: pointer; color: var(--text-2); }
+.update-notes pre { max-height: 160px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; user-select: text; }
+.update-dialog progress { width: 100%; height: 8px; accent-color: var(--accent); }
+.update-error { color: var(--red); user-select: text; }
+.update-skip { padding: 0; border: 0; background: none; color: var(--text-2); font: inherit; font-size: 12px; cursor: pointer; }
+.update-skip:hover { text-decoration: underline; }
 .modal > footer {
   display: flex;
   align-items: center;

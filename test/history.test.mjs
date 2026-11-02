@@ -42,7 +42,7 @@ test('versjoner sammenlignes riktig, og riktig installasjonsfil velges', () => {
   assert.ok(newer('v1.0.0', '0.2.0'));
   assert.ok(!newer('0.2.0', '0.2.0'));
   assert.ok(!newer('0.1.9', '0.2.0'));
-  const assets = [{ name: 'Reccut-0.3.0.dmg' }, { name: 'Reccut Setup 0.3.0.exe' }, { name: 'Reccut-0.3.0.AppImage' }];
+  const assets = [{ name: 'Reccut-0.3.0.dmg' }, { name: 'Reccut-0.3.0-arm64.dmg' }, { name: 'Reccut Setup 0.3.0.exe' }, { name: 'Reccut Setup 0.3.0-arm64.exe' }, { name: 'Reccut-0.3.0.AppImage' }, { name: 'Reccut-0.3.0-arm64.AppImage' }];
   const a = pickAsset(assets);
   assert.ok(a && (process.platform === 'linux' ? /AppImage/.test(a.name) : true));
 });
