@@ -1408,7 +1408,7 @@ const BUILTIN_FONTS = [
 const COMMON_FONTS = ['Arial', 'Helvetica Neue', 'Verdana', 'Trebuchet MS', 'Georgia', 'Times New Roman', 'Courier New', 'Impact', 'Futura', 'Avenir Next', 'Gill Sans', 'Segoe UI', 'Calibri', 'Roboto', 'Inter'];
 const systemFonts = signal(null);
 
-async function loadSystemFonts() {
+export async function loadSystemFonts() {
   if (systemFonts.value) return;
   try {
     const list = await window.queryLocalFonts();

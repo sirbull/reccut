@@ -2,9 +2,45 @@
 // ## heading, - bullets, numbered steps, ![caption](file), **bold**, {{key:id}}, [[run:id|label]], [[article:id|label]].
 import { WORKFLOWS } from './workflows.js';
 import { CATALOG_ARTICLES } from './catalog.js';
-export const SECTIONS = ['Getting Started', 'Recording', 'Media', 'Editing', 'Audio', 'Look', 'AI and Plugins', 'Export', 'Reference'];
+export const SECTIONS = ['Getting Started', 'Recording', 'Media', 'Editing', 'Audio', 'Look', 'AI and Plugins', 'Export', 'Design', 'Reference'];
 
 export const ARTICLES = [
+  {
+    id: 'design', section: 'Design', title: 'Design Thumbnails and Images',
+    summary: 'Make layered images from video frames, photos, text and rectangles, then export or package them.',
+    keywords: 'thumbnail image design canvas text layers picture photo png jpeg webp',
+    body: `Open [[run:roomDesign|Design]] in the title bar. Choose New Design for a size preset or enter a custom size from 1 to 8192 pixels. You can keep several designs in a project. Double click a design name to rename it; duplicate and delete buttons are below its preview.
+
+## Add pictures
+
+Place Image opens a photo or a flattened PSD or SVG. Choose Copy into project to keep it in Designs/Assets, or Leave in place to reference the original. Remember this choice skips the question next time. Design pictures stay separate from the Edit media browser. From Project references images already imported in Edit.
+
+The Video tab has its own preview and scrubber. Use This Frame saves a full quality PNG of the sequence or selected source video into Designs/Frames. Changing the timeline afterwards does not change this image. Arrow keys step one frame in the Video panel; Shift and arrows step one second. An empty or audio only timeline cannot supply a video frame.
+
+Drop files to place them. Cmd/Ctrl V pastes an image from the system clipboard. A missing image has a warning in Layers: click it to locate the file before exporting.
+
+## Edit layers
+
+V selects, T adds text, U draws a rectangle and H pans. Double click text to edit it directly; Escape finishes editing. Properties also has a text field and the system font picker. Fit text in box shrinks long titles, down to 6 pixels. At the minimum size, extremely long text can still be clipped.
+
+Click or Shift click to select layers, or drag on empty canvas to make a selection box. Drag the selection to move it; guides snap to edges and centers. Hold Cmd/Ctrl to turn snapping off. Arrow keys move one pixel; Shift and arrows move ten. Backspace deletes; Cmd/Ctrl D duplicates.
+
+Drag handles to resize and use the handle above the box to rotate. Images keep their aspect ratio by default; Shift frees it. For other layers Shift locks aspect. Alt resizes from the center. Shift snaps rotation to 15 degrees. Space and drag, or scrolling, pans. Cmd/Ctrl and scrolling zooms, Cmd/Ctrl 0 fits, and Alt Cmd/Ctrl 1 shows actual size. Cmd/Ctrl 1 still opens Record.
+
+Layers are shown top first. Drag rows to change their order; use eye and lock buttons to hide or protect a layer. Double click a layer name to rename it. Right click for more layer actions. Selecting a locked layer lets you unlock it, but does not allow transforms.
+
+## Save and export
+
+Design changes save with the project and have their own Undo and Redo. Undo in Design keeps the timeline intact, and Undo in Edit keeps designs intact. Opening a project clears both histories.
+
+Export Design saves PNG, JPEG or WebP using the same drawing as the canvas. PNG and WebP can omit the canvas background for transparency. JPEG uses an opaque background. Choose a width or scale and an optional file size limit in MB. Zero disables the limit. If a file cannot fit, reduce its width or raise the limit. Existing files get numbered names.
+
+Package Project includes design assets and image media used by designs, even when Remove unused media is enabled. Fonts are listed in the package report and must be installed on the destination computer.
+
+Styles, gradients, masks, background removal, design templates and automatic suggestions are planned for later phases.`,
+    see: ['projects', 'package', 'export-frame'],
+  },
+
   {
     id: 'welcome',
     section: 'Getting Started',
@@ -12,11 +48,12 @@ export const ARTICLES = [
     summary: 'Your illustrated, searchable guide to recording, editing, AI tools and delivery. Available offline inside Reccut.',
     keywords: 'overview rooms start',
     body: `
-Reccut has three rooms, shown at the top of the window. Switch between them with {{key:roomRecord}}, {{key:roomEdit}} and {{key:roomExport}}.
+Reccut has four rooms, shown at the top of the window. Switch between them with {{key:roomRecord}}, {{key:roomEdit}} and {{key:roomExport}}.
 
 - **Record** captures your screen, camera and microphone, with keystrokes and cursor zoom.
 - **Edit** is a magnetic timeline editor with the tools and shortcuts from Final Cut Pro.
 - **Export** turns the project, or any file, into the format you need.
+- **Design** makes thumbnails and images with separate layers.
 
 ![The Into the Wild nature project: media on the left, viewer in the centre, inspector on the right and the timeline below.](overview.jpg)
 

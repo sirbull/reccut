@@ -20,6 +20,7 @@ import { hasMotion, setMotion } from '../../shared/stabilize.js';
 import { CAMERA_LOGS, hasLut, setLut } from '../../shared/grade.js';
 import { couldNotRead } from '../../shared/formats.js';
 import { prefs } from '../prefs.js';
+import { normalizeDesignProject } from '../../shared/design.js';
 
 // Objektene i prosjektet endres bare gjennom commit, så de trenger ikke fryses.
 setAutoFreeze(true);
@@ -28,6 +29,7 @@ const api = window.api;
 
 export const room = signal('record');
 export const project = signal(newProject());
+export const projectEpoch = signal(0);
 // Hver versjon av prosjektet endres aldri etter at den er laget, så tidsindeksen kan gjenbrukes.
 effect(() => sealProject(project.value));
 export const projectPath = signal(null);
@@ -236,12 +238,18 @@ export function endTransient(keep = true) {
   pruneSelection();
 }
 
+function restoreEditHistory(restored) {
+  const current = project.value;
+  if (restored.designs === current.designs && restored.designAssets === current.designAssets) return restored;
+  return { ...restored, designs: current.designs, designAssets: current.designAssets };
+}
+
 export function undo() {
   endPreview();
   if (!undoStack.length) return;
   const prevId = currentSequence(project.value).id;
   redoStack.push(project.value);
-  project.value = undoStack.pop();
+  project.value = restoreEditHistory(undoStack.pop());
   historyVersion.value++;
   if (currentSequence(project.value).id !== prevId) afterSequenceChange(prevId);
   pruneSelection();
@@ -253,7 +261,7 @@ export function redo() {
   if (!redoStack.length) return;
   const prevId = currentSequence(project.value).id;
   undoStack.push(project.value);
-  project.value = redoStack.pop();
+  project.value = restoreEditHistory(redoStack.pop());
   historyVersion.value++;
   if (currentSequence(project.value).id !== prevId) afterSequenceChange(prevId);
   pruneSelection();
@@ -341,6 +349,10 @@ export async function saveNow() {
 }
 
 export function setProject(p, path = null) {
+  p = normalizeDesignProject(p);
+  transientBase = null;
+  previewBase = null;
+  projectEpoch.value++;
   playing.value = false;
   sourceMediaId.value = null;
   browserPlayhead.value = null;

@@ -670,6 +670,30 @@ ipcMain.handle('file:writeBinary', async (_e, file, data) => {
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   await fs.promises.writeFile(file, Buffer.from(data));
 });
+ipcMain.handle('design:writeImage', async (_e, file, data) => {
+  await fs.promises.mkdir(path.dirname(file), { recursive: true });
+  const ext = path.extname(file), stem = file.slice(0, -ext.length);
+  let n = 1;
+  while (true) {
+    const target = n === 1 ? file : `${stem} ${n}${ext}`;
+    let handle;
+    try {
+      handle = await fs.promises.open(target, 'wx');
+    } catch (err) {
+      if (err.code === 'EEXIST') { n++; continue; }
+      throw err;
+    }
+    try {
+      await handle.writeFile(Buffer.from(data));
+      await handle.close();
+      return target;
+    } catch (err) {
+      await handle.close().catch(() => {});
+      await fs.promises.unlink(target).catch(() => {});
+      throw err;
+    }
+  }
+});
 ipcMain.handle('media:analyzeMotion', (_e, m) => {
   media.scheduleMotion(m, notifyAnalyzed);
 });
@@ -790,7 +814,7 @@ ipcMain.handle('dialog:openProject', async () => {
 });
 
 // Kopierer filer inn i prosjektmappen. Filer som allerede ligger der, brukes som de er.
-ipcMain.handle('media:copyIn', (_e, files, dir) => {
+ipcMain.handle('media:copyIn', (_e, files, dir, options = {}) => {
   const { done } = jobs.add({
     kind: 'copy',
     title: files.length > 1 ? `Copying ${files.length} files to the project` : `Copying ${path.basename(files[0])} to the project`,
@@ -810,7 +834,7 @@ ipcMain.handle('media:copyIn', (_e, files, dir) => {
         const stem = path.basename(file, ext);
         let target = path.join(dir, path.basename(file));
         let n = 2;
-        while (fs.existsSync(target) && fs.statSync(target).size !== sizes[i]) target = path.join(dir, `${stem} ${n++}${ext}`);
+        while (fs.existsSync(target) && (options.unique || fs.statSync(target).size !== sizes[i])) target = path.join(dir, `${stem} ${n++}${ext}`);
         if (!fs.existsSync(target)) {
           const tmp = target + '.part';
           await new Promise((resolve, reject) => {
@@ -889,8 +913,8 @@ ipcMain.handle('export:start', (_e, payload) => {
   done.finally(() => reservedOutputs.delete(payload.settings.output)).catch(() => {});
   done.then(
     (file) => {
-      send('export:done', { id, file });
-      if (Notification.isSupported() && !win?.isFocused()) {
+      send('export:done', { id, file, quiet: Boolean(payload.settings.quiet) });
+      if (!payload.settings.quiet && Notification.isSupported() && !win?.isFocused()) {
         new Notification({ title: 'Export finished', body: path.basename(file) }).show();
       }
     },

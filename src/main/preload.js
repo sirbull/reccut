@@ -103,6 +103,7 @@ contextBridge.exposeInMainWorld('api', {
   psdLayers: invoke('layers:psd'),
   psdExtract: invoke('layers:psdExtract'),
   writeBinary: invoke('file:writeBinary'),
+  writeDesignImage: invoke('design:writeImage'),
   relinkMedia: invoke('media:relink'),
   exists: invoke('media:exists'),
   listRecordings: invoke('media:recordings'),

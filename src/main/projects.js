@@ -8,7 +8,7 @@ const fs = require('fs');
 const history = require('./history');
 const path = require('path');
 
-const SUBDIRS = { media: 'Media', recordings: 'Recordings', optimized: 'Optimized Media', exports: 'Exports' };
+const SUBDIRS = { media: 'Media', recordings: 'Recordings', optimized: 'Optimized Media', exports: 'Exports', designs: 'Designs' };
 
 function legacyDir(base) {
   return path.join(base, 'Projects');
@@ -98,6 +98,9 @@ function fixOldPaths(text) {
 const LINK_FIELDS = ['path', 'proxy', 'optimized', 'reversed', 'motion', 'wave'];
 
 function addRelative(project, dir) {
+  project.designs ||= {};
+  project.designAssets ||= {};
+  for (const a of Object.values(project.designAssets)) if (a.path) a.rel = path.relative(dir, a.path);
   for (const m of Object.values(project.media || {})) {
     if (m.path) m.rel = path.relative(dir, m.path);
     for (const st of Object.values(m.streams || {})) {
@@ -113,6 +116,12 @@ function resolveRelative(project, dir) {
     const cand = path.resolve(dir, rel.split(/[\\/]/).join(path.sep));
     return fs.existsSync(cand) ? cand : abs;
   };
+  project.designs ||= {};
+  project.designAssets ||= {};
+  for (const a of Object.values(project.designAssets)) {
+    a.path = fix(a.path, a.rel);
+    a.missing = !a.path || !fs.existsSync(a.path);
+  }
   for (const m of Object.values(project.media || {})) {
     m.path = fix(m.path, m.rel);
     for (const st of Object.values(m.streams || {})) {

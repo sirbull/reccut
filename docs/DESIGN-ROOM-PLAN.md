@@ -15,7 +15,7 @@ This plan is written for implementing agents. Follow it task by task. Do not red
 3. No new npm dependencies, except the background removal model files in phase 0. `@huggingface/transformers`, `immer`, `preact`, `@preact/signals` and `lucide-preact` are already installed.
 4. Keep the code style of the file you are in: short comments, plain names, no classes where the codebase uses functions, Preact function components, signals for state, `immer` `produce` for project changes.
 5. New code comments in English. Existing Norwegian comments stay as they are.
-6. User-visible text in English, short, plain sentences. Never use em-dashes in UI text, help text or docs. Use a colon, comma or full stop instead.
+6. User-visible text in English, short, plain sentences. In the Design room, names of tools, panels, commands and settings follow the Photoshop terms in section 5.8. Never use em-dashes in UI text, help text or docs. Use a colon, comma or full stop instead.
 7. Pure logic goes in `src/shared/design*.js` with no DOM access, so it can be tested with `node --test`. Functions that need text measurement take a `measure(text, font)` argument (same pattern as `captionLayout(project, clip, measure)` in `src/shared/render.js`).
 8. Every task that adds logic adds or extends a test in `test/`. Run `npm test` before you finish a task. All tests must pass, including the existing ones.
 9. Run `npm run build` before you finish a task. It must succeed without errors.
@@ -77,6 +77,7 @@ Generative AI fill, curved text on a path, a Bezier pen tool, a history panel, s
 | D9 | Placeholder title text in templates and suggestions is the project name. AI title suggestions are an optional button that only works when the AI agent is configured, and it says that the transcript is sent to that service. |
 | D10 | Plain images opened without video become a new design in the open project. |
 | D11 | Rendering uses Canvas 2D only. One function draws a design, used by the editor canvas, thumbnails and export. |
+| D12 | Design has its own shortcut set, like a separate program inside Reccut. Design commands use `rooms: DESIGN` only, so they may reuse keys that Edit uses (T, V, B, ⌘G, arrows and so on) without conflict. `conflictsFor()` in `registry.js` already compares keys per room. Only the room switch commands (Record, Edit, Export, Design) and app level commands (`rooms: ALL`: save, open, settings, Quick Search) are shared. Edit shortcuts never fire in Design and Design shortcuts never fire in Edit. |
 
 ---
 
@@ -298,7 +299,7 @@ Folder layout in a project folder:
   3. Add an `Asset` with `origin: 'placed'`.
   4. Add an image layer that fits the design (`contain`, centered).
   5. All in one `designCommit`.
-- The place dialog has a small choice "Copy into project" / "Leave in place", defaulting to `prefs.importCopy`, and a checkbox "Remember this choice" that writes `importCopy`.
+- The choice is made with the two commands **Place Embedded…** (copy) and **Place Linked…** (leave in place), as in Photoshop (section 5.8). Dropping files on the canvas uses the default from `prefs.importCopy`; holding Alt while dropping does the opposite. The Layers panel shows a small link icon on linked image layers.
 - Unsupported or unreadable files: a toast naming the file, nothing is added.
 - `getImage(layer)` returns a cached `ImageBitmap` (or `HTMLImageElement`) for `layer.asset` or `layer.media`. Cache key: absolute path plus file modified time if available, otherwise path. Large images (longest side over 4096) get a downscaled preview bitmap for the editor canvas. Export always uses the full image.
 - Missing files: an image layer whose file cannot be loaded draws a gray checkerboard with "Missing file" and shows a warning in the layer panel with a "Locate…" button (`api.openFileDialog`), which updates the asset path for every layer using it.
@@ -324,6 +325,50 @@ Per layer, in this order:
 7. `clip: true`: the layer is composited with `source-atop` against an accumulation of the layer directly below. Implement by drawing the base layer and its clipped layers on a group canvas first, then compositing that group with the base layer's blend and opacity.
 
 Same function in the editor canvas, the template thumbnails and export, so they always match. Export draws at `scale = 1` on a canvas the exact design size (or `OffscreenCanvas`) and encodes with `convertToBlob` / `toBlob`.
+
+### 5.8 Language and terminology (applies to every task)
+
+Everything in the Design room is in English: labels, buttons, menus, tooltips, toasts, errors, help text, layer default names and template names. Use the names Photoshop uses, so it feels familiar. The data model keeps the field names from section 5.2; only the labels the user sees follow this table. When a task below uses another word for one of these things, the label in this table wins.
+
+| Thing | Label in the UI | Photoshop-style shortcut (Design room only, see D12) |
+|---|---|---|
+| Layer list | **Layers** panel | |
+| Right panel | **Properties** panel | |
+| Select and move | **Move Tool** | V |
+| Text | **Type Tool**; text layers are **type layers** | T |
+| Shapes | **Rectangle Tool**, **Ellipse Tool**, **Polygon Tool**, **Line Tool**, **Custom Shape Tool** (star, arrow) | U, Shift+U cycles |
+| Crop | **Crop Tool** | C |
+| Pan / zoom | **Hand Tool** / **Zoom Tool** | H (and hold Space) / Z |
+| Mask painting | **Brush Tool** / **Eraser Tool** | B / E |
+| Pick a color from the canvas | **Eyedropper Tool** | I |
+| Swap black and white while painting a mask | Switch Foreground and Background Colors | X |
+| Transform handles | **Free Transform** | CmdOrCtrl+T |
+| Duplicate | **Duplicate Layer** | CmdOrCtrl+J |
+| Select all / none | **Select All** / **Deselect** | CmdOrCtrl+A / CmdOrCtrl+D |
+| Groups | **Group Layers** / **Ungroup Layers** | CmdOrCtrl+G / Shift+CmdOrCtrl+G |
+| Clip to the layer below | **Create Clipping Mask** / **Release Clipping Mask** | Alt+CmdOrCtrl+G |
+| Arrange | **Bring to Front**, **Bring Forward**, **Send Backward**, **Send to Back** | Shift+CmdOrCtrl+], CmdOrCtrl+], CmdOrCtrl+[, Shift+CmdOrCtrl+[ |
+| Shape mask (`layer.mask`) | **Vector Mask** (Add Vector Mask, Delete Vector Mask, Invert, Feather) | |
+| Background removal result (`layer.cutout`) | **Layer Mask**, made by **Remove Background**; painting it is "Edit Layer Mask"; Feather and **Shift Edge** as in Select and Mask | |
+| Effects (`shadows`, `stroke`, `outline`) | **Layer Style** with **Drop Shadow**, **Outer Glow**, **Stroke**. The sticker outline (`outline`) is shown as **Stroke** with Position: Outside on image layers. | |
+| Shadow fields | **Blend Mode, Opacity, Angle, Distance, Spread, Size** (store `x, y` in the model, show Angle and Distance; Size is `blur`) | |
+| Stroke fields | **Size, Position (Outside, Inside, Center), Fill Type (Color, Gradient)** | |
+| Fill | **Color Fill** / **Gradient Fill**; gradient styles **Linear, Radial, Freeform** | |
+| Blend modes | Normal, Darken, Multiply, Color Burn, Lighten, Screen, Color Dodge, Overlay, Soft Light, Hard Light, Difference, Exclusion, Hue, Saturation, Color, Luminosity (Photoshop order, with separators between the groups) | |
+| Opacity | **Opacity** (%) | |
+| Image adjustments | **Brightness/Contrast**, **Hue/Saturation**, **Black & White**, **Gaussian Blur** | |
+| Text settings | **Character** (font family, font style/weight, size, **Tracking**, **Leading**, All Caps) and **Paragraph** (alignment) sections | |
+| Placing files | **Place Embedded…** (copies the file into the project, D4) and **Place Linked…** (leaves it where it is). A linked file that cannot be found shows a **Relink…** button. | |
+| Saved styles | **Styles** panel, **New Style…** | |
+| Saved colors | **Swatches** | |
+| Templates | **Templates** (in the New Design dialog, like presets in New Document) | |
+| Design size | **Canvas Size…** (keeps content size, adds or crops space) and **Image Size…** (scales everything) | Alt+CmdOrCtrl+C / Alt+CmdOrCtrl+I |
+| Rotate / flip the whole design | **Rotate Canvas** 90° Clockwise / Counter Clockwise, **Flip Canvas Horizontal / Vertical** | |
+| Export | **Export As…** and **Quick Export as PNG** | Alt+Shift+CmdOrCtrl+W for Export As |
+| Zoom | **Fit on Screen**, **100%**, Zoom In, Zoom Out | CmdOrCtrl+0, CmdOrCtrl+1, CmdOrCtrl+=, CmdOrCtrl+- |
+| Guides | **Smart Guides**, **Snap** | |
+
+Every shortcut in this table must pass `conflictsFor()` against Design and `ALL` commands. Check this especially for the Cmd/Ctrl ones. New Design gets no shortcut, because CmdOrCtrl+N is New Project for the whole app. If a key in this table conflicts with an `ALL` command, leave it out and write it in the log. Do not move an `ALL` command.
 
 ### 5.7 Project format compatibility
 
@@ -420,6 +465,7 @@ Files: `src/renderer/app.jsx`, `src/renderer/registry.js`, `src/renderer/design/
 4. `design/store.js`: signals `currentDesignId`, `selection` (array of layer ids), `tool` (`'select' | 'text' | 'shape' | 'hand'`), `zoom` (`'fit'` or a number), plus `designCommit`, design transient helpers, `designUndo`, `designRedo`, `canDesignUndo`, `canDesignRedo` (section 5.4). When the project changes identity (another project opened), reset stacks, selection and `currentDesignId`.
 5. `editor/store.js` `undo()` and `redo()`: keep current `designs` and `designAssets` (section 5.4). Test it.
 6. `registry.js` `undo`/`redo` commands route by room.
+6b. Keep Design separate from Edit (D12). Today `runCommand()` in `registry.js` (line 407) switches to Edit when a command does not belong to the current room. Menu accelerators (`register: true`) go through `handleMenu` in `app.jsx` and then `runCommand`. Without a change, pressing an Edit shortcut such as CmdOrCtrl+C or CmdOrCtrl+E in Design would throw the user into Edit. Change `runCommand` so that when `room.value === 'design'` and the command's rooms do not include `'design'`, it does nothing and returns `false`. Record and Export keep today's behaviour. Registered commands that Design needs as well (Undo, Redo, Cut, Copy, Paste, Select All, Delete) get `rooms` that include `'design'` and route by room inside `run`. Test: with `room` set to `'design'`, `runCommand('tool:blade')` returns `false` and `room` stays `'design'`; `runCommand('undo')` calls the design undo.
 7. `DesignRoom.jsx`: layout with three columns (left panel 260 px, canvas, right panel 300 px) and the layer panel at the bottom of the right column. Empty state when the project has no designs: big "New Design" button and the size template grid.
 8. Check `commandForEvent` usage: commands without `rooms` default to `EDIT`, so timeline shortcuts do not fire in Design. Verify that Backspace, arrows, Space and letter keys do nothing in Design yet.
 
@@ -449,7 +495,7 @@ Files: `src/renderer/design/Canvas.jsx`, `src/shared/designRender.js` (first ver
 6. Snapping: to design edges and center, and to other layers' edges and centers, within 6 screen pixels. Show the guide lines while dragging. Hold Cmd/Ctrl to disable snapping.
 7. Each drag is one undo step (design transient).
 8. Zoom: Cmd/Ctrl + scroll, Cmd/Ctrl + `+`/`-`, Cmd/Ctrl+0 fit, Cmd/Ctrl+1 100%. Pan: Space + drag, or scroll. Register these as commands with `rooms: DESIGN`.
-9. Delete/Backspace deletes the selection. Cmd/Ctrl+D duplicates. Cmd/Ctrl+A selects all unlocked layers. Escape clears selection.
+9. Delete/Backspace deletes the selection. CmdOrCtrl+J is Duplicate Layer. CmdOrCtrl+A is Select All (unlocked layers). CmdOrCtrl+D and Escape are Deselect. CmdOrCtrl+T shows Free Transform handles on the selection (they show on select anyway; the command exists for familiarity). Labels and keys follow section 5.8.
 
 Tests (`test/design.test.mjs`): resize math for a rotated layer (dragging the bottom right handle of a 30° rotated layer keeps the opposite corner fixed in design space), aspect lock, center resize, rotation snapping, snapping to the nearest candidate within the threshold. Put this math in `design.js` as pure functions (`resizeLayer(layer, handle, dx, dy, { keepAspect, fromCenter })`, `snapMove(...)`) and test them there.
 
@@ -479,8 +525,8 @@ Acceptance: picking a frame in a 1080p project for a 1280×720 design gives a sh
 
 Files: `assets.js`, `DesignRoom.jsx`, `Canvas.jsx`.
 
-1. "Place Image…" button and command (Shift+CmdOrCtrl+P in Design, check for conflicts): `api.openMediaDialog` or `api.openFileDialog` with image filters (png, jpg, jpeg, webp, gif, bmp, svg, heic if supported by Chromium on the platform, psd).
-2. Copy choice (section 5.5) in a small `Modal` before placing, unless "Remember this choice" was set.
+1. Two commands and a split button, **Place Embedded…** (copies into the project) and **Place Linked…** (leaves the file where it is), as in section 5.8. The main part of the button uses the default from `prefs.importCopy`. No default shortcuts. Both open `api.openMediaDialog` or `api.openFileDialog` with image filters (png, jpg, jpeg, webp, gif, bmp, svg, heic if supported by Chromium on the platform, psd).
+2. Copy or link follows the command used (section 5.5). There is no extra dialog.
 3. Drop files on the canvas: place at the drop point. Use `src/renderer/fileDrop.js` helpers to get paths.
 4. Paste an image from the clipboard (Cmd/Ctrl+V when the canvas has focus and the clipboard holds an image): write it to `Designs/Assets/Pasted <date>.png` with `api.writeBinary` and place it (always copied).
 5. "From Project" tab in the left panel: image media from Edit, click to add as `layer.media` (D5). Video media shows "Use the Video tab to pick a frame".
@@ -663,7 +709,10 @@ Make a classic tutorial thumbnail: frame background darkened (brightness -0.3), 
 ### Task 3.7: Shortcuts and help
 
 1. All Design commands in `registry.js` with `rooms: DESIGN`, `menu` entries in a new "Design" menu or under existing menus, and `help: 'design'`.
-2. Tool shortcuts: V select, T text, U shape (cycles shapes with Shift+U), H hand, C crop. Check they do not collide with Design commands.
+2. Tool shortcuts: V select, T text, U shape (cycles shapes with Shift+U), H hand, C crop. Check they do not collide with other Design commands. Collisions with Edit commands are fine (D12).
+3. Shortcuts with Cmd/Ctrl are menu accelerators when `register: true`, and menu accelerators work in every room. Design commands with Cmd/Ctrl keys that Edit also uses (for example CmdOrCtrl+G, CmdOrCtrl+D, CmdOrCtrl+]) must therefore NOT use `register: true`; they are handled by `commandForEvent` with the room check. The exceptions are Undo, Redo, Copy, Cut, Paste, Select All and Delete, which stay registered and route by room inside `run` (section 5.4, task 1.2 step 6b). Use the keys and labels from section 5.8.
+4. The keyboard shortcut editor (Settings and `src/renderer/keyboard.js`) shows Design commands as their own group "Design", so users see the two shortcut sets separately. Customizing a Design shortcut only checks for conflicts among Design and `ALL` commands (already the behaviour of `conflictsFor`). Test: assigning T to a Design command reports no conflict with an Edit command on T; assigning CmdOrCtrl+S reports the conflict with Save.
+5. Add every Design shortcut to the help article and to Quick Search (they appear automatically when they are in `COMMANDS` with a `help` id).
 
 ### Phase 3 unusual use
 

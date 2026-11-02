@@ -313,6 +313,8 @@ export function newProject(name = 'Untitled Project') {
     fps: 30,
     autoFormat: true,
     media: {},
+    designs: {},
+    designAssets: {},
     clips: {},
     primary: [],
     markers: [],

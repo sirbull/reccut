@@ -48,7 +48,8 @@ export async function exportCaptionsOnly(p, { range, captions, name, dir }) {
   toast('Captions saved.', { actions: [{ label: api.platform === 'darwin' ? 'Reveal' : 'Show', onClick: () => api.reveal(file) }] });
 }
 
-api.onExportDone(({ file }) => {
+api.onExportDone(({ file, quiet }) => {
+  if (quiet) return;
   toast(`Export finished: ${file.split(/[\\/]/).pop()}`, {
     kind: 'success',
     timeout: 12000,
