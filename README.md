@@ -10,6 +10,8 @@
   &nbsp;·&nbsp;
   <a href="#install">Install</a>
   &nbsp;·&nbsp;
+  <a href="#is-it-safe">Is it safe?</a>
+  &nbsp;·&nbsp;
   <a href="#build-from-source">Build from source</a>
   &nbsp;·&nbsp;
   <a href="docs/FEATURES.md">Full feature list</a>
@@ -171,8 +173,22 @@ Reccut's source code is available under the **MIT licence**. You can build it yo
 
 Download the latest version from [Releases](https://github.com/sirbull/reccut/releases/latest): `.dmg` for Mac (Apple Silicon and Intel), `.exe` for Windows and `.AppImage` for Linux (x64).
 
-The app is not code-signed yet:
+### Is it safe?
 
+Yes. Reccut is not malware. Windows and macOS warn about it because the installer is not code-signed yet. A code-signing certificate costs money every year, and without one the system doesn't know who made the file. The warning does not mean that anything harmful was found.
+
+You don't have to take our word for it:
+
+- **All the source code is public** in this repository. Anyone can read it, search it or have it reviewed.
+- **The installers are built by GitHub**, not on a private computer. The [build workflow](.github/workflows/build.yml) builds them from the public code, and the build logs are visible under [Actions](https://github.com/sirbull/reccut/actions).
+- **You can build it yourself** from the source code. See [Build from source](#build-from-source).
+
+### Installing despite the warning
+
+- **Windows:**
+  1. If your browser says the file *isn't commonly downloaded*, choose **Keep** (in Edge: **⋯ → Keep → Show more → Keep anyway**).
+  2. Open `Reccut.Setup.x.y.z.exe`. When the blue window says **Windows protected your PC**, click **More info** and then **Run anyway**.
+  3. Reccut installs and starts by itself.
 - **Mac:** the first time you open Reccut, macOS says it can't verify the app. Click **Done**, open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Reccut, then confirm with your password.
 
   If macOS instead says the app is **damaged**, run this in Terminal and open Reccut again:
@@ -184,7 +200,6 @@ The app is not code-signed yet:
   If Terminal answers *Operation not permitted*, delete Reccut from Applications, run `xattr -d com.apple.quarantine ~/Downloads/Reccut-*.dmg`, and install again from the `.dmg`.
 
   Allow access to camera, microphone and screen recording. Keystrokes and cursor zoom also need access under Privacy & Security → Accessibility. Restart the app after granting access.
-- **Windows:** if SmartScreen warns you, choose **More info** and **Run anyway**.
 - **Linux:** run `chmod +x Reccut-*.AppImage` and start the file. Ubuntu 22.04 and newer need `sudo apt install libfuse2`. If it closes right away with a sandbox error (Ubuntu 24.04), start it with `--no-sandbox`. Keystrokes and cursor zoom need an X11 session. System audio is not recorded on Linux, and HEVC clips are converted before playback.
 
 Reccut checks GitHub for new versions once a day and can download the installer for you. Nothing is installed until you open it yourself, and the check can be turned off in Settings.
