@@ -1,137 +1,137 @@
-# Keying, bakgrunnsfjerning og AI i Reccut
+# Keying, background removal and AI in Reccut
 
-## Det som er implementert
+## What is implemented
 
-I Effects-fanen på et video-, bilde- eller opptaksklipp finnes **Keying & effect stack**. På opptak velger du kamera eller skjerm før du legger til en effekt.
+The Effects tab on a video, image or recording clip has **Keying & effect stack**. On recordings, choose camera or screen before you add an effect.
 
-- **Remove solid background** leser kildebildet ved spillhodet, finner den vanligste kantfargen og legger på en fargekeyer.
-- **Remove static background** leser ni kildebilder fra klippet. En median per piksel estimerer en bakgrunnsreferanse, og en differansekeyer sammenligner hvert bilde med den.
-- **Color key** kan også legges til manuelt, med valgfri bakgrunnsfarge.
-- **Background reference key** lar deg fange et rent bakgrunnsbilde ved spillhodet. Motivet må være ute av bildet når referansen tas.
-- **Luma key** fjerner mørke områder, eller lyse områder med Invert matte.
+- **Remove solid background** reads the source frame at the playhead, finds the most common edge color and applies a color keyer.
+- **Remove static background** reads nine source frames from the clip. A per-pixel median estimates a background reference, and a difference keyer compares each frame with it.
+- **Color key** can also be added manually, with any background color.
+- **Background reference key** lets you capture a clean background frame at the playhead. The subject must be out of frame when the reference is taken.
+- **Luma key** removes dark areas, or light areas with Invert matte.
 
-**Advanced** har nå også **Recover fine detail** for delvis gjennomsiktige hårstrå og fine kanter, **Preserve source shadows** for skygger i opptaket, **Shadow color range** for skyggens fargetoleranse, **Recover edge color** for bakgrunnsfarge i kantpiksler og **Matte gamma** for mellomtonene i alfamasken. De nye recovery-kontrollene starter på 0, slik at eksisterende prosjekter beholder resultatet. Gamma starter på 1. Skyggebevaring trenger en lys, uskygget Screen color-prøve. Motiver med samme farge som bakgrunnen kan kreve en maske.
+**Advanced** now also has **Recover fine detail** for semi-transparent hair and fine edges, **Preserve source shadows** for shadows in the footage, **Shadow color range** for the shadow's color tolerance, **Recover edge color** for background color in edge pixels and **Matte gamma** for the midtones of the alpha matte. The new recovery controls start at 0, so existing projects keep their result. Gamma starts at 1. Shadow preservation needs a light, unshadowed Screen color sample. Subjects with the same color as the background may need a mask.
 
-**Advanced** åpner ellers spillfjerning for fargekeyeren, matte black/white, krymping eller utvidelse av kanten, feather, invertering og mattevisning. Positiv kantverdi krymper forgrunnen; negativ utvider. Husk å bytte fra mattevisning til Composite før eksport: visningen er del av effekten.
+**Advanced** otherwise opens spill removal for the color keyer, matte black/white, edge shrink or expand, feather, invert and matte view. A positive edge value shrinks the foreground; a negative value expands it. Remember to switch from matte view to Composite before exporting: the view is part of the effect.
 
-Effektene kjøres ovenfra og ned. Du kan legge til samme effekt flere ganger, slå av, duplisere, fjerne og flytte hver instans. Blur, Saturation, Contrast og Opacity kan også legges i denne stakken. Stakken kjøres før klippets eksisterende fargekorrigering og øvrige klippeffekter. Masker kan brukes etterpå. Stack-parametrene er foreløpig statiske; de eksisterende klippeffektene beholder nøkkelbildestøtten sin.
+The effects run from top to bottom. You can add the same effect several times, and turn off, duplicate, remove and move each instance. Blur, Saturation, Contrast and Opacity can also be added to this stack. The stack runs before the clip's existing color correction and other clip effects. Masks can be applied afterwards. The stack parameters are static for now; the existing clip effects keep their keyframe support.
 
-**Drop Shadow** bruker den synlige formen etter keying, beskjæring og masker. Vignett og fargejusteringer bevarer gjennomsiktigheten, og lagene under vises gjennom de fjernede områdene.
+**Drop Shadow** uses the visible shape after keying, cropping and masks. Vignette and color adjustments preserve transparency, and the layers below show through the removed areas.
 
-Bruk **×** ved effektnavnet for å slette en video- eller lydeffekt. Justerte effekter viser en advarsel med **Don’t show this again**. Valget lagres i appinnstillingene og kan tilbakestilles under **Settings → General → Projects → Warn before removing adjusted effects**. Sletting med alle innstillinger og nøkkelbilder kan angres i ett steg.
+Use **×** next to the effect name to delete a video or audio effect. Adjusted effects show a warning with **Don’t show this again**. The choice is saved in the app settings and can be reset under **Settings → General → Projects → Warn before removing adjusted effects**. Deleting an effect with all its settings and keyframes can be undone in one step.
 
-Forhåndsvisning og eksport bruker samme effektkode. WebGL2 brukes når det er tilgjengelig; CPU-reserven gir samme matteberegning, men er tregere på store bilder. Keyeren bruker ingen tidsbasert utjevning som kan etterlate spor fra forrige bilde. Det er ikke en garanti for perfekte kanter, hår eller bevegelsesuskarphet.
+Preview and export use the same effect code. WebGL2 is used when available; the CPU fallback produces the same matte computation, but is slower on large images. The keyer uses no temporal smoothing that could leave traces from the previous frame. This is not a guarantee of perfect edges, hair or motion blur.
 
-Bakgrunnsanalyse krever fast kamera, stabil belysning og at bakgrunnen er synlig i de fleste prøvene ved hver piksel. En person som står stille gjennom hele opptaket kan bli del av referansen. Et rent referansebilde gir bedre kontroll. Dette er ikke semantisk personsegmentering, kamera-sporing eller AI-basert rekonstruksjon av forgrunnsfarger. Referansen lagres i prosjektet og følger med i prosjektpakking.
+Background analysis requires a locked-off camera, stable lighting and that the background is visible in most of the samples at each pixel. A person standing still throughout the recording can become part of the reference. A clean reference frame gives better control. This is not semantic person segmentation, camera tracking or AI-based reconstruction of foreground colors. The reference is saved in the project and included in project packaging.
 
-## Eksterne prosessorer og CorridorKey
+## External processors and CorridorKey
 
-Under **Settings → Plugins** kan du installere en lokal prosessor fra en JSON-manifest. Et eksempel finnes i [examples/local-processor.json](examples/local-processor.json). Bytt executable og argumentene til din lokalt installerte adapter. Manifesten gjennomgås i grensesnittet før installasjon.
+Under **Settings → Plugins** you can install a local processor from a JSON manifest. There is an example in [examples/local-processor.json](examples/local-processor.json). Replace the executable and arguments with your locally installed adapter. The manifest is reviewed in the interface before installation.
 
-En prosessor er et separat program, ikke JavaScript som lastes fra prosjektfilen. Reccut starter programmet uten et shell, med hvert argument som et separat argument. `{input}` erstattes med kildefilen, og `{output}` med en ny resultatfil i Reccut/Processed. Prosessorer kjører med brukerens rettigheter, så installer bare verktøy du stoler på.
+A processor is a separate program, not JavaScript loaded from the project file. Reccut starts the program without a shell, with each argument passed as a separate argument. `{input}` is replaced with the source file, and `{output}` with a new result file in Reccut/Processed. Processors run with the user's permissions, so only install tools you trust.
 
-Kontrakten er:
+The contract is:
 
-1. Les hele kildefilen fra `{input}` og skriv én spillbar video til `{output}`.
-2. Behold kildevarighet, bildefrekvens og bildetidspunkter. Reccut kontrollerer varigheten før resultatet brukes, men kan ikke bevise at en ekstern prosessor har bevart hvert bildetidspunkt.
-3. For keying må resultatet ha alfakanal, for eksempel ProRes 4444 MOV eller VP9 med alfa i WebM. En vanlig H.264 MP4 har ikke alfa.
-4. Avslutt med status 0 ved suksess, og skriv feilmeldinger til stderr ved feil.
+1. Read the whole source file from `{input}` and write one playable video to `{output}`.
+2. Keep the source duration, frame rate and frame timestamps. Reccut checks the duration before the result is used, but cannot prove that an external processor has preserved every frame timestamp.
+3. For keying, the result must have an alpha channel, for example ProRes 4444 MOV or VP9 with alpha in WebM. A regular H.264 MP4 has no alpha.
+4. Exit with status 0 on success, and write error messages to stderr on failure.
 
-Velg prosessoren under **Effects → External processing** på et vanlig videoklipp. Resultatet brukes bare på det klippet. Originalmediet beholdes i biblioteket, original lyd beholdes, og kildebyttet kan angres. Bakgrunnsoppgaven kan avbrytes. Ved feil eller endret kilde underveis blir ikke klippet byttet automatisk.
+Choose the processor under **Effects → External processing** on a regular video clip. The result is only used on that clip. The original media is kept in the library, the original audio is kept, and the source swap can be undone. The background task can be canceled. If it fails or the source changes along the way, the clip is not swapped automatically.
 
-Det er foreløpig **ingen native OFX-/Adobe-host eller ferdig CorridorKey-adapter**. Installasjon av en OFX-bundle er derfor ikke nok. Den kjøpte CorridorKey-appen kan brukes separat; importer deretter en video med alfa. Et lokalt CLI-verktøy eller den åpne modellen kan kobles til gjennom en adapter som oppfyller kontrakten over. Modeller, Python/GPU-miljø og eventuelle lisenser installeres separat; ingen modeller er distribuert med Reccut.
+There is currently **no native OFX/Adobe host or ready-made CorridorKey adapter**. Installing an OFX bundle is therefore not enough. The purchased CorridorKey app can be used separately; then import a video with alpha. A local CLI tool or the open model can be connected through an adapter that fulfils the contract above. Models, the Python/GPU environment and any licenses are installed separately; no models are distributed with Reccut.
 
-Kontroller versjonen du bruker mot [CorridorKeys offisielle dokumentasjon](https://help.corridorkey.com/docs/getting-started/), [runtime-prosjektets CLI-dokumentasjon](https://github.com/alexandremendoncaalvaro/CorridorKey-Runtime#cli-usage) og [modellprosjektet](https://github.com/nikopueringer/CorridorKey2.0). Disse har forskjellige inndata- og utdataopplegg. Eksempelmanifesten er et adapterformat, ikke en bekreftelse på at en bestemt CorridorKey-versjon er testet med Reccut.
+Check the version you use against [CorridorKey's official documentation](https://help.corridorkey.com/docs/getting-started/), [the runtime project's CLI documentation](https://github.com/alexandremendoncaalvaro/CorridorKey-Runtime#cli-usage) and [the model project](https://github.com/nikopueringer/CorridorKey2.0). These have different input and output layouts. The example manifest is an adapter format, not confirmation that a specific CorridorKey version has been tested with Reccut.
 
-## Redigeringsagenten
+## The editing agent
 
-### Modeller og leverandører
+### Models and providers
 
-Under **Settings → AI** velger du OpenAI, Anthropic Claude, Google Gemini, Mistral, OpenRouter, Groq, xAI eller DeepSeek. Du kan også velge en lokal server: Ollama, LM Studio eller llama.cpp. **Other server or gateway** tar alle OpenAI- eller Anthropic-kompatible adresser, for eksempel vLLM, Jan, LocalAI, LiteLLM eller en maskin i det lokale nettet. **Fetch models** henter modell-ID-ene fra serveren. Modellen må støtte verktøykall. **Model can see images** slås av for modeller uten bildeinndata.
+Under **Settings → AI** you choose OpenAI, Anthropic Claude, Google Gemini, Mistral, OpenRouter, Groq, xAI or DeepSeek. You can also choose a local server: Ollama, LM Studio or llama.cpp. **Other server or gateway** accepts any OpenAI- or Anthropic-compatible address, for example vLLM, Jan, LocalAI, LiteLLM or a machine on the local network. **Fetch models** fetches the model IDs from the server. The model must support tool calls. Turn off **Model can see images** for models without image input.
 
-Alle unntatt Anthropic bruker Chat Completions-protokollen. HTTP er bare tillatt mot denne maskinen og private nettverksadresser. Andre adresser krever HTTPS. Lokale servere trenger ingen nøkkel. Nøkler krypteres med safeStorage og ligger bare i hovedprosessen, aldri i prosjektet eller i grensesnittet.
+All except Anthropic use the Chat Completions protocol. HTTP is only allowed to this machine and private network addresses. Other addresses require HTTPS. Local servers need no key. Keys are encrypted with safeStorage and live only in the main process, never in the project or in the interface.
 
-### Slik virker den
+### How it works
 
-Agenten er en løkke: modellen får et verktøyregister, kaller verktøy, får svarene og fortsetter til den svarer uten verktøykall, men høyst 40 steg.
+The agent is a loop: the model gets a tool registry, calls tools, gets the results and continues until it answers without a tool call, but at most 40 steps.
 
-- **Verktøyregisteret** ligger i [src/shared/aiEdits.js](../src/shared/aiEdits.js). Hvert verktøy har navn, beskrivelse, JSON-skjema og koden som gjør endringen. Det er altså én kilde for dokumentasjon, validering og handling. Redigeringen bruker de samme funksjonene som tidslinjen (ops.js), og hvert verktøykall blir ett angresteg.
-- **Lese:** `get_timeline`, `list_media`.
-- **Redigere:** `add_media_to_timeline`, `split_clips`, `delete_clips`, `trim_clip`, `move_clip`, `add_title`, `add_captions`, `set_clip_properties` (mange klipp i ett angresteg, med alle fargekontroller og fargehjulene), `add_video_effect`, `add_transition`.
-- **Kjøretid** ([src/renderer/agent.js](../src/renderer/agent.js)):
-  - `transcribe_speech` kjører Whisper lokalt på lyden på tidslinjen og gir tale med tidskoder uten å endre undertekstene. Resultatet gjenbrukes til lyden endres.
-  - `analyze_look` måler lysstyrke, svart- og hvitpunkt, klipping, metning og fargestikk i kildebildene til hvert klipp, og i vedlagte referansebilder.
-  - `preview_frames` rendrer tidslinjen med samme motor som eksporten og måler det ferdig korrigerte bildet. Bildet sendes også til modellen når den kan se bilder.
-  - `search_help` søker i hjelpeartiklene, og `show_help` åpner en artikkel for brukeren.
-  - `find_commands` og `run_command` gir tilgang til alle kommandoene i appen, fra samme register som menyene, hurtigtastene og Find Command ([src/renderer/registry.js](../src/renderer/registry.js)). Nye kommandoer blir dermed automatisk tilgjengelige for agenten, med meny, hurtigtast og beskrivelse.
-  - `select` velger klipp og flytter spillhodet, slik brukeren gjør før en kommando.
-  - `get_settings` og `change_settings` leser og endrer innstillingene, opptaksinnstillingene og hurtigtastene.
-- **Alle egenskaper:** `get_clip` viser alt i inspektøren. `set_clip_properties` og `set_project_settings` godtar alle enkle verdier som finnes fra før, med samme type (`checkPatch`). Nye egenskaper i inspektøren blir derfor tilgjengelige uten egen kode. Kjente verdier har i tillegg faste grenser.
-  - `import_media` importerer filer brukeren har oppgitt.
-- **Håndboken** er systeminstruksjonen i agent.js. Den forklarer den magnetiske tidslinjen, forskjellen på kildetid og tidslinjetid, spor, undertekster, opptak og lydnivåer, og gir en arbeidsflyt for automatisk redigering. Detaljer slås opp med `search_help`, slik at hjelpen og agenten ikke sier forskjellige ting.
-- **Hovedprosessen** ([src/main/extensions.js](../src/main/extensions.js)) oversetter den nøytrale meldingshistorikken til Anthropic Messages eller Chat Completions, med verktøy og bilder. Chat Completions tar bare imot bilder i brukermeldinger, så de legges etter verktøysvarene.
+- **The tool registry** lives in [src/shared/aiEdits.js](../src/shared/aiEdits.js). Each tool has a name, description, JSON schema and the code that makes the change. So there is one source for documentation, validation and action. Editing uses the same functions as the timeline (ops.js), and each tool call becomes one undo step.
+- **Read:** `get_timeline`, `list_media`.
+- **Edit:** `add_media_to_timeline`, `split_clips`, `delete_clips`, `trim_clip`, `move_clip`, `add_title`, `add_captions`, `set_clip_properties` (many clips in one undo step, with all color controls and the color wheels), `add_video_effect`, `add_transition`.
+- **Runtime** ([src/renderer/agent.js](../src/renderer/agent.js)):
+  - `transcribe_speech` runs Whisper locally on the timeline audio and returns speech with timecodes without changing the subtitles. The result is reused until the audio changes.
+  - `analyze_look` measures brightness, black and white point, clipping, saturation and color cast in each clip's source frames, and in attached reference images.
+  - `preview_frames` renders the timeline with the same engine as export and measures the finished, corrected frame. The frame is also sent to the model when it can see images.
+  - `search_help` searches the help articles, and `show_help` opens an article for the user.
+  - `find_commands` and `run_command` give access to every command in the app, from the same registry as the menus, shortcuts and Find Command ([src/renderer/registry.js](../src/renderer/registry.js)). New commands therefore become available to the agent automatically, with menu, shortcut and description.
+  - `select` selects clips and moves the playhead, as the user does before a command.
+  - `get_settings` and `change_settings` read and change the settings, the recording settings and the shortcuts.
+- **All properties:** `get_clip` shows everything in the inspector. `set_clip_properties` and `set_project_settings` accept every simple value that already exists, with the same type (`checkPatch`). New properties in the inspector therefore become available without extra code. Known values also have fixed limits.
+  - `import_media` imports files the user has specified.
+- **The handbook** is the system prompt in agent.js. It explains the magnetic timeline, the difference between source time and timeline time, tracks, subtitles, recordings and audio levels, and gives a workflow for automatic editing. Details are looked up with `search_help`, so the help and the agent do not say different things.
+- **The main process** ([src/main/extensions.js](../src/main/extensions.js)) translates the neutral message history into Anthropic Messages or Chat Completions, with tools and images. Chat Completions only accepts images in user messages, so they are placed after the tool results.
 
-Agenten redigerer uten å spørre ved hvert kutt. **Undo this request** angrer alle endringene fra siste forespørsel, så lenge prosjektet ikke er endret etterpå. **Stop** avbryter mellom to steg.
+The agent edits without asking at every cut. **Undo this request** undoes all changes from the last request, as long as the project has not been changed since. **Stop** interrupts between two steps.
 
-### Råmateriale: talking head og skjermopptak
+### Raw footage: talking head and screen recordings
 
-Agenten jobber som en redaktør med en assistent som har logget materialet: først tekst og tall, bilder bare der det trengs.
+The agent works like an editor with an assistant who has logged the footage: text and numbers first, images only where needed.
 
-- **Tale:** Whisper kjører med ordtider (modellene `whisper-*_timestamped`). Pauser måles fra lydnivået ([src/shared/speech.js](../src/shared/speech.js)). Whisper strekker ofte siste ord inn i en pause, så ordkantene flyttes til pausene. Undertekstene fra «Generate captions» bruker de samme ordtidene og blir dermed også mer presise. `transcribe_speech` kan transkribere ett medieklipp i kildetid før det ligger på tidslinjen.
-- **Skjerm:** `inspect_media` gir sceneskift (ffmpeg, nedskalert til 160 px og 4 bilder per sekund, så også lange opptak går raskt), hendelsesloggen fra Reccut-opptak (klikk, hurtigtaster og zoom, aldri vanlig skriving) og et oversiktsark med bilder og tidskoder. Agenten ser først på hele filen og deretter på kortere utsnitt.
-- **Bygging:** `build_sequence` legger hele planen i ett angresteg. Gode tagninger legges i hovedsporet. Skjermklipp kobles til det segmentet der de forklares, med forskyvning og eventuell økt hastighet. Titler plasseres på samme måte. Kutt som havner i en målt pause, får beholde opptil 0,15 sekunder stillhet, slik at overgangene høres naturlige ut.
-- **Egne titler:** `create_title_template` lager animerte maler i det samme formatet som de innebygde (.reccut-title). Formatbeskrivelsen og et eksempel hentes fra koden. Malene lagres i prosjektet og vises i Titles-biblioteket.
+- **Speech:** Whisper runs with word timings (the `whisper-*_timestamped` models). Pauses are measured from the audio level ([src/shared/speech.js](../src/shared/speech.js)). Whisper often stretches the last word into a pause, so the word edges are moved to the pauses. The subtitles from "Generate captions" use the same word timings and are therefore also more precise. `transcribe_speech` can transcribe one media clip in source time before it is on the timeline.
+- **Screen:** `inspect_media` returns scene changes (ffmpeg, scaled down to 160 px and 4 frames per second, so even long recordings are fast), the event log from Reccut recordings (clicks, shortcuts and zoom, never regular typing) and a contact sheet with frames and timecodes. The agent looks at the whole file first and then at shorter sections.
+- **Building:** `build_sequence` lays down the whole plan in one undo step. Good takes go in the primary storyline. Screen clips are connected to the segment where they are explained, with an offset and optionally increased speed. Titles are placed the same way. Cuts that land in a measured pause keep up to 0.15 seconds of silence, so the transitions sound natural.
+- **Custom titles:** `create_title_template` makes animated templates in the same format as the built-in ones (.reccut-title). The format description and an example are taken from the code. The templates are saved in the project and shown in the Titles library.
 
-### Fortelling, grafikk, KI-video og programtillegg
+### Story, graphics, AI video and plugins
 
-- **Historien:** `get_story` og `set_story` lagrer brief, papirklipp, notater per medieklipp og vedlagte dokumenter i prosjektet. Dokumenter lagt ved i chatten (PDF, Typeloom, Word, Final Draft, Fountain, RTF og tekst) leses i hovedprosessen og lagres i historien. PDF leses med pdf.js: linjer og avstander rekonstrueres fra tekstposisjonene, slik at rollenavn og replikkblokker i et manus holdes adskilt. Skannede PDF-er uten tekst gir en tydelig feilmelding. Typeloom-prosjekter (`.typeloom`, en zip med `binder.json` og TipTap-dokumenter) skrives om til manus i Fountain-stil. Binderrekkefølgen, mapper som overskrifter, korktavle-sammendrag som `= `-linjer og manuselementene beholdes, mens dokumenter i papirkurven og researchfiler utelates. Mangler manus eller brief, skal agenten spørre før den klipper, eller foreslå en struktur.
-- **Manus mot tagninger:** `match_script` ([src/shared/speech.js](../src/shared/speech.js)) sammenstiller hver replikk med ordene i transkripsjonene, som ScriptSync. I et filmmanus matches bare replikkene, med rollen som sier dem. Et manus regnes som filmmanus når et rollenavn går igjen eller det finnes sceneoverskrifter. I et voiceover-manus matches alle setninger. Den finner alle tagninger, også flere i samme fil, med samsvar og antall nøl. Sceneoverskrifter, rollenavn og regi hoppes over.
-- **Animert grafikk:** `create_motion_graphic` lar agenten skrive en tegnefunksjon for canvas. Den kjøres i et skjult vindu i en egen, tom økt uten nettverk, filer og Node, med tidsgrense per bilde ([src/main/graphics.js](../src/main/graphics.js)). Bildene kodes til H.264, eller til ProRes 4444 med alfakanal for grafikk over video. Klippet importeres, og agenten får fire forhåndsbilder og eventuelle kodefeil tilbake.
-- **KI-video:** Higgsfield følger med som innebygd programtillegg (**Higgsfield AI Video**). Det står øverst i Plugins-listen, kan ikke fjernes, settes opp i Settings → Plugins og har et eget verktøyvindu med beskrivelse, lengde, startbilde fra spillhodet og plassering ved spillhodet. Agentens `generate_video` bruker samme API. Nøkkel-ID og hemmelighet lagres kryptert. Startbilder lastes opp til en forhåndssignert adresse uten nøkkelen. Forespørselen sendes med Idempotency-Key, og status sjekkes med økende ventetid til den er ferdig. Prisen vises og må godkjennes før hver generering (kan slås av). Modellene velges med endpoint-ID i innstillingene. Det er testet med simulert API, ikke med en ekte konto.
-- **Programtillegg:** `propose_processor` lager et programtillegg: et FFmpeg-kall eller et Python-skript med eget ikon (SVG) og innstillinger (tall, valg eller av/på), som settes inn i argumentene som `{param:id}`. Utkastet vises i chatten med hele skriptet, og ingenting installeres eller kjøres før brukeren velger **Install processor**. Deretter åpnes det som et verktøyvindu.
-  - **Plugins**-knappen i verktøylinjen lister installerte programtillegg. Hvert åpnes i et lite, flyttbart vindu over resten av appen ([src/renderer/Plugins.jsx](../src/renderer/Plugins.jsx)), med innstillingene som kontroller og **Apply to selected clip**. Vinduene husker plasseringen sin.
-  - Ikoner vises som `<img>` (SVG kan ikke kjøre skript der), og skript, lenker og bilder avvises i tillegg.
-  - Innstillinger er aldri fritekst. Tall kontrolleres mot min og maks, og valg mot en liste med enkle verdier, så verdier ikke kan smugle inn ekstra kommandolinjevalg.
-  - `run_processor` kjører et programtillegg med valgte innstillinger, og `open_plugin` åpner vinduet for brukeren.
-- **Innstillinger per programtillegg:** Settings → Plugins har en **Settings**-knapp per tillegg, og tannhjulet i tilleggets vindu åpner samme sted. For tillegg med parametere lagres brukerens standardverdier i preferansene (`pluginSettings`). Vinduet starter med dem, og agentens `run_processor` bruker dem når den ikke selv oppgir verdier. «Reset» går tilbake til tilleggets egne standarder. For Higgsfield inneholder innstillingene konto, modeller og prisbekreftelse.
-- **Én versjon per programtillegg:** Når agenten endrer et programtillegg, gir den `replaceId` (eller samme navn), og tillegget beholder id-en og får høyere versjonsnummer. Installasjon erstatter tillegget med samme id, slik at det aldri blir liggende kopier. Python-skript lagres som én fil per versjon, så den installerte versjonen virker helt til oppdateringen er installert. Deretter slettes de gamle filene. **Remove** i innstillingene sletter også skriptene.
-- **Deling:** **Share…** lager en `.reccut-plugin`-fil (JSON med navn, versjon, forfatter, ikon, innstillinger, argumenter og skript, uten lokale stier). Filtypen er registrert i `package.json`, så dobbeltklikk åpner Reccut. Filen åpnes for gjennomgang (`plugins:readFile`) og installeres ikke før brukeren godtar. Bare programtillegg laget med FFmpeg eller Python kan deles. FFmpeg-tillegg bruker alltid appens egen FFmpeg, også etter oppdateringer.
-- **Vilkår:** Teksten ligger i [src/shared/pluginTerms.json](../src/shared/pluginTerms.json), med versjon. Deling krever at vilkårene for deling er godtatt. Tillegg kan deles gratis eller selges, men Reccut er ikke part i salget, og den som deler, er ansvarlig. Godkjenningen lagres i filen med dato og eventuelt navn. All installasjon (fra agenten, fra fil eller fra manifest) krever at brukeren krysser av for at de selv er ansvarlige. Hovedprosessen avviser installasjon og eksport uten godkjenning. Vilkårsteksten bør gjennomgås juridisk før lansering.
-- **AI-knappen** i verktøylinjen åpner chatten. Første gang vises oppsettet, og chatten åpnes når tilkoblingen er testet.
-- **Oppsett:** Første gang chatten åpnes, kan brukeren velge mellom en modell på maskinen (Ollama, LM Studio eller llama.cpp blir funnet automatisk), Google Gemini, Claude og OpenAI. Med en nøkkel hentes modellisten, og den beste modellen velges (`pickModel`). Tilkoblingen testes før chatten åpnes. **? What can I ask** forklarer hvordan man spør og har eksempler man kan klikke på.
+- **The story:** `get_story` and `set_story` save the brief, paper edit, notes per media clip and attached documents in the project. Documents attached in the chat (PDF, Typeloom, Word, Final Draft, Fountain, RTF and text) are read in the main process and saved in the story. PDF is read with pdf.js: lines and spacing are reconstructed from the text positions, so character names and dialogue blocks in a script stay separate. Scanned PDFs without text give a clear error message. Typeloom projects (`.typeloom`, a zip with `binder.json` and TipTap documents) are rewritten into Fountain-style scripts. The binder order, folders as headings, corkboard summaries as `= ` lines and the script elements are kept, while documents in the trash and research files are left out. If there is no script or brief, the agent should ask before it cuts, or suggest a structure.
+- **Script against takes:** `match_script` ([src/shared/speech.js](../src/shared/speech.js)) aligns each line with the words in the transcripts, like ScriptSync. In a screenplay, only the dialogue is matched, with the character who speaks it. A script counts as a screenplay when a character name repeats or there are scene headings. In a voiceover script, every sentence is matched. It finds every take, including several in the same file, with match quality and number of hesitations. Scene headings, character names and directions are skipped.
+- **Motion graphics:** `create_motion_graphic` lets the agent write a drawing function for canvas. It runs in a hidden window in its own empty session without network, files or Node, with a time limit per frame ([src/main/graphics.js](../src/main/graphics.js)). The frames are encoded to H.264, or to ProRes 4444 with an alpha channel for graphics over video. The clip is imported, and the agent gets four preview frames and any code errors back.
+- **AI video:** Higgsfield ships as a built-in plugin (**Higgsfield AI Video**). It sits at the top of the Plugins list, cannot be removed, is set up in Settings → Plugins and has its own tool window with prompt, duration, start frame from the playhead and placement at the playhead. The agent's `generate_video` uses the same API. The key ID and secret are stored encrypted. Start frames are uploaded to a presigned address without the key. The request is sent with an Idempotency-Key, and the status is polled with increasing wait times until it is done. The price is shown and must be approved before each generation (can be turned off). Models are chosen by endpoint ID in the settings. It has been tested with a simulated API, not with a real account.
+- **Plugins:** `propose_processor` creates a plugin: an FFmpeg call or a Python script with its own icon (SVG) and settings (numbers, choices or on/off), which are inserted into the arguments as `{param:id}`. The draft is shown in the chat with the full script, and nothing is installed or run until the user chooses **Install processor**. It then opens as a tool window.
+  - The **Plugins** button in the toolbar lists installed plugins. Each opens in a small, movable window above the rest of the app ([src/renderer/Plugins.jsx](../src/renderer/Plugins.jsx)), with the settings as controls and **Apply to selected clip**. The windows remember their position.
+  - Icons are shown as `<img>` (SVG cannot run scripts there), and scripts, links and images are also rejected.
+  - Settings are never free text. Numbers are checked against min and max, and choices against a list of simple values, so values cannot smuggle in extra command line options.
+  - `run_processor` runs a plugin with chosen settings, and `open_plugin` opens the window for the user.
+- **Settings per plugin:** Settings → Plugins has a **Settings** button per plugin, and the gear in the plugin's window opens the same place. For plugins with parameters, the user's default values are saved in the preferences (`pluginSettings`). The window starts with them, and the agent's `run_processor` uses them when it does not specify values itself. "Reset" goes back to the plugin's own defaults. For Higgsfield, the settings contain the account, models and price confirmation.
+- **One version per plugin:** When the agent changes a plugin, it passes `replaceId` (or the same name), and the plugin keeps its id and gets a higher version number. Installation replaces the plugin with the same id, so copies are never left behind. Python scripts are saved as one file per version, so the installed version keeps working until the update is installed. The old files are then deleted. **Remove** in the settings also deletes the scripts.
+- **Sharing:** **Share…** creates a `.reccut-plugin` file (JSON with name, version, author, icon, settings, arguments and script, without local paths). The file type is registered in `package.json`, so double-clicking opens Reccut. The file is opened for review (`plugins:readFile`) and is not installed until the user accepts. Only plugins made with FFmpeg or Python can be shared. FFmpeg plugins always use the app's own FFmpeg, also after updates.
+- **Terms:** The text lives in [src/shared/pluginTerms.json](../src/shared/pluginTerms.json), with a version. Sharing requires that the sharing terms have been accepted. Plugins can be shared for free or sold, but Reccut is not a party to the sale, and the person sharing is responsible. The acceptance is saved in the file with the date and optionally a name. All installation (from the agent, from a file or from a manifest) requires the user to tick a box confirming that they are responsible. The main process rejects installation and export without acceptance. The terms should be reviewed by a lawyer before launch.
+- **The AI button** in the toolbar opens the chat. The first time, the setup is shown, and the chat opens when the connection has been tested.
+- **Setup:** The first time the chat opens, the user can choose between a model on the machine (Ollama, LM Studio or llama.cpp are found automatically), Google Gemini, Claude and OpenAI. With a key, the model list is fetched and the best model is chosen (`pickModel`). The connection is tested before the chat opens. **? What can I ask** explains how to ask and has examples you can click.
 
-### Teksting, farge og stil
+### Subtitles, color and style
 
-- **Teksting og oversettelse:** Agenten transkriberer, oversetter og forkorter, og erstatter undertekstsporet med `add_captions` og `replace`. Reglene ligger i koden (`fitCaptions` i [src/shared/srt.js](../src/shared/srt.js)), ikke bare i instruksjonene:
-  - minst 1 sekund og høyst 7 sekunder på skjermen
-  - høyst 17 tegn per sekund
-  - to linjer à 42 tegn
-  - minst to bilder mellom undertekstene, og ingen overlapp
+- **Subtitling and translation:** The agent transcribes, translates and shortens, and replaces the subtitle track with `add_captions` and `replace`. The rules live in the code (`fitCaptions` in [src/shared/srt.js](../src/shared/srt.js)), not just in the instructions:
+  - at least 1 second and at most 7 seconds on screen
+  - at most 17 characters per second
+  - two lines of 42 characters
+  - at least two frames between subtitles, and no overlap
 
-  Korte tekster forlenges inn i stillheten etter seg. Tekster som bryter reglene, sendes tilbake som advarsler, og agenten skriver dem om. Modellen gjør det den er god på (omformulere), og koden gjør regningen.
-- **Farge og eksponering:** Agenten måler først, retter så feil (eksponering, klipping, fargestikk), lager stil etterpå, og avstemmer klipp fra samme scene. Den kontrollerer resultatet med målingene fra `preview_frames`. Det virker derfor også med modeller som ikke ser bilder.
-- **Referansebilde:** Bilder legges ved med **Image…**, ved å lime inn eller ved å dra dem inn. De sendes med meldingen, og `analyze_look` måler dem, slik at agenten kan flytte tallene for hvert klipp mot referansen.
+  Short subtitles are extended into the silence after them. Subtitles that break the rules are sent back as warnings, and the agent rewrites them. The model does what it is good at (rephrasing), and the code does the math.
+- **Color and exposure:** The agent measures first, then fixes errors (exposure, clipping, color cast), creates a style afterwards, and matches clips from the same scene. It checks the result with the measurements from `preview_frames`. It therefore also works with models that cannot see images.
+- **Reference image:** Images are attached with **Image…**, by pasting or by dragging them in. They are sent with the message, and `analyze_look` measures them, so the agent can move each clip's numbers toward the reference.
 
-### Begrensninger og neste steg
+### Limitations and next steps
 
-- Ordtidene fra Whisper er gode, men ikke helt presise. Kuttene legges derfor i målte pauser når det går.
-- Agenten kan ikke lage programtillegg med kode. Titler er data og trygge. Kjørbare prosessorer må installeres av brukeren.
-- Agenten kan ikke generere voiceover, bilder eller video ennå. Dette passer inn som egne verktøy som lager en fil og importerer den.
-- Den kan ikke sladde ansikter automatisk. Det krever ansiktsgjenkjenning og sporing.
-- Den kan ikke eksportere eller pakke prosjektet.
-- Det finnes ingen MCP-server ennå.
-- Agenten er testet med simulerte modellsvar i Node og Electron. Målingene er testet på ekte dekodede videobilder. Ordtider og pauser er testet med Whisper-modellen i Node på syntetisk tale. Den er ikke testet mot en ekte leverandør, og transkripsjonsarbeideren og `preview_frames` er ikke kjørt i den ferdige appen.
+- Whisper's word timings are good, but not perfectly precise. Cuts are therefore placed in measured pauses when possible.
+- The agent cannot create plugins with code. Titles are data and safe. Executable processors must be installed by the user.
+- The agent cannot generate voiceover, images or video yet. This fits in as separate tools that create a file and import it.
+- It cannot redact faces automatically. That requires face detection and tracking.
+- It cannot export or package the project.
+- There is no MCP server yet.
+- The agent has been tested with simulated model responses in Node and Electron. The measurements have been tested on real decoded video frames. Word timings and pauses have been tested with the Whisper model in Node on synthetic speech. It has not been tested against a real provider, and the transcription worker and `preview_frames` have not been run in the finished app.
 
-## Prosjektpakking
+## Project packaging
 
-Claude hadde allerede lagt til **Trim media to the parts that are used** i Package Project. Arbeidet er videreført med tester og feilrettinger: overgangsreserver beholdes selv med null ekstra handles, ulike kutt med samme start forveksles ikke, lyd utenfor opptaksmappen følger med, og ufullstendige pakker ryddes bort ved feil eller avbrudd.
+Claude had already added **Trim media to the parts that are used** to Package Project. The work has been continued with tests and bug fixes: transition handles are kept even with zero extra handles, different cuts with the same start are not confused, audio outside the recording folder is included, and incomplete packages are cleaned up on failure or cancellation.
 
-Vanlige video- og lydfiler kan kuttes. Opptaksmapper og stillbilder kopieres hele. Kutting omkoder med høy kvalitet og er ikke en bit-identisk kopi av originalen. Vist størrelse er et anslag; en omkodet fil kan bli større enn forventet. Originalprosjektet endres ikke.
+Regular video and audio files can be trimmed. Recording folders and still images are copied whole. Trimming re-encodes at high quality and is not a bit-identical copy of the original. The size shown is an estimate; a re-encoded file can turn out larger than expected. The original project is not changed.
 
-## Verifisering
+## Verification
 
-- `npm test`: modell-, sikkerhets-, prosessor- og FFmpeg-integrasjonstester.
-- `npm run build`: renderer, eksportarbeider og transkripsjonsarbeider.
-- `npm run test:render`: ekte WebGL2 og CPU-rendering i Electron, effektstabling, sammensetting over et annet spor, kildelesing, inspektørhandlinger og AI-forslag med angre.
+- `npm test`: model, security, processor and FFmpeg integration tests.
+- `npm run build`: renderer, export worker and transcription worker.
+- `npm run test:render`: real WebGL2 and CPU rendering in Electron, effect stacking, compositing over another track, source reading, inspector actions and AI suggestions with undo.
 
-Syntetiske testbilder og korte genererte videoer brukes til funksjonskontroll. Hår, glass og komplekse ekte opptak er ikke kvalitetsvalidert, og ingen kjøpt CorridorKey-installasjon eller ekstern API-konto er brukt i testene.
+Synthetic test images and short generated videos are used for functional checks. Hair, glass and complex real footage have not been quality validated, and no purchased CorridorKey installation or external API account has been used in the tests.
