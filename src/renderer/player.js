@@ -1,7 +1,7 @@
 // Avspillingsmotor. Hvert aktivt klipp får sitt eget video- eller lydelement,
 // som holdes i takt med spillhodet. Bildet tegnes med samme kode som eksporten.
 // Redigeringen og eksportfanen har hver sin spiller.
-import { audioWindow, computeAudio, computeFrame, instSpeed, sourceTime, transitionWindow, visualStreams, workPath } from '../shared/model.js';
+import { audioWindow, computeAudio, computeFrame, instSpeed, sideBackgroundMedia, sourceTime, transitionWindow, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 import { activeEffects } from '../shared/audiofx.js';
 import { prefs, previewResolutionScale } from './prefs.js';
@@ -186,7 +186,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
 
   // Kilde for tegnemotoren: elementet som allerede står på riktig sted.
   function getSource(clip, key) {
-    const m = getProject().media[clip.mediaId];
+    const m = key === 'background' ? sideBackgroundMedia(getProject(), clip) : getProject().media[clip.mediaId];
     if (m?.kind === 'image') {
       const img = getImage(m.streams?.main?.proxy || m.path);
       return img ? previewSource({ img, w: img.naturalWidth, h: img.naturalHeight }) : null;
@@ -403,7 +403,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     drawFrame(staging.getContext('2d', { alpha: false }), p, frame, (clip, key) => {
       const src = getSource(clip, key);
       if (!src) {
-        const media = p.media[clip.mediaId];
+        const media = key === 'background' ? sideBackgroundMedia(p, clip) : p.media[clip.mediaId];
         const el = pool.get(`${clip.id}:${key}`)?.el;
         if (media?.kind === 'image') {
           const image = images.get(media.streams?.main?.proxy || media.path);

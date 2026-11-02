@@ -12,6 +12,7 @@ import {
   Monitor,
   MousePointer2,
   RectangleHorizontal,
+  RectangleVertical,
   Square,
   SlidersHorizontal,
   Volume2,
@@ -206,6 +207,7 @@ export function Recorder({ active }) {
                 { value: 'circle', label: 'Circle', icon: Circle, showLabel: true },
                 { value: 'square', label: 'Square', icon: Square, showLabel: true },
                 { value: 'rect', label: '16:9', icon: RectangleHorizontal, showLabel: true },
+                { value: 'portrait', label: '9:16', icon: RectangleVertical, showLabel: true },
               ]}
             />
           </Row>

@@ -11,14 +11,17 @@ import { clipMatrix, maskList, paintMask, shapeAt, shapeCorners, shapePath } fro
 import {
   DEFAULT_CAPTION_STYLE,
   FONTS,
-  cameraRectAt,
   clamp,
   clicksAt,
   cursorAt,
   easeInOut,
   easeOutCubic,
   keysAt,
+  layoutClipFor,
+  recordingRectsAt,
   redactStrength,
+  sideBackgroundMedia,
+  sideProps,
   sourceTime,
   valueAt,
   visualOpacity,
@@ -616,15 +619,34 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
   const filter = colorFilter(clip, T, H);
   let screenRect = { x: 0, y: 0, w: W, h: H };
   const screen = media.streams.screen;
+  const camera = media.streams.camera;
+  const showCamera = valueAt(clip, 'showCamera', T) !== false;
+  // Oppsettet (hjørne, side om side) kan komme fra PiP-klippet på sporet over.
+  let layoutClip = screen && camera?.hasVideo ? layoutClipFor(project, clip, T) : null;
+  if (layoutClip === clip && !showCamera) layoutClip = null;
+  const aspect = screen?.width && screen?.height ? screen.width / screen.height : 16 / 9;
+  const layout = layoutClip ? recordingRectsAt(layoutClip, layoutClip === clip ? s : sourceTime(layoutClip, T), W, H, aspect) : null;
+  const side = layout?.side || 0;
+  const sp = layoutClip && sideProps(layoutClip);
   if (screen && clip.recordingPart !== 'camera') {
+    if (side > 0.001) drawSideBackground(ctx, project, layoutClip, sp, side, W, H, getSource);
     let src = getSource(clip, 'screen', s - (screen.offset || 0));
     if (src) src = graded(clip, T, src, 'screen', media);
     if (src) {
-      const r = (screenRect = containRect(src.w, src.h, W, H));
+      const r = (screenRect = side > 0 ? layout.screen : containRect(src.w, src.h, W, H));
+      if (side > 0.001 && !(valueAt(clip, 'shadow', T) > 0)) drawSideShadow(ctx, r, side);
       drawWithEffects(ctx, clip, T, r, H, (ctx) => {
+        if (r.r > 0.5) {
+          ctx.beginPath();
+          ctx.roundRect(r.x, r.y, r.w, r.h, r.r);
+          ctx.clip();
+        }
         ctx.filter = filter;
         ctx.drawImage(src.img, r.x, r.y, r.w, r.h);
       });
+      if (side > 0.001) drawSideFrame(ctx, sp, r, side, H);
+    } else if (side > 0) {
+      screenRect = layout.screen;
     } else if (screen.width) {
       screenRect = containRect(screen.width, screen.height, W, H);
     }
@@ -637,10 +659,8 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
     }
   }
 
-  const camera = media.streams.camera;
-  const showCamera = valueAt(clip, 'showCamera', T) !== false;
   if (camera?.hasVideo && showCamera && clip.recordingPart !== 'screen') {
-    const rect = screen ? cameraRectAt(clip, s, W, H) : { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
+    const rect = screen && layout ? layout.cam : { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
     let src = rect.a > 0.01 ? getSource(clip, 'camera', s - (camera.offset || 0)) : null;
     if (src) src = graded(clip, T, src, 'camera', media);
     if (src) {
@@ -650,10 +670,68 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
         ctx.filter = colorFilter(clip, T, H, 'camera');
         drawCamera(ctx, src.img, src.w, src.h, rect, clip.props.mirror, rect.w < W * 0.9 && !(valueAt(clip, 'shadow', T) > 0));
       });
+      if (side > 0.001) drawSideFrame(ctx, sp, rect, side, H);
       ctx.restore();
     }
   }
   if (clip.recordingPart !== 'camera' && clip.props.showKeys) drawKeys(ctx, keysAt(media.rec?.keys, s), W, H);
+}
+
+// Bakgrunnen bak side om side: et bilde fra biblioteket (fyller bildet), en gradient eller en farge.
+function drawSideBackground(ctx, project, clip, p, alpha, W, H, getSource) {
+  ctx.save();
+  ctx.filter = 'none';
+  ctx.globalAlpha *= alpha;
+  const src = sideBackgroundMedia(project, clip) ? getSource(clip, 'background', 0) : null;
+  if (src) {
+    const sc = Math.max(W / src.w, H / src.h);
+    ctx.drawImage(src.img, (W - src.w * sc) / 2, (H - src.h * sc) / 2, src.w * sc, src.h * sc);
+  } else if (p.sideBg === 'gradient') {
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, p.sideBgColor);
+    g.addColorStop(1, p.sideBgColor2);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.fillStyle = p.sideBgColor;
+    ctx.fillRect(0, 0, W, H);
+  }
+  ctx.restore();
+}
+
+// Myk skygge under skjermen, laget på samme måte som kameraets, så den blir lik i visning og eksport.
+function drawSideShadow(ctx, r, alpha) {
+  const w = ctx.canvas.width, h = ctx.canvas.height;
+  const layer = scratchCanvas(5, w, h);
+  layer.g.setTransform(ctx.getTransform());
+  layer.g.fillStyle = '#000';
+  layer.g.beginPath();
+  layer.g.roundRect(r.x, r.y, r.w, r.h, r.r);
+  layer.g.fill();
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  compositeLayer(ctx, layer.c, w, h, 1, r.h, { opacity: 0.45, blur: r.w * 0.03, offset: r.h * 0.015 });
+  ctx.restore();
+}
+
+// Ramme rundt skjerm og kamera, utenfor bildet så ingenting dekkes.
+function drawSideFrame(ctx, p, r, alpha, H) {
+  if (p.sideFrame !== 'line' && p.sideFrame !== 'gradient') return;
+  const lw = Math.max(1, H * 0.004);
+  ctx.save();
+  ctx.filter = 'none';
+  ctx.globalAlpha *= alpha;
+  ctx.lineWidth = lw;
+  if (p.sideFrame === 'gradient') {
+    const g = ctx.createLinearGradient(r.x, r.y, r.x + r.w, r.y + r.h);
+    g.addColorStop(0, p.sideFrameColor);
+    g.addColorStop(1, p.sideFrameColor2);
+    ctx.strokeStyle = g;
+  } else ctx.strokeStyle = p.sideFrameColor;
+  ctx.beginPath();
+  ctx.roundRect(r.x - lw / 2, r.y - lw / 2, r.w + lw, r.h + lw, r.r + lw / 2);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // Kamerabildet beskjæres slik at det fyller rammen, med skygge når det er bilde i bilde.

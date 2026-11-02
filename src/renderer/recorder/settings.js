@@ -60,7 +60,7 @@ function load() {
       s.hideFromCapture = false;
       s.captureVisibilityVersion = 1;
     }
-    if (!['circle', 'square', 'rect'].includes(s.pipShape)) s.pipShape = 'rect';
+    if (!['circle', 'square', 'rect', 'portrait'].includes(s.pipShape)) s.pipShape = 'rect';
     if (!MODIFIERS.some((m) => m.value === s.modifier)) s.modifier = MODIFIERS[0].value;
     s.micMixer = normalizeMix(s.micMixer);
     s.videoFormat = recordingVideoFormat(s.videoFormat).value;

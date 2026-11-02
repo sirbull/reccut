@@ -4,7 +4,7 @@ import { RemoveEffectButton } from './RemoveEffectButton.jsx';
 import { VideoEffects } from './VideoEffects.jsx';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { ArrowDown, ArrowUp, Captions, ChevronLeft, ChevronRight, Circle, Diamond, EyeOff, Film, PenTool, RectangleHorizontal, SquareDashed, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
+import { ArrowDown, ArrowUp, Captions, ChevronLeft, ChevronRight, Circle, Diamond, EyeOff, Film, PanelLeft, PanelRight, PenTool, RectangleHorizontal, SquareDashed, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
 import {
   audioComponents,
   FRAME_RATES,
@@ -37,6 +37,8 @@ import {
   kfToTimeline,
   removeKeyframe,
   setKeyframeEase,
+  isSideLayout,
+  sideProps,
   sourceTime,
   valueAt,
 } from '../../shared/model.js';
@@ -46,7 +48,7 @@ import { recordingChildren, setClipDuration, setSpeed, setTransition } from '../
 import { GRADE_PROPS, CAMERA_LOGS } from '../../shared/grade.js';
 import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { beginTransient, commit, endPreview, endTransient, getWave, mirror, previewEdit, motionVersion, project, selectedClips, selectedTransition, selection, tasks, timeSig, updateTransient, waveVersion } from './store.js';
+import { beginTransient, commit, endPreview, endTransient, getWave, importPaths, mirror, previewEdit, motionVersion, project, selectedClips, selectedTransition, selection, tasks, timeSig, updateTransient, waveVersion } from './store.js';
 import { seek } from './playback.js';
 import { setKeyframe } from './keyframes.js';
 import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
@@ -1282,7 +1284,11 @@ const LAYOUT_OPTIONS = [
   { value: 4, label: '4', title: 'Top right' },
   { value: 5, label: '5', title: 'Bottom left' },
   { value: 6, label: '6', title: 'Bottom right' },
+  { value: 7, label: 'Side by side, camera left', icon: PanelLeft },
+  { value: 8, label: 'Side by side, camera right', icon: PanelRight },
 ];
+const layoutName = (v) => (v === 7 ? 'Side L' : v === 8 ? 'Side R' : v);
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'avif'];
 
 function RecordingTab({ clip, media }) {
   const T = timeSig.value;
@@ -1295,6 +1301,9 @@ function RecordingTab({ clip, media }) {
   const parents = clip.recordingPart === 'camera' ? Object.values(project.value.clips).filter((c) => c.recordingPart === 'screen' && c.mediaId === clip.mediaId && (!recordingChildren(project.value, c.id).length || c.id === clip.linkedTo)) : [];
   const rec = media?.rec || {};
   const switches = (clip.kf.layout || []).filter(([t]) => t >= clip.in && t <= clip.in + clip.dur);
+  // Side om side trenger både skjerm og kamera.
+  const canSide = hasCam && media?.streams?.screen?.hasVideo;
+  const usesSide = canSide && (isSideLayout(layout) || switches.some(([, v]) => isSideLayout(v)));
   return (
     <>
       {clip.recordingPart === 'camera' && (
@@ -1326,7 +1335,7 @@ function RecordingTab({ clip, media }) {
           <Row label="Layout at playhead" stacked>
             <Segmented
               value={layout}
-              options={LAYOUT_OPTIONS}
+              options={canSide ? LAYOUT_OPTIONS : LAYOUT_OPTIONS.filter((o) => !isSideLayout(o.value))}
               onChange={(v) =>
                 commit((q) => {
                   const c = q.clips[clip.id];
@@ -1339,7 +1348,7 @@ function RecordingTab({ clip, media }) {
           <div class="switch-list">
             {switches.map(([t, v]) => (
               <button key={t} class={Math.abs(t - s) < 0.05 ? 'on' : ''} onClick={() => seek(kfToTimeline(clip, t))}>
-                {formatShort(t - clip.in)} <b>{v}</b>
+                {formatShort(t - clip.in)} <b>{layoutName(v)}</b>
               </button>
             ))}
             {atSwitch && (
@@ -1356,6 +1365,7 @@ function RecordingTab({ clip, media }) {
                 { value: 'circle', label: 'Circle' },
                 { value: 'square', label: 'Square' },
                 { value: 'rect', label: '16:9' },
+                { value: 'portrait', label: '9:16' },
               ]}
             />
           </Row>
@@ -1375,6 +1385,7 @@ function RecordingTab({ clip, media }) {
           </Row>
         </Section>
       )}
+      {usesSide && <SideBySideSection clip={clip} />}
       {hasCam && <CameraColorSection clip={clip} />}
       {clip.recordingPart !== 'camera' && <Section title="Overlays">
         <Row label={`Keystrokes (${rec.keys?.length || 0})`}>
@@ -1389,6 +1400,87 @@ function RecordingTab({ clip, media }) {
         <p class="hint">Blade the clip (B or {window.api.platform === 'darwin' ? 'Cmd' : 'Ctrl'} B) to turn overlays on or off for part of the recording.</p>
       </Section>}
     </>
+  );
+}
+
+// Side om side: kameraets format, bakgrunnen og rammen rundt skjerm og kamera.
+function SideBySideSection({ clip }) {
+  const p = sideProps(clip);
+  const live = (key) => (v) => updateTransient((q) => (q.clips[clip.id].props[key] = v));
+  const images = Object.values(project.value.media).filter((m) => m.kind === 'image');
+  const chooseImage = async () => {
+    const file = await window.api.openFileDialog({ title: 'Choose a Background Image', filters: [{ name: 'Images', extensions: IMAGE_EXTENSIONS }] });
+    if (!file) return;
+    const [m] = await importPaths([file], null);
+    if (m) setProp(clip, { sideBg: 'image', sideBgImage: m.id });
+  };
+  return (
+    <Section title="Side by Side">
+      <Row label="Camera">
+        <Segmented
+          value={p.sideShape}
+          onChange={(v) => setProp(clip, { sideShape: v })}
+          options={[
+            { value: 'portrait', label: '9:16' },
+            { value: 'tall', label: '3:4' },
+            { value: 'square', label: 'Square' },
+          ]}
+        />
+      </Row>
+      <Row label="Camera size">
+        <Segmented
+          value={p.sideSize}
+          onChange={(v) => setProp(clip, { sideSize: v })}
+          options={[
+            { value: 'small', label: 'Small' },
+            { value: 'medium', label: 'Medium' },
+            { value: 'large', label: 'Large' },
+          ]}
+        />
+      </Row>
+      <Row label="Background">
+        <Segmented
+          value={p.sideBg}
+          onChange={(v) => setProp(clip, { sideBg: v })}
+          options={[
+            { value: 'gradient', label: 'Gradient' },
+            { value: 'color', label: 'Color' },
+            { value: 'image', label: 'Image' },
+          ]}
+        />
+      </Row>
+      {p.sideBg === 'image' && (
+        <Row label="Image" stacked>
+          <Select
+            value={images.some((m) => m.id === p.sideBgImage) ? p.sideBgImage : ''}
+            options={[{ value: '', label: 'None' }, ...images.map((m) => ({ value: m.id, label: m.name })), { value: 'choose', label: 'Choose Image…' }]}
+            onChange={(v) => (v === 'choose' ? chooseImage() : setProp(clip, { sideBgImage: v || null }))}
+          />
+        </Row>
+      )}
+      <Row label={p.sideBg === 'image' ? 'Fallback color' : 'Colors'}>
+        <ColorField value={p.sideBgColor} onLive={live('sideBgColor')} />
+        {p.sideBg === 'gradient' && <ColorField value={p.sideBgColor2} onLive={live('sideBgColor2')} />}
+      </Row>
+      <Row label="Frame">
+        <Segmented
+          value={p.sideFrame}
+          onChange={(v) => setProp(clip, { sideFrame: v })}
+          options={[
+            { value: 'none', label: 'None' },
+            { value: 'line', label: 'Line' },
+            { value: 'gradient', label: 'Gradient' },
+          ]}
+        />
+      </Row>
+      {p.sideFrame !== 'none' && (
+        <Row label="Frame colors">
+          <ColorField value={p.sideFrameColor} onLive={live('sideFrameColor')} />
+          {p.sideFrame === 'gradient' && <ColorField value={p.sideFrameColor2} onLive={live('sideFrameColor2')} />}
+        </Row>
+      )}
+      <p class="hint">The screen and camera sit next to each other over the background. Switch layout at the playhead to animate in and out of side by side. The image is added to your library.</p>
+    </Section>
   );
 }
 

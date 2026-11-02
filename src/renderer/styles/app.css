@@ -693,6 +693,10 @@ input[type='color'].color::-webkit-color-swatch {
   height: 15px;
   border-radius: 50%;
 }
+.mini .cam.portrait {
+  width: 9px;
+  height: 16px;
+}
 .mini .tl { top: 3px; left: 3px; }
 .mini .tr { top: 3px; right: 3px; }
 .mini .bl { bottom: 3px; left: 3px; }

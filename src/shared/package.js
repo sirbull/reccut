@@ -32,6 +32,8 @@ export function reduceProject(src, opts = {}) {
     for (const c of Object.values(t.clips)) if (c.group) count.set(c.group, (count.get(c.group) || 0) + 1);
     for (const c of Object.values(t.clips)) if (c.group && count.get(c.group) < 2) delete c.group;
     for (const c of Object.values(t.clips)) if (c.mediaId) usedBy.set(c.mediaId, [...(usedBy.get(c.mediaId) || []), c]);
+    // Bakgrunnsbildet i side om side brukes uten å ligge på tidslinjen selv.
+    for (const c of Object.values(t.clips)) if (c.props?.sideBgImage && !usedBy.has(c.props.sideBgImage)) usedBy.set(c.props.sideBgImage, []);
   }
 
   if (opts.removeUnused) {

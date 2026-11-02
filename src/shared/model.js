@@ -436,6 +436,7 @@ export function defaultProps(type, media) {
         pipSize: rec.pip?.size || 'medium',
         pipShape: rec.pip?.shape || 'rect',
         mirror: Boolean(rec.pip?.mirror),
+        ...SIDE_DEFAULTS,
         showKeys: rec.overlays?.keys ?? true,
         cursorZoom: rec.overlays?.cursorZoom ?? true,
         showClicks: rec.overlays?.clicks ?? false,
@@ -671,8 +672,9 @@ export function removeKeyframe(clip, prop, s) {
 export function pipRect(layout, lastCorner, W, H, size, shape) {
   if (layout === 1) return { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
   const base = W * (PIP_SIZES[size] || PIP_SIZES.medium);
-  const w = shape === 'rect' || !shape ? base : base * 0.7;
-  const h = shape === 'rect' || !shape ? (w * 9) / 16 : w;
+  const portrait = shape === 'portrait';
+  const w = shape === 'rect' || !shape ? base : portrait ? base * 0.5 : base * 0.7;
+  const h = shape === 'rect' || !shape ? (w * 9) / 16 : portrait ? (w * 16) / 9 : w;
   const r = shape === 'circle' ? w / 2 : w * 0.06;
   const m = Math.min(W, H) * 0.025;
   const corner = layout === 2 ? lastCorner : layout;
@@ -686,23 +688,109 @@ export function lerpRect(a, b, t) {
   return { x: l(a.x, b.x), y: l(a.y, b.y), w: l(a.w, b.w), h: l(a.h, b.h), r: l(a.r, b.r), a: l(a.a, b.a) };
 }
 
-// Kamerarammen ved kildetid s, med myk overgang rett etter hvert oppsettsbytte.
-export function cameraRectAt(clip, s, W, H) {
+/* Side om side: skjermen og kameraet ved siden av hverandre over en bakgrunn.
+   Oppsett 7 har kameraet til venstre, 8 til høyre. Velges i redigeringen. */
+
+export const isSideLayout = (n) => n === 7 || n === 8;
+export const SIDE_SHAPES = { portrait: 9 / 16, tall: 3 / 4, square: 1 };
+export const SIDE_SIZES = { small: 0.55, medium: 0.75, large: 1 };
+export const SIDE_DEFAULTS = {
+  sideShape: 'portrait',
+  sideSize: 'medium',
+  sideBg: 'gradient',
+  sideBgColor: '#1b2238',
+  sideBgColor2: '#4a2550',
+  sideBgImage: null,
+  sideFrame: 'gradient',
+  sideFrameColor: '#4c8dff',
+  sideFrameColor2: '#d65db1',
+};
+
+export function sideProps(clip) {
+  const out = { ...SIDE_DEFAULTS };
+  for (const k of Object.keys(SIDE_DEFAULTS)) if (clip.props?.[k] != null) out[k] = clip.props[k];
+  return out;
+}
+
+// Skjermen beholder formatet sitt. Kameraet er like høyt som skjermen ganger størrelsen,
+// og begge midtstilles som én gruppe.
+export function sideRects(layout, W, H, screenAspect, shape, size) {
+  const camAspect = SIDE_SHAPES[shape] || SIDE_SHAPES.portrait;
+  const camScale = SIDE_SIZES[size] || SIDE_SIZES.medium;
+  const m = H * 0.07;
+  const gap = W * 0.025;
+  const h = Math.min(H - 2 * m, (W - 2 * m - gap) / (screenAspect + camScale * camAspect));
+  const sw = h * screenAspect;
+  const cw = h * camScale * camAspect;
+  const ch = h * camScale;
+  const x0 = (W - sw - gap - cw) / 2;
+  const camLeft = layout === 7;
+  const r = Math.min(W, H) * 0.018;
+  return {
+    screen: { x: camLeft ? x0 + cw + gap : x0, y: (H - h) / 2, w: sw, h, r, a: 1 },
+    cam: { x: camLeft ? x0 : x0 + sw + gap, y: (H - ch) / 2, w: cw, h: ch, r, a: 1 },
+  };
+}
+
+function fullScreenRect(W, H, aspect) {
+  const w = Math.min(W, H * aspect);
+  const h = w / aspect;
+  return { x: (W - w) / 2, y: (H - h) / 2, w, h, r: 0, a: 1 };
+}
+
+// Kamera og skjerm ved kildetid s, med myk overgang rett etter hvert oppsettsbytte.
+// side er 1 når oppsettet er side om side, og glir mellom 0 og 1 i overgangen.
+export function recordingRectsAt(clip, s, W, H, screenAspect = 16 / 9) {
   const list = clip.kf?.layout?.length ? clip.kf.layout : [[0, 6]];
   let idx = 0;
   for (let i = 0; i < list.length; i++) if (list[i][0] <= s) idx = i;
   const cur = list[idx][1];
   const prev = idx > 0 ? list[idx - 1][1] : cur;
-  const cornerBefore = (i) => {
-    for (let j = i; j >= 0; j--) if (list[j][1] >= 3) return list[j][1];
+  // Siste oppsett der kameraet vises, så Skjerm (2) toner ut kameraet der det sto.
+  const shownBefore = (i, keep) => {
+    for (let j = i; j >= 0; j--) if (keep(list[j][1])) return list[j][1];
     return 6;
   };
   const { pipSize, pipShape } = clip.props;
-  const to = pipRect(cur, cornerBefore(idx), W, H, pipSize, pipShape);
+  const { sideShape, sideSize } = sideProps(clip);
+  const full = fullScreenRect(W, H, screenAspect);
+  const at = (i) => {
+    const n = list[i][1];
+    const shown = n === 2 ? shownBefore(i, (v) => v >= 3) : n;
+    if (isSideLayout(shown)) {
+      const r = sideRects(shown, W, H, screenAspect, sideShape, sideSize);
+      return n === 2 ? { cam: { ...r.cam, a: 0 }, screen: full, side: 0 } : { ...r, side: 1 };
+    }
+    return { cam: pipRect(n, shownBefore(i, (v) => v >= 3 && v <= 6), W, H, pipSize, pipShape), screen: full, side: 0 };
+  };
+  const to = at(idx);
   const t = idx > 0 || list[0][0] > 0 ? clamp((s - list[idx][0]) / LAYOUT_ANIM, 0, 1) : 1;
   if (t >= 1 || prev === cur) return to;
-  const from = pipRect(prev, cornerBefore(idx - 1), W, H, pipSize, pipShape);
-  return lerpRect(from, to, easeOutCubic(t));
+  const from = at(idx - 1);
+  const k = easeOutCubic(t);
+  return { cam: lerpRect(from.cam, to.cam, k), screen: lerpRect(from.screen, to.screen, k), side: from.side + (to.side - from.side) * k };
+}
+
+export function cameraRectAt(clip, s, W, H, screenAspect) {
+  return recordingRectsAt(clip, s, W, H, screenAspect).cam;
+}
+
+// Bakgrunnsbildet for side om side, når det er valgt og finnes i biblioteket.
+// Ligger kameraet på eget spor, er valget lagret på PiP-klippet (se layoutClipFor).
+export function sideBackgroundMedia(project, clip) {
+  if (clip?.type !== 'recording') return null;
+  const { sideBg, sideBgImage } = sideProps(clip);
+  const m = sideBg === 'image' && sideBgImage ? project.media?.[sideBgImage] : null;
+  return m?.kind === 'image' && !m.offline ? m : null;
+}
+
+// Klippet som bestemmer oppsettet. Er kameraet på eget spor, styrer PiP-klippet også
+// skjermen, men bare når det faktisk vises. Ellers fyller skjermen bildet som før.
+export function layoutClipFor(project, clip, T) {
+  if (clip.recordingPart !== 'screen') return clip;
+  const cam = Object.values(project.clips).find((c) => c.recordingPart === 'camera' && c.linkedTo === clip.id);
+  if (!cam || !cam.enabled || laneHidden(project, cam.lane) || T < cam.start || T >= cam.start + cam.dur) return null;
+  return valueAt(cam, 'showCamera', T) !== false ? cam : null;
 }
 
 /* Hendelser fra opptaket: musepeker, forstørring, klikk og taster. */

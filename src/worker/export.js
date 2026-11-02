@@ -3,7 +3,7 @@
 import { setMotion } from '../shared/stabilize.js';
 import { CAMERA_LOGS, setLut } from '../shared/grade.js';
 import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOutputFormat, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, WebMOutputFormat, canEncodeVideo } from 'mediabunny';
-import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sealProject, sourceTime, visualStreams, workPath } from '../shared/model.js';
+import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sealProject, sideBackgroundMedia, sourceTime, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 import { AUDIO_FORMATS, QUALITIES, audioKbps, outputGeometry, videoBitrate, videoFormat } from '../shared/formats.js';
 import { FRAME_FORMATS, frameExportSettings, frameGeometry } from '../shared/frameExport.js';
@@ -509,6 +509,8 @@ function neededFrames(project, frame, copies) {
       else if (direct(st, copies)) out.push({ clip, key, path: st.path, decode: st.needsProxy ? { vf: st.decodeFilters, duration: st.duration } : null, t });
       else out.push({ clip, key, path: workPath(st), t });
     }
+    const bg = sideBackgroundMedia(project, clip);
+    if (bg) out.push({ clip, key: 'background', path: bg.streams?.main?.proxy || bg.path, image: true, t: 0 });
   };
   const addSide = (side) => { if (!side) return; add(side.clip, side.T); for (const clip of side.companions || []) add(clip, side.T); };
   for (const l of frame.layers) {
