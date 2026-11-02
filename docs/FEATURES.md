@@ -136,7 +136,7 @@ Settings (Cmd ,) is built like in Final Cut Pro, with tabs at the top:
 
 ## Help, search and shortcuts
 
-**Help → Reccut Help** (F1) opens a separate handbook with 74 articles, pictures, practical examples and full-text search. The help can sit next to the editor and works offline. It also covers AI setup, local models, plugins and troubleshooting. Commands and custom shortcuts are pulled from the app. Plan and maintenance: [HELP-PLAN.md](HELP-PLAN.md). Run `npm run test:help` to check the content and the help window, and `npm run help:screenshots` to update the illustrations.
+**Help → Reccut Help** (F1) opens a separate handbook with 74 articles, pictures, practical examples and full-text search. The help can sit next to the editor and works offline. It also covers AI setup, local models, plugins and troubleshooting. Commands and custom shortcuts are pulled from the app.
 
 * Every tool and feature has a shortcut, and all are listed in the menus with the key next to them. The menus, the keys, the search and the shortcut list are built from one list in the code (`src/renderer/registry.js`), so they always match each other.
 * **Ctrl Space** opens quick search, like FX Console: type the name of an effect, a tool, a transition, a title, a look, an animation, a setting (for example Exposure or Volume), a command or a media item, and press Enter. Effects and looks are applied to the selected clips, settings open in the inspector with the number field ready, and whatever was changed or opened flashes briefly so you can see where it is. Also works while you are typing in a field. Cmd K (Ctrl K) and the question mark at the top open the same thing. On Mac, the Help menu also has the standard search field that finds menu items.

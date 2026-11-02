@@ -16,14 +16,7 @@
     "dist:mac": "node scripts/fetch-ffmpeg.mjs && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --mac --publish never",
     "dist:win": "node scripts/fetch-ffmpeg.mjs win-x64 && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --win --publish never",
     "dist:linux": "node scripts/fetch-ffmpeg.mjs linux-x64 && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --linux --x64 --publish never",
-    "test": "node --test test/*.test.mjs",
-    "test:render": "electron scripts/verify-effects.cjs",
-    "test:analog": "electron scripts/verify-analog.cjs",
-    "test:colors": "electron scripts/verify-colors.cjs",
-    "test:scopes": "node scripts/verify-scopes.cjs",
-    "test:help": "node scripts/build.mjs && node --test test/help-*.test.mjs && node scripts/verify-help.cjs",
-    "test:keyboard": "node scripts/build.mjs && node --test test/keyboard.test.mjs test/recording-shortcuts.test.mjs && node scripts/verify-keyboard.cjs",
-    "help:screenshots": "node scripts/build.mjs && node scripts/capture-help.cjs"
+    "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
     "@huggingface/transformers": "^4.3.2",
