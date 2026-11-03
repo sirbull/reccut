@@ -39,7 +39,8 @@ function setup() {
 test('input tracking installs no global keyboard or mouse hook', () => {
   const s = setup();
   assert.deepEqual(s.required, ['electron']);
-  assert.doesNotMatch(source, /uiohook|keydown|keyup|isTrustedAccessibilityClient/);
+  // No native input hook module, no key events and no Accessibility trust check.
+  assert.doesNotMatch(source, /napi|keydown|keyup|isTrustedAccessibilityClient/);
   assert.equal(s.tracker.endSession(), null);
 });
 

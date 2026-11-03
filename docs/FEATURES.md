@@ -17,7 +17,7 @@ Record, edit and export video in one app, for Mac, Windows and Linux. The app is
 * The camera image as a circle, square or 16:9, in three sizes
 * Six layouts you switch with a shortcut while recording: 1 camera, 2 screen, 3 to 6 picture in picture in each corner
 * **Magnified pointer:** press the shortcut with 9 (Control Option 9 on Mac by default), and the pointer grows with an animation until you press it again
-* **No keylogger:** Reccut never listens to the keyboard or mouse outside its own window. The pointer position is read by the system, and the magnified pointer is controlled with an ordinary shortcut.
+* **No global input listening:** Reccut never listens to the keyboard or mouse outside its own window. The pointer position is read by the system, and the magnified pointer is controlled with an ordinary shortcut.
 * Screen and camera are saved separately, together with layout and pointer. Everything can therefore be changed afterwards.
 * A finished MP4 is made automatically in the background after recording (can be turned off), and the **Edit** button opens the recording in the editor
 * Recordings are saved in the Recordings folder of the open project and added straight to the project's library
