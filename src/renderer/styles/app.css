@@ -629,6 +629,30 @@ input[type='color'].color::-webkit-color-swatch {
   border-radius: 5px;
   animation: pulse 1.4s infinite;
 }
+.rec-badge.keys {
+  left: 62px;
+  background: #ffd60a;
+  color: #1c1c1e;
+  animation: none;
+}
+.keys-facts {
+  margin: 8px 0 12px;
+  padding-left: 18px;
+  line-height: 1.45;
+}
+.keys-facts li + li {
+  margin-top: 6px;
+}
+.keys-agree {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 12px;
+  font-weight: 600;
+}
+.keys-agree input {
+  margin-top: 3px;
+}
 .rec-meta {
   text-align: center;
   color: var(--text-3);
@@ -1811,6 +1835,7 @@ input[type='color'].color::-webkit-color-swatch {
   border-radius: 2px;
 }
 .band.cam { background: #64d2ff; }
+.band.keys { background: #ffd60a; }
 .band.zoom { background: #ff9f0a; }
 .kf-row {
   position: absolute;

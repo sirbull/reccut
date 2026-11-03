@@ -183,7 +183,7 @@ On a Mac the Help menu also has a search field. Type a word and macOS points to 
     section: 'Recording',
     title: 'Recording Screen and Camera',
     summary: 'Screen, camera and microphone are recorded separately, so everything can be changed afterwards.',
-    keywords: 'record capture webcam pip layout cursor zoom system audio area region crop part of screen countdown shortcut hotkey global pause resume window tray menu bar control bar crash recover microphone test level',
+    keywords: 'record capture webcam pip layout keystrokes keystroke add-on cursor zoom system audio area region crop part of screen countdown shortcut hotkey global pause resume window tray menu bar control bar crash recover microphone test level',
     body: `
 Choose a screen, a camera and a microphone in the Record room. Turn on system audio to record the sound from your computer.
 
@@ -236,7 +236,8 @@ Choose a countdown of 3, 5 or 10 seconds under Recording. The numbers are shown 
 - The layout buttons, or the shortcuts shown on them, switch between camera full screen, screen only and the camera in a corner. To use these keys from another app, enable **Allow shortcuts in other apps** under **Record → Shortcuts**.
 - Choose the camera shape (circle, square or 16:9), size and mirroring.
 - Turn on **Show PiP on screen** under Camera to see the camera over the app you are demonstrating. It follows the recording's position, size and shape, including when recording a screen area. Clicks pass through to the app underneath. It appears while Reccut is in the background and hides when you return. Use the layout shortcuts with **3–6** to switch corners. This is available for display and area capture. On macOS and Linux, the on-screen camera can also appear in the screen file; leave it off if you need a clean screen file for later editing.
-- **Cursor zoom** zooms in on the mouse pointer. Press the recording shortcut with **9** to turn it on and off. Reccut never listens to the keyboard or mouse outside its own window.
+- **Show keystrokes** needs the optional **Keystroke Add-on**. Reccut itself never reads the keyboard outside its own window. Click **Get Add-on** to read what the add-on does before it is downloaded: it reads the keyboard for the whole computer while you record, only shortcuts with Cmd, Ctrl, Alt or Win (plus Esc and the F keys) leave it, and they are saved in the recording so you can change them in Edit. It runs only while you record, and **Keys** in the recording controls shows when it is active. Reccut's own shortcuts are never shown. Remove the add-on under Overlays.
+- **Cursor zoom** zooms in on the mouse pointer. Press the recording shortcut with **9** to turn it on and off.
 - The recording is saved in the Recordings folder of the open project and added to its media. If the timeline is empty, it is also placed on the timeline.
 
 Everything is saved as separate files, so in the editor you can still change the layout, camera shape, overlays and the level of the microphone and system audio.

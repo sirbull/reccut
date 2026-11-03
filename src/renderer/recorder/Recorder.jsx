@@ -22,6 +22,7 @@ import * as engine from './engine.js';
 import { project, projectFolders } from '../editor/store.js';
 import * as editorCommands from '../editor/commands.js';
 import { GainControl, MicrophoneMixer } from './MicrophoneMixer.jsx';
+import { KeystrokesRows } from './KeystrokesAddon.jsx';
 import { meterDb } from './mixer.js';
 import { RECORDING_VIDEO_FORMATS, recordingAudioChoice, recordingAudioOptions } from '../../shared/recordingFormats.cjs';
 
@@ -79,6 +80,7 @@ export function Recorder({ active }) {
           <canvas ref={canvasRef} />
           {engine.editingArea.value && engine.activeArea() && <AreaEditor canvasRef={canvasRef} />}
           {recording && <div class="rec-badge">REC</div>}
+          {recording && engine.keystrokesRunning.value && <div class="rec-badge keys" title="The Keystroke Add-on is reading shortcuts for this recording">KEYS</div>}
           {engine.countdown.value > 0 && <div class="rec-countdown">{engine.countdown.value}</div>}
         </div>
         <div class="layout-row">
@@ -221,6 +223,7 @@ export function Recorder({ active }) {
         </Section>
 
         <Section title="Overlays">
+          <KeystrokesRows />
           <Row label={<><MousePointer2 size={14} /> Cursor zoom</>}>
             <Toggle checked={s.cursorZoom} onChange={(v) => set({ cursorZoom: v })} />
           </Row>

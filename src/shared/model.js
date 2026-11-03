@@ -437,6 +437,7 @@ export function defaultProps(type, media) {
         pipShape: rec.pip?.shape || 'rect',
         mirror: Boolean(rec.pip?.mirror),
         ...SIDE_DEFAULTS,
+        showKeys: rec.overlays?.keys ?? true,
         cursorZoom: rec.overlays?.cursorZoom ?? true,
         showClicks: rec.overlays?.clicks ?? false,
       };
@@ -824,6 +825,17 @@ export function zoomAmountAt(zooms, s) {
     p = Math.max(p, easeOutCubic(Math.min(up, down)));
   }
   return p;
+}
+
+export const KEY_LIFE = 1.6;
+
+export function keysAt(keys, s) {
+  const out = [];
+  for (const [t, label] of keys || []) {
+    if (t > s) break;
+    if (s - t < KEY_LIFE) out.push({ label, age: s - t });
+  }
+  return out.slice(-3);
 }
 
 export function clicksAt(clicks, s) {

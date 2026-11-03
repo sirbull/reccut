@@ -1,7 +1,7 @@
 // Opptaksmotor: kilder, live forhåndsvisning og opptak til separate filer.
 import { signal } from '@preact/signals';
-import { drawCamera, drawCursor } from '../../shared/render.js';
-import { LAYOUT_ANIM, easeOutCubic, lerpRect, pipRect, ZOOM_RAMP, clamp } from '../../shared/model.js';
+import { drawCamera, drawCursor, drawKeys } from '../../shared/render.js';
+import { KEY_LIFE, LAYOUT_ANIM, easeOutCubic, lerpRect, pipRect, ZOOM_RAMP, clamp } from '../../shared/model.js';
 import { settings, saveSettings } from './settings.js';
 import { recordingAudioChoice, recordingPlan, recordingVideoFormat } from '../../shared/recordingFormats.cjs';
 import { projectFolders } from '../editor/store.js';
@@ -304,6 +304,7 @@ let camAnimStart = 0;
 let lastCorner = 6;
 let liveZoom = { on: false, at: 0, off: 0 };
 let liveCursor = null;
+let liveKeys = [];
 let inputFrame = null;
 
 // Pekerbevegelse skal ikke vente på neste 30 Hz videobilde. Samle hendelser
@@ -435,7 +436,7 @@ function currentMeta() {
     ...(isWindowSource() ? { source: 'window' } : {}),
     pip: { size: s.pipSize, shape: s.pipShape, mirror: s.mirror },
     // Pekerzoom følger skjermen, så den er av når bare et vindu tas opp.
-    overlays: { cursorZoom: s.cursorZoom && !isWindowSource() },
+    overlays: { keys: Boolean(s.showKeys && keystrokesRunning.value), cursorZoom: s.cursorZoom && !isWindowSource() },
   };
   for (const r of recorders) {
     const isCam = r.name === 'camera';
@@ -511,6 +512,11 @@ function draw() {
     drawCamera(ctx, cameraVideo, cameraVideo.videoWidth, cameraVideo.videoHeight, cam, s.mirror, cam.w < W * 0.9);
     ctx.restore();
   }
+  if (keystrokesRunning.value) {
+    const nowS = now / 1000;
+    liveKeys = liveKeys.filter((k) => nowS - k.t < KEY_LIFE);
+    drawKeys(ctx, liveKeys.slice(-3).map((k) => ({ label: k.label, age: nowS - k.t })), W, H);
+  }
   if (!hasScreen && !hasCamera) {
     ctx.fillStyle = '#1c1c1e';
     ctx.fillRect(0, 0, W, H);
@@ -562,7 +568,7 @@ ticker.onmessage = () => {
 };
 
 function sendState() {
-  api.recState({ state: recording.value ? (paused.value ? 'paused' : 'recording') : countdown.value ? 'countdown' : 'idle', elapsed: elapsed.value, level: level.value, countdown: countdown.value });
+  api.recState({ state: recording.value ? (paused.value ? 'paused' : 'recording') : countdown.value ? 'countdown' : 'idle', elapsed: elapsed.value, level: level.value, countdown: countdown.value, keys: keystrokesRunning.value });
 }
 export function setActive(active) {
   const wasActive = roomActive;
@@ -585,12 +591,38 @@ export function setActive(active) {
   api.setPolling(active || recording.value);
 }
 
+// Keystroke Add-on: installed state, and whether the helper is reading keys right now.
+export const keystrokes = signal(null);
+export const keystrokesRunning = signal(false);
+export async function refreshKeystrokes() {
+  try {
+    keystrokes.value = await api.keystrokesStatus();
+  } catch {
+    keystrokes.value = { supported: false };
+  }
+  return keystrokes.value;
+}
+api.onKeystrokesRunning((on) => {
+  keystrokesRunning.value = Boolean(on);
+  if (!on) liveKeys = [];
+  sendState();
+});
+api.onKeystrokesError((reason) => {
+  keystrokesRunning.value = false;
+  notice.value = {
+    text: reason === 'permission'
+      ? 'Keystrokes are not shown: macOS has not allowed Input Monitoring for Reccut. Open Record › Overlays to allow it.'
+      : 'Keystrokes are not shown: the Keystroke Add-on could not read the keyboard on this computer.',
+  };
+});
+
 api.onInput((e) => {
   const now = performance.now();
   if (e.type === 'zoom') {
     liveCursor = [e.x, e.y];
     liveZoom = e.on ? { on: true, at: now, off: 0 } : { on: false, at: liveZoom.at, off: now };
   } else if (e.type === 'cursor') liveCursor = [e.x, e.y];
+  else if (e.type === 'key') liveKeys.push({ label: e.label, t: now / 1000 });
   scheduleInputDraw();
 });
 
@@ -752,7 +784,8 @@ async function beginRecording() {
   paused.value = false;
   layouts = [[0, effectiveLayout()]];
   // Opptaket lagres i opptaksmappen til det åpne prosjektet.
-  await api.recBegin({ t0, base: projectFolders.value?.recordings || null });
+  // The Keystroke Add-on runs only for this recording, and only when the user turned it on.
+  await api.recBegin({ t0, base: projectFolders.value?.recordings || null, keys: Boolean(s.showKeys && keystrokes.value?.installed && !keystrokes.value?.damaged) });
   recorders = [];
   const { w, h } = canvasSize.value;
   if (screenStream) {
@@ -786,6 +819,7 @@ export async function stopRecording() {
   recording.value = false;
   paused.value = false;
   finishing.value = true;
+  api.recStopping();
   sendState();
   try {
     for (const r of recorders) if (r.rec.state !== 'inactive') r.rec.stop();

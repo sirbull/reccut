@@ -16,6 +16,7 @@ import {
   cursorAt,
   easeInOut,
   easeOutCubic,
+  keysAt,
   layoutClipFor,
   recordingRectsAt,
   redactStrength,
@@ -673,6 +674,7 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
       ctx.restore();
     }
   }
+  if (clip.recordingPart !== 'camera' && clip.props.showKeys) drawKeys(ctx, keysAt(media.rec?.keys, s), W, H);
 }
 
 // Bakgrunnen bak side om side: et bilde fra biblioteket (fyller bildet), en gradient eller en farge.
@@ -810,6 +812,40 @@ export function drawClicks(ctx, clicks, rect) {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+// Tastetrykk vises som avrundede merker nederst på midten.
+export function drawKeys(ctx, items, W, H) {
+  if (!items.length) return;
+  const size = H * 0.034;
+  ctx.save();
+  ctx.filter = 'none';
+  ctx.font = `600 ${size}px ${FONTS.sans}`;
+  ctx.textBaseline = 'middle';
+  const padX = size * 0.7;
+  const h = size * 2;
+  const gap = size * 0.5;
+  const widths = items.map((it) => ctx.measureText(it.label).width + padX * 2);
+  const total = widths.reduce((a, b) => a + b, 0) + gap * (items.length - 1);
+  let x = (W - total) / 2;
+  const y = H * 0.86;
+  items.forEach((it, i) => {
+    const fadeIn = clamp(it.age / 0.12, 0, 1);
+    const fadeOut = clamp((1.6 - it.age) / 0.35, 0, 1);
+    ctx.globalAlpha = Math.min(fadeIn, fadeOut);
+    const dy = (1 - easeOutCubic(fadeIn)) * size * 0.6;
+    ctx.fillStyle = 'rgba(28, 28, 30, 0.86)';
+    ctx.beginPath();
+    ctx.roundRect(x, y - h / 2 + dy, widths[i], h, size * 0.45);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.lineWidth = Math.max(1, size * 0.04);
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(it.label, x + padX, y + dy);
+    x += widths[i] + gap;
+  });
+  ctx.restore();
 }
 
 export function wrapText(ctx, text, maxW) {

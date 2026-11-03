@@ -132,7 +132,7 @@ const RUNTIME_TOOLS = [
   {
     name: 'inspect_media',
     description:
-      'Look inside a media item, also before it is on the timeline: scene changes (new window, page or camera shot) with strength 0..1, the recording event log of Reccut recordings (cursor zoom, and clicks with position in older recordings), and a contact sheet of evenly spaced frames with source times (sent as an image when the model can see images). Start with the whole file, then use a narrower from and to around what matters. For recordings choose stream "screen" or "camera".',
+      'Look inside a media item, also before it is on the timeline: scene changes (new window, page or camera shot) with strength 0..1, the recording event log of Reccut recordings (cursor zoom, keyboard shortcuts when the Keystroke Add-on was used, and clicks with position in older recordings), and a contact sheet of evenly spaced frames with source times (sent as an image when the model can see images). Start with the whole file, then use a narrower from and to around what matters. For recordings choose stream "screen" or "camera".',
     parameters: {
       type: 'object',
       properties: {
@@ -162,8 +162,9 @@ const RUNTIME_TOOLS = [
       if (m.rec) {
         const within = (list) => (list || []).filter(([t]) => t >= from && t <= to);
         info.clicks = within(m.rec.clicks).slice(0, 100).map(([t, x, y]) => [t, Math.round(x * 100) / 100, Math.round(y * 100) / 100]);
+        if (m.rec.keys?.length) info.shortcuts = within(m.rec.keys).slice(0, 100);
         info.cursorZooms = within(m.rec.zooms).slice(0, 50);
-        info.note = 'Clicks are [seconds, x, y] with x and y 0..1 across the screen. Only older recordings have clicks.';
+        info.note = 'Clicks are [seconds, x, y] with x and y 0..1 across the screen. Only older recordings have clicks. Shortcuts are [seconds, label] and exist only when the Keystroke Add-on was used; normal typing is never saved.';
       }
       let image;
       if (m.kind !== 'audio' && sv?.hasVideo !== false) {

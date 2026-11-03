@@ -34,6 +34,8 @@ const DEFAULTS = {
   captureVisibilityVersion: 1,
   modifier: MODIFIERS[0].value,
   backgroundShortcuts: false,
+  // Needs the Keystroke Add-on, which the user installs separately.
+  showKeys: false,
   cursorZoom: true,
   autoRender: true,
   // Opptaksområde: hele skjermen eller et område (andeler av skjermen).

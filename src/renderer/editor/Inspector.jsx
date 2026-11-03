@@ -1388,6 +1388,9 @@ function RecordingTab({ clip, media }) {
       {usesSide && <SideBySideSection clip={clip} />}
       {hasCam && <CameraColorSection clip={clip} />}
       {clip.recordingPart !== 'camera' && <Section title="Overlays">
+        {rec.keys?.length > 0 && <Row label={`Keystrokes (${rec.keys.length})`}>
+          <Toggle checked={clip.props.showKeys} onChange={(v) => setProp(clip, { showKeys: v })} />
+        </Row>}
         <Row label={`Cursor zoom (${rec.zooms?.length || 0})`}>
           <Toggle checked={clip.props.cursorZoom} onChange={(v) => setProp(clip, { cursorZoom: v })} />
         </Row>

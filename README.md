@@ -64,6 +64,15 @@ The camera appears as a separate **PiP** clip on V2, linked to the screen clip o
 
 A global shortcut starts and stops recording from any app. Pause and resume without leaving gaps in the video. A floating control bar shows the recording time and controls without appearing in the recording. Recordings are saved as you go, with recovery after a crash.
 
+**Keystrokes on screen** come from an optional add-on, not from Reccut itself. Reccut never reads your keyboard. To show shortcuts in a recording, open **Record → Overlays → Show keystrokes → Get Add-on**. A dialog explains what the add-on does before anything is downloaded:
+
+- It reads the keyboard for the whole computer while you record, using the same system feature as keyloggers. Security software may warn about it, which is why it is not in the installer.
+- Only shortcuts with Ctrl, Cmd, Alt or Win, plus Esc and the F keys, leave the add-on. Normal typing never does.
+- The shortcuts are saved in the recording so you can show, hide or cut them in Edit.
+- It runs only while you record, and a **Keys** label in the recording controls shows when it is active.
+
+The add-on is a small program built by GitHub from [native/keystrokes](native/keystrokes) and attached to each release with a SHA-256 checksum. Reccut checks the checksum when it downloads the add-on and before every start. Remove it again under **Record → Overlays**.
+
 ## One-click background removal and advanced keying
 
 <p align="center">
@@ -182,6 +191,7 @@ You don't have to take our word for it:
 - **All the source code is public** in this repository. Anyone can read it, search it or have it reviewed.
 - **The installers are built by GitHub**, not on a private computer. The [build workflow](.github/workflows/build.yml) builds them from the public code, and the build logs are visible under [Actions](https://github.com/sirbull/reccut/actions).
 - **You can build it yourself** from the source code. See [Build from source](#build-from-source).
+- **The installer does not read your keyboard.** Keystrokes on screen need a separate add-on that you choose to download.
 
 ### Installing despite the warning
 
