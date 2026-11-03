@@ -9,6 +9,7 @@ import { backgroundJobs, removeBackground, cancelBackground } from './cutout.js'
 import { refineSession, brushSettings, startRefine, stopRefine, navigateRefineHistory } from './refine.js';
 import { maskEditing, fillTextWithImage } from './masks.js';
 import { defaultDesignMask } from '../../shared/designMasks.js';
+import { canvasCrop,canvasCropRatio,finishCanvasCrop } from './tools.js';
 import { cropSession, setCropRatio, finishCrop, startCrop } from './crop.js';
 import { CROP_RATIOS } from '../../shared/designCrop.js';
 import { FillControls, StrokeControls, ShadowControls, StyleNumber } from './StyleControls.jsx';
@@ -19,6 +20,8 @@ export function Properties() {
   const d = currentDesign.value, ids = selection.value;
   imageVersion.value; fontVersion.value;
   if (!d) return null;
+  const canvasDraft=canvasCrop.value;
+  if(canvasDraft)return <Section title="Crop Canvas" collapsible={false}><Row label="Aspect Ratio"><Select value={canvasDraft.ratio} options={CROP_RATIOS.filter(r=>r.value!=='design')} onChange={canvasCropRatio}/></Row><p class="hint">Drag handles to crop the canvas. Drag inside to move the crop. Original image sources stay intact. Enter applies; Escape cancels.</p><Row><Button onClick={()=>finishCanvasCrop(false)}>Cancel</Button><Button variant="primary" onClick={()=>finishCanvasCrop()}>Apply Canvas Crop</Button></Row></Section>;
   const crop = cropSession.value;
   if (crop) return <Section title="Crop" collapsible={false}>
     <Row label="Aspect Ratio"><Select value={crop.ratio} options={CROP_RATIOS} onChange={setCropRatio} /></Row>

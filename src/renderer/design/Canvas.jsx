@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { hitTest, layerBounds, layerPoint, selectionBounds, resizeLayer, rotatePoint, snapMove, snapRotation, newLayer, groupSelectionIds, rotateDesignLayers, scaleDesignLayers } from '../../shared/design.js';
+import { hitTest, layerBounds, layerPoint, selectionBounds, resizeLayer, rotatePoint, snapMove, snapRotation, newLayer, groupSelectionIds, rotateDesignLayers, scaleDesignLayers, designSafeZones } from '../../shared/design.js';
+import { canvasCrop,showSafeZones } from './tools.js';
 import { drawDesign, imageFilter } from '../../shared/designRender.js';
 import { designFont, layoutDesignText } from '../../shared/designText.js';
 import { currentDesign, selection, selectLayer, tool, shapeType, zoom, viewScale, pan, setZoom, addText, beginDesignTransient, updateDesignTransient, endDesignTransient } from './store.js';
@@ -19,7 +20,7 @@ function handlesFor(box, scale) {
   return [...positions.map((p, i) => ({ ...p, handle: HANDLES[i] })), { ...layerPoint(box, box.w / 2, -28 / scale), handle: 'rotate' }];
 }
 export function DesignCanvas({ active }) {
-  const crop = cropSession.value, refine = refineSession.value, maskId = maskEditing.value;
+  const crop = cropSession.value, refine = refineSession.value, maskId = maskEditing.value, canvasDraft=canvasCrop.value, safe=showSafeZones.value;
   const [brushHover,setBrushHover] = useState(null);
   const d = currentDesign.value, selected = selection.value, z = zoom.value, p = pan.value, version = `${imageVersion.value}:${fontVersion.value}`;
   const host = useRef(null), canvas = useRef(null), drag = useRef(null), textRef = useRef(null), space = useRef(false), latest = useRef(null);
@@ -78,7 +79,9 @@ export function DesignCanvas({ active }) {
       drawDesign(ctx, d, (l)=>refine&&l.asset===refine.asset?refine.canvas:getImage(l), { scale, fontAvailable, hideLayers: new Set([editing, crop?.layer.id].filter(Boolean)) });
       ctx.scale(scale, scale);
       ctx.strokeStyle = '#0a84ff'; ctx.lineWidth = 1 / scale;
-      if (box && !editing && !crop && !refine && !maskId) {
+      if(safe){ctx.save();ctx.fillStyle='#ffbf4730';ctx.strokeStyle='#ffbf47';ctx.lineWidth=1/scale;ctx.setLineDash([5/scale,4/scale]);for(const z of designSafeZones(d)){ctx.fillRect(z.x,z.y,z.w,z.h);ctx.strokeRect(z.x,z.y,z.w,z.h);ctx.font=`${12/scale}px sans-serif`;ctx.fillStyle='#ffbf47';ctx.fillText(z.label,z.x+4/scale,z.y+16/scale);ctx.fillStyle='#ffbf4730';}ctx.restore();}
+      if(canvasDraft){const b=cropViewport({x:0,y:0,w:d.width,h:d.height},canvasDraft.crop);ctx.save();ctx.fillStyle='#00000090';ctx.beginPath();ctx.rect(0,0,d.width,d.height);ctx.rect(b.x,b.y,b.w,b.h);ctx.fill('evenodd');ctx.strokeStyle='#ffffff';ctx.lineWidth=1.5/scale;ctx.strokeRect(b.x,b.y,b.w,b.h);for(const [x,y]of POSITIONS){ctx.fillStyle='#ffffff';ctx.fillRect(b.x+x*b.w-4/scale,b.y+y*b.h-4/scale,8/scale,8/scale)}ctx.restore();}
+      if (box && !editing && !crop && !refine && !maskId && !canvasDraft) {
         const corners = [[0, 0], [box.w, 0], [box.w, box.h], [0, box.h]].map(([x, y]) => layerPoint(box, x, y));
         ctx.beginPath(); corners.forEach((pt, i) => i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)); ctx.closePath(); ctx.stroke();
         const handles = handlesFor(box, scale), top = handles[1], rot = handles[8];
@@ -106,7 +109,7 @@ export function DesignCanvas({ active }) {
       ctx.restore();
     });
     return () => cancelAnimationFrame(frame);
-  }, [active, d, selected, z, p, size, version, guides, marquee, editing, crop, refine, maskId, brushHover, brushSettings.value]);
+  }, [active, d, selected, z, p, size, version, guides, marquee, editing, crop, refine, maskId, brushHover, brushSettings.value,canvasDraft,safe]);
   useEffect(() => { if (editing) { textRef.current?.focus(); textRef.current?.select(); } }, [editing]);
   function startText(id) {
     const layer = d.layers.find((l) => l.id === id);
@@ -131,6 +134,7 @@ export function DesignCanvas({ active }) {
     if (space.current || tool.value === 'hand' || e.button === 1) {
       drag.current = { type: 'pan', clientX: e.clientX, clientY: e.clientY, pan: pan.value }; return;
     }
+    if(canvasDraft){const full={x:0,y:0,w:d.width,h:d.height},b=cropViewport(full,canvasDraft.crop),index=POSITIONS.findIndex(([x,y])=>Math.hypot(pt.x-b.x-x*b.w,pt.y-b.y-y*b.h)<=10/scale);drag.current={type:'canvasCrop',start:pt,session:canvasDraft,handle:index>=0?HANDLES[index]:null};return;}
     if (crop) {
       const local=cropPoint(pt,crop.layer), b=cropViewport(crop.full,crop.crop);
       const index=POSITIONS.findIndex(([x,y])=>Math.hypot(local.x-b.x-x*b.w,local.y-b.y-y*b.h)<=10/scale);
@@ -167,6 +171,7 @@ export function DesignCanvas({ active }) {
     if(state.type==='mask'){const p=cropPoint(point(e),state.layer),x=Math.max(0,Math.min(1,p.x/state.layer.w)),y=Math.max(0,Math.min(1,p.y/state.layer.h));const points=state.layer.mask.points.map(p=>[...p]);if(state.layer.mask.shape==='polygon'||points.length!==4)points[state.index]=[x,y];else{const i=state.index;for(const n of i===0||i===3?[0,3]:[1,2])points[n][0]=x;for(const n of i<2?[0,1]:[2,3])points[n][1]=y;}updateDesignTransient(p=>{const l=p.designs[d.id].layers.find(l=>l.id===state.layer.id);if(l?.mask)l.mask.points=points;});return;}
     if (state.type === 'pan') { pan.value = { x: state.pan.x + e.clientX - state.clientX, y: state.pan.y + e.clientY - state.clientY }; return; }
     const pt = point(e); let dx = pt.x - state.start.x, dy = pt.y - state.start.y;
+    if(state.type==='canvasCrop'){const s=state.session,full={x:0,y:0,w:d.width,h:d.height},c=s.crop,ratio=s.ratio==='free'?null:Number(s.ratio);canvasCrop.value={...s,crop:state.handle?resizeCrop(full,c,state.handle,dx,dy,ratio):{...c,x:Math.max(0,Math.min(1-c.w,c.x+dx/d.width)),y:Math.max(0,Math.min(1-c.h,c.y+dy/d.height))}};return;}
     if (state.type === 'crop') {
       const s=state.session,local=cropPoint(pt,s.layer),cx=local.x-state.start.x,cy=local.y-state.start.y;
       const ratio=s.ratio==='design'?d.width/d.height:s.ratio==='free'?null:Number(s.ratio);
@@ -213,8 +218,9 @@ export function DesignCanvas({ active }) {
     const state = drag.current;
     drag.current = null; setGuides([]); setMarquee(null);
     if(state.type==='refine'){if(keep)saveRefineStroke();else{stopRefine();startRefine();}}
+    if(state.type==='canvasCrop'&&!keep)canvasCrop.value=state.session;
     if (state.type === 'crop' && !keep) cropSession.value = state.session;
-    if (state.type !== 'pan' && state.type !== 'marquee' && state.type !== 'crop' && state.type !== 'refine') endDesignTransient(keep);
+    if (state.type !== 'pan' && state.type !== 'marquee' && state.type !== 'crop' && state.type !== 'refine' && state.type !== 'canvasCrop') endDesignTransient(keep);
     if (state.type === 'shape') tool.value = 'select';
     if (host.current.hasPointerCapture(e.pointerId)) host.current.releasePointerCapture(e.pointerId);
   }
@@ -222,9 +228,9 @@ export function DesignCanvas({ active }) {
   let textLayout;
   if (text) { const ctx = canvas.current?.getContext('2d'); if (ctx) textLayout = layoutDesignText(text, (t, font) => { ctx.font = font; return ctx.measureText(t).width; }); }
   return (
-    <div class={`dz-stage dz-tool-${tool.value}${crop ? ' dz-crop-mode' : ''}${refine ? ' dz-refine-mode' : ''}`} ref={host} tabIndex={0} aria-label="Design canvas" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={(e) => up(e, false)} onLostPointerCapture={up}
+    <div class={`dz-stage dz-tool-${tool.value}${crop ? ' dz-crop-mode' : ''}${refine ? ' dz-refine-mode' : ''}${canvasDraft?' dz-canvas-crop-mode':''}`} ref={host} tabIndex={0} aria-label="Design canvas" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={(e) => up(e, false)} onLostPointerCapture={up}
       onKeyDown={(e) => { if(refineSession.value||maskEditing.value){e.stopPropagation();if(refineSession.value&&(e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();navigateRefineHistory(e.shiftKey);return;}if(e.key==='Escape'){e.preventDefault();if(drag.current?.type==='mask')endDesignTransient(false);drag.current=null;stopRefine();maskEditing.value=null;}return;} if (cropSession.value) { e.stopPropagation(); if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); drag.current = null; finishCrop(e.key === 'Enter'); } return; } if (e.key === 'Escape' && drag.current) { e.stopPropagation(); up(e, false); } }}
-      onDblClick={(e) => { const hit = d && hitTest(d, point(e).x, point(e).y); if (hit) selectLayer(hit.id, { single: true }); if (hit?.type === 'text') startText(hit.id); else if (hit?.type === 'image') startCrop(); }}
+      onDblClick={(e) => { if(canvasCrop.value)return; const hit = d && hitTest(d, point(e).x, point(e).y); if (hit) selectLayer(hit.id, { single: true }); if (hit?.type === 'text') startText(hit.id); else if (hit?.type === 'image') startCrop(); }}
       onDragOver={(e) => { if (hasFiles(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }}
       onDrop={(e) => { if (!hasFiles(e.dataTransfer)) return; e.preventDefault(); e.stopPropagation(); requestPlace(droppedPaths(e.dataTransfer, window.api.pathForFile), point(e), e.altKey).catch((err) => toast(err.message, { kind: 'error' })); }}>
       {d && <div class="dz-checker" style={{ left: offset.x, top: offset.y, width: d.width * scale, height: d.height * scale }} />}

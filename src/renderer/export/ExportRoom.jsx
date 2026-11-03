@@ -49,7 +49,8 @@ import {
 } from '../../shared/formats.js';
 import { createPlayer } from '../player.js';
 import { tasks } from '../editor/store.js';
-import { FrameRateWarning, SourceMediaChoice, defaultExportDir, exportCaptionsOnly } from '../editor/ExportDialog.jsx';
+import { FrameRateWarning, SourceMediaChoice, defaultExportDir, exportCaptionsOnly, startExport } from '../editor/ExportDialog.jsx';
+import { ThumbnailChoice } from '../design/ThumbnailChoice.jsx';
 import { Button, IconButton, NumberField, Row, Section, Segmented, Select, toast } from '../ui.jsx';
 import {
   PROJECT_SOURCE,
@@ -119,7 +120,7 @@ function extFor(s) {
   return s.audioOnly ? AUDIO_FORMATS.find((f) => f.id === s.audioFormat).ext : videoFormat(s.format).ext;
 }
 
-async function exportSource(id, name) {
+async function exportSource(id, name, thumbnailId=null) {
   const p = sourceProject(id);
   const rs = resolvedSettings(id);
   const folder = settings.value.dir || (await defaultExportDir());
@@ -130,7 +131,7 @@ async function exportSource(id, name) {
     toast(`${p.name} is empty and was not exported.`);
     return false;
   }
-  await api.startExport({ project: p, settings: { ...rs, output: `${folder}${sep}${safe}.${extFor(rs)}` } });
+  await startExport(p,{ ...rs, output: `${folder}${sep}${safe}.${extFor(rs)}` },rs.audioOnly?null:thumbnailId);
   return true;
 }
 
@@ -156,6 +157,7 @@ export function ExportRoom({ active }) {
   const duration = Math.max(0, b - a);
   const size = estimateSize({ ...rs }, duration, geo.w, geo.h);
   const [name, setName] = useState(p.name);
+  const [thumbnailId,setThumbnailId]=useState(null),[preparing,setPreparing]=useState(false);
 
   useEffect(() => setName(p.name), [id, p.name]);
   useEffect(() => {
@@ -175,7 +177,8 @@ export function ExportRoom({ active }) {
   };
 
   const doExport = async () => {
-    if (await exportSource(id, name)) toast('Export started. Follow the progress in the queue on the left.', { timeout: 4000 });
+    if(preparing)return;setPreparing(true);
+    try { if (await exportSource(id, name, p.designs?.[thumbnailId]?thumbnailId:null)) toast('Export started. Follow the progress in the queue on the left.', { timeout: 4000 }); } catch(err) { toast(`Could not start export: ${err.message}`,{kind:'error'}); } finally { setPreparing(false); }
   };
   const exportAll = async () => {
     let n = 0;
@@ -502,6 +505,7 @@ export function ExportRoom({ active }) {
           )}
 
           <Section title="File">
+            <ThumbnailChoice project={p} value={thumbnailId} onChange={setThumbnailId} disabled={s.audioOnly}/>
             <Row label="File name" stacked>
               <div class="name-row">
                 <input class="text-input" value={name} onInput={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.stopPropagation()} />
@@ -523,8 +527,8 @@ export function ExportRoom({ active }) {
           </Section>
         </div>
         <footer class="ex-footer">
-          <Button variant="primary" class="big" onClick={doExport}>
-            {id === PROJECT_SOURCE ? 'Export Project' : 'Convert File'}
+          <Button variant="primary" class="big" disabled={preparing} onClick={doExport}>
+            {preparing?'Preparing Export…':id === PROJECT_SOURCE ? 'Export Project' : 'Convert File'}
           </Button>
           {hasCaptions(p) && (
             <Button variant="secondary" onClick={() => exportCaptionsOnly(p, { range: so.range, captions: s.captions, name, dir: s.dir })}>

@@ -61,7 +61,7 @@ Settings has a separate Design keyboard group. Shortcut conflicts are checked wi
 
 ## Save and export
 
-Canvas Size changes the canvas while keeping layer sizes and positions relative to its center.
+Canvas Size changes the canvas without scaling layers. Use its nine-point content anchor to choose where existing content stays. Resize scales content for new sizes.
 
 Design changes save with the project and have their own Undo and Redo. Undo in Design keeps the timeline intact, and Undo in Edit keeps designs intact. Opening a project clears both histories.
 
@@ -91,7 +91,27 @@ Choose a canvas size and title, or type your own title. Offline title ideas come
 
 When an AI provider is configured, Suggest Titles with AI is available for sequences with captions. The first use in a Suggestions window names the provider and asks before sending up to 12,000 transcript characters. No image, audio or video file is sent by this action. AI never runs automatically, and offline suggestions remain available if the provider fails.
 
-Closing Suggestions cancels the analysis or pending frame capture. Switching projects, rooms or changing the sequence also discards stale results.`,
+Closing Suggestions cancels the analysis or pending frame capture. Switching projects, rooms or changing the sequence also discards stale results.
+
+## Preview and readability
+
+Preview in the toolbar shows generic video-list layouts at 360, 246 and 168 pixels wide and in a phone layout. Switch light/dark backgrounds and the progress bar. The duration badge uses the current sequence duration. The whole design is fitted inside each preview.
+
+Safe Zones highlights generic overlay areas for the selected size on the editing canvas. These areas are guides, not platform requirements, and are never exported. Check Readability in Properties finds small text, low text-fill contrast and text overlapping an overlay area. Select jumps to the affected text layer. Checks use the layers behind the text and a white backdrop for transparency. Outlines and shadows may improve actual legibility.
+
+## Variants and sizes
+
+Canvas offers Make Variant and Compare Variants. Each variant is independently editable. Keep this one marks a favorite without deleting any design. Favorites appear in the Designs list.
+
+Resize creates designs for one or more selected sizes, scaling and positioning layers using anchors or relative centers. Resize current design requires exactly one target size. Export All Sizes saves the selected designs to a folder as PNG, JPEG or WebP, with dimensions in their file names. Existing files get unique names.
+
+The Export room and Easy Export offer Also save thumbnail when the project has designs. Choose a design to save a JPEG next to the completed video with the same base name. Its appearance is prepared before video export starts, so later edits do not change it. An existing JPEG is kept and an error is shown rather than overwriting it.
+
+## Open Image and canvas tools
+
+Open Image creates a separate design at the image's displayed pixel size, with just that image and a transparent canvas. Dropping images on the empty Design room does the same. The import-copy preference controls embedded or linked sources. JPEG orientation is honored. Open Image supports up to 8192 pixels per side; larger images can be placed into an existing design.
+
+Canvas offers Crop Canvas, Rotate Canvas Left/Right and Flip Canvas Horizontally/Vertically. Crop Canvas has aspect presets and draggable handles; drag inside to move the crop. Enter or Apply Canvas Crop applies it; Escape or Cancel discards it. Cropping moves every layer and changes the canvas size. Image sources and masks stay intact, so they can still be repositioned. The canvas background adapts to the new size. All canvas operations can be undone.`,
     see: ['projects', 'package', 'export-frame'],
   },
 

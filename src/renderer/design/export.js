@@ -8,11 +8,11 @@ import { toast } from '../ui.jsx';
 import { currentDesign } from './store.js';
 import { ensureImage, imagePath } from './assets.js';
 
-export async function saveDesignImage(design, { format = 'png', quality = 0.92, transparent = !design.background, width = design.width, limit = 0, name = design.name, dir } = {}) {
+export async function encodeDesignImage(design, { format = 'png', quality = 0.92, transparent = !design.background, width = design.width, limit = 0, sourceProject = project.value } = {}) {
   const fmt = FRAME_FORMATS.find((f) => f.id === format);
   const height = Math.max(1, Math.round(width * design.height / design.width));
   if (!fmt || !Number.isInteger(width) || width < 1 || width > 8192 || height > 8192) throw new Error('Export sizes must be whole numbers from 1 to 8192 pixels.');
-  const p = project.value, loaded = new Map();
+  const p = sourceProject, loaded = new Map();
   await Promise.all(design.layers.filter((l) => l.type === 'image' && !l.hidden).map(async (l) => {
     const img = await ensureImage(imagePath(l, p));
     if (!img) throw new Error(`Relink the missing image "${l.name}" before exporting.`);
@@ -33,9 +33,14 @@ export async function saveDesignImage(design, { format = 'png', quality = 0.92, 
     blob = result.data;
   } else blob = await encode(quality);
   if (limit > 0 && blob.size > limit * 1e6) throw new Error('This PNG exceeds the size limit. Choose JPEG or reduce its width.');
-  const folder = dir || await defaultExportDir();
+  return blob;
+}
+export async function saveDesignImage(design, options = {}) {
+  const blob = await encodeDesignImage(design, options), format = options.format || 'png', name = options.name ?? design.name;
+  const fmt = FRAME_FORMATS.find(f => f.id === format), folder = options.dir || await defaultExportDir();
   return window.api.writeDesignImage(`${folder}${window.api.platform === 'win32' ? '\\' : '/'}${designFileName(name)}.${fmt.ext}`, new Uint8Array(await blob.arrayBuffer()));
 }
+export function designExportError(err) {return /EACCES|EPERM|EROFS/.test(err.message)?'This folder is read only. Choose another folder.':/ENOSPC/.test(err.message)?'There is not enough free space to save this image.':err.message;}
 export function designSaved(path) {
   toast(`Design saved: ${path.split(/[\\/]/).pop()}`, { kind: 'success', actions: [{ label: 'Reveal', onClick: () => window.api.reveal(path) }, { label: 'Open', onClick: () => window.api.openPath(path) }] });
 }

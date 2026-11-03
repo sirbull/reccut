@@ -38,4 +38,11 @@ async function readClipboard(clipboard, toPNG) {
   }
   return { image, text };
 }
-module.exports = { writeImage, readClipboard };
+async function writeVideoThumbnail(video,data) {
+  if(typeof video!=='string'||!path.isAbsolute(video)||!path.extname(video))throw new Error('A local exported video is required.');
+  await fs.promises.access(video);
+  const target=video.slice(0,-path.extname(video).length)+'.jpg';
+  const handle=await fs.promises.open(target,'wx');
+  try{await handle.writeFile(Buffer.from(data));await handle.close();return target;}catch(err){await handle.close().catch(()=>{});await fs.promises.unlink(target).catch(()=>{});throw err;}
+}
+module.exports = { writeImage, readClipboard, writeVideoThumbnail };

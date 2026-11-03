@@ -25,7 +25,7 @@ function setup(options = {}) {
       Promise.resolve().then(()=> { if (this.crossOrigin !== 'anonymous' || path.includes('corrupt')) this.onerror(); else this.onload(); });
     }
   }
-  vm.runInNewContext(bundle, { module,exports:module.exports,require:(name)=>name==='qa-player'?{fileUrl:p=>'media://file/'+encodeURIComponent(p)}:{toast:message=>messages.push(message)}, window:{api,addEventListener(){}},localStorage:{getItem:()=>null,setItem(){}},performance:{now:()=>0},setTimeout:()=>0,clearTimeout(){},structuredClone,Image:FakeImage });
+  vm.runInNewContext(bundle, { module,exports:module.exports,require:(name)=>name==='qa-player'?{fileUrl:p=>'media://file/'+encodeURIComponent(p)}:{toast:message=>messages.push(message)}, window:{api,addEventListener(){}},localStorage:{getItem:()=>null,setItem(){}},performance:{now:()=>0},setTimeout:()=>0,clearTimeout(){},structuredClone,createImageBitmap:async()=>({close(){}}),Image:FakeImage });
   const q=module.exports; q.design.addDesign();
   return {...q,images,messages,copied,exports,api,listeners,written};
 }
@@ -183,4 +183,11 @@ test('an already canceled frame request does not start export or add assets',asy
   const q=setup(),controller=new AbortController();controller.abort();
   await q.assets.captureFrameAsset({...q.editor.project.value,duration:3,fps:30},1,{signal:controller.signal});
   assert.equal(q.exports.length,0);assert.equal(Object.keys(q.editor.project.value.designAssets).length,0);
+});
+
+test('Open Image creates one exact-size transparent design and independent undo without Edit media',async()=>{
+ const q=setup({width:3024,height:4032});const before=Object.keys(q.editor.project.value.designs).length;await q.assets.openImageFiles(['/outside/Phone.jpg'],{copy:false});const d=q.design.currentDesign.value;assert.equal(d.name,'Phone');assert.equal(d.width,3024);assert.equal(d.height,4032);assert.equal(d.background,null);assert.equal(d.layers.length,1);assert.equal(d.layers[0].w,3024);assert.equal(d.layers[0].h,4032);assert.equal(d.layers[0].fit,'contain');assert.equal(Object.keys(q.editor.project.value.media).length,0);q.design.designUndo();assert.equal(Object.keys(q.editor.project.value.designs).length,before);
+});
+test('Open Image rejects oversize sources instead of cropping or creating an empty design',async()=>{
+ const q=setup({width:12000,height:100});const before=Object.keys(q.editor.project.value.designs).length;await q.assets.openImageFiles(['/wide.png'],{copy:false});assert.equal(Object.keys(q.editor.project.value.designs).length,before);assert.ok(q.messages.some(m=>m.includes('8192')));
 });

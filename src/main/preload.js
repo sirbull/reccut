@@ -104,6 +104,7 @@ contextBridge.exposeInMainWorld('api', {
   psdLayers: invoke('layers:psd'),
   psdExtract: invoke('layers:psdExtract'),
   writeBinary: invoke('file:writeBinary'),
+  writeVideoThumbnail: invoke('design:videoThumbnail'),
   writeDesignImage: invoke('design:writeImage'),
   retainDesignCutouts: invoke('design:retainCutouts'),
   discardDesignCutout: invoke('design:discardCutout'),

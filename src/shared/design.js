@@ -221,9 +221,9 @@ export function snapMove(box, dx, dy, candidates, threshold) {
   };
   return { dx: axis('x', 'w', dx), dy: axis('y', 'h', dy), guides };
 }
-export function resizeDesign(d, width, height) {
+export function resizeDesign(d, width, height, anchor = { x: 0.5, y: 0.5 }) {
   if (!validDesignSize(width, height)) throw new Error('Width and height must be whole numbers from 1 to 8192 pixels.');
-  return { ...d, width, height, size: 'custom', layers: d.layers.map((l) => ({ ...l, x: l.x + (width - d.width) / 2, y: l.y + (height - d.height) / 2 })) };
+  return { ...d, width, height, size: 'custom', layers: d.layers.map((l) => ({ ...l, x: l.x + (width - d.width) * number(anchor.x,0.5,0,1), y: l.y + (height - d.height) * number(anchor.y,0.5,0,1) })) };
 }
 export function reorderLayers(layers, ids, direction) {
   const picked = new Set(ids), out = [...layers];
@@ -329,4 +329,66 @@ export function cameraFrameProject(project, time) {
   if (!clip) return null;
   const media=project.media[clip.mediaId],camera=media.streams.camera,k=Math.min(1,8192/Math.max(camera.width||1920,camera.height||1080));
   return {...project,width:Math.max(1,Math.round((camera.width||1920)*k)),height:Math.max(1,Math.round((camera.height||1080)*k)),clips:{[clip.id]:{...clip,recordingPart:'camera',props:{...clip.props,showCamera:true,showKeys:false}}},primary:[clip.id],media:{[media.id]:{...media,streams:{camera}}}};
+}
+
+// Generic overlay areas for preview, not platform upload specifications.
+const badgeZone = { x: 0.8, y: 0.84, w: 0.2, h: 0.16, label: 'Duration badge' };
+for (const preset of DESIGN_SIZES) preset.safe = preset.group === 'Video' ? [badgeZone] : preset.id === 'reels' ? [{ x: 0.88, y: 0.12, w: 0.12, h: 0.76, label: 'Side controls' }, { x: 0, y: 0.82, w: 1, h: 0.18, label: 'Caption area' }] : [];
+export function designSafeZones(d) {
+  return (DESIGN_SIZES.find(s => s.id === d.size)?.safe || []).map(z => ({ ...z, x: z.x*d.width, y: z.y*d.height, w: z.w*d.width, h: z.h*d.height }));
+}
+// https://www.w3.org/TR/WCAG22/#dfn-relative-luminance
+export function contrastRatio(a,b) {
+  const luminance = color => {
+    const rgb = typeof color === 'string' ? (color.match(/[a-f\d]{2}/gi)||[]).map(v=>parseInt(v,16)) : color;
+    const values = [0,1,2].map(i=>{const s=Math.max(0,Math.min(255,rgb?.[i]||0))/255;return s<=0.04045?s/12.92:((s+0.055)/1.055)**2.4;});
+    return values[0]*0.2126+values[1]*0.7152+values[2]*0.0722;
+  };
+  const x=luminance(a),y=luminance(b);return(Math.max(x,y)+0.05)/(Math.min(x,y)+0.05);
+}
+export function readabilityWarnings(d,{textSizes={},contrasts={}}={}) {
+  const warnings=[],zones=designSafeZones(d);
+  for(const l of d.layers.filter(l=>l.type==='text'&&!l.hidden&&l.opacity>0&&l.text.trim())) {
+    const size=(textSizes[l.id]??l.size)*Math.min(168/d.width,94.5/d.height),b=layerBounds(l);
+    if(size<12)warnings.push({layerId:l.id,kind:'small',message:`Text is about ${Math.max(0,Math.round(size))} px at small preview size.`});
+    if(Number.isFinite(contrasts[l.id])&&contrasts[l.id]<3)warnings.push({layerId:l.id,kind:'contrast',message:`Text fill contrast is about ${contrasts[l.id].toFixed(1)}:1. Aim for 3:1 or more.`});
+    for(const z of zones)if(b.x<z.x+z.w&&b.x+b.w>z.x&&b.y<z.y+z.h&&b.y+b.h>z.y)warnings.push({layerId:l.id,kind:'safe',message:`Text overlaps the ${z.label.toLowerCase()}.`});
+  }
+  return warnings;
+}
+export function duplicateDesign(d,{variant=false}={}) {
+  const copy=structuredClone(d),groups=new Map();copy.id=uid();copy.created=Date.now();copy.name=`${d.name} ${variant?'variant':'copy'}`;copy.favorite=false;
+  if(variant)copy.variantOf=d.variantOf||d.id;
+  copy.layers=copy.layers.map(l=>{if(l.group&&!groups.has(l.group))groups.set(l.group,uid());return{...l,id:uid(),group:l.group?groups.get(l.group):null};});return copy;
+}
+export function designVariants(designs,d) {const group=d?.variantOf||d?.id;return Object.values(designs||{}).filter(v=>v.id===group||v.variantOf===group);}
+export function resizeDesignContent(d,width,height) {
+  if(!validDesignSize(width,height))throw new Error('Width and height must be whole numbers from 1 to 8192 pixels.');
+  const k=Math.min(width/d.width,height/d.height);
+  const axis=(pos,len,total,target,anchor)=>anchor==='stretch'?{pos:pos*k,len:Math.max(1,target-(total-len)*k)}:{len:len*k,pos:anchor==='left'||anchor==='top'?pos*k:anchor==='right'||anchor==='bottom'?target-(total-pos)*k:(pos+len/2)/total*target-len*k/2};
+  const scaleAppearance=(l,s)=>({...l,...(l.type==='text'?{size:Math.max(6,l.size*s),tracking:l.tracking*s}:{}),radius:(l.radius||0)*s,stroke:l.stroke?{...l.stroke,width:l.stroke.width*s}:null,outline:l.outline?{...l.outline,width:l.outline.width*s}:null,box:l.box?{...l.box,padding:l.box.padding*s,radius:l.box.radius*s}:null,shadows:l.shadows.map(sh=>({...sh,x:sh.x*s,y:sh.y*s,blur:sh.blur*s,spread:sh.spread*s}))});
+  const layers=d.layers.map(original=>{
+    const x=axis(original.x,original.w,d.width,width,original.anchor?.x),y=axis(original.y,original.h,d.height,height,original.anchor?.y);
+    let l=scaleAppearance({...structuredClone(original),x:x.pos,y:y.pos,w:x.len,h:y.len},k),b=layerBounds(l),fit=Math.min(1,width/b.w,height/b.h);
+    if(fit<1){l=scaleAppearance({...l,w:l.w*fit,h:l.h*fit},fit);b=layerBounds(l);}
+    l.x+=Math.max(0,-b.x)-Math.max(0,b.x+b.w-width);l.y+=Math.max(0,-b.y)-Math.max(0,b.y+b.h-height);return l;
+  });return{...d,width,height,size:'custom',layers};
+}
+export function cropDesignCanvas(d,rect) {
+  const x=Math.max(0,Math.min(d.width-1,Math.round(rect.x))),y=Math.max(0,Math.min(d.height-1,Math.round(rect.y))),width=Math.min(d.width-x,Math.round(rect.w)),height=Math.min(d.height-y,Math.round(rect.h));
+  if(!validDesignSize(width,height))throw new Error('Crop must contain at least one pixel.');
+  return{...d,width,height,size:'custom',layers:d.layers.map(l=>({...l,x:l.x-x,y:l.y-y}))};
+}
+function transformBackground(fill,point) {
+  if(fill?.type!=='gradient')return fill;
+  const g=gradientParams(fill.gradient);return{...fill,gradient:{...g,start:point(g.start),end:point(g.end),center:point(g.center),points:g.points.map(p=>({...p,...point(p)}))}};
+}
+export function rotateDesignCanvas(d,direction=1) {
+  const clockwise=direction>0,point=p=>clockwise?{x:1-p.y,y:p.x}:{x:p.y,y:1-p.x};
+  return{...d,width:d.height,height:d.width,size:'custom',background:transformBackground(d.background,point),layers:d.layers.map(l=>{
+    const cx=l.x+l.w/2,cy=l.y+l.h/2;return{...l,x:(clockwise?d.height-cy:cy)-l.w/2,y:(clockwise?cx:d.width-cx)-l.h/2,rotation:((l.rotation+(clockwise?90:-90))%360+360)%360,...(l.anchor?{anchor:{x:(clockwise?{top:'right',middle:'center',bottom:'left',stretch:'stretch'}:{top:'left',middle:'center',bottom:'right',stretch:'stretch'})[l.anchor.y],y:(clockwise?{left:'top',center:'middle',right:'bottom',stretch:'stretch'}:{left:'bottom',center:'middle',right:'top',stretch:'stretch'})[l.anchor.x]}}:{})};
+  })};
+}
+export function flipDesignCanvas(d,axis='x') {
+  return{...d,background:transformBackground(d.background,p=>axis==='x'?{x:1-p.x,y:p.y}:{x:p.x,y:1-p.y}),layers:d.layers.map(l=>({...l,x:axis==='x'?d.width-l.x-l.w:l.x,y:axis==='y'?d.height-l.y-l.h:l.y,rotation:-l.rotation,...(axis==='x'?{flipX:!l.flipX}:{flipY:!l.flipY}),...(l.anchor?{anchor:{...l.anchor,...(axis==='x'?{x:({left:'right',right:'left'})[l.anchor.x]||l.anchor.x}:{y:({top:'bottom',bottom:'top'})[l.anchor.y]||l.anchor.y})}}:{})}))};
 }

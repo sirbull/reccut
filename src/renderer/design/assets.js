@@ -2,11 +2,11 @@ import { signal, effect } from '@preact/signals';
 import { project, projectEpoch, projectFolders, projectPath } from '../editor/store.js';
 import { prefs } from '../prefs.js';
 import { fileUrl } from '../player.js';
-import { newLayer, normalizeLayer, fitBox } from '../../shared/design.js';
+import { newDesign, newLayer, normalizeLayer, fitBox, validDesignSize } from '../../shared/design.js';
 import { designFileName } from '../../shared/designExport.js';
 import { frameExportSettings } from '../../shared/frameExport.js';
 import { uid } from '../../shared/model.js';
-import { currentDesignId, currentDesign, designCommit, selection, selectedLayers } from './store.js';
+import { currentDesignId, currentDesign, designCommit, openDesign, selection, selectedLayers } from './store.js';
 import { prepareDesignLayers } from './layered.js';
 import { clearDesignRenderCache } from '../../shared/designRender.js';
 import { toast } from '../ui.jsx';
@@ -286,3 +286,21 @@ export async function captureFrame(source, time) {
   if (currentDesignId.value === designId) selection.value = [l.id];
   return l;
 }
+
+export async function openImageFiles(paths,{copy=prefs.value.importCopy}={}) {
+  const epoch=projectEpoch.value;
+  for(const source of paths)try{
+    if(!/\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(source))throw new Error('Choose a PNG, JPEG, WebP, GIF, BMP or SVG image.');
+    const image=await ensureImage(source);if(!image)throw new Error('Could not read this image.');
+    const width=image.naturalWidth,height=image.naturalHeight;
+    if(!validDesignSize(width,height))throw new Error('Open Image supports images up to 8192 pixels per side. Use Place Image for a larger source.');
+    if(epoch!==projectEpoch.value)return;
+    let path=source;if(copy)[path]=await api.copyIntoProject([source],await designDir(),{unique:true});
+    if(path!==source&&!await ensureImage(path))throw new Error('Could not read the copied image.');
+    if(epoch!==projectEpoch.value)return;
+    const name=source.split(/[\\/]/).pop(),asset={id:uid(),name,path,copied:copy,origin:'placed',width,height},d=newDesign({name:name.replace(/\.[^.]+$/,''),width,height,size:'custom'});
+    d.background=null;d.layers=[newLayer('image',{asset:asset.id,name,x:0,y:0,w:width,h:height,fit:'contain'})];
+    designCommit(p=>{p.designAssets[asset.id]=asset;p.designs[d.id]=d});openDesign(d.id);
+  }catch(err){if(epoch===projectEpoch.value)toast(`Could not open image: ${err.message}`,{kind:'error'});}
+}
+export async function chooseOpenImage(){const epoch=projectEpoch.value,path=await api.openFileDialog({title:'Open Image',filters:[{name:'Images',extensions:['png','jpg','jpeg','webp','gif','bmp','svg']}]});if(path&&epoch===projectEpoch.value)await openImageFiles([path]);}

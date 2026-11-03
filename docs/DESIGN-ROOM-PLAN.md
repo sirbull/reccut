@@ -1285,3 +1285,72 @@ Not done / open questions: no remaining implementation items in phase 6. Generic
 
 ### Phase 6 validation
 All 451 automated tests pass. Production build and Mac ARM64 application packaging/start pass. No dependencies or version number changed. Final production bundles do not expose the temporary QA helper. Detailed limits and measurements are recorded in DESIGN-PHASE6-QA.md.
+
+## Phase 7–8 completion log — 2026-11-03
+
+Implementation now covers phases 1–8. Help/features documentation is current. The Mac build/review checks below pass; cross-platform and public-release checks remain qualified as documented in [DESIGN-PHASE7-8-QA.md](DESIGN-PHASE7-8-QA.md).
+
+### 7.1 Feed preview
+Date: 2026-11-03
+Files changed: Design Preview component, toolbar/view state and CSS.
+Tests added: common renderer remains covered; native CSS geometry and rendered preview checks.
+Manual checks done: actual 360/246/168 px previews and 328 px phone image, duration badge, light/dark backgrounds, visually inspected generic layouts. Whole design fits the preview tile. Minimum-width toolbar was checked and its overflow fixed with wrapping.
+Not done / open questions: no branded UI or platform-specific layout guarantee is included.
+
+### 7.2 Safe zones and readability
+Date: 2026-11-03
+Files changed: design preset/pure helpers, Canvas overlays, Readability panel.
+Tests added: known contrast pairs, small and portrait text size, safe-zone intersection, hidden/empty layers.
+Manual checks done: actual 1.0:1 gray-on-gray fill warning, small-text and lower-right overlay warnings, Check Readability and Select. Guides are view state and do not enter design export.
+Not done / open questions: checks are heuristic, on demand and use white under transparency. Outlines/shadows can improve legibility beyond the sampled fill.
+
+### 7.3 Variants
+Date: 2026-11-03
+Files changed: pure duplication/family helpers, tools state, Compare view, design list.
+Tests added: independent layer/group IDs, copied appearance, shared assets/family IDs and persistence.
+Manual checks done: three variants compared, favorite marker changed, every variant retained.
+Not done / open questions: none for the planned behavior.
+
+### 7.4 Resize and export to many sizes
+Date: 2026-11-03
+Files changed: pure content resize, size/export dialogs, common image encoder.
+Tests added: every built-in layout across wide/tall/square targets, with anchors and rotated unanchored content; source/crop/mask preservation.
+Manual checks done: two sizes created in one undo step; actual batch dialog saved six dimension-named PNGs; slash/emoji names handled safely. Read-only directory and real ENOSPC on a filled temporary disk image produced clear errors and no partial image.
+Not done / open questions: cross-platform filesystem/runtime checks remain release QA.
+
+### 7.5 Thumbnail with video export
+Date: 2026-11-03
+Files changed: Export room/Easy Export choice, snapshot helper, main/preload exact-basename JPEG writer.
+Tests added: pre-export snapshot, early completion, job matching, cancellation, listener cleanup, disk errors, Unicode paths and preserving an existing JPEG.
+Manual checks done: actual MP4/JPEG pair; subsequent red edit did not change the queued green JPEG snapshot. Export-room choice/picker was available.
+Not done / open questions: a same-name existing JPEG is preserved and reported rather than overwritten; a thumbnail failure retains the completed video.
+
+### 8.1 Open Image
+Date: 2026-11-03
+Files changed: asset helpers, empty-room drop, dialog/button and command.
+Tests added: exact displayed dimensions, one layer, transparent background, Edit-media separation, independent undo and oversize rejection.
+Manual checks done: EXIF orientation-6 fixture opened at 3024×4032; native empty-room drop and Open Image dialog created correctly sized designs. Original source remained intact.
+Not done / open questions: HEIC and every camera format are not part of the supported dialog/test matrix. No OS image associations were added.
+
+### 8.2 Canvas operations
+Date: 2026-11-03
+Files changed: pure crop/rotation/reflection/anchor functions, Canvas draft interaction, Properties, Canvas Size anchor grid and commands.
+Tests added: all nine anchors, locked/hidden layer translation, preserved source masks/crop, rotation/flip round trips and transformed anchors.
+Manual checks done: full orientation-fixture background-removal/gradient/square-crop/transparent-PNG workflow; actual pointer crop 400×300 to 300×200, Enter and Undo; Cancel; pixel-matrix rotation/flip checks and nine-point grid UI.
+Not done / open questions: backgrounds reflow to the new canvas; image/mask sources remain nondestructive.
+
+### 9.1 Help and features
+Date: 2026-11-03
+Files changed: Design handbook article and FEATURES.
+Checks: commands/help metadata tests pass; articles now cover preview, readability, variants, sizes, paired export and standalone canvas operations.
+Open: none for implementation documentation.
+
+### 9.2 Review status
+- [x] All 466 tests pass; production build succeeds.
+- [x] Actual dist:mac pipeline produced an ARM64 app and DMG; packaged app starts; code signature and DMG checksum verified.
+- [x] No new dependencies in this round. Bundled model licenses and manifest remain as recorded in phase 4.
+- [x] Prior phase reports record old-project compatibility, independent histories, moved project packaging and the 300-layer performance budget. Their tests still pass.
+- [x] New product strings use English and no em-dashes. New unusual-use checks and results are recorded above.
+- [ ] Cross-platform/installer/notarization release matrix and exhaustive interaction combinations noted in previous QA reports remain unverified; no universal or public-release approval is claimed.
+
+No version bump or publication was performed. The current app version remains 0.9.0, read by About through app.getVersion().

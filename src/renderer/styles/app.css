@@ -5172,3 +5172,28 @@ kbd.keycap {
 .dz-suggestion-card b { display: block; font-size: 12px; padding: 6px 2px 3px; }
 .dz-suggestions progress { width: 100%; }
 @media (max-width: 850px) { .dz-suggestion-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+
+/* Design preview and canvas tools */
+.dz-feed-preview { overflow: auto; flex: 1; min-height: 0; padding: 18px; background: #18191c; color: #e8e8ea; }
+.dz-feed-preview.light { background: #f3f3f5; color: #17181b; }
+.dz-feed-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; margin-bottom: 16px; }
+.dz-feed-examples,.dz-compare-grid { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+.dz-feed-examples section { max-width: 100%; }
+.dz-feed-examples h3 { font-size: 12px; opacity: .7; }
+.dz-feed-examples b { display: block; margin-top: 9px; max-width: 328px; overflow-wrap: anywhere; }
+.dz-feed-examples p { opacity: .7; font-size: 12px; }
+.dz-feed-image { position: relative; max-width: 100%; overflow: hidden; border-radius: 7px; background: repeating-conic-gradient(#ddd 0 25%,#aaa 0 50%) 0/12px 12px; }
+.dz-feed-image canvas { display: block; max-width: 100%; height: auto!important; }
+.dz-duration { position: absolute; bottom: 7px; right: 7px; background: #000d; color: #fff; padding: 2px 5px; border-radius: 3px; font-size: 11px; }
+.dz-feed-progress { position: absolute; bottom: 0; left: 0; width: 42%; height: 3px; background: #e34952; }
+.dz-phone { width: 360px; padding: 15px; border: 1px solid #7777; border-radius: 18px; }
+.dz-feed-placeholder { height: 90px; background: #8883; border-radius: 7px; }
+.dz-favorite { color: var(--yellow); }
+.dz-readability-warning { padding: 8px 0; border-bottom: 1px solid var(--line-2); }
+.dz-readability-warning p { font-size: 12px; margin: 4px 0; }
+.dz-anchor-grid { display: grid; grid-template-columns: repeat(3,25px); gap: 3px; }
+.dz-anchor-grid button { width: 25px; height: 25px; border: 1px solid var(--line-2); border-radius: 4px; background: var(--bg-3); color: var(--text-2); }
+.dz-anchor-grid button[aria-pressed=true] { background: var(--accent); color: white; }
+.dz-compare-grid section { width: 246px; }
+.dz-compare-grid b { display: block; margin: 8px 0; overflow-wrap: anywhere; }
+.dz-toolbar { flex-wrap: wrap; }

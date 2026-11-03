@@ -7,6 +7,8 @@ import { project, projectFolders, room } from './store.js';
 import { prefs } from '../prefs.js';
 import { exportOpen } from './commands.js';
 import { captionItems, toSrt, toVtt } from '../../shared/srt.js';
+import { startExportWithThumbnail } from '../design/videoThumbnail.js';
+import { ThumbnailChoice } from '../design/ThumbnailChoice.jsx';
 import { Button, Modal, Row, Segmented, Select, toast } from '../ui.jsx';
 
 const api = window.api;
@@ -20,8 +22,8 @@ function loadLast() {
   }
 }
 
-export async function startExport(p, settings) {
-  const id = await api.startExport({ project: p, settings });
+export async function startExport(p, settings, thumbnailId = null) {
+  const id = await startExportWithThumbnail(p, settings, thumbnailId);
   return id;
 }
 
@@ -114,6 +116,7 @@ export function ExportDialog() {
   const hasCaptions = Object.values(p.clips).some((c) => c.lane === CAPTION_LANE);
   const [captions, setCaptions] = useState(hasCaptions ? 'burn' : 'none');
   const [name, setName] = useState(p.name);
+  const [thumbnailId,setThumbnailId]=useState(null),[preparing,setPreparing]=useState(false);
   const [dir, setDir] = useState(last?.dir || null);
   const audioOnly = Boolean(base.audioOnly);
 
@@ -150,14 +153,15 @@ export function ExportDialog() {
     const safe = (name || p.name).replace(/[\\/:*?"<>|]/g, '_');
     let output = `${folder}${sep}${safe}.${ext}`;
     localStorage.setItem('exportSettings', JSON.stringify({ ...settingsObj, dir }));
-    await startExport(p, {
+    if(preparing)return;setPreparing(true);
+    try { await startExport(p, {
       ...settingsObj,
       output,
       range: useRange && p.range ? p.range : null,
       captions: audioOnly ? (captions.includes('srt') ? 'srt' : captions === 'vtt' ? 'vtt' : 'none') : captions,
-    });
+    }, audioOnly?null:thumbnailId);
     exportOpen.value = false;
-    toast('Exporting in the background. You can keep editing.', { timeout: 5000 });
+    toast('Exporting in the background. You can keep editing.', { timeout: 5000 }); } catch(err) { toast(`Could not start export: ${err.message}`,{kind:'error'}); } finally { setPreparing(false); }
   };
 
   return (
@@ -192,8 +196,8 @@ export function ExportDialog() {
               Captions Only
             </Button>
           )}
-          <Button variant="primary" onClick={doExport}>
-            Export
+          <Button variant="primary" disabled={preparing} onClick={doExport}>
+            {preparing?'Preparing Export…':'Export'}
           </Button>
         </>
       }
@@ -214,7 +218,7 @@ export function ExportDialog() {
           })}
         </div>
         <div class="export-form">
-          <Row label="File name" stacked>
+          <ThumbnailChoice project={p} value={thumbnailId} onChange={setThumbnailId} disabled={audioOnly}/><Row label="File name" stacked>
             <div class="name-row">
               <input class="text-input" value={name} onInput={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.stopPropagation()} />
               <span class="ext">.{ext}</span>

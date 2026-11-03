@@ -21,7 +21,7 @@ export function writingText(event) {
 // Modal windows own all keys. Floating plugin windows own keys while focused.
 export function dialogOwnsKeyboard(event) {
   const doc = globalThis.document;
-  if (doc?.querySelector('.modal-backdrop, .help-window, .palette, .dz-crop-mode, .dz-refine-mode, dialog[open]')) return true;
+  if (doc?.querySelector('.modal-backdrop, .help-window, .palette, .dz-crop-mode, .dz-refine-mode, .dz-canvas-crop-mode, dialog[open]')) return true;
   const inDialog = (el) => Boolean(el?.closest?.('[role="dialog"], .plugin-window'));
   return inDialog(doc?.activeElement) ||
     (event?.composedPath?.() || [event?.target]).some(inDialog);

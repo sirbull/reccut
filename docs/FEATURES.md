@@ -267,4 +267,7 @@ Open source used: Electron, Preact, Lucide (icons), Mediabunny (decoding and enc
 * Local Design Suggestions scores up to 180 sampled sequence frames, avoids fades/transitions, and offers up to six frames across four suitable layouts each. Titles come from names, timeline text and captions, including Norwegian. Shuffle changes titles/layouts; choosing a card captures the complete frame at full quality and creates an editable design with one-step undo.
 * Optional AI title suggestions name the configured provider and require an explicit Send Transcript action. Local suggestions work without AI or network access.
 
-Feed previews and later image-editing tools remain scheduled for later Design phases.
+* Generic feed previews at 360, 246 and 168 pixels wide plus a phone layout, light/dark backgrounds, duration badge and optional progress bar. Canvas-only safe-zone guides and on-demand readability warnings for text size, sampled contrast and overlay overlap.
+* Independent design variants with comparison and favorites. Resize to multiple anchored/relative layouts and batch export selected designs with dimensions in file names.
+* Also save thumbnail in video export prepares a design snapshot and writes a JPEG alongside the completed video using its actual base name. Existing JPEG files are preserved with an error message.
+* Open Image or an empty-room image drop creates a design at the displayed pixel dimensions, honoring JPEG orientation. Nondestructive canvas cropping, quarter-turn rotations, flips and Canvas Size with a nine-point content anchor.
