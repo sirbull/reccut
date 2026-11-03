@@ -5,6 +5,7 @@ import { drawDesign } from '../../shared/designRender.js';
 import { uid } from '../../shared/model.js';
 import { project, projectEpoch } from '../editor/store.js';
 import { prefs } from '../prefs.js';
+import { fileUrl } from '../player.js';
 import { Button, IconButton, Modal, Segmented, toast } from '../ui.jsx';
 import { currentDesign, openDesign, addDesign, selection, tool, shapeType, zoom, viewScale, setZoom, newDesignOpen, exportDesignOpen, designCommit, endDesignTransient } from './store.js';
 import { fontAvailable, fontVersion } from './fonts.js';
@@ -74,7 +75,7 @@ export function DesignRoom({ active }) {
         {tab === 'styles' && <StylesPanel/>}
         {tab === 'templates' && <TemplatesPanel/>}
         {tab === 'video' && <FramePicker active={active} />}
-        {tab === 'project' && <><p class="hint">Images here are shared with Edit. Use the Video tab to pick a video frame.</p>{Object.values(p.media).filter((m) => m.kind === 'image').map((m) => <Button key={m.id} disabled={!d} onClick={() => placeProjectImage(m)}>{m.name}</Button>)}</>}
+        {tab === 'project' && <><p class="hint">Images here are shared with Edit. Use the Video tab to pick a video frame.</p><div class="dz-project-images">{Object.values(p.media).filter((m) => m.kind === 'image').map((m) => <button key={m.id} type="button" title={m.name} disabled={!d} onClick={() => placeProjectImage(m)}><img src={fileUrl(m.streams.main?.proxy || m.path)} draggable={false} alt={m.name} /></button>)}</div></>}
       </div>
       <div class="dz-panel-footer"><Button onClick={chooseOpenImage}>Open Image…</Button><Button icon={Plus} onClick={() => (newDesignOpen.value = true)}>New Design</Button><div class="dz-place"><Button icon={ImagePlus} disabled={!d} onClick={() => chooseImage().catch((err) => toast(err.message, { kind: 'error' }))}>{prefs.value.importCopy ? 'Place Embedded…' : 'Place Linked…'}</Button><Button disabled={!d} title="Place options" aria-label="Place options" onClick={async () => { const id = await window.api.popupMenu([{ id: 'embedded', label: 'Place Embedded…' }, { id: 'linked', label: 'Place Linked…' }]); if (id) chooseImage(id === 'embedded').catch((err) => toast(err.message, { kind: 'error' })); }}>▾</Button></div></div>
     </aside>

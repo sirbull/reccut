@@ -1,7 +1,7 @@
 import { signal, effect } from '@preact/signals';
 import { prefs, setPrefs } from '../prefs.js';
 import { project, projectEpoch, room } from '../editor/store.js';
-import { currentDesign, selectedLayers, changeLayers, designCommit, openDesign } from './store.js';
+import { currentDesign, selectedLayers, changeDesign, designCommit, openDesign, selection } from './store.js';
 import { extractDesignStyle, applyDesignStyle, applyTemplate, templateFromDesign, validateDesignTemplate } from '../../shared/designTemplates.js';
 import { ensureImage, designDir } from './assets.js';
 import { uid } from '../../shared/model.js';
@@ -13,7 +13,18 @@ export const savedStyles=()=>Array.isArray(prefs.value.designStyles)?prefs.value
 export function storeStyles(styles){try{localStorage.setItem('prefs',JSON.stringify({...prefs.value,designStyles:styles}));}catch{toast('Could not save styles. Free some space or remove unused styles.',{kind:'error'});return false;}setPrefs({designStyles:styles});return true;}
 export function openSaveStyle(){const l=selectedLayers()[0];if(!l)return;if(savedStyles().length>=500)return toast('You can save up to 500 styles. Remove a style before adding another.');styleDialog.value={layer:l,designHeight:currentDesign.value.height,name:l.name};}
 export function saveStyle(name){const s=styleDialog.value;if(!s||!name.trim())return;const list=savedStyles();if(list.length>=500){toast('You can save up to 500 styles.');return;}if(storeStyles([...list,{id:uid(),name:name.trim().slice(0,160),type:s.layer.type,style:extractDesignStyle(s.layer,s.designHeight)}]))styleDialog.value=null;}
-export function applyStyle(style){const d=currentDesign.value;if(!d)return;changeLayers(l=>{if(l.type===style.type)Object.assign(l,applyDesignStyle(l,style,d.height));});}
+// Selected layers of the style's type, or every unlocked layer of that type when none are selected.
+function styleTargets(style,d){const picked=selectedLayers().filter(l=>l.type===style.type);return new Set((picked.length?picked:d.layers.filter(l=>l.type===style.type&&!l.locked)).map(l=>l.id));}
+export function applyStyle(style){libraryPreview.value=null;const d=currentDesign.value;if(!d)return;const ids=styleTargets(style,d);changeDesign(d=>{for(const l of d.layers)if(ids.has(l.id))Object.assign(l,applyDesignStyle(l,style,d.height));});}
+// Shown on the canvas instead of the current design while a library card is hovered or dragged. Never saved.
+export const libraryPreview=signal(null);
+export function previewStyle(style){const d=currentDesign.value;if(!d)return;const ids=styleTargets(style,d);libraryPreview.value={...d,layers:d.layers.map(l=>ids.has(l.id)?applyDesignStyle(l,style,d.height):l)};}
+export function previewTemplate(template,size){const current=currentDesign.value;if(!current)return;libraryPreview.value=applyTemplate(template,{...templateContext(),width:size==='current'?current.width:template.design.width,height:size==='current'?current.height:template.design.height});}
+let dragged=null;
+export const isLibraryDrag=e=>Array.from(e.dataTransfer.types).includes('application/x-reccut-library');
+export function startLibraryDrag(e,apply){dragged=apply;e.dataTransfer.setData('application/x-reccut-library','');e.dataTransfer.effectAllowed='copy';}
+export function endLibraryDrag(){dragged=null;libraryPreview.value=null;}
+export function dropLibraryItem(hit){const apply=dragged;endLibraryDrag();apply?.(hit);}
 export async function refreshTemplates(){try{userTemplates.value=await window.api.listDesignTemplates();}catch(err){toast(`Could not load templates: ${err.message}`,{kind:'error'});}}
 export function templateContext(){
   const p=project.value,layers=currentDesign.value?.layers||[],frame=layers.find(l=>l.type==='image'&&p.designAssets[l.asset]?.origin==='frame')||layers.find(l=>l.type==='image'&&!l.cutout?.enabled),cutout=layers.find(l=>l.type==='image'&&l.cutout?.enabled);
@@ -38,7 +49,7 @@ export async function createFromTemplate(template,size='template',{context:overr
     const asset={id:uid(),name:l.name,path,copied:true,origin:'placed',width:image.naturalWidth||image.width,height:image.naturalHeight||image.height};assets.push(asset);l.asset=asset.id;delete l.data;
   }
   if(epoch!==projectEpoch.value||p.id!==project.value.id||signal?.aborted)return;
-  designCommit(p=>{for(const a of assets)p.designAssets[a.id]=a;p.designs[d.id]=d;});openDesign(d.id);
+  libraryPreview.value=null;designCommit(p=>{for(const a of assets)p.designAssets[a.id]=a;p.designs[d.id]=d;});openDesign(d.id);
   return d;
 }
 export function openSaveTemplate(){const d=currentDesign.value;if(d)templateDialog.value={design:d,name:d.name};}
@@ -52,4 +63,4 @@ export async function importTemplate(){
 export async function exportTemplate(template){
   const path=await window.api.saveFileDialog({title:'Export Design Template',defaultPath:`${template.name.replace(/[\\/:*?"<>|]/g,'_')}.reccut-design-template`,filters:[{name:'Reccut Design Template',extensions:['reccut-design-template']}]});if(path)await window.api.writeText(path,JSON.stringify(validateDesignTemplate(template),null,2));
 }
-effect(()=>{projectEpoch.value;if(room.value!=='design'||!currentDesign.value){styleDialog.value=null;templateDialog.value=null;}});
+effect(()=>{projectEpoch.value;if(room.value!=='design'||!currentDesign.value){styleDialog.value=null;templateDialog.value=null;libraryPreview.value=null;}});
