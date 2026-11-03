@@ -677,6 +677,8 @@ designCleanup.onCollected(value=>send('design:cutoutsCollected',value));
 ipcMain.handle('design:retainCutouts',(_e,id,paths)=>designCleanup.retain(id,paths));
 ipcMain.handle('design:discardCutout',(_e,file)=>designCleanup.discard(file));
 ipcMain.handle('design:videoThumbnail',(_e,file,data)=>require('./design').writeVideoThumbnail(file,data));
+ipcMain.handle('design:readableImage', (_e, file) => media.readableImage(file));
+ipcMain.handle('design:imageExtensions', () => media.imageExtensions());
 ipcMain.handle('design:writeImage', async (_e, file, data) => designCleanup.register(await require('./design').writeImage(file, data)));
 let designLibrary;
 function getDesignLibrary() {

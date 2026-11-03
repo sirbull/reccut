@@ -77,9 +77,13 @@ export async function loadDesignImages(design, p = project.value) {
   const loaded = await Promise.all(layers.map((l) => ensureImage(imagePath(l, p))));
   return layers.filter((_, i) => !loaded[i]);
 }
+const NATIVE_IMAGE = /\.(png|jpe?g|jfif|webp|gif|bmp|avif|svg|ico)$/i;
+// Alle bildeformater Edit kan lese. Andre enn NATIVE_IMAGE konverteres i hovedprosessen.
+let imageExtensions;
+const imageFilters = async () => [{ name: 'Images', extensions: imageExtensions ||= await api.imageExtensions() }];
 export async function chooseImage(copy = prefs.value.importCopy) {
   const epoch = projectEpoch.value, designId = currentDesignId.value;
-  const path = await api.openFileDialog({ title: copy ? 'Place Embedded' : 'Place Linked', filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg', 'psd', 'psb'] }] });
+  const path = await api.openFileDialog({ title: copy ? 'Import Image (Embedded)' : 'Import Image (Linked)', filters: await imageFilters() });
   if (path && epoch === projectEpoch.value) await placeFiles([path], { copy, epoch, designId });
 }
 export function requestPlace(paths, point = null, alternate = false) {
@@ -89,10 +93,11 @@ export async function placeFiles(paths, { copy = prefs.value.importCopy, point =
   const assets = [], groups = new Map();
   for (const original of paths) {
     try {
-      if (!/\.(png|jpe?g|webp|gif|bmp|svg|psd|psb)$/i.test(original)) throw new Error('Choose a PNG, JPEG, WebP, GIF, BMP, SVG, PSD or PSB image.');
       const name = original.split(/[\\/]/).pop();
       let files = [{ path: original, name, owned: ownFile }];
-      if (/\.(psd|psb|svg)$/i.test(original)) {
+      // Konverterte bilder ligger i hurtigbufferen, så de kopieres alltid inn i prosjektet.
+      if (!/\.(psd|psb|svg)$/i.test(original) && !NATIVE_IMAGE.test(original)) files = [{ path: await api.readableImage(original), name, owned: ownFile, converted: true }];
+      else if (/\.(psd|psb|svg)$/i.test(original)) {
         const base = designFileName(name.replace(/\.[^.]+$/, ''));
         const prepared = await prepareDesignLayers(original, `${await designDir()}${sep}${base}${sep}${uid()}`, epoch);
         if (!prepared) continue;
@@ -105,8 +110,8 @@ export async function placeFiles(paths, { copy = prefs.value.importCopy, point =
         const image = await ensureImage(path);
         if (!image) throw new Error(`Could not read ${file.name}.`);
         if (epoch !== projectEpoch.value) return;
-        if (copy && !file.owned) [path] = await api.copyIntoProject([path], await designDir(), { unique: true });
-        const asset = { id: uid(), name: file.name, path, copied: copy || file.owned, origin: 'placed', width: image.naturalWidth, height: image.naturalHeight, missing: false };
+        if ((copy || file.converted) && !file.owned) [path] = await api.copyIntoProject([path], await designDir(), { unique: true });
+        const asset = { id: uid(), name: file.name, path, copied: copy || file.owned || !!file.converted, origin: 'placed', width: image.naturalWidth, height: image.naturalHeight, missing: false };
         if (path !== file.path) await ensureImage(path);
         assets.push(asset);
         if (group) groups.set(asset.id, { group, groupName: name.replace(/\.[^.]+$/, '') });
@@ -290,17 +295,17 @@ export async function captureFrame(source, time) {
 export async function openImageFiles(paths,{copy=prefs.value.importCopy}={}) {
   const epoch=projectEpoch.value;
   for(const source of paths)try{
-    if(!/\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(source))throw new Error('Choose a PNG, JPEG, WebP, GIF, BMP or SVG image.');
-    const image=await ensureImage(source);if(!image)throw new Error('Could not read this image.');
+    const readable=NATIVE_IMAGE.test(source)?source:await api.readableImage(source),mustCopy=copy||readable!==source;
+    const image=await ensureImage(readable);if(!image)throw new Error('Could not read this image.');
     const width=image.naturalWidth,height=image.naturalHeight;
     if(!validDesignSize(width,height))throw new Error('Open Image supports images up to 8192 pixels per side. Use Place Image for a larger source.');
     if(epoch!==projectEpoch.value)return;
-    let path=source;if(copy)[path]=await api.copyIntoProject([source],await designDir(),{unique:true});
-    if(path!==source&&!await ensureImage(path))throw new Error('Could not read the copied image.');
+    let path=readable;if(mustCopy)[path]=await api.copyIntoProject([readable],await designDir(),{unique:true});
+    if(path!==readable&&!await ensureImage(path))throw new Error('Could not read the copied image.');
     if(epoch!==projectEpoch.value)return;
-    const name=source.split(/[\\/]/).pop(),asset={id:uid(),name,path,copied:copy,origin:'placed',width,height},d=newDesign({name:name.replace(/\.[^.]+$/,''),width,height,size:'custom'});
+    const name=source.split(/[\\/]/).pop(),asset={id:uid(),name,path,copied:mustCopy,origin:'placed',width,height},d=newDesign({name:name.replace(/\.[^.]+$/,''),width,height,size:'custom'});
     d.background=null;d.layers=[newLayer('image',{asset:asset.id,name,x:0,y:0,w:width,h:height,fit:'contain'})];
     designCommit(p=>{p.designAssets[asset.id]=asset;p.designs[d.id]=d});openDesign(d.id);
   }catch(err){if(epoch===projectEpoch.value)toast(`Could not open image: ${err.message}`,{kind:'error'});}
 }
-export async function chooseOpenImage(){const epoch=projectEpoch.value,path=await api.openFileDialog({title:'Open Image',filters:[{name:'Images',extensions:['png','jpg','jpeg','webp','gif','bmp','svg']}]});if(path&&epoch===projectEpoch.value)await openImageFiles([path]);}
+export async function chooseOpenImage(){const epoch=projectEpoch.value,path=await api.openFileDialog({title:'Open Image',filters:await imageFilters()});if(path&&epoch===projectEpoch.value)await openImageFiles([path]);}

@@ -66,7 +66,7 @@ export function DesignRoom({ active }) {
   };
   return <div class="dz-room" onDragOver={(e) => { if (hasFiles(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} onDrop={(e) => { if (!hasFiles(e.dataTransfer)) return; e.preventDefault(); e.stopPropagation(); place(droppedPaths(e.dataTransfer, window.api.pathForFile), e.altKey); }}>
     <aside class="dz-left panel">
-      <div class="dz-panel-head"><b>Design</b><IconButton icon={Plus} title="New Design" onClick={() => (newDesignOpen.value = true)} /></div>
+      <div class="dz-panel-head"><b>Design</b></div>
       <div class="dz-tabs"><Segmented value={tab} options={[{ value: 'designs', label: 'Designs' }, { value: 'video', label: 'Video' }, { value: 'project', label: 'From Project' }, {value:'styles',label:'Styles'}, {value:'templates',label:'Templates'}]} onChange={setTab} /></div>
       <div class="dz-left-content">
         {tab === 'designs' && list.map((item) => <div key={item.id} class={`dz-design-card${item.id === d?.id ? ' active' : ''}`} onClick={() => openDesign(item.id)}>
@@ -79,7 +79,7 @@ export function DesignRoom({ active }) {
         {tab === 'video' && <FramePicker active={active} />}
         {tab === 'project' && <><p class="hint">Images here are shared with Edit. Use the Video tab to pick a video frame.</p><div class="dz-project-images">{Object.values(p.media).filter((m) => m.kind === 'image').map((m) => <button key={m.id} type="button" title={m.name} disabled={!d} onClick={() => placeProjectImage(m)}><img src={fileUrl(m.streams.main?.proxy || m.path)} draggable={false} alt={m.name} /></button>)}</div></>}
       </div>
-      <div class="dz-panel-footer"><Button onClick={chooseOpenImage}>Open Image…</Button><Button icon={Plus} onClick={() => (newDesignOpen.value = true)}>New Design</Button><div class="dz-place"><Button icon={ImagePlus} disabled={!d} onClick={() => chooseImage().catch((err) => toast(err.message, { kind: 'error' }))}>{prefs.value.importCopy ? 'Place Embedded…' : 'Place Linked…'}</Button><Button disabled={!d} title="Place options" aria-label="Place options" onClick={async () => { const id = await window.api.popupMenu([{ id: 'embedded', label: 'Place Embedded…' }, { id: 'linked', label: 'Place Linked…' }]); if (id) chooseImage(id === 'embedded').catch((err) => toast(err.message, { kind: 'error' })); }}>▾</Button></div></div>
+      <div class="dz-panel-footer"><Button icon={Plus} onClick={() => (newDesignOpen.value = true)}>New Design</Button><div class="dz-place"><Button icon={ImagePlus} title={d ? 'Import an image into this design' : 'Open an image as a new design'} onClick={() => (d ? chooseImage() : chooseOpenImage()).catch((err) => toast(err.message, { kind: 'error' }))}>Import Image…</Button><Button title="Import options" aria-label="Import options" onClick={async () => { const id = await window.api.popupMenu([{ id: 'embedded', label: 'Import Embedded…', enabled: !!d }, { id: 'linked', label: 'Import Linked…', enabled: !!d }, { separator: true }, { id: 'open', label: 'Open as New Design…' }]); if (id) (id === 'open' ? chooseOpenImage() : chooseImage(id === 'embedded')).catch((err) => toast(err.message, { kind: 'error' })); }}>▾</Button></div></div>
     </aside>
     <div class="dz-center">
       <div class="dz-toolbar">

@@ -106,6 +106,8 @@ contextBridge.exposeInMainWorld('api', {
   writeBinary: invoke('file:writeBinary'),
   writeVideoThumbnail: invoke('design:videoThumbnail'),
   writeDesignImage: invoke('design:writeImage'),
+  readableImage: invoke('design:readableImage'),
+  imageExtensions: invoke('design:imageExtensions'),
   retainDesignCutouts: invoke('design:retainCutouts'),
   discardDesignCutout: invoke('design:discardCutout'),
   onDesignCutoutsCollected: (cb) => { const fn=(_e,value)=>cb(value);ipcRenderer.on('design:cutoutsCollected',fn);return()=>ipcRenderer.removeListener('design:cutoutsCollected',fn); },
