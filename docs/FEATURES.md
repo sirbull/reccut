@@ -7,19 +7,18 @@ Record, edit and export video in one app, for Mac, Windows and Linux. The app is
 ## Recording
 
 * Screen at native resolution, **a single app window**, webcam or external camera, internal or external microphone
-* **Start from any app**: Control Option 0 (Ctrl Shift 0 on Windows) starts and stops recording even when Reccut is in the background or in Edit. The same keys with 8 pause and resume. Pauses are removed from the video, and keystrokes, clicks, pointer zoom and layout carry over.
+* **Start from any app**: Control Option 0 (Ctrl Shift 0 on Windows) starts and stops recording even when Reccut is in the background or in Edit. The same keys with 8 pause and resume. Pauses are removed from the video, and pointer zoom and layout carry over.
 * **You can see that you are recording, without it ending up in the video**: a small control bar with time, microphone level, Pause and Stop floats above other apps and is hidden from the recording (macOS and Windows). The menu bar icon on macOS shows a red dot and the time, and on Windows the system tray icon turns red. Reccut can tuck itself away while you record and come back when the recording is saved.
 * **Microphone check**: shows whether it is silent, weak, good or clipping, and Test records four seconds and plays them back.
-* **Recordings rescue themselves**: they are written to disk as you go (WebM, remuxed to MP4 when you stop), and if the app or the computer crashes, Reccut offers to recover the recording on the next launch, with layout, keystrokes and pointer movement.
-* **Record just part of the screen**: choose Area, drag out the area directly on screen (free or locked to 16:9, 9:16, 1:1 or 4:3), or adjust it in the preview. Only the area is saved, and pointer zoom, clicks and keystrokes follow the area. A thin frame on screen shows the area and turns red while recording; it sits just outside the area and never ends up in the video.
+* **Recordings rescue themselves**: they are written to disk as you go (WebM, remuxed to MP4 when you stop), and if the app or the computer crashes, Reccut offers to recover the recording on the next launch, with layout and pointer movement.
+* **Record just part of the screen**: choose Area, drag out the area directly on screen (free or locked to 16:9, 9:16, 1:1 or 4:3), or adjust it in the preview. Only the area is saved, and pointer zoom follows the area. A thin frame on screen shows the area and turns red while recording; it sits just outside the area and never ends up in the video.
 * **Countdown** of 3, 5 or 10 seconds before recording starts, in the preview and in the middle of the area on screen
 * **System audio** with one switch
 * The camera image as a circle, square or 16:9, in three sizes
 * Six layouts you switch with a shortcut while recording: 1 camera, 2 screen, 3 to 6 picture in picture in each corner
-* **Keystrokes shown on screen** (can be turned off). Only shortcuts with Cmd, Ctrl or Alt are shown, never regular typing. Reccut's own shortcuts are not shown.
-* **Magnified pointer:** hold a key (right Cmd on Mac by default, right Ctrl on Windows), and the pointer grows with an animation until you let go
-* Highlighting of mouse clicks (optional)
-* Screen and camera are saved separately, together with layout, pointer and keystrokes. Everything can therefore be changed afterwards.
+* **Magnified pointer:** press the shortcut with 9 (Control Option 9 on Mac by default), and the pointer grows with an animation until you press it again
+* **Keystrokes on screen with an optional add-on:** Reccut itself never reads the keyboard outside its own window. To show shortcuts in the video, download the Keystroke Add-on under Record, Overlays. A dialog explains first that it reads the keyboard for the whole computer while you record, that only shortcuts with Cmd, Ctrl, Alt or Win (plus Esc and F keys) leave it, and that they are saved in the recording so they can be changed in Edit. It runs only while recording, shows a Keys label in the recording controls, is checked with SHA-256 before every start, and can be removed at any time. It is built from `native/keystrokes` and attached to each GitHub release, never put in the installer.
+* Screen and camera are saved separately, together with layout and pointer. Everything can therefore be changed afterwards.
 * A finished MP4 is made automatically in the background after recording (can be turned off), and the **Edit** button opens the recording in the editor
 * Recordings are saved in the Recordings folder of the open project and added straight to the project's library
 
@@ -94,7 +93,7 @@ Record, edit and export video in one app, for Mac, Windows and Linux. The app is
 * **Transitions**: Cross Dissolve, Fade to Black, Fade to White, Push in three directions, Wipe, Circle Reveal, Zoom and Blur
 * All titles, transitions and effects have a live preview in the library (hover over them), drawn with the same engine as export
 * **Subtitles**: one to three lines, left, centered or right, placed at the top, middle, bottom, freely with X and Y, or dragged in the viewer. Font, size, weight, text color, outline color and outline width, background with color and transparency, and shadow. Import and export of SRT and WebVTT, and automatic subtitling with Whisper.
-* Recordings can be adjusted afterwards: camera on or off, switch layout at the playhead, shape and size, keystrokes, magnified pointer and clicks, and audio level for microphone and system audio separately
+* Recordings can be adjusted afterwards: camera on or off, switch layout at the playhead, shape and size, magnified pointer, and audio level for microphone and system audio separately
 * **Project templates**: Automatic, YouTube 1080p and 4K, Shorts/Reels/TikTok, Square, Instagram Feed, Tutorial (with title card and lower third) and Cinematic. Format and frame rate can be changed freely in the project settings, including to custom values. With Automatic, the sequence takes the format of the first clip, and Sequence Settings (Cmd J) opens so you can keep it or choose something else.
 * Waveforms, thumbnails, markers, in and out points, and autosave (also when the app closes right after a change)
 
@@ -152,7 +151,7 @@ By default the shortcuts only work when Reccut is in focus, outside fields and d
 | --- | --- | --- |
 | Layout 1 to 6 | Ctrl Option 1 to 6 | Ctrl Shift 1 to 6 |
 | Start and stop recording | Ctrl Option 0 | Ctrl Shift 0 |
-| Magnify the pointer | Hold right Cmd | Hold right Ctrl |
+| Magnify the pointer on and off | Ctrl Option 9 | Ctrl Shift 9 |
 
 ### Editing (like in Final Cut Pro)
 
@@ -213,9 +212,9 @@ Installers are built by GitHub Actions: the **Actions** tab, the **Bygg installa
 
 The app is not code signed yet:
 
-* **Mac:** The first time, macOS says the app cannot be verified. Press **Done**, open **System Settings → Privacy & Security**, scroll down and press **Open Anyway** next to Reccut, and confirm with your password. If macOS instead says the app is **damaged**, run `xattr -dr com.apple.quarantine /Applications/Reccut.app` in Terminal. If Terminal answers *Operation not permitted*, delete the app, run `xattr -d com.apple.quarantine ~/Downloads/Reccut-*.dmg` and reinstall from the `.dmg` file. Grant access to camera, microphone and screen recording. Keystrokes and the magnified pointer also need access under Privacy & Security, Accessibility. Restart the app after granting access.
+* **Mac:** The first time, macOS says the app cannot be verified. Press **Done**, open **System Settings → Privacy & Security**, scroll down and press **Open Anyway** next to Reccut, and confirm with your password. If macOS instead says the app is **damaged**, run `xattr -dr com.apple.quarantine /Applications/Reccut.app` in Terminal. If Terminal answers *Operation not permitted*, delete the app, run `xattr -d com.apple.quarantine ~/Downloads/Reccut-*.dmg` and reinstall from the `.dmg` file. Grant access to camera, microphone and screen recording. Restart the app after granting access.
 * **Windows:** Choose **More info** and **Run anyway** if SmartScreen warns you.
-* **Linux:** Run `chmod +x Reccut-*.AppImage` and start the file. Ubuntu 22.04 and later need `sudo apt install libfuse2`. If it closes with a sandbox error (Ubuntu 24.04), start it with `--no-sandbox`. Keystrokes and the magnified pointer require an X11 session. System audio is not recorded on Linux, and HEVC clips are converted before playback.
+* **Linux:** Run `chmod +x Reccut-*.AppImage` and start the file. Ubuntu 22.04 and later need `sudo apt install libfuse2`. If it closes with a sandbox error (Ubuntu 24.04), start it with `--no-sandbox`. The magnified pointer requires an X11 session. System audio is not recorded on Linux, and HEVC clips are converted before playback.
 
 ## Running from source
 
@@ -241,4 +240,4 @@ npm run dist:mac # or dist:win, builds an installer
 | `assets/template-kit` | The After Effects template kit and the description of the `.reccut-title` format |
 | `src/worker` | Hidden windows for export and automatic subtitling |
 
-Open source used: Electron, Preact, Lucide (icons), Mediabunny (decoding and encoding with WebCodecs), FFmpeg 9 (muxing, transcoding, analysis; fetched with `node scripts/fetch-ffmpeg.mjs`, which also runs after `npm install`), uiohook-napi (global keystrokes) and Transformers.js with Whisper (subtitling). The FFmpeg binaries are GPL licensed, built without `--enable-nonfree`, and ship with the app together with LICENSE-FFmpeg.txt.
+Open source used: Electron, Preact, Lucide (icons), Mediabunny (decoding and encoding with WebCodecs), FFmpeg 9 (muxing, transcoding, analysis; fetched with `node scripts/fetch-ffmpeg.mjs`, which also runs after `npm install`) and Transformers.js with Whisper (subtitling). The FFmpeg binaries are GPL licensed, built without `--enable-nonfree`, and ship with the app together with LICENSE-FFmpeg.txt.

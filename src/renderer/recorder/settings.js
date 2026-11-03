@@ -34,10 +34,9 @@ const DEFAULTS = {
   captureVisibilityVersion: 1,
   modifier: MODIFIERS[0].value,
   backgroundShortcuts: false,
-  showKeys: true,
+  // Needs the Keystroke Add-on, which the user installs separately.
+  showKeys: false,
   cursorZoom: true,
-  showClicks: false,
-  zoomKey: isMac ? 'MetaRight' : 'CtrlRight',
   autoRender: true,
   // Opptaksområde: hele skjermen eller et område (andeler av skjermen).
   areaMode: 'full',

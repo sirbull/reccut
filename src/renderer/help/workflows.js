@@ -280,13 +280,13 @@ Read the failed task's message. Check the executable path, installed runtime and
   {
     id: 'recording-setup', section: 'Recording', title: 'Recording Setup, Permissions and Sound',
     summary: 'Prepare a reliable screen, camera and microphone recording before the real take.',
-    keywords: 'permissions screen recording accessibility microphone camera black screen silence test mixer gain clipping system audio setup',
+    keywords: 'permissions screen recording input monitoring keystroke add-on microphone camera black screen silence test mixer gain clipping system audio setup',
     body: `
 Create or open a project first. Check the Record room before a long take; its settings apply to new recordings.
 
 ## Choose the sources
 
-1. Select a display or an individual window under **Screen**. Refresh the window list if needed. Window capture does not support cursor zoom or click highlights.
+1. Select a display or an individual window under **Screen**. Refresh the window list if needed. Window capture does not support cursor zoom.
 2. Select the camera and microphone you intend to use. Disconnecting a device can make its saved selection unavailable.
 3. Turn on **System audio** if the recording needs sound from the computer. Keep it off if you only need your voice.
 4. For part of a display, choose **Area**, draw the box, and choose **Use Area**. Only the selected area is stored.
@@ -295,9 +295,9 @@ Create or open a project first. Check the Record room before a long take; its se
 
 ## Grant permissions
 
-On macOS, allow screen recording, camera and microphone access in the system's Privacy & Security settings. Accessibility access is used for keystroke overlays and cursor controls. Reccut provides permission controls in the recording interface. After changing system permissions, restart Reccut if the source or input tracking is still unavailable. On Windows, check camera and microphone access for desktop apps in system settings.
+On macOS, allow screen recording, camera and microphone access in the system's Privacy & Security settings. If you use the Keystroke Add-on, macOS also asks to allow Input Monitoring for Reccut. Reccut provides permission controls in the recording interface. After changing system permissions, restart Reccut if the source or input tracking is still unavailable. On Windows, check camera and microphone access for desktop apps in system settings.
 
-If the preview is black, check the selected source and screen permission before changing export settings. If only keystrokes are missing, check Accessibility and the overlay switch.
+If the preview is black, check the selected source and screen permission before changing export settings.
 
 ## Set the microphone level
 
@@ -347,7 +347,7 @@ Import the original Reccut recording, rather than only its flattened MP4. The or
 
 1. Select the recording clip in Edit and open its recording properties in the inspector.
 2. Under **Camera**, turn the camera on or off, choose **Layout at playhead**, and set shape, size and mirroring. Layout changes are tied to the source time at the playhead.
-3. Under **Overlays**, enable or disable Keystrokes, Cursor zoom and Click highlights. The counts show how many events the recording contains.
+3. Under **Overlays**, enable or disable Cursor zoom, Keystrokes for recordings made with the Keystroke Add-on, and Click highlights for older recordings that have them. The counts show how many events the recording contains.
 4. Open **Audio** to enable and balance the microphone and system-audio components independently.
 
 **Example:** record a software demonstration with a corner camera. For a section where the camera covers a button, place the playhead at that section and switch to Screen, then restore a corner layout when you want the camera to return. Play across both changes to check the result.

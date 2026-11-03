@@ -8,6 +8,7 @@ const {
   dialog,
   globalShortcut,
   ipcMain,
+  net,
   screen,
   session,
   safeStorage,
@@ -36,7 +37,8 @@ const packager = require('./packager');
 const { createRecordUI } = require('./recordui');
 const { createPipPreview } = require('./pip');
 const updates = require('./updates');
-const { InputTracker, ZOOM_KEYS } = require('./input');
+const { InputTracker } = require('./input');
+const { createKeystrokes, comboLabel, appShortcut } = require('./keystrokes');
 
 const { createExtensionHost, readDocument } = require('./extensions');
 const { renderGraphic } = require('./graphics');
@@ -317,7 +319,7 @@ const recordingShortcuts = require('./shortcuts').createRecordingShortcuts({
   globalShortcut,
   context: () => ({
     modifier: shortcutModifier, active: shortcutsActive, blocked: shortcutsBlocked,
-    background: backgroundShortcuts, nativeInput: input.started,
+    background: backgroundShortcuts,
     focused: Boolean(win?.isFocused()),
     otherWindowFocused: Boolean(BrowserWindow.getFocusedWindow() && BrowserWindow.getFocusedWindow() !== win),
   }),
@@ -362,7 +364,6 @@ ipcMain.handle('window:restore', () => {
 });
 ipcMain.handle('shortcuts:set', (_e, modifier) => {
   shortcutModifier = modifier;
-  input.setAppShortcuts(modifier);
   return registerShortcuts();
 });
 ipcMain.handle('shortcuts:active', (_e, active) => {
@@ -375,20 +376,62 @@ ipcMain.handle('shortcuts:scope', (e, scope) => {
   backgroundShortcuts = scope.background === true;
   return registerShortcuts();
 });
-ipcMain.handle('input:status', () => ({
-  available: input.available(),
-  permission: input.permission(false),
-  started: input.started,
-  zoomKeys: ZOOM_KEYS,
-}));
-ipcMain.handle('input:request', () => {
-  input.permission(true);
-  const started = input.start();
-  registerShortcuts();
-  return { permission: input.permission(false), started };
+// Keystroke Add-on: downloaded only on request, and running only while recording.
+const keystrokes = createKeystrokes({
+  dir: path.join(app.getPath('userData'), 'addons', 'keystrokes'),
+  version: app.getVersion(),
+  repo: updates.repo(),
+  fetchImpl: (url) => net.fetch(url, { headers: { 'User-Agent': `Reccut/${app.getVersion()}` } }),
 });
-ipcMain.handle('input:setZoomKey', (_e, key) => {
-  input.zoomKey = key;
+let keySession = null;
+function onKeystroke(e) {
+  if (e.type !== 'key') {
+    if (e.type === 'error') send('keystrokes:error', e.reason);
+    return;
+  }
+  if (!keySession || appShortcut(shortcutModifier, e.name, e.mods)) return;
+  const label = comboLabel(e.name, e.mods);
+  keySession.keys.push([Math.round((Date.now() - keySession.t0)) / 1000, label]);
+  send('input', { type: 'key', label });
+}
+function stopKeystrokes() {
+  clearInterval(keyWatchdog);
+  keyWatchdog = null;
+  keystrokes.stop();
+  keySession = null;
+  send('keystrokes:running', false);
+}
+// The add-on never outlives a recording: if the recorder stops reporting, the helper stops.
+let keyWatchdog = null;
+let lastCheckpoint = 0;
+function watchKeystrokes() {
+  lastCheckpoint = Date.now();
+  clearInterval(keyWatchdog);
+  keyWatchdog = setInterval(() => {
+    if (Date.now() - lastCheckpoint > 30000) stopKeystrokes();
+  }, 5000);
+}
+// Stop pressed: no more keys are read while the files are being finished.
+ipcMain.handle('rec:stopping', () => {
+  keystrokes.stop();
+  send('keystrokes:running', false);
+});
+const fromMain = (e) => e.sender === win?.webContents;
+ipcMain.handle('keystrokes:status', () => keystrokes.status());
+ipcMain.handle('keystrokes:install', (e, opts) => {
+  if (!fromMain(e)) throw new Error('Not allowed.');
+  return keystrokes.install({ consent: opts?.consent === true });
+});
+ipcMain.handle('keystrokes:remove', (e) => {
+  if (!fromMain(e)) throw new Error('Not allowed.');
+  keySession = null;
+  return keystrokes.remove();
+});
+ipcMain.handle('keystrokes:request', (e) => {
+  if (!fromMain(e)) throw new Error('Not allowed.');
+  const state = keystrokes.request();
+  if (state !== 'granted' && isMac) shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent');
+  return keystrokes.status();
 });
 ipcMain.handle('input:polling', (_e, on) => (on ? input.startPolling() : input.stopPolling()));
 
@@ -409,8 +452,7 @@ ipcMain.handle('permissions:request', async () => {
 });
 ipcMain.handle('permissions:open', (_e, which) => {
   if (!isMac) return;
-  const pane = which === 'accessibility' ? 'Privacy_Accessibility' : 'Privacy_ScreenCapture';
-  shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${pane}`);
+  shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
 });
 
 ipcMain.handle('paths:base', () => baseDir());
@@ -456,13 +498,21 @@ function stamp() {
 // kan reddes fra filene som allerede er skrevet til disk.
 const markerFile = () => path.join(app.getPath('userData'), 'recording-in-progress.json');
 
-ipcMain.handle('rec:begin', async (_e, { t0, base }) => {
+ipcMain.handle('rec:begin', async (_e, { t0, base, keys }) => {
   const dir = path.join(base || path.join(baseDir(), 'Recordings'), `Recording ${stamp()}`);
   await fs.promises.mkdir(dir, { recursive: true });
   recordingDir = dir;
   await fs.promises.writeFile(markerFile(), JSON.stringify({ dir, t0 })).catch(() => {});
   input.beginSession(t0);
   input.startPolling();
+  stopKeystrokes();
+  if (keys) {
+    keySession = { t0, keys: [] };
+    if (keystrokes.start(onKeystroke)) {
+      watchKeystrokes();
+      send('keystrokes:running', true);
+    } else keySession = null;
+  }
   return dir;
 });
 
@@ -505,8 +555,7 @@ function removePauses(out, pauses) {
   };
   const points = (list) => (list || []).map((e) => [shift(e[0]), ...e.slice(1)]).filter(([s]) => !s.inside).map(([s, ...rest]) => [s.t, ...rest]);
   out.cursor = points(out.cursor);
-  out.clicks = points(out.clicks);
-  out.keys = points(out.keys);
+  if (out.keys) out.keys = points(out.keys);
   out.layouts = (out.layouts || []).map(([t, v]) => [shift(t).t, v]);
   out.zooms = (out.zooms || []).map(([a, b]) => [shift(a).t, shift(b).t]).filter(([a, b]) => b > a);
   delete out.pauses;
@@ -515,8 +564,9 @@ function removePauses(out, pauses) {
 
 // Mellomlagring under opptak (hvert femte sekund): oppsett og hendelser så langt.
 ipcMain.handle('rec:checkpoint', async (_e, meta) => {
+  lastCheckpoint = Date.now();
   if (!recordingDir) return;
-  const events = input.session ? { cursor: input.session.cursor, zooms: input.session.zooms, clicks: input.session.clicks, keys: input.session.keys } : {};
+  const events = input.session ? { cursor: input.session.cursor, zooms: input.session.zooms, ...(keySession ? { keys: keySession.keys } : {}) } : {};
   await fs.promises.writeFile(path.join(recordingDir, 'recording.partial.json'), JSON.stringify({ ...meta, ...events, savedAt: Date.now() })).catch(() => {});
 });
 
@@ -543,7 +593,7 @@ ipcMain.handle('rec:recover', async (_e, dir) => {
   try {
     partial = JSON.parse(await fs.promises.readFile(path.join(dir, 'recording.partial.json'), 'utf8'));
   } catch {}
-  const out = { version: 1, createdAt: new Date(partial.t0 || Date.now()).toISOString(), recovered: true, fps: 30, layouts: [[0, 6]], cursor: [], zooms: [], clicks: [], keys: [], ...partial };
+  const out = { version: 1, createdAt: new Date(partial.t0 || Date.now()).toISOString(), recovered: true, fps: 30, layouts: [[0, 6]], cursor: [], zooms: [], ...partial };
   delete out.savedAt;
   // Zoom som var på da det stoppet, avsluttes ved siste kjente tid.
   const end = Math.max(0, ...(out.cursor || []).map((c) => c[0]), ...(out.keys || []).map((k) => k[0]));
@@ -575,7 +625,9 @@ ipcMain.handle('rec:discard', async (_e, dir) => {
 ipcMain.handle('rec:finish', async (_e, meta) => {
   const dir = recordingDir;
   recordingDir = null;
-  const events = input.endSession() || { cursor: [], zooms: [], clicks: [], keys: [] };
+  const events = input.endSession() || { cursor: [], zooms: [] };
+  if (keySession) events.keys = keySession.keys;
+  stopKeystrokes();
   const out = removePauses({ version: 1, createdAt: new Date().toISOString(), ...meta, ...events }, meta.pauses);
   const sources = [];
   out.formatWarnings = [];
@@ -1022,7 +1074,6 @@ app.whenReady().then(async () => {
   );
 
   buildMenu();
-  if (input.permission(false) === 'granted') input.start();
   createWindow();
   recordUI.init();
 
@@ -1038,6 +1089,7 @@ app.on('will-quit', () => {
   recordUI.destroy();
   globalShortcut.unregisterAll();
   input.stop();
+  keystrokes.stop();
   jobs.destroyWorkers();
 });
 

@@ -458,7 +458,7 @@ function RecoverDialog() {
       }
     >
       <p class="lead">
-        Reccut was closed while recording ({it.name}, {(it.size / 1e6).toFixed(1)} MB saved). The part that was recorded is on disk and can be recovered, with layouts, keystrokes and cursor movements up to the last few seconds.
+        Reccut was closed while recording ({it.name}, {(it.size / 1e6).toFixed(1)} MB saved). The part that was recorded is on disk and can be recovered, with layouts and cursor movements up to the last few seconds.
       </p>
     </Modal>
   );

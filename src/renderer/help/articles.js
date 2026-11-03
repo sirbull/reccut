@@ -14,7 +14,7 @@ export const ARTICLES = [
     body: `
 Reccut has three rooms, shown at the top of the window. Switch between them with {{key:roomRecord}}, {{key:roomEdit}} and {{key:roomExport}}.
 
-- **Record** captures your screen, camera and microphone, with keystrokes and cursor zoom.
+- **Record** captures your screen, camera and microphone, with cursor zoom.
 - **Edit** is a magnetic timeline editor with the tools and shortcuts from Final Cut Pro.
 - **Export** turns the project, or any file, into the format you need.
 
@@ -183,7 +183,7 @@ On a Mac the Help menu also has a search field. Type a word and macOS points to 
     section: 'Recording',
     title: 'Recording Screen and Camera',
     summary: 'Screen, camera and microphone are recorded separately, so everything can be changed afterwards.',
-    keywords: 'record capture webcam pip layout keystrokes cursor zoom system audio area region crop part of screen countdown shortcut hotkey global pause resume window tray menu bar control bar crash recover microphone test level',
+    keywords: 'record capture webcam pip layout keystrokes keystroke add-on cursor zoom system audio area region crop part of screen countdown shortcut hotkey global pause resume window tray menu bar control bar crash recover microphone test level',
     body: `
 Choose a screen, a camera and a microphone in the Record room. Turn on system audio to record the sound from your computer.
 
@@ -201,11 +201,11 @@ While you record, you can always see that the screen is being recorded, without 
 - the **Reccut icon** in the menu bar on macOS shows a red dot and the time. On Windows the icon in the taskbar tray turns red; click it for Start, Pause, Stop and Show Reccut.
 - **Hide Reccut while recording** puts the Reccut window away when you start, and brings it back when the recording is saved.
 
-Paused parts are left out of the video, and keystrokes, clicks, cursor zoom and layouts follow along.
+Paused parts are left out of the video, and cursor zoom and layouts follow along.
 
 ## Record one window
 
-Choose a window instead of a screen under **Screen**. Only that window is recorded, even if it is moved or covered. Click Refresh list of windows if a new window is missing. Cursor zoom and click highlights are off for window recordings.
+Choose a window instead of a screen under **Screen**. Only that window is recorded, even if it is moved or covered. Click Refresh list of windows if a new window is missing. Cursor zoom is off for window recordings.
 
 ## Check the microphone
 
@@ -217,7 +217,7 @@ Choose **Flat**, **Clear speech**, **Warm voice** or **Bright voice** as a start
 
 ## If Reccut or the computer crashes
 
-The recording is written to disk while you record. If Reccut is closed by a crash or a power cut, it offers to **recover** the recording the next time it starts, with layouts, keystrokes and cursor movements up to the last few seconds.
+The recording is written to disk while you record. If Reccut is closed by a crash or a power cut, it offers to **recover** the recording the next time it starts, with layouts and cursor movements up to the last few seconds.
 
 ## Record only part of the screen
 
@@ -225,7 +225,7 @@ Under **Record**, choose **Area** instead of Full Screen. The screen is covered 
 
 - **Adjust in Preview** shows the whole screen in the preview, so you can move and resize the area there instead.
 - A thin frame on the screen shows the area while you are in the Record room. It turns red while you record. It is drawn just outside the area, so it never ends up in the video.
-- Only the area is saved, so the rest of the screen never ends up in the file. The cursor zoom, clicks and keystrokes follow the area.
+- Only the area is saved, so the rest of the screen never ends up in the file. The cursor zoom follows the area.
 
 ## Countdown
 
@@ -236,8 +236,8 @@ Choose a countdown of 3, 5 or 10 seconds under Recording. The numbers are shown 
 - The layout buttons, or the shortcuts shown on them, switch between camera full screen, screen only and the camera in a corner. To use these keys from another app, enable **Allow shortcuts in other apps** under **Record → Shortcuts**.
 - Choose the camera shape (circle, square or 16:9), size and mirroring.
 - Turn on **Show PiP on screen** under Camera to see the camera over the app you are demonstrating. It follows the recording's position, size and shape, including when recording a screen area. Clicks pass through to the app underneath. It appears while Reccut is in the background and hides when you return. Use the layout shortcuts with **3–6** to switch corners. This is available for display and area capture. On macOS and Linux, the on-screen camera can also appear in the screen file; leave it off if you need a clean screen file for later editing.
-- **Show keystrokes** shows shortcuts you press, but never normal typing and never Reccut's own shortcuts.
-- **Cursor zoom** zooms in on the mouse pointer while you hold the chosen key.
+- **Show keystrokes** needs the optional **Keystroke Add-on**. Reccut itself never reads the keyboard outside its own window. Click **Get Add-on** to read what the add-on does before it is downloaded: it reads the keyboard for the whole computer while you record, only shortcuts with Cmd, Ctrl, Alt or Win (plus Esc and the F keys) leave it, and they are saved in the recording so you can change them in Edit. It runs only while you record, and **Keys** in the recording controls shows when it is active. Reccut's own shortcuts are never shown. Remove the add-on under Overlays.
+- **Cursor zoom** zooms in on the mouse pointer. Press the recording shortcut with **9** to turn it on and off.
 - The recording is saved in the Recordings folder of the open project and added to its media. If the timeline is empty, it is also placed on the timeline.
 
 Everything is saved as separate files, so in the editor you can still change the layout, camera shape, overlays and the level of the microphone and system audio.
@@ -1020,7 +1020,7 @@ Choose **AI** in the toolbar. The first time, a short setup lets you choose a mo
 
 - **Subtitles and translation:** "Subtitle this video in Finnish." The agent transcribes the speech with the local speech model, translates and condenses it, and replaces the captions in one step. Reccut fits the timing to common subtitle rules: at least one second on screen, no more than 17 characters per second, two lines of 42 characters, a short gap between captions and no overlaps. The agent rewrites captions that break the rules. Read through the result before you publish it.
 - **Colour and exposure:** "Adjust colour and exposure on every clip so they look good." The agent measures brightness, clipping, saturation and colour cast in each clip, corrects them with the colour controls and wheels, and makes clips from the same scene match.
-- **Edit raw footage:** "Make a tutorial from my talking head and the screen recordings." The agent transcribes each clip with word times, finds pauses from the audio level, keeps the best take of each sentence, finds what happens in long screen recordings from scene changes, clicks, shortcuts and contact sheets, and builds the whole edit in one step with the screen parts timed to the narration. Cuts are placed between words with a short natural pause.
+- **Edit raw footage:** "Make a tutorial from my talking head and the screen recordings." The agent transcribes each clip with word times, finds pauses from the audio level, keeps the best take of each sentence, finds what happens in long screen recordings from scene changes, cursor zoom and contact sheets, and builds the whole edit in one step with the screen parts timed to the narration. Cuts are placed between words with a short natural pause.
 - **Your own titles:** describe a lower third, callout or end card and the agent designs an animated title template for it, adds it to the Titles library and places it.
 - **Tell a story:** attach a script (PDF, Typeloom project, Word, Final Draft, Fountain, RTF or text), storyboard images or a short brief with **Attach…**. The agent finds every take of every line, picks the best one and builds the edit. Without a script or brief it asks what the video is for, its length and tone before it cuts, or proposes a structure from the footage. The brief, the paper edit and the documents are saved with the project.
 - **Graphics and intros:** ask for an infographic, animated chart, intro, chapter card or logo animation. The agent writes and renders it as a video clip (with transparency when it goes over footage), adds it to the library and places it.

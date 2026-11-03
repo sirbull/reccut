@@ -132,7 +132,7 @@ const RUNTIME_TOOLS = [
   {
     name: 'inspect_media',
     description:
-      'Look inside a media item, also before it is on the timeline: scene changes (new window, page or camera shot) with strength 0..1, the recording event log of Reccut recordings (clicks with position, keyboard shortcuts, cursor zoom), and a contact sheet of evenly spaced frames with source times (sent as an image when the model can see images). Start with the whole file, then use a narrower from and to around what matters. For recordings choose stream "screen" or "camera".',
+      'Look inside a media item, also before it is on the timeline: scene changes (new window, page or camera shot) with strength 0..1, the recording event log of Reccut recordings (cursor zoom, keyboard shortcuts when the Keystroke Add-on was used, and clicks with position in older recordings), and a contact sheet of evenly spaced frames with source times (sent as an image when the model can see images). Start with the whole file, then use a narrower from and to around what matters. For recordings choose stream "screen" or "camera".',
     parameters: {
       type: 'object',
       properties: {
@@ -162,9 +162,9 @@ const RUNTIME_TOOLS = [
       if (m.rec) {
         const within = (list) => (list || []).filter(([t]) => t >= from && t <= to);
         info.clicks = within(m.rec.clicks).slice(0, 100).map(([t, x, y]) => [t, Math.round(x * 100) / 100, Math.round(y * 100) / 100]);
-        info.shortcuts = within(m.rec.keys).slice(0, 100);
+        if (m.rec.keys?.length) info.shortcuts = within(m.rec.keys).slice(0, 100);
         info.cursorZooms = within(m.rec.zooms).slice(0, 50);
-        info.note = 'Clicks are [seconds, x, y] with x and y 0..1 across the screen. Only shortcuts are logged, never typing.';
+        info.note = 'Clicks are [seconds, x, y] with x and y 0..1 across the screen. Only older recordings have clicks. Shortcuts are [seconds, label] and exist only when the Keystroke Add-on was used; normal typing is never saved.';
       }
       let image;
       if (m.kind !== 'audio' && sv?.hasVideo !== false) {
@@ -588,7 +588,7 @@ How Reccut works:
 - Lane 0 is the magnetic primary storyline. Its clips play back to back without gaps; inserting, deleting or trimming one moves everything after it. Build the main edit there with append or insert. Gaps on lane 0 are clips of type "gap".
 - Lanes 1 and up are connected clips above the storyline: titles, B-roll, overlays, logos. Higher lanes draw on top. Lanes -1 and down hold audio such as music and voice-over. Connected clips move with the storyline clip under them.
 - Captions live on lane 1000 and are burned into the export.
-- Recording clips come from Reccut's recorder and combine screen, camera, microphone and system audio with picture-in-picture, keystrokes and cursor zoom.
+- Recording clips come from Reccut's recorder and combine screen, camera, microphone and system audio with picture-in-picture and cursor zoom.
 - Volume is in decibels: 0 is unchanged, -6 is half as loud, -60 is silent. For music under speech use about -18 to -12 dB with fades.
 - Visual effects in the effect stack run top to bottom before colour correction.
 
@@ -602,7 +602,7 @@ Telling a story: an edit needs to know what story it tells. Before a narrative e
 Building an edit from raw footage (for example a talking head plus screen recordings):
 1. Understand the material. list_media, then transcribe_speech with mediaId for each clip with speech. Read the whole transcript before cutting.
 2. Pick the takes. False starts, repeated sentences, "no wait", "let me redo that", long hesitations and mistakes are bad takes: keep the last complete, fluent version of each sentence. Remove dead air longer than about 0.7 s and filler words when it does not sound abrupt. Use words true for the stretch you cut and place cuts between words, at the end of the last good word and the start of the next.
-3. Understand the screen recordings without watching them all: inspect_media over the whole file gives scene changes, clicks, shortcuts and a contact sheet; then inspect narrower ranges where things happen. Match each part of the narration to the moment on screen that shows it.
+3. Understand the screen recordings without watching them all: inspect_media over the whole file gives scene changes, cursor zoom and a contact sheet; then inspect narrower ranges where things happen. Match each part of the narration to the moment on screen that shows it.
 4. Plan the whole edit, then place it with one build_sequence: the talking head takes as the storyline; the matching screen parts as overlays attached to the storyline segment where they are explained (offset so the action appears as it is mentioned), sped up with speed when an action is slow, trimmed when it is idle; titles and lower thirds where they help. Keep the speaker on screen at the start and at key moments so the viewer connects with them.
 5. Check with get_timeline and preview_frames at the transitions between parts, fix timing, then summarise for the user what you kept, what you removed and why.
 

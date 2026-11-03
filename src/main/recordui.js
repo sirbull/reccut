@@ -65,16 +65,19 @@ button:hover{background:rgba(255,255,255,.18)}
 #stop:hover{background:#ff5d53}
 .sq{width:10px;height:10px;border-radius:2px;background:#fff}
 .bars{display:flex;gap:3px}.bars i{width:3px;height:11px;background:#fff;border-radius:1px}
+#keys{display:none;font-size:11px;padding:2px 6px;border-radius:6px;background:rgba(255,214,10,.2);color:#ffd60a}
+.keys #keys{display:block}
+#pause{margin-left:auto}
 .tri{width:0;height:0;border-left:10px solid #fff;border-top:6px solid transparent;border-bottom:6px solid transparent}
 </style></head><body><div id="bar">
-<div id="dot"></div><div id="time">0:00</div><div id="meter" title="Microphone level"><div></div></div>
+<div id="dot"></div><div id="time">0:00</div><div id="meter" title="Microphone level"><div></div></div><div id="keys" title="The Keystroke Add-on is reading shortcuts for this recording">Keys</div>
 <button id="pause" title="Pause"><span class="bars"><i></i><i></i></span></button>
 <button id="stop" title="Stop recording"><span class="sq"></span>Stop</button>
 </div><script>
 const bar=document.getElementById('bar'),time=document.getElementById('time'),meter=document.querySelector('#meter div'),pause=document.getElementById('pause');
 document.getElementById('stop').onclick=()=>control.send(bar.classList.contains('count')?'cancel':'stop');
 pause.onclick=()=>control.send(bar.classList.contains('paused')?'resume':'pause');
-control.onState((s)=>{bar.className=s.state==='paused'?'paused':s.state==='countdown'?'count':'';
+control.onState((s)=>{bar.className=(s.state==='paused'?'paused':s.state==='countdown'?'count':'')+(s.keys?' keys':'');
 time.textContent=s.state==='countdown'?'Starting in '+s.countdown:s.time;meter.style.width=Math.round((s.level||0)*100)+'%';
 pause.style.display=s.state==='countdown'?'none':'flex';
 pause.innerHTML=s.state==='paused'?'<span class="tri"></span>':'<span class="bars"><i></i><i></i></span>';pause.title=s.state==='paused'?'Resume':'Pause';
@@ -85,7 +88,7 @@ function createRecordUI({ send, getMainWindow, modifierLabel }) {
   let tray = null;
   let control = null;
   let controlReady = null;
-  let state = { state: 'idle', elapsed: 0, level: 0, countdown: 0 };
+  let state = { state: 'idle', elapsed: 0, level: 0, countdown: 0, keys: false };
   let showControls = true;
   let lastKind = '';
   const icons = {};
@@ -133,14 +136,14 @@ function createRecordUI({ send, getMainWindow, modifierLabel }) {
     const label = state.state === 'idle' ? '' : state.state === 'countdown' ? ` ${state.countdown}` : ` ${fmt(state.elapsed)}`;
     // macOS: tiden står ved ikonet i menylinjen. Windows: i verktøytipset.
     if (isMac) tray.setTitle(label, { fontType: 'monospacedDigit' });
-    tray.setToolTip(state.state === 'idle' ? 'Reccut' : `Reccut: ${state.state === 'paused' ? 'paused' : 'recording'}${label}`);
+    tray.setToolTip(state.state === 'idle' ? 'Reccut' : `Reccut: ${state.state === 'paused' ? 'paused' : 'recording'}${label}${state.keys ? ', showing keystrokes' : ''}`);
     if (!isMac) tray.setContextMenu(menu());
   }
 
   function ensureControl() {
     if (control && !control.isDestroyed()) return;
     const d = screen.getPrimaryDisplay().workArea;
-    const W = 290;
+    const W = 336;
     const H = 52;
     control = new BrowserWindow({
       width: W,
@@ -175,7 +178,7 @@ function createRecordUI({ send, getMainWindow, modifierLabel }) {
     }
     ensureControl();
     const c = control;
-    const payload = { state: state.state, time: fmt(state.elapsed), level: state.level, countdown: state.countdown };
+    const payload = { state: state.state, time: fmt(state.elapsed), level: state.level, countdown: state.countdown, keys: Boolean(state.keys) };
     controlReady.then(() => {
       if (c.isDestroyed()) return;
       c.webContents.send('control:state', payload);

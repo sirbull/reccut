@@ -1,0 +1,60 @@
+# Reccut Keystroke Add-on
+
+A small helper program that shows keyboard shortcuts in Reccut recordings.
+It is **not** part of the Reccut installer. Reccut downloads it from the
+GitHub release for the same version only when the user asks for it, after a
+dialog that explains what it does.
+
+## What it does
+
+- Reads the keyboard for the whole system, also when other apps are in focus.
+  This uses the same operating system feature as keyloggers
+  (`WH_KEYBOARD_LL` on Windows, an event tap on macOS, XRecord on Linux),
+  which is why it is kept out of the installer.
+- Runs only while Reccut is recording with "Show keystrokes" turned on.
+  Reccut starts it when the recording starts and stops it when it ends.
+  It also quits by itself as soon as Reccut closes its input.
+- Writes shortcuts to its standard output and nowhere else. It never writes
+  files, never uses the network and never stores anything.
+- Filters before anything leaves the program: only keys pressed together
+  with Ctrl, Cmd or Alt (not Option alone on macOS, not AltGr), plus Esc and
+  F1 to F24. Normal typing, Shift combinations and key repeats are dropped.
+
+Reccut saves the shortcuts it receives in the recording file
+(`recording.json`, `keys`), so they can be shown, hidden or cut in Edit.
+
+## Protocol
+
+```
+reccut-keystrokes            run until stdin closes
+reccut-keystrokes --check    prints granted, denied or unavailable
+reccut-keystrokes --request  macOS: asks for Input Monitoring, then prints the state
+```
+
+While running, each line on stdout is one of:
+
+```
+READY                 listening
+K <name> <mods>       a shortcut; mods: 1 Ctrl, 2 Alt/Option, 4 Shift, 8 Cmd/Win
+E permission          macOS: Input Monitoring is not allowed
+E unavailable         no keyboard source (for example Wayland without X11)
+```
+
+Key names follow physical US key names: `A` to `Z`, `0` to `9`, `F1` to `F24`,
+`Enter`, `Escape`, `Backspace`, `Delete`, `Tab`, `Space`, `ArrowLeft`,
+`Semicolon`, `Numpad1` and so on.
+
+## Building
+
+```
+# Windows (MinGW or MSYS2)
+gcc -O2 -s -o reccut-keystrokes-win-x64.exe keystrokes-win.c -luser32
+# macOS (universal)
+clang -O2 -arch arm64 -arch x86_64 -mmacosx-version-min=11.0 -o reccut-keystrokes-mac keystrokes-mac.c -framework ApplicationServices
+# Linux (needs libx11-dev and libxtst-dev)
+gcc -O2 -s -o reccut-keystrokes-linux-x64 keystrokes-linux.c -lX11 -lXtst -lpthread
+```
+
+The release workflow (`.github/workflows/build.yml`) builds all three and
+attaches each file with a `.sha256` file to the release. Reccut checks the
+checksum before it uses the file, and again every time it starts it.

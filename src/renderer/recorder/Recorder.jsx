@@ -7,7 +7,6 @@ import {
   Timer,
   Circle,
   FolderOpen,
-  Keyboard,
   Mic,
   Monitor,
   MousePointer2,
@@ -23,6 +22,7 @@ import * as engine from './engine.js';
 import { project, projectFolders } from '../editor/store.js';
 import * as editorCommands from '../editor/commands.js';
 import { GainControl, MicrophoneMixer } from './MicrophoneMixer.jsx';
+import { KeystrokesRows } from './KeystrokesAddon.jsx';
 import { meterDb } from './mixer.js';
 import { RECORDING_VIDEO_FORMATS, recordingAudioChoice, recordingAudioOptions } from '../../shared/recordingFormats.cjs';
 
@@ -38,11 +38,8 @@ const LAYOUTS = [
   { n: 6, label: 'Bottom right', cls: 'screen', cam: 'br' },
 ];
 
-export const inputStatus = { value: null };
-
 export function Recorder({ active }) {
   const canvasRef = useRef(null);
-  const [input, setInput] = useState(null);
   const [failed, setFailed] = useState([]);
   const [mixerOpen, setMixerOpen] = useState(false);
   const s = settings.value;
@@ -60,29 +57,18 @@ export function Recorder({ active }) {
 
   useEffect(() => {
     api.recShowControls(s.showControls);
-    api.inputStatus().then(setInput);
-    api.setZoomKey(s.zoomKey);
   }, []);
 
   useEffect(() => {
     api.setShortcuts(s.modifier).then(setFailed);
-  }, [s.modifier, s.backgroundShortcuts, input?.started]);
+  }, [s.modifier, s.backgroundShortcuts]);
 
   const set = (patch, after) => {
     saveSettings(patch);
     after?.();
   };
 
-  const requestInput = async () => {
-    const r = await api.requestInput();
-    setInput(await api.inputStatus());
-    if (r.permission !== 'granted' && isMac) api.openPermissionSettings('accessibility');
-  };
-
   const recording = engine.recording.value || engine.countdown.value > 0;
-  const zoomKeys = input?.zoomKeys || [];
-  const zoomLabel = zoomKeys.find((k) => k.value === s.zoomKey)?.label || 'tasten';
-  const inputReady = input?.started;
   const hasVideo = Boolean(s.screenId || s.cameraId);
   const embedsAudio = Boolean((s.screenId && s.systemAudio) || (s.cameraId && s.micId));
   const formatsDisabled = recording || engine.finishing.value;
@@ -94,6 +80,7 @@ export function Recorder({ active }) {
           <canvas ref={canvasRef} />
           {engine.editingArea.value && engine.activeArea() && <AreaEditor canvasRef={canvasRef} />}
           {recording && <div class="rec-badge">REC</div>}
+          {recording && engine.keystrokesRunning.value && <div class="rec-badge keys" title="The Keystroke Add-on is reading shortcuts for this recording">KEYS</div>}
           {engine.countdown.value > 0 && <div class="rec-countdown">{engine.countdown.value}</div>}
         </div>
         <div class="layout-row">
@@ -236,49 +223,11 @@ export function Recorder({ active }) {
         </Section>
 
         <Section title="Overlays">
-          <Row label={<><Keyboard size={14} /> Show keystrokes</>}>
-            <Toggle checked={s.showKeys} onChange={(v) => set({ showKeys: v })} />
-          </Row>
+          <KeystrokesRows />
           <Row label={<><MousePointer2 size={14} /> Cursor zoom</>}>
             <Toggle checked={s.cursorZoom} onChange={(v) => set({ cursorZoom: v })} />
           </Row>
-          {s.cursorZoom && inputReady && (
-            <Row label="Hold key">
-              <Select
-                value={s.zoomKey}
-                options={zoomKeys}
-                onChange={(v) => {
-                  set({ zoomKey: v });
-                  api.setZoomKey(v);
-                }}
-              />
-            </Row>
-          )}
-          <Row label="Highlight clicks">
-            <Toggle checked={s.showClicks} onChange={(v) => set({ showClicks: v })} />
-          </Row>
-          {input && !inputReady && (
-            <div class="callout">
-              {input.available ? (
-                <>
-                  <p>
-                    {isMac
-                      ? 'To show keystrokes and zoom the cursor while you hold a key, Reccut needs Accessibility access.'
-                      : 'The keyboard listener could not start.'}
-                  </p>
-                  <button class="btn secondary small" onClick={requestInput}>
-                    Grant Access
-                  </button>
-                </>
-              ) : (
-                <p>The keyboard listener is not available. You can toggle cursor zoom with {mod.short}9.</p>
-              )}
-            </div>
-          )}
-          <p class="hint">
-            {inputReady ? <>Hold <b>{zoomLabel}</b> to zoom the cursor. </> : null}
-            Only shortcuts with Cmd, Ctrl or Alt are shown, never regular typing. Reccut's own shortcuts are never shown.
-          </p>
+          <p class="hint">Press <b>{mod.short}9</b> to zoom the cursor on and off while recording.</p>
         </Section>
 
         <Section title="Recording">
@@ -345,7 +294,7 @@ export function Recorder({ active }) {
             <Select value={s.modifier} options={MODIFIERS} onChange={(v) => set({ modifier: v })} />
           </Row>
           <p class="hint">
-            <b>{mod.short}0</b> starts and stops recording. <b>{mod.short}8</b> pauses and resumes. {mod.short}1 camera, {mod.short}2 screen and {mod.short}3 to {mod.short}6 corners.
+            <b>{mod.short}0</b> starts and stops recording. <b>{mod.short}8</b> pauses and resumes. {mod.short}1 camera, {mod.short}2 screen, {mod.short}3 to {mod.short}6 corners and {mod.short}9 cursor zoom.
             {' '}By default, these keys work only in Reccut, outside input fields and dialogs. Enable “Allow shortcuts in other apps” to use them in the background; those combinations can then override shortcuts in other apps. You can always use the floating controls or tray menu to pause and stop.
             {failed.length > 0 && <span class="warn"> Used by another app: {failed.join(', ')}.</span>}
             {isMac && s.modifier === 'Command+Shift' && <span class="warn"> Cmd + Shift + 3, 4 and 5 are used by macOS for screenshots.</span>}

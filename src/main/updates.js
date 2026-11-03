@@ -42,7 +42,8 @@ function newer(a, b) {
 // Installasjonsfilen som passer denne maskinen.
 function pickAsset(assets, platform = process.platform, arch = process.arch) {
   const list = (Array.isArray(assets) ? assets : []).filter((a) => {
-    if (typeof a?.name !== 'string') return false;
+    // The Keystroke Add-on is attached to the same release but is never an installer.
+    if (typeof a?.name !== 'string' || /keystrokes/i.test(a.name)) return false;
     const arm = /arm64|aarch64/i.test(a.name);
     const x64 = /x64|x86_64|amd64/i.test(a.name);
     const ia32 = /ia32|i[3-6]86/i.test(a.name);
@@ -143,4 +144,4 @@ async function download(requested, onProgress, signal) {
   }
 }
 
-module.exports = { check, download, newer, pickAsset, resolveAsset };
+module.exports = { check, download, newer, pickAsset, resolveAsset, repo };

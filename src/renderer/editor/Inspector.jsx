@@ -1388,15 +1388,15 @@ function RecordingTab({ clip, media }) {
       {usesSide && <SideBySideSection clip={clip} />}
       {hasCam && <CameraColorSection clip={clip} />}
       {clip.recordingPart !== 'camera' && <Section title="Overlays">
-        <Row label={`Keystrokes (${rec.keys?.length || 0})`}>
+        {rec.keys?.length > 0 && <Row label={`Keystrokes (${rec.keys.length})`}>
           <Toggle checked={clip.props.showKeys} onChange={(v) => setProp(clip, { showKeys: v })} />
-        </Row>
+        </Row>}
         <Row label={`Cursor zoom (${rec.zooms?.length || 0})`}>
           <Toggle checked={clip.props.cursorZoom} onChange={(v) => setProp(clip, { cursorZoom: v })} />
         </Row>
-        <Row label={`Click highlights (${rec.clicks?.length || 0})`}>
+        {rec.clicks?.length > 0 && <Row label={`Click highlights (${rec.clicks.length})`}>
           <Toggle checked={clip.props.showClicks} onChange={(v) => setProp(clip, { showClicks: v })} />
-        </Row>
+        </Row>}
         <p class="hint">Blade the clip (B or {window.api.platform === 'darwin' ? 'Cmd' : 'Ctrl'} B) to turn overlays on or off for part of the recording.</p>
       </Section>}
     </>
