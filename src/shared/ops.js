@@ -85,7 +85,6 @@ export function separateRecordingCamera(project, id) {
   delete camera.transition;
   delete camera.transitionOut;
   camera.expanded = false;
-  camera.props.showKeys = false;
   camera.props.showClicks = false;
   camera.props.cursorZoom = false;
   camera.props.audioDetached = true;

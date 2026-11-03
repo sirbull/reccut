@@ -54,7 +54,7 @@ If you use Final Cut Pro, the magnetic main storyline and editing shortcuts will
 
 Record the whole screen, a single window or a selected area, with your webcam and microphone. You can also record the camera on its own. Use it for a tutorial, a presentation, gameplay or a piece to camera.
 
-When you stop, click **Edit** to open the recording on the timeline. Trim the start and end, cut out a mistake, add subtitles or music, and export. Screen and camera are stored separately, along with the layout, cursor movements and keystrokes, so you can change the camera position or hide overlays after recording.
+When you stop, click **Edit** to open the recording on the timeline. Trim the start and end, cut out a mistake, add subtitles or music, and export. Screen and camera are stored separately, along with the layout and cursor movements, so you can change the camera position or hide overlays after recording.
 
 The camera appears as a separate **PiP** clip on V2, linked to the screen clip on V1. Click PiP and open **Color → Camera Color** to adjust exposure, contrast, saturation and temperature for the camera alone. Linked clips stay in sync when moved, trimmed or cut. Choose **Detach PiP** to edit its timing independently, and reconnect it in **Recording → PiP Connection**. Older combined clips can use **Show PiP on Separate Track**. Adjustments are saved with the project and included in exports.
 
@@ -199,8 +199,8 @@ You don't have to take our word for it:
 
   If Terminal answers *Operation not permitted*, delete Reccut from Applications, run `xattr -d com.apple.quarantine ~/Downloads/Reccut-*.dmg`, and install again from the `.dmg`.
 
-  Allow access to camera, microphone and screen recording. Keystrokes and cursor zoom also need access under Privacy & Security → Accessibility. Restart the app after granting access.
-- **Linux:** run `chmod +x Reccut-*.AppImage` and start the file. Ubuntu 22.04 and newer need `sudo apt install libfuse2`. If it closes right away with a sandbox error (Ubuntu 24.04), start it with `--no-sandbox`. Keystrokes and cursor zoom need an X11 session. System audio is not recorded on Linux, and HEVC clips are converted before playback.
+  Allow access to camera, microphone and screen recording. Restart the app after granting access.
+- **Linux:** run `chmod +x Reccut-*.AppImage` and start the file. Ubuntu 22.04 and newer need `sudo apt install libfuse2`. If it closes right away with a sandbox error (Ubuntu 24.04), start it with `--no-sandbox`. Cursor zoom needs an X11 session. System audio is not recorded on Linux, and HEVC clips are converted before playback.
 
 Reccut checks GitHub for new versions once a day and can download the installer for you. Nothing is installed until you open it yourself, and the check can be turned off in Settings.
 
@@ -239,4 +239,4 @@ To publish a new version, bump the version in `package.json`, tag it (for exampl
 
 Reccut is released under the MIT licence.
 
-It is built on Electron, Preact, Mediabunny, FFmpeg, uiohook-napi, Lucide and Transformers.js (Whisper). The bundled FFmpeg binaries are GPL-licensed, built without `--enable-nonfree`, and ship with the app together with `LICENSE-FFmpeg.txt`.
+It is built on Electron, Preact, Mediabunny, FFmpeg, Lucide and Transformers.js (Whisper). The bundled FFmpeg binaries are GPL-licensed, built without `--enable-nonfree`, and ship with the app together with `LICENSE-FFmpeg.txt`.

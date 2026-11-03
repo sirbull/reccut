@@ -1,7 +1,7 @@
 // Opptaksmotor: kilder, live forhåndsvisning og opptak til separate filer.
 import { signal } from '@preact/signals';
-import { drawCamera, drawClicks, drawCursor, drawKeys } from '../../shared/render.js';
-import { KEY_LIFE, LAYOUT_ANIM, easeOutCubic, lerpRect, pipRect, ZOOM_RAMP, clamp } from '../../shared/model.js';
+import { drawCamera, drawCursor } from '../../shared/render.js';
+import { LAYOUT_ANIM, easeOutCubic, lerpRect, pipRect, ZOOM_RAMP, clamp } from '../../shared/model.js';
 import { settings, saveSettings } from './settings.js';
 import { recordingAudioChoice, recordingPlan, recordingVideoFormat } from '../../shared/recordingFormats.cjs';
 import { projectFolders } from '../editor/store.js';
@@ -304,8 +304,6 @@ let camAnimStart = 0;
 let lastCorner = 6;
 let liveZoom = { on: false, at: 0, off: 0 };
 let liveCursor = null;
-let liveKeys = [];
-let liveClicks = [];
 let inputFrame = null;
 
 // Pekerbevegelse skal ikke vente på neste 30 Hz videobilde. Samle hendelser
@@ -436,8 +434,8 @@ function currentMeta() {
     ...(activeArea() ? { area: activeArea() } : {}),
     ...(isWindowSource() ? { source: 'window' } : {}),
     pip: { size: s.pipSize, shape: s.pipShape, mirror: s.mirror },
-    // Pekerzoom og klikk følger skjermen, så de er av når bare et vindu tas opp.
-    overlays: { keys: s.showKeys, cursorZoom: s.cursorZoom && !isWindowSource(), clicks: s.showClicks && !isWindowSource() },
+    // Pekerzoom følger skjermen, så den er av når bare et vindu tas opp.
+    overlays: { cursorZoom: s.cursorZoom && !isWindowSource() },
   };
   for (const r of recorders) {
     const isCam = r.name === 'camera';
@@ -500,11 +498,6 @@ function draw() {
     ctx.drawImage(screenVideo, rect.x, rect.y, rect.w, rect.h);
   }
   if (hasScreen && !editing) {
-    if (s.showClicks) {
-      const nowS = now / 1000;
-      liveClicks = liveClicks.filter((c) => nowS - c.t < 0.5);
-      drawClicks(ctx, liveClicks.map((c) => ({ x: c.x, y: c.y, age: nowS - c.t })), rect);
-    }
     if (s.cursorZoom && liveCursor) {
       const up = liveZoom.on ? clamp((now - liveZoom.at) / (ZOOM_RAMP * 1000), 0, 1) : 0;
       const down = liveZoom.on ? 1 : 1 - clamp((now - liveZoom.off) / (ZOOM_RAMP * 1000), 0, 1);
@@ -517,11 +510,6 @@ function draw() {
     ctx.globalAlpha = cam.a;
     drawCamera(ctx, cameraVideo, cameraVideo.videoWidth, cameraVideo.videoHeight, cam, s.mirror, cam.w < W * 0.9);
     ctx.restore();
-  }
-  if (s.showKeys) {
-    const nowS = now / 1000;
-    liveKeys = liveKeys.filter((k) => nowS - k.t < KEY_LIFE);
-    drawKeys(ctx, liveKeys.slice(-3).map((k) => ({ label: k.label, age: nowS - k.t })), W, H);
   }
   if (!hasScreen && !hasCamera) {
     ctx.fillStyle = '#1c1c1e';
@@ -603,11 +591,6 @@ api.onInput((e) => {
     liveCursor = [e.x, e.y];
     liveZoom = e.on ? { on: true, at: now, off: 0 } : { on: false, at: liveZoom.at, off: now };
   } else if (e.type === 'cursor') liveCursor = [e.x, e.y];
-  else if (e.type === 'key') liveKeys.push({ label: e.label, t: now / 1000 });
-  else if (e.type === 'click') {
-    liveCursor = [e.x, e.y];
-    liveClicks.push({ x: e.x, y: e.y, t: now / 1000 });
-  }
   scheduleInputDraw();
 });
 

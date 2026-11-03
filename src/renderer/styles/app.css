@@ -1811,7 +1811,6 @@ input[type='color'].color::-webkit-color-swatch {
   border-radius: 2px;
 }
 .band.cam { background: #64d2ff; }
-.band.keys { background: #ffd60a; }
 .band.zoom { background: #ff9f0a; }
 .kf-row {
   position: absolute;

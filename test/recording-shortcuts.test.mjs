@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 const { createRecordingShortcuts } = createRequire(import.meta.url)('../src/main/shortcuts.js');
 
 function setup() {
-  const state = { modifier: 'Control+Alt', focused: true, blocked: false, background: false, active: true, nativeInput: false, otherWindowFocused: false };
+  const state = { modifier: 'Control+Alt', focused: true, blocked: false, background: false, active: true, otherWindowFocused: false };
   const keys = new Map(), actions = [];
   const shortcuts = createRecordingShortcuts({
     globalShortcut: { unregisterAll: () => keys.clear(), register: (key, fn) => { keys.set(key, fn); return true; } },

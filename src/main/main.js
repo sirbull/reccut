@@ -36,7 +36,7 @@ const packager = require('./packager');
 const { createRecordUI } = require('./recordui');
 const { createPipPreview } = require('./pip');
 const updates = require('./updates');
-const { InputTracker, ZOOM_KEYS } = require('./input');
+const { InputTracker } = require('./input');
 
 const { createExtensionHost, readDocument } = require('./extensions');
 const { renderGraphic } = require('./graphics');
@@ -317,7 +317,7 @@ const recordingShortcuts = require('./shortcuts').createRecordingShortcuts({
   globalShortcut,
   context: () => ({
     modifier: shortcutModifier, active: shortcutsActive, blocked: shortcutsBlocked,
-    background: backgroundShortcuts, nativeInput: input.started,
+    background: backgroundShortcuts,
     focused: Boolean(win?.isFocused()),
     otherWindowFocused: Boolean(BrowserWindow.getFocusedWindow() && BrowserWindow.getFocusedWindow() !== win),
   }),
@@ -362,7 +362,6 @@ ipcMain.handle('window:restore', () => {
 });
 ipcMain.handle('shortcuts:set', (_e, modifier) => {
   shortcutModifier = modifier;
-  input.setAppShortcuts(modifier);
   return registerShortcuts();
 });
 ipcMain.handle('shortcuts:active', (_e, active) => {
@@ -374,21 +373,6 @@ ipcMain.handle('shortcuts:scope', (e, scope) => {
   shortcutsBlocked = Boolean(scope.blocked);
   backgroundShortcuts = scope.background === true;
   return registerShortcuts();
-});
-ipcMain.handle('input:status', () => ({
-  available: input.available(),
-  permission: input.permission(false),
-  started: input.started,
-  zoomKeys: ZOOM_KEYS,
-}));
-ipcMain.handle('input:request', () => {
-  input.permission(true);
-  const started = input.start();
-  registerShortcuts();
-  return { permission: input.permission(false), started };
-});
-ipcMain.handle('input:setZoomKey', (_e, key) => {
-  input.zoomKey = key;
 });
 ipcMain.handle('input:polling', (_e, on) => (on ? input.startPolling() : input.stopPolling()));
 
@@ -409,8 +393,7 @@ ipcMain.handle('permissions:request', async () => {
 });
 ipcMain.handle('permissions:open', (_e, which) => {
   if (!isMac) return;
-  const pane = which === 'accessibility' ? 'Privacy_Accessibility' : 'Privacy_ScreenCapture';
-  shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${pane}`);
+  shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
 });
 
 ipcMain.handle('paths:base', () => baseDir());
@@ -505,8 +488,6 @@ function removePauses(out, pauses) {
   };
   const points = (list) => (list || []).map((e) => [shift(e[0]), ...e.slice(1)]).filter(([s]) => !s.inside).map(([s, ...rest]) => [s.t, ...rest]);
   out.cursor = points(out.cursor);
-  out.clicks = points(out.clicks);
-  out.keys = points(out.keys);
   out.layouts = (out.layouts || []).map(([t, v]) => [shift(t).t, v]);
   out.zooms = (out.zooms || []).map(([a, b]) => [shift(a).t, shift(b).t]).filter(([a, b]) => b > a);
   delete out.pauses;
@@ -516,7 +497,7 @@ function removePauses(out, pauses) {
 // Mellomlagring under opptak (hvert femte sekund): oppsett og hendelser så langt.
 ipcMain.handle('rec:checkpoint', async (_e, meta) => {
   if (!recordingDir) return;
-  const events = input.session ? { cursor: input.session.cursor, zooms: input.session.zooms, clicks: input.session.clicks, keys: input.session.keys } : {};
+  const events = input.session ? { cursor: input.session.cursor, zooms: input.session.zooms } : {};
   await fs.promises.writeFile(path.join(recordingDir, 'recording.partial.json'), JSON.stringify({ ...meta, ...events, savedAt: Date.now() })).catch(() => {});
 });
 
@@ -543,10 +524,10 @@ ipcMain.handle('rec:recover', async (_e, dir) => {
   try {
     partial = JSON.parse(await fs.promises.readFile(path.join(dir, 'recording.partial.json'), 'utf8'));
   } catch {}
-  const out = { version: 1, createdAt: new Date(partial.t0 || Date.now()).toISOString(), recovered: true, fps: 30, layouts: [[0, 6]], cursor: [], zooms: [], clicks: [], keys: [], ...partial };
+  const out = { version: 1, createdAt: new Date(partial.t0 || Date.now()).toISOString(), recovered: true, fps: 30, layouts: [[0, 6]], cursor: [], zooms: [], ...partial };
   delete out.savedAt;
   // Zoom som var på da det stoppet, avsluttes ved siste kjente tid.
-  const end = Math.max(0, ...(out.cursor || []).map((c) => c[0]), ...(out.keys || []).map((k) => k[0]));
+  const end = Math.max(0, ...(out.cursor || []).map((c) => c[0]));
   out.zooms = (out.zooms || []).map(([a, b]) => [a, b ?? end]);
   const sources = [];
   out.formatWarnings = [];
@@ -575,7 +556,7 @@ ipcMain.handle('rec:discard', async (_e, dir) => {
 ipcMain.handle('rec:finish', async (_e, meta) => {
   const dir = recordingDir;
   recordingDir = null;
-  const events = input.endSession() || { cursor: [], zooms: [], clicks: [], keys: [] };
+  const events = input.endSession() || { cursor: [], zooms: [] };
   const out = removePauses({ version: 1, createdAt: new Date().toISOString(), ...meta, ...events }, meta.pauses);
   const sources = [];
   out.formatWarnings = [];
@@ -1022,7 +1003,6 @@ app.whenReady().then(async () => {
   );
 
   buildMenu();
-  if (input.permission(false) === 'granted') input.start();
   createWindow();
   recordUI.init();
 

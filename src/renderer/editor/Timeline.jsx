@@ -1252,7 +1252,6 @@ function RecBands({ clip, media }) {
   return (
     <div class="rec-bands">
       {cam && <span class="band cam" title="Camera" />}
-      {clip.props.showKeys && media.rec?.keys?.length > 0 && <span class="band keys" title="Keystrokes" />}
       {clip.props.cursorZoom && media.rec?.zooms?.length > 0 && <span class="band zoom" title="Cursor zoom" />}
     </div>
   );

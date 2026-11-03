@@ -399,8 +399,7 @@ async function recordingMedia(dir, notify) {
       cursor: rec.cursor || [],
       zooms: rec.zooms || [],
       clicks: rec.clicks || [],
-      keys: rec.keys || [],
-      overlays: rec.overlays || { keys: true, cursorZoom: true, clicks: false },
+      overlays: rec.overlays || { cursorZoom: true, clicks: false },
     },
   });
 }
