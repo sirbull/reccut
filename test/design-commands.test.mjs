@@ -39,3 +39,11 @@ test('Design shortcuts match Photoshop terms with no per-room conflicts on Mac o
     for(const cmd of r.COMMANDS.filter(c=>c.id.startsWith('design:'))) for(const k of r.keysFor(cmd)) assert.equal(r.conflictsFor(k,cmd.id).length,0,`${cmd.id}: ${k}`);
   }
 });
+
+test('Design keyboard conflicts are room aware, including group, crop and paste in place',()=>{
+  const {registry:r,editor:e}=setup();e.room.value='design';
+  assert.equal(r.conflictsFor('T','design:crop').some(c=>c.id==='tool:trim'),false);
+  assert.ok(r.conflictsFor('CmdOrCtrl+S','design:crop').some(c=>c.id==='save'));
+  for(const id of ['design:group','design:ungroup','design:pasteInPlace'])assert.ok(!r.byId.get(id).register,id);
+  for(const id of ['design:crop','design:cycleShape','design:align:left','design:distribute:x'])assert.equal(r.byId.get(id).help,'design');
+});

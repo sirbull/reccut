@@ -27,6 +27,8 @@ const DEFAULTS = {
   syncMuteCamera: true,
   // Egne hurtigtaster: { kommando: 'CmdOrCtrl+Shift+B' }, tom streng betyr ingen.
   shortcuts: {},
+  designStyles: [],
+  designColors: [],
   reopenLast: true,
   checkUpdates: true,
   checkOfflineOnFocus: true,

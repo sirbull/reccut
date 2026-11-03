@@ -5,14 +5,14 @@ import {
 } from '../../shared/gradient.js';
 import { renderGradient } from '../../shared/gradientRender.js';
 
-export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onInput, onCommit, onCancel }) {
+export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onInput, onCommit, onCancel, renderColors }) {
   const p = gradientParams(params), free = p.mode === 'freeform';
   const [selected, setSelected] = useState(p.stops[0].id);
   const preview = useRef(null), drag = useRef(null);
   const items = free ? p.points : p.stops, field = free ? 'points' : 'stops';
   const active = items.find((s) => s.id === selected) || items[0];
   // The preview and its handles retain the source aspect ratio.
-  const width = 360, height = width / aspect;
+  const width = Math.max(1, Math.min(360, 240 * aspect)), height = Math.max(1, Math.min(240, width / aspect));
   useLayoutEffect(() => {
     const cv = preview.current;
     cv.width = width;
@@ -107,7 +107,7 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
       <Row label="Type"><Select value={p.mode} options={[
         { value: 'linear', label: 'Linear' }, { value: 'radial', label: 'Radial' }, { value: 'freeform', label: 'Freeform' },
       ]} onChange={(mode) => onChange({ mode })} /></Row>
-      <div class="gradient-preview" style={{ aspectRatio: String(aspect) }} {...pointerEvents}
+      <div class="gradient-preview" style={{ aspectRatio: String(aspect), width, maxWidth: 'calc(100% - 18px)', maxHeight: 240 }} {...pointerEvents}
         onDblClick={(e) => { if (free && !e.target.closest('button')) { const xy = coords(e); add(xy.x, xy.y); } }}>
         <canvas ref={preview} aria-label="Gradient preview" />
         <svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
@@ -136,6 +136,7 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
       <p class="hint">{free ? 'Double-click to add a point. Drag points to move; drag the square to adjust spread.' : 'Drag the handles to shape the gradient. Double-click the color bar to add a stop.'}</p>
       <Row label={free ? 'Point' : 'Stop'}><Select value={active.id}
         options={items.map((s, i) => ({ value: s.id, label: `${i + 1} · ${s.color.toUpperCase()}` }))} onChange={setSelected} /></Row>
+      {renderColors?.(active.color,(color)=>replace(active.id,{color}))}
       <Row label="Color"><input type="color" class="color" value={active.color} aria-label="Selected gradient color"
         onInput={(e) => replace(active.id, { color: e.currentTarget.value }, true)}
         onChangeCapture={onCommit} onBlur={onCommit} onKeyDown={(e) => e.stopPropagation()} /><span class="gradient-hex">{active.color.toUpperCase()}</span></Row>

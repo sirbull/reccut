@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { build } from 'esbuild';
-const bundle = (await build({ stdin: { contents: "export * as assets from './src/renderer/design/assets.js'; export * as design from './src/renderer/design/store.js'; export * as editor from './src/renderer/editor/store.js';", resolveDir: process.cwd() }, bundle: true, write: false, format: 'cjs', platform: 'browser', plugins: [{ name: 'browser-services', setup(b) { b.onResolve({filter: /\/player\.js$/},()=>({path:'qa-player',external:true})); b.onResolve({filter: /\/ui\.jsx$/},()=>({path:'qa-ui',external:true})); } }] })).outputFiles[0].text;
+const bundle = (await build({ stdin: { contents: "export * as assets from './src/renderer/design/assets.js'; export * as layered from './src/renderer/design/layered.js'; export * as crop from './src/renderer/design/crop.js'; export * as design from './src/renderer/design/store.js'; export * as editor from './src/renderer/editor/store.js';", resolveDir: process.cwd() }, bundle: true, write: false, format: 'cjs', platform: 'browser', plugins: [{ name: 'browser-services', setup(b) { b.onResolve({filter: /\/player\.js$/},()=>({path:'qa-player',external:true})); b.onResolve({filter: /\/ui\.jsx$/},()=>({path:'qa-ui',external:true})); } }] })).outputFiles[0].text;
 function setup(options = {}) {
   const messages = [], images = [], copied = [], exports = [], listeners = new Set();
   const module = { exports: {} };
@@ -54,7 +54,7 @@ test('frame capture accepts completion before the IPC response and stores an ind
 
 test('zero-size decoded images are rejected before drawing', async () => {
   const q = setup({ deferred: true });
-  const pending = q.assets.placeFiles(['/empty.svg'], { copy: false });
+  const pending = q.assets.placeFiles(['/empty.png'], { copy: false });
   q.images[0].naturalWidth = 0; q.images[0].onload(); await pending;
   assert.equal(q.design.currentDesign.value.layers.length, 0);
   assert.equal(q.messages.length, 1);
@@ -129,4 +129,46 @@ test('switching projects clears old folders before an immediate image placement'
   q.design.openDesign(Object.keys(p.designs)[0]);
   await q.assets.placeFiles(['/outside/image.png'], { copy: true });
   assert.equal(q.copied[0].dir, '/new/Designs/Assets');
+});
+
+
+test('cross-project copy registers independent assets, preserves groups and pastes relative centers', async () => {
+  const q=setup(); await q.assets.placeFiles(['/outside/photo.png'],{copy:true}); q.design.addText(); q.design.selectAll(); q.design.groupSelection();
+  const source=q.design.currentDesign.value, group=source.layers[0].group;
+  await q.assets.copyLayers();
+  q.editor.setProject({...structuredClone(q.editor.project.value),id:'project-b',designs:{},designAssets:{},media:{}});
+  q.design.addDesign({width:640,height:360}); await q.assets.pasteImage();
+  const p=q.editor.project.value,d=q.design.currentDesign.value;
+  assert.equal(d.layers.length,2); assert.equal(Object.keys(p.designAssets).length,1); assert.notEqual(d.layers[0].group,group); assert.equal(d.layers[0].group,d.layers[1].group);
+  assert.equal(d.layers[0].media,null);assert.ok(p.designAssets[d.layers[0].asset]);assert.equal(q.copied.length,2);
+  assert.equal((d.layers[0].x+d.layers[0].w/2)/d.width,(source.layers[0].x+source.layers[0].w/2)/source.width);
+  q.design.designUndo(); assert.equal(q.design.currentDesign.value.layers.length,0); assert.equal(Object.keys(q.editor.project.value.designAssets).length,0);
+});
+test('plain clipboard text becomes one text layer, while paste in place retains coordinates',async()=>{
+  const q=setup(); q.api.setClipboard({text:'A *highlighted* title',image:null});await q.assets.pasteImage();
+  assert.equal(q.design.currentDesign.value.layers[0].text,'A *highlighted* title');
+  const source=q.design.currentDesign.value.layers[0];await q.assets.copyLayers();q.design.addDesign({width:300,height:300});await q.assets.pasteImage(true);
+  assert.equal(q.design.currentDesign.value.layers[0].x,source.x);assert.equal(q.design.currentDesign.value.layers[0].y,source.y);
+});
+test('layered PSD import asks before extraction and registers positioned layers in one undo step',async()=>{
+  const q=setup();const extracted=[];
+  q.api.psdLayers=async()=>({width:1920,height:1080,layers:[{index:0,name:'Background',visible:true},{index:1,name:'Title',visible:true}]});
+  q.api.psdExtract=async(file,indices,mode,dir)=>{extracted.push({indices,mode,dir});return indices.map(i=>({path:dir+'/'+i+'.png',name:'Layer '+i}))};
+  const placing=q.assets.placeFiles(['/outside/art.psd'],{copy:true});
+  for(let i=0;i<20&&!q.layered.designLayerImport.value;i++)await Promise.resolve();
+  assert.ok(q.layered.designLayerImport.value);assert.equal(extracted.length,0);
+  q.layered.finishLayerImport({indices:[0,1],mode:'layers'});await placing;
+  const layers=q.design.currentDesign.value.layers;assert.equal(layers.length,2);assert.equal(layers[0].x,layers[1].x);assert.equal(layers[0].group,layers[1].group);assert.ok(layers[0].group);
+  assert.equal(Object.keys(q.editor.project.value.designAssets).length,2);assert.match(extracted[0].dir,/Designs\/Assets\/art\//);
+  q.design.designUndo();assert.equal(q.design.currentDesign.value.layers.length,0);assert.equal(Object.keys(q.editor.project.value.designAssets).length,0);
+});
+
+test('crop drafts cancel safely when another action edits the layer or switches projects',async()=>{
+  const q=setup();q.editor.room.value='design';await q.assets.placeFiles(['/photo.png'],{copy:false});
+  const original=q.design.currentDesign.value.layers[0];q.crop.startCrop();q.crop.setCropRatio('1');assert.ok(q.crop.cropSession.value);
+  q.design.changeLayers(l=>{l.name='Changed elsewhere'});assert.equal(q.crop.cropSession.value,null);assert.equal(q.design.currentDesign.value.layers[0].name,'Changed elsewhere');
+  q.design.designUndo();assert.equal(q.design.currentDesign.value.layers[0].name,original.name);
+  q.crop.startCrop();q.crop.setCropRatio('0.8');q.crop.finishCrop();assert.ok(Math.abs(q.design.currentDesign.value.layers[0].w/q.design.currentDesign.value.layers[0].h-0.8)<1e-8);
+  q.design.designUndo();assert.deepEqual(JSON.parse(JSON.stringify(q.design.currentDesign.value.layers[0])),JSON.parse(JSON.stringify(original)));
+  q.crop.startCrop();q.editor.setProject({...structuredClone(q.editor.project.value),id:'new-project'});assert.equal(q.crop.cropSession.value,null);
 });

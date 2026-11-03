@@ -4,9 +4,10 @@ import { Loader2 } from 'lucide-preact';
 import { createPlayer, fileUrl } from '../player.js';
 import { mediaPreviewProject } from '../editor/playback.js';
 import { project, projectEpoch } from '../editor/store.js';
-import { frameSourceProject, frameThumbnails } from '../../shared/design.js';
+import { frameSourceProject, frameThumbnails, cameraFrameProject } from '../../shared/design.js';
 import { formatTimecode } from '../../shared/model.js';
-import { currentDesign } from './store.js';
+import { currentDesign, changeDesign } from './store.js';
+import { removeBackground } from './cutout.js';
 import { captureFrame } from './assets.js';
 import { Button, Select, toast } from '../ui.jsx';
 
@@ -39,6 +40,8 @@ export function FramePicker({ active }) {
     return () => { observer.disconnect(); cancelAnimationFrame(resizeFrame); player.stopLoop(); };
   }, [active, sourceProject.width, sourceProject.height]);
   useEffect(() => () => player.dispose(), []);
+  const cameraProject=cameraFrameProject(sourceProject,time);
+  const useCamera=async()=>{if(busy||!cameraProject)return;setBusy(true);try{const l=await captureFrame(cameraProject,time);if(l){changeDesign(d=>{const image=d.layers.find(a=>a.id===l.id);if(image)d.layers=[...d.layers.filter(a=>a.id!==l.id),image];});await removeBackground(l.id);}}catch(err){toast(`Could not cut out camera: ${err.message}`,{kind:'error'});}finally{setBusy(false);}};
   const useFrame = async () => {
     if (busy) return;
     setBusy(true);
@@ -56,6 +59,7 @@ export function FramePicker({ active }) {
     {thumbnails.length > 0 && <div class="dz-filmstrip">{thumbnails.map((thumb, i) => <button key={i} title={formatTimecode(thumb.time, sourceProject.fps)} onClick={() => seek(thumb.time)}><img src={fileUrl(thumb.path)} draggable={false} alt="" /></button>)}</div>}
     {hasVideo ? <><input class="slider" aria-label="Video frame" type="range" min={0} max={max} step={1 / sourceProject.fps} value={time} onInput={(e) => seek(Number(e.currentTarget.value))} /><div class="dz-timecode">{formatTimecode(time, sourceProject.fps)}</div></> : <p class="hint">Add video to the timeline in Edit to pick a frame. You can still place your own images.</p>}
     <Button variant="primary" disabled={!hasVideo || !currentDesign.value || busy} onClick={useFrame}>{busy && <Loader2 size={14} class="spin" />}{busy ? 'Capturing Frame…' : 'Use This Frame'}</Button>
+    <Button disabled={!cameraProject||!currentDesign.value||busy} onClick={useCamera}>Cut Out Camera</Button>
     <p class="hint">Captures the full quality composite as an independent PNG. Arrow keys step frames here.</p>
   </div>;
 }

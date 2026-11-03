@@ -145,10 +145,12 @@ async function save(base, project, file, { history: keepHistory = true } = {}) {
   if (!file) file = (await create(path.join(base), project.name)).file;
   const tmp = file + '.tmp';
   const data = JSON.parse(JSON.stringify(project));
+  const cutoutCleanup = await require('./designCleanup').plan(data, file, history);
   addRelative(data, path.dirname(file));
   const text = JSON.stringify(data);
   await fs.promises.writeFile(tmp, text);
   await fs.promises.rename(tmp, file);
+  await cutoutCleanup.commit();
   if (!keepHistory) return file;
   lastFile = file;
   // Versjonshistorikk: en kopi med noen minutters mellomrom (i bakgrunnen).

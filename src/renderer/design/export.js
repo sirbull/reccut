@@ -1,3 +1,4 @@
+import { fontAvailable } from './fonts.js';
 import { FRAME_FORMATS } from '../../shared/frameExport.js';
 import { designFileName, fitToSize } from '../../shared/designExport.js';
 import { drawDesign } from '../../shared/designRender.js';
@@ -16,13 +17,14 @@ export async function saveDesignImage(design, { format = 'png', quality = 0.92, 
     const img = await ensureImage(imagePath(l, p));
     if (!img) throw new Error(`Relink the missing image "${l.name}" before exporting.`);
     loaded.set(l.id, img);
+    if(l.cutout?.enabled){const path=p.designAssets?.[l.cutout.asset]?.path,mask=await ensureImage(path);if(!mask)throw new Error(`Relink the cutout mask for \"${l.name}\" before exporting.`);loaded.set(`asset:${l.cutout.asset}`,mask);}
   }));
   await document.fonts.ready;
   const cv = new OffscreenCanvas(width, height), ctx = cv.getContext('2d');
   const alpha = fmt.alpha && transparent;
   // Flatten unless the user explicitly requests transparency.
   if (!alpha) { ctx.fillStyle = design.background?.color || '#ffffff'; ctx.fillRect(0, 0, width, height); }
-  drawDesign(ctx, design, (l) => loaded.get(l.id), { scale: width / design.width, transparent: alpha });
+  drawDesign(ctx, design, (l) => loaded.get(l.id) || loaded.get(`asset:${l.asset}`), { fontAvailable, scale: width / design.width, transparent: alpha });
   const encode = (q) => cv.convertToBlob({ type: fmt.mime, quality: q });
   let blob;
   if (limit > 0 && format !== 'png') {

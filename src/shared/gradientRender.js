@@ -93,6 +93,14 @@ function freeformCPU(ctx, p, w, h) {
 }
 // Static fills are cached independently of the changing video frames. Preview and
 // export use the same full-resolution field, including when WebGL is unavailable.
+export function gradientCanvasStyle(ctx, p, w, h, x = 0, y = 0) {
+  const coincident = p.mode === 'linear' && Math.hypot((p.end.x - p.start.x) * w, (p.end.y - p.start.y) * h) < 1e-8;
+  const g = p.mode === 'radial'
+    ? ctx.createRadialGradient(x + p.center.x * w, y + p.center.y * h, 0, x + p.center.x * w, y + p.center.y * h, p.radius * Math.min(w, h))
+    : ctx.createLinearGradient(x + p.start.x * w, y + p.start.y * h, x + p.end.x * w, y + p.end.y * h);
+  for (const s of p.stops) g.addColorStop(s.position, s.color);
+  return coincident ? p.stops.at(-1).color : g;
+}
 export function renderGradient(params, w, h) {
   const p = gradientParams(params);
   const key = JSON.stringify([w, h, p]);
@@ -108,12 +116,7 @@ export function renderGradient(params, w, h) {
     if (result) ctx.drawImage(result, 0, 0);
     else freeformCPU(ctx, p, w, h);
   } else {
-    const coincident = p.mode === 'linear' && Math.hypot((p.end.x - p.start.x) * w, (p.end.y - p.start.y) * h) < 1e-8;
-    const g = p.mode === 'radial'
-      ? ctx.createRadialGradient(p.center.x * w, p.center.y * h, 0, p.center.x * w, p.center.y * h, p.radius * Math.min(w, h))
-      : ctx.createLinearGradient(p.start.x * w, p.start.y * h, p.end.x * w, p.end.y * h);
-    for (const s of p.stops) g.addColorStop(s.position, s.color);
-    ctx.fillStyle = coincident ? p.stops.at(-1).color : g;
+    ctx.fillStyle = gradientCanvasStyle(ctx, p, w, h);
     ctx.fillRect(0, 0, w, h);
   }
   cache.set(key, cv);

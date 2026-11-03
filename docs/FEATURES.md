@@ -257,4 +257,11 @@ Open source used: Electron, Preact, Lucide (icons), Mediabunny (decoding and enc
 * Package Project includes design assets and protects media used only by designs. The report lists system fonts that need to be installed on another computer.
 * Cmd/Ctrl 4 remains the Video Inspector shortcut. Design currently opens from the title bar, View menu or command search. The 100% command has no shortcut because Cmd/Ctrl 1 continues to open Record. Design uses Cmd/Ctrl J for Duplicate Layer and Cmd/Ctrl D for Deselect.
 
-Gradients, advanced shapes and text effects, groups, crop tools, background removal, masks, styles, templates, suggestions and feed previews remain scheduled for later Design phases.
+* Solid and gradient fills, inside/center/outside strokes, multiple shadows, blend modes, image adjustments and highlighted text with line backgrounds.
+* Rectangle, ellipse, polygon, star, line and arrow tools; groups, alignment/distribution, crop modes and layered PSD/SVG import.
+* Offline Remove Background with bundled MIT-licensed BiRefNet models, progress and cancellation. Cut Out Camera captures the complete camera image independently of the timeline layout.
+* Nondestructive cutout masks, Erase/Restore brushes with per-stroke undo, Feather, Shift Edge, sticker outlines and shadows that follow transparency. Rectangle, ellipse and polygon masks, clipping groups and Fill Text With Image.
+* 15 built-in text styles, up to 500 saved styles and 22 built-in design templates. Templates use frame, cutout, title, subtitle and logo placeholders, adapt to other canvas ratios, and import/export as .reccut-design-template files.
+* My Colors stores up to 20 colors; My Logo is copied into projects that use it.
+
+Automatic suggestions and feed previews remain scheduled for later Design phases.

@@ -58,15 +58,15 @@ function svgWith(text, keep) {
   groups.forEach((g, i) => {
     if (!keep.includes(i)) g.remove();
     else {
-      g.removeAttribute('display');
-      g.style?.removeProperty?.('display');
+      g.removeAttribute('display'); g.removeAttribute('visibility');
+      g.style?.removeProperty?.('display'); g.style?.removeProperty?.('visibility');
     }
   });
   return new XMLSerializer().serializeToString(svg);
 }
 
-async function rasterize(svgText, size, maxSide) {
-  const scale = Math.min(4, Math.max(1, maxSide / Math.max(size.w, size.h)));
+async function rasterize(svgText, size, maxSide, preview = false) {
+  const scale = preview ? Math.min(1, maxSide / Math.max(size.w, size.h)) : Math.min(4, Math.max(1, maxSide / Math.max(size.w, size.h)));
   const w = Math.round(size.w * scale);
   const h = Math.round(size.h * scale);
   const url = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' }));
@@ -86,26 +86,25 @@ async function rasterize(svgText, size, maxSide) {
 
 const svgCache = new Map();
 
-async function readLayers(file) {
+export async function readLayers(file) {
   if (/\.svg$/i.test(file)) {
     const parsed = await parseSvg(file);
     svgCache.set(file, parsed);
     const all = parsed.layers.map((l) => l.index);
-    const thumb = (await rasterize(svgWith(parsed.text, all), parsed.size, 160)).toDataURL();
+    const thumb = (await rasterize(svgWith(parsed.text, all), parsed.size, 160, true)).toDataURL();
     const layers = [];
-    for (const l of parsed.layers) layers.push({ ...l, thumb: (await rasterize(svgWith(parsed.text, [l.index]), parsed.size, 64)).toDataURL() });
+    for (const l of parsed.layers) layers.push({ ...l, thumb: (await rasterize(svgWith(parsed.text, [l.index]), parsed.size, 64, true)).toDataURL() });
     return { file, kind: 'svg', width: Math.round(parsed.size.w), height: Math.round(parsed.size.h), thumb, layers };
   }
   return { file, kind: 'psd', ...(await api.psdLayers(file)) };
 }
 
-async function extract(req, indices, mode) {
-  const dir = outDir(req.file);
+export async function extractLayered(req, indices, mode, dir = outDir(req.file), maxSide = 2160) {
   if (req.kind === 'psd') return api.psdExtract(req.file, indices, mode, dir);
   const parsed = svgCache.get(req.file) || (await parseSvg(req.file));
   const out = [];
   const write = async (keep, name, label) => {
-    const cv = await rasterize(svgWith(parsed.text, keep), parsed.size, 2160);
+    const cv = await rasterize(svgWith(parsed.text, keep), parsed.size, maxSide);
     const blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
     const path = `${dir}${sep}${name.replace(/[\\/:*?"<>|]/g, '_')}.png`;
     await api.writeBinary(path, new Uint8Array(await blob.arrayBuffer()));
@@ -140,7 +139,7 @@ export async function finish(req, indices, mode, toTimeline) {
   if (layerImport.value === req) layerImport.value = queue.shift() || null;
   if (!indices.length) return;
   try {
-    const files = await extract(req, indices, mode);
+    const files = await extractLayered(req, indices, mode);
     const { items, failed } = await api.importMedia(files.map((f) => f.path));
     if (failed.length) toast(`Could not read ${failed.join(', ')}.`, { kind: 'error' });
     const named = items.map((m, i) => withAnalysis({ ...m, name: files[i]?.name || m.name, layered: req.kind }));

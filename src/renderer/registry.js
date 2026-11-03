@@ -28,6 +28,11 @@ import { prefs, setPrefs } from './prefs.js';
 import { CLIP_COLORS, RAMP_PRESETS } from '../shared/model.js';
 import * as design from './design/store.js';
 import { quickExportPNG } from './design/export.js';
+import { removeBackground } from './design/cutout.js';
+import { startRefine, refineSession } from './design/refine.js';
+import { fillTextWithImage } from './design/masks.js';
+import { openSaveStyle, openSaveTemplate, importTemplate } from './design/library.js';
+import { startCrop } from './design/crop.js';
 import { chooseImage, pasteImage, copyLayers } from './design/assets.js';
 import { toggleViewerFullscreen } from './editor/fullscreen.js';
 
@@ -160,15 +165,28 @@ export const COMMANDS = [
   { id: 'findCommand', label: 'Quick Search', menu: 'Help', group: 'search', keys: 'Ctrl+Space', also: ['CmdOrCtrl+K'], rooms: ALL, anywhere: true, run: () => (paletteOpen.value = !paletteOpen.value), help: 'search', keywords: 'find command palette console fx effects tools search everything' },
 
   /* Design */
+  { id: 'design:removeBackground', label: 'Remove Background', run: () => removeBackground(), enabled: () => design.selectedLayers().some(l => l.type === 'image'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:refineMask', label: 'Refine Mask…', run: startRefine, enabled: () => design.selectedLayers().some(l => l.type === 'image' && l.cutout?.enabled), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:fillTextImage', label: 'Fill Text with Image', run: fillTextWithImage, enabled: () => { const l=design.selectedLayers();return l.length===2&&l.some(l=>l.type==='image')&&l.some(l=>l.type==='text'); }, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:saveStyle', label: 'Save Style…', run: openSaveStyle, enabled: () => design.selectedLayers().length > 0, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:saveTemplate', label: 'Save as Template…', run: openSaveTemplate, enabled: () => Boolean(design.currentDesign.value), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:importTemplate', label: 'Import Design Template…', run: importTemplate, menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:new', label: 'New Design…', run: () => (design.newDesignOpen.value = true), menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:placeEmbedded', label: 'Place Embedded…', run: () => chooseImage(true), enabled: () => Boolean(design.currentDesign.value), menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:placeLinked', label: 'Place Linked…', run: () => chooseImage(false), enabled: () => Boolean(design.currentDesign.value), menu: 'Design', rooms: DESIGN, help: 'design' },
-  { id: 'design:export', label: 'Export As…', keys: 'Alt+Shift+CmdOrCtrl+W', run: () => (design.exportDesignOpen.value = true), enabled: () => Boolean(design.currentDesign.value), menu: 'Design', rooms: DESIGN, help: 'design' },
-  { id: 'design:quickExport', label: 'Quick Export as PNG', run: quickExportPNG, enabled: () => Boolean(design.currentDesign.value), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:export', label: 'Export As…', keys: 'Alt+Shift+CmdOrCtrl+W', run: () => (design.exportDesignOpen.value = true), enabled: () => Boolean(design.currentDesign.value) && !refineSession.value, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:quickExport', label: 'Quick Export as PNG', run: quickExportPNG, enabled: () => Boolean(design.currentDesign.value) && !refineSession.value, menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:transform', label: 'Free Transform', keys: 'CmdOrCtrl+T', run: () => (design.tool.value = 'select'), menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:select', label: 'Move Tool', keys: 'V', run: () => (design.tool.value = 'select'), menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:text', label: 'Type Tool', keys: 'T', run: () => (design.tool.value = 'text'), menu: 'Design', rooms: DESIGN, help: 'design' },
-  { id: 'design:shape', label: 'Rectangle Tool', keys: 'U', run: () => (design.tool.value = 'shape'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:shape', label: 'Shape Tool', keys: 'U', run: () => (design.tool.value = 'shape'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:cycleShape', label: 'Next Shape Tool', keys: 'Shift+U', run: design.cycleShape, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:crop', label: 'Crop Tool', keys: 'C', run: startCrop, enabled: () => design.selectedLayers().some((l) => l.type === 'image'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:group', label: 'Group Layers', keys: 'CmdOrCtrl+G', run: () => design.groupSelection(), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:ungroup', label: 'Ungroup Layers', keys: 'Shift+CmdOrCtrl+G', run: () => design.groupSelection(true), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:pasteInPlace', label: 'Paste in Place', keys: 'Shift+CmdOrCtrl+V', run: () => pasteImage(true), menu: 'Design', rooms: DESIGN, help: 'design' },
+  ...[['left', 'Left Edges'], ['center', 'Horizontal Centers'], ['right', 'Right Edges'], ['top', 'Top Edges'], ['middle', 'Vertical Centers'], ['bottom', 'Bottom Edges']].map(([mode, label]) => ({ id: `design:align:${mode}`, label: `Align ${label}`, run: () => design.alignSelection(mode), enabled: () => design.selectedLayers().length > 0, menu: 'Design', rooms: DESIGN, help: 'design' })),
+  ...[['x', 'Horizontal'], ['y', 'Vertical']].map(([axis, label]) => ({ id: `design:distribute:${axis}`, label: `Distribute ${label} Spacing`, run: () => design.distributeSelection(axis), enabled: () => design.selectedLayers().length >= 3, menu: 'Design', rooms: DESIGN, help: 'design' })),
   { id: 'design:hand', label: 'Hand Tool', keys: 'H', run: () => (design.tool.value = 'hand'), menu: 'Design', rooms: DESIGN, help: 'design' },
 
   { id: 'design:duplicate', label: 'Duplicate Layer', keys: 'CmdOrCtrl+J', run: design.duplicateSelection, menu: 'Design', rooms: DESIGN, help: 'design' },

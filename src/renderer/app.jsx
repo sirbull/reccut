@@ -47,6 +47,7 @@ import {
 import * as commands from './editor/commands.js';
 import { ExportDialog, startExport } from './editor/ExportDialog.jsx';
 import { ExportFrameDialog } from './editor/ExportFrameDialog.jsx';
+import { refineSession } from './design/refine.js';
 import { DesignRoom } from './design/DesignRoom.jsx';
 import { designUndo, designRedo, canDesignUndo, canDesignRedo, currentDesign, exportDesignOpen, historyVersion as designHistoryVersion } from './design/store.js';
 import { ExportRoom } from './export/ExportRoom.jsx';
@@ -211,7 +212,7 @@ function TitleBar() {
         <div class="actions">
           <IconButton icon={Undo2} title="Undo Design" disabled={!canDesignUndo()} onClick={designUndo} />
           <IconButton icon={Redo2} title="Redo Design" disabled={!canDesignRedo()} onClick={designRedo} />
-          <Button variant="primary" disabled={!currentDesign.value} onClick={() => (exportDesignOpen.value = true)}>Export As…</Button>
+          <Button variant="primary" disabled={!currentDesign.value || Boolean(refineSession.value)} onClick={() => (exportDesignOpen.value = true)}>Export As…</Button>
         </div>
       ) : r === 'export' ? (
         <div class="actions" />

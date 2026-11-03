@@ -1115,3 +1115,145 @@ Open: font installation on another machine and cross-platform distribution build
 ### QA cleanup note
 Date: 2026-11-02
 The real system clipboard was used for the native clipboard tests. Restoring its original snapshot failed because Electron 45 does not accept read-only ClipboardItems directly in clipboard.write(). The QA process closed before conversion to new writable ClipboardItems, so the original content could not be recovered. The user was informed. This affects test cleanup, not the production layer-copy adapter, which uses writeText, or image paste, which only reads ClipboardItems.
+
+### Phase 2 and 3 completion
+Date: 2026-11-03
+Status: tasks 2.1 through 2.6 and 3.1 through 3.7 are implemented. All 410 automated tests, the normal build and whitespace checks pass. Detailed application checks, performance measurements and boundaries are recorded in [DESIGN-PHASE2-3-QA.md](DESIGN-PHASE2-3-QA.md). Phases 4 through 8 and background-removal model preparation remain open. No version or dependency change.
+
+### 2.1 Completion: fills and gradients
+Date: 2026-11-03
+Files changed: shared design/gradient renderers, `StyleControls.jsx`, Properties and Gradient Editor.
+Checks: shared field math, local rotated coordinates, alpha, one/32 stops, freeform/radial fields, design background and one-step gradient dragging pass. Preview allocation is bounded for extreme aspect ratios.
+Open: none for the required fill controls.
+
+### 2.2 Completion: strokes
+Date: 2026-11-03
+Files changed: design normalization, effect bounds, renderer and Properties.
+Checks: Inside/Center/Outside native pixels, outline-only shapes, text outside contour, zero alpha, zero/500 px widths, dash/join controls and margin tests pass. Effect bounds are separate from geometry bounds used by transform handles.
+Open: none.
+
+### 2.3 Completion: shadows and glow
+Date: 2026-11-03
+Files changed: shadow normalization/presets, renderer and Layer Styles controls.
+Checks: ordered shadow bitmaps, margin/spread tests, native overlapping shadow colors, add/remove/undo, zero/500 px blur and zoom-invariant blur pass. Canvas blur uses backing-pixel units, so blur is scaled with bitmap resolution.
+Open: image spread remains intentionally disabled until phase 4's alpha morphology.
+
+### 2.4 Completion: blend modes and adjustments
+Date: 2026-11-03
+Files changed: renderer, Properties and style tests.
+Checks: all native blend options, independent filter components and reset, opacity isolation and darkened-frame workflow pass.
+Open: optional film Look selector skipped because the existing film module exposes RGB/LUT generation rather than a canvas/ImageData application function. No second color pipeline was added.
+
+### 2.5 Completion: shapes
+Date: 2026-11-03
+Files changed: pure local shape geometry, normalization, Canvas, shape menu and Properties.
+Checks: polygon/star point counts and bounds, radius clamps, persistence, native arrow/star/ellipse and stroke-only line/arrow defaults pass. Existing mask geometry uses a different centered pixel format, so local fractional polygon/star points remain in design.js.
+Open: none.
+
+### 2.6 Completion: rich text
+Date: 2026-11-03
+Files changed: `designText.js`, renderer, Properties, font checks and Layers warnings.
+Checks: paired/escaped/unmatched/consecutive stars, word/grapheme wrapping, uppercase expansion, tracking/autofit, empty/long text, line backgrounds, emoji, Arabic and missing-font fallback pass. Unknown local font names are checked against fallback metrics because Chromium's fonts.check can accept undeclared families.
+Open: none for phase 2.
+
+### 3.1 Completion: groups
+Date: 2026-11-03
+Files changed: pure grouping/transforms, Design store, Canvas, Layers and Properties.
+Checks: contiguous topmost placement and relative order, whole-group/member selection, collapse/name, aggregate numeric transforms and flips, rotation/non-uniform scaling, locked-group refusal, native group drag/drop, undo and ungrouped positions pass. Scaling rotated members preserves their rotation without skew.
+Open: none.
+
+### 3.2 Completion: align and distribute
+Date: 2026-11-03
+Files changed: pure geometry helpers, Design actions and Properties.
+Checks: six alignments, single-layer canvas target, rotated axis-aligned bounds and equal horizontal/vertical gaps pass.
+Open: none.
+
+### 3.3 Completion: clipboard
+Date: 2026-11-03
+Files changed: Design asset copy/paste and tests, registry.
+Checks: layers with absolute asset paths, embedded files copied into a distinct receiving project, linked references, group remapping, relative centers, Paste in Place, plain text, PNG placement and one-step history pass. All clipboard testing used memory or mocked IPC. The system clipboard was untouched.
+Open: none for the planned clipboard formats.
+
+### 3.4 Completion: crop
+Date: 2026-11-03
+Files changed: `designCrop.js`, crop session, Canvas and Properties.
+Checks: dimmed full source, image repositioning, handles, ratios, native Enter/Escape, apply/cancel, rotated/flipped geometry and one-step undo pass. Drafts stay outside project history until Apply and cancel on a stale layer/project. Reset Crop restores Contain. Initial frame placement still retains the whole source.
+Open: none.
+
+### 3.5 Completion: layered PSD and SVG
+Date: 2026-11-03
+Files changed: shared editor import entry points, Design layered-import dialog and asset placement.
+Checks: selected layers versus one image, real PSD transparency/source placement, real layered SVG, grouped placement, per-file unique asset directories and one-step undo pass. SVG thumbnail allocation is bounded. Existing PSD decoder limitations are unchanged.
+Open: no new decoder features are part of this phase.
+
+### 3.6 Completion: performance
+Date: 2026-11-03
+Files changed: bounded bitmap cache, Canvas draw scheduling/allocation, Layers row memoization and CSS containment.
+Checks: immutable identity plus multiple pixel scales, invalidation and bounded storage pass. On Apple M1 Pro with 300 mixed layers, real pointer dragging measured median 8.3 ms and 95th percentile 10 ms, with no interval over 25 ms. Full UI trace, 120 consecutive updates and 50 rapid undos passed. Detailed timings are in the QA report.
+Open: cross-platform distribution performance remains a release check.
+
+### 3.7 Completion: shortcuts and help
+Date: 2026-11-03
+Files changed: registry, keyboard scope, Settings and Design help article.
+Checks: V/T/U/Shift+U/H/C, groups, Paste in Place, align/distribute metadata, Design category and Mac/Windows room-aware conflicts pass. Crop owns Enter/Escape while open. Existing Edit shortcuts and Cmd/Ctrl+1 remain assigned as before.
+Open: none for phase 3. Next implementation phase is background removal and masks, with the phase 0 model preparation as a prerequisite.
+
+
+## Phase 4–5 completion log — 2026-11-03
+
+Scope: tasks 4.1–4.4 and 5.1–5.4, with the bundled-model prerequisites 0.1–0.2. Phases 6 and later are not implemented. Detailed evidence and remaining platform/performance limits: [DESIGN-PHASE4-5-QA.md](DESIGN-PHASE4-5-QA.md).
+
+### 0.1 Model selection
+Files: `src/main/designModels.js`, `scripts/fetch-models.mjs`, package resource configuration.
+
+Checks: read model licenses; tested five input classes with the patched BiRefNet-lite 1024 WebGPU export and MODNet; CPU BiRefNet-lite 512 was tested on a person. Original onnx-community BiRefNet-lite could not load on this M1 Pro GPU because its shader storage-buffer requirement exceeded the device limit. ISNet was excluded for its AGPL license. Chosen MIT models are pinned by revision and every shipped file by SHA-256; original license files ship with them. Primary inference measured 2.31–3.45 seconds after model initialization. CPU fallback measured 6.43 seconds, exceeding the approximate five-second target; first use also incurs model load time. These limits are explicit in the QA report.
+
+### 0.2 Bundled worker
+Files: segment worker/html, build script, main/preload IPC, model fetch script, package config and `scripts/before-pack.cjs`.
+
+Checks: actual hidden worker with local media protocol, progress/cancel and queued jobs. Remote loading/cache disabled and CSP excludes HTTP(S). A fresh worker completed inference with networking offline and zero remote requests. Mac ARM64 application built with both model resource directories and local ORT runtimes. ONNX files are explicitly classified as data during macOS signing because the signer's binary detector crashed parsing their protobuf content; executable signing remains enabled. No additional npm dependencies.
+
+### 4.1 Remove Background and camera shortcut
+Files: `cutout.js`, `FramePicker.jsx`, Properties, assets/export, main/preload.
+
+Checks: full-resolution independent masks, original image unchanged, feather/edge shift, progress/Cancel. Automated cancellation covers deletion, undo, project switch, explicit cancel and consecutive starts, including completion before the start IPC response. Native camera capture produced a full 600×400 frame and mask without modifying timeline/media state. Person, product, code, landscape, transparent PNG, 1×1 and 12000×100 inputs completed without crashes.
+
+Deviation: immutable PNGs use reserved unique names `reccut-cutout-<id>.png`, preventing overwrite and allowing cleanup to distinguish generated masks from user originals. Friendly names remain in asset metadata.
+
+### 4.2 Refine brush and file lifetime
+Files: `refine.js`, Canvas, Design history store, `designCleanup.js`, project save.
+
+Checks: native Erase/Restore, one new PNG per stroke, undo/redo resolves previous mask files. Actual pointer painting on a rotated, flipped and cropped image landed at the expected source pixel. Pure tests cover all fit modes and inverse transforms. Cleanup runs after successful atomic project save, retains undo/redo, persistent snapshots and neighboring-document references, and never removes external/original files; filesystem tests cover these protections and discarded late results.
+
+### 4.3 Sticker outline and shadows
+Files: pure alpha morphology in `designMasks.js` (re-exported from `design.js`), common renderer and StyleControls.
+
+Checks: separable dilation/erosion against a reference, soft alpha/borders/narrow images; outline follows the final cutout and shape mask. Image shadow spread is now enabled. Native tiny-canvas pixel assertions passed. Masked PNG with 10 px white outline, feather/shift and spread shadow matched the shared renderer exactly (maximum channel difference zero).
+
+### 4.4 Shape masks and clipping
+Files: Properties, Canvas mask handles, `masks.js`, Layers, common renderer.
+
+Checks: rectangle/ellipse/polygon data, feather/invert, hidden/orphan clipping rules, isolated clipping group with base opacity applied once. Native pixel checks verify clipping, hidden bases, inversion and final outline. Fill Text With Image groups the two selected layers, matches their geometry and is undoable. Pure tests cover group ordering.
+
+### 5.1 Saved styles
+Files: `library.js`, `LibraryPanel.jsx`, prefs, shared template/style module.
+
+Checks: appearance-only deep copies and relative text size, same-type application in one undo step, rename/delete/update actions, persistence errors, limit 500. Native panel with 500 styles rendered one page of 24 saved cards plus 15 built-ins and refused style 501.
+
+### 5.2 Built-in text styles
+Files: `designTemplates.js`, library previews.
+
+Checks: all 15 specified styles, safe generic font stacks, common renderer previews, native application and undo. Saved image styles have a generated preview when no project image is available.
+
+### 5.3 Templates
+Files: `designTemplates.js`, `library.js`, `LibraryPanel.jsx`, native `designLibrary.js`, main/preload/build.
+
+Checks: 22 built-ins (12 wide, 6 tall, 4 square); every template stays within wide/tall/square and 3000×3000 canvases. Placeholder resolution, source path rejection, newer versions, unknown-layer warnings, oversized data and excessive layer counts tested. Native save/load, duplicate-name suffix, JSON rejection, version-2 rejection, import/export and card previews passed. Templates are stored atomically in userData/design-templates; project images become placeholders, not external file references.
+
+### 5.4 Brand kit
+Files: `brand.js`, `BrandColors.jsx`, fill/shadow/outline/gradient controls, native design library.
+
+Checks: maximum 20 unique colors, shared swatches in Design color controls, logo selection/copy into userData and independent project copy when applying a template. Replacing My Logo left existing project images readable. Logo image cache reloads when switching projects.
+
+### Verification status
+All 432 automated tests pass; production build passes. Development and packaged Mac ARM64 checks are recorded in the QA report. This completes implementation of phases 4 and 5, with the documented CPU timing and cross-platform/release QA limitations. Version remains 0.9.0; no release, version bump or publication was performed.

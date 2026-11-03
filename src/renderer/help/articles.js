@@ -7,27 +7,57 @@ export const SECTIONS = ['Getting Started', 'Recording', 'Media', 'Editing', 'Au
 export const ARTICLES = [
   {
     id: 'design', section: 'Design', title: 'Design Thumbnails and Images',
-    summary: 'Make layered images from video frames, photos, text and rectangles, then export or package them.',
+    summary: 'Make layered images from video frames, photos, text and shapes, then export or package them.',
     keywords: 'thumbnail image design canvas text layers picture photo png jpeg webp',
     body: `Open [[run:roomDesign|Design]] in the title bar. Choose New Design for a size preset or enter a custom size from 1 to 8192 pixels. You can keep several designs in a project. Double click a design name to rename it; duplicate and delete buttons are below its preview.
 
 ## Add pictures
 
-Place Embedded copies a photo or flattened PSD/SVG into Designs/Assets. Place Linked references the original file. The split button offers both choices and its main action follows the import copy preference. Design pictures stay separate from the Edit media browser. From Project references images already imported in Edit.
+Place Embedded copies a photo into Designs/Assets. For a layered PSD, PSB or SVG, choose Place as one image or Place layers. Select the layers to keep. Layer positions and order are preserved, and imported layers are grouped. Place Linked references the original file. The split button offers both choices and its main action follows the import copy preference. Design pictures stay separate from the Edit media browser. From Project references images already imported in Edit.
 
 The Video tab has its own preview and scrubber. Use This Frame saves a full quality PNG of the sequence or selected source video into Designs/Frames. The full frame is placed with its original aspect ratio, fitted inside the design without cropping. Move and resize the layer to compose the thumbnail. Changing the timeline afterwards does not change this image. Arrow keys step one frame in the Video panel; Shift and arrows step one second. An empty or audio only timeline cannot supply a video frame.
 
-Drop files to place them using the import copy preference. Hold Alt while dropping to reverse the choice. Cmd/Ctrl V pastes an image from the system clipboard. Cmd/Ctrl C and X copy and cut selected layers, and V pastes them into another design in the same project. Linked images have a link icon. A missing image has a warning in Layers: click Relink to find the file before exporting.
+Drop files to place them using the import copy preference. Hold Alt while dropping to reverse the choice. Cmd/Ctrl V pastes an image from the system clipboard. Cmd/Ctrl C and X copy and cut selected layers, and V pastes them into another design or project. Referenced images travel with the layers; embedded files are copied into the receiving project. Plain text becomes a text layer. Paste keeps relative centers when the design size changes. Shift Cmd/Ctrl V pastes in place. Linked images have a link icon. A missing image has a warning in Layers: click Relink to find the file before exporting.
 
 ## Edit layers
 
-V selects the Move Tool, T the Type Tool, U the Rectangle Tool and H the Hand Tool. Double click text to edit it directly; Escape finishes editing. Properties has Character and Paragraph sections with content, the system font picker, weight, size, Tracking, Leading, alignment and All Caps. Fit text in box shrinks long titles, down to 6 pixels. At the minimum size, extremely long text can still be clipped.
+V selects the Move Tool, T the Type Tool, U the Shape Tool, H the Hand Tool and C the Crop Tool. Shift U cycles rectangle, ellipse, polygon, star, line and arrow. The shape menu also offers each tool. Double click text to edit it directly; Escape finishes editing. Properties has Character and Paragraph sections with content, the system font picker, weight, size, Tracking, Leading, alignment and All Caps. Fit text in box shrinks long titles, down to 6 pixels. At the minimum size, extremely long text can still be clipped.
 
 Click or Shift click to select layers, or drag on empty canvas to make a selection box. Drag the selection to move it; guides snap to edges and centers. Hold Cmd/Ctrl to turn snapping off. Arrow keys move one pixel; Shift and arrows move ten. Backspace deletes; Cmd/Ctrl J duplicates a layer. Cmd/Ctrl D or Escape deselects. Cmd/Ctrl T selects Free Transform.
 
 Drag handles to resize and use the handle above the box to rotate. Images keep their aspect ratio by default; Shift frees it. For other layers Shift locks aspect. Alt resizes from the center. Shift snaps rotation to 15 degrees. Space and drag, or scrolling, pans. Cmd/Ctrl and scrolling zooms, Cmd/Ctrl 0 fits on screen. Use the 100% command for actual size. Cmd/Ctrl 1 still opens Record, so 100% has no shortcut.
 
 Layers are shown top first. Drag rows to change their order; use eye and lock buttons to hide or protect a layer. Double click a layer name to rename it. Right click for more layer actions. Selecting a locked layer lets you unlock it, but does not allow transforms.
+
+## Styles and text
+
+Properties has Fill controls for solid colors and linear, radial or freeform gradients. The gradient spans the layer box and follows its rotation. Stroke offers Size, Position (Inside, Center, Outside), solid/dashed/dotted styles and joins. Text starts with an Outside stroke. A Size of zero hides the stroke.
+
+Layer Styles adds Soft Drop Shadow, Hard Shadow, Outer Glow or Long Shadow. You can add several shadows, reorder them and adjust Color, Opacity, Angle, Distance, Spread and Size. Spread also follows the transparency of images. Blend Mode controls how a layer combines with the layers below it. Images also have Brightness, Contrast, Saturation, Hue, Blur and Grayscale, with Reset Adjustments.
+
+Use paired asterisks, *words*, to give words the Highlight fill. Type \\* to keep a literal asterisk. Consecutive or unmatched asterisks remain literal. Text Effects can add a padded, rounded background box behind each line. Missing local fonts fall back to the system font and show Font not installed in Properties and Layers.
+
+## Groups, alignment and crop
+
+Cmd/Ctrl G groups selected layers and Shift Cmd/Ctrl G ungroups them. A click selects the group; double click selects a member. In Layers, Alt click also selects one member. Collapse a group with its arrow and double click its name to rename it. Locked group members must be unlocked before moving, regrouping or changing group order. Group resize preserves each member's rotation and does not add skew.
+
+Align and Distribute in Properties aligns selected bounds. With one layer, alignment uses the canvas. Distribution needs at least three layers and makes the gaps equal. Rotated layers use their visible rectangular bounds.
+
+Double click an image or choose Crop Tool to show the full source dimmed around the crop. Drag the image to reposition it and drag handles to change the crop. Choose Free, Design, 1:1, 16:9, 9:16 or 4:5. Enter or Apply Crop applies it in one undo step; Escape or Cancel discards it. Reset Crop restores the full source within the current layer box.
+
+## Design shortcuts
+
+- {{key:design:select}} Move Tool, {{key:design:text}} Type Tool, {{key:design:shape}} Shape Tool.
+- {{key:design:cycleShape}} Next Shape Tool, {{key:design:hand}} Hand Tool, {{key:design:crop}} Crop Tool.
+- {{key:design:group}} Group Layers, {{key:design:ungroup}} Ungroup Layers.
+- {{key:design:duplicate}} Duplicate Layer, {{key:design:clear}} Deselect, {{key:design:transform}} Free Transform.
+- {{key:design:pasteInPlace}} Paste in Place.
+- {{key:design:up}} Bring Forward, {{key:design:down}} Send Backward, {{key:design:front}} Bring to Front, {{key:design:back}} Send to Back.
+- {{key:design:moveLeft1}} / {{key:design:moveRight1}} / {{key:design:moveUp1}} / {{key:design:moveDown1}} move one pixel. Shift moves ten pixels.
+- {{key:design:zoomIn}} Zoom In, {{key:design:zoomOut}} Zoom Out, {{key:design:zoomFit}} Fit on Screen.
+- {{key:design:export}} Export As.
+
+Settings has a separate Design keyboard group. Shortcut conflicts are checked within the current room and against shared commands such as Save. Quick Search lists every Design command, including alignment and distribution.
 
 ## Save and export
 
@@ -39,7 +69,21 @@ Export As saves PNG, JPEG or WebP using the same drawing as the canvas. PNG and 
 
 Package Project includes design assets and image media used by designs, even when Remove unused media is enabled. Fonts are listed in the package report and must be installed on the destination computer.
 
-Styles, gradients, masks, background removal, design templates and automatic suggestions are planned for later phases.`,
+## Cutouts and masks
+
+Select an image and choose Remove Background in Properties. The model runs locally with the app, including without internet. Tasks shows progress and Cancel. The original image stays intact; the result is a separate mask. Feather softens the edge and Shift Edge expands or contracts it. Edit Layer Mask opens Erase and Restore brushes with Size and Hardness. Each stroke can be undone and redone. Done leaves brush mode. Sticker Outline follows the final visible edge; shadows follow it too.
+
+Layer Mask adds a rectangle, ellipse or polygon. Edit Mask moves its handles; Feather and Invert adjust its edge. Clip to Layer Below keeps a layer inside the visible layer below. Select one text layer and one image, then Fill Text With Image to make a clipping group. The Video tab offers Cut Out Camera when the selected recording has a camera stream.
+
+## Reusable styles and templates
+
+The Styles tab offers 15 built-in styles and My Styles. Save Style stores the selected layer's appearance. Text size adapts to the design height. Right click a saved style to rename, update from the selection, or delete it. You can store up to 500 styles.
+
+Templates offers 22 built-in layouts for wide, tall and square designs, plus My Templates. Click a template to create a new design using its size or the current canvas size. It uses the current frame, cutout, project title and My Logo when available. Save as Template lets you assign picture and text placeholders. Import and export use .reccut-design-template files, without links to original project files.
+
+My Colors stores up to 20 colors beside color controls. Save Color adds the current color; right click a swatch to remove it. My Logo is copied into each new design that uses it, so replacing the saved logo keeps existing projects intact.
+
+Automatic suggestions are planned for a later phase.`,
     see: ['projects', 'package', 'export-frame'],
   },
 

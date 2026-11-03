@@ -672,7 +672,35 @@ ipcMain.handle('file:writeBinary', async (_e, file, data) => {
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   await fs.promises.writeFile(file, Buffer.from(data));
 });
-ipcMain.handle('design:writeImage', (_e, file, data) => require('./design').writeImage(file, data));
+const designCleanup = require('./designCleanup');
+designCleanup.onCollected(value=>send('design:cutoutsCollected',value));
+ipcMain.handle('design:retainCutouts',(_e,id,paths)=>designCleanup.retain(id,paths));
+ipcMain.handle('design:discardCutout',(_e,file)=>designCleanup.discard(file));
+ipcMain.handle('design:writeImage', async (_e, file, data) => designCleanup.register(await require('./design').writeImage(file, data)));
+let designLibrary;
+function getDesignLibrary() {
+  if(!designLibrary)designLibrary=require('./designLibrary').createDesignLibrary(app.getPath('userData'),require('../../build/designTemplates.cjs').validateDesignTemplate);
+  return designLibrary;
+}
+ipcMain.handle('design:templates:list',()=>getDesignLibrary().list());
+ipcMain.handle('design:templates:save',(_e,data,id)=>getDesignLibrary().save(data,id));
+ipcMain.handle('design:templates:remove',(_e,id)=>getDesignLibrary().remove(id));
+ipcMain.handle('design:brand:logo',()=>getDesignLibrary().logo());
+ipcMain.handle('design:brand:setLogo',(_e,file)=>getDesignLibrary().setLogo(file));
+function startDesignSegment(payload) {
+  if (!payload || typeof payload.path !== 'string' || !path.isAbsolute(payload.path)) throw new Error('Choose a local image to remove its background.');
+  const model = require('./designModels');
+  const modelDir = app.isPackaged ? path.join(process.resourcesPath, 'models') : path.join(__dirname, '..', '..', 'vendor', 'models');
+  let result;
+  const task=jobs.add({ kind: 'segment', title: 'Removing background', queue: 'heavy', run: async (ctx) => { result=await jobs.runInWorker('segment', { path: payload.path, maxSide: Math.max(1, Math.min(2048, Number(payload.maxSide) || 1024)), model: model.id, fallback: model.fallback, modelDir }, ctx);return {width:result.width,height:result.height,model:result.model,device:result.device}; } });
+  return {id:task.id,done:task.done.then(()=>result)};
+}
+ipcMain.handle('design:segment', (_e, payload) => startDesignSegment(payload).done);
+ipcMain.handle('design:segmentStart', (_e, payload) => {
+  const { id, done } = startDesignSegment(payload);
+  done.then((result) => send('design:segmentDone', { id, result }), (err) => send('design:segmentDone', { id, error: String(err.message || err) }));
+  return id;
+});
 ipcMain.handle('design:clipboardRead', () => require('./design').readClipboard(clipboard, (bytes) => nativeImage.createFromBuffer(bytes).toPNG()));
 ipcMain.handle('design:clipboardWrite', (_e, text) => clipboard.writeText(String(text)));
 
