@@ -1257,3 +1257,31 @@ Checks: maximum 20 unique colors, shared swatches in Design color controls, logo
 
 ### Verification status
 All 432 automated tests pass; production build passes. Development and packaged Mac ARM64 checks are recorded in the QA report. This completes implementation of phases 4 and 5, with the documented CPU timing and cross-platform/release QA limitations. Version remains 0.9.0; no release, version bump or publication was performed.
+
+## Phase 6 completion log — 2026-11-03
+
+Scope: tasks 6.1–6.3 are implemented. Phase 7, phase 8 and the final cross-platform/release review remain outstanding. Verification details: [DESIGN-PHASE6-QA.md](DESIGN-PHASE6-QA.md).
+
+### 6.1 Frame candidates and scoring
+Date: 2026-11-03
+Files changed: `src/shared/thumbScore.js`, `designSuggest.js`, `src/renderer/design/frameSampler.js`, `suggest.js`, `src/renderer/player.js`.
+Tests added: score ordering, normalized metrics, distributed bounded sampling, fades/transitions, camera visibility, spacing, deadline/cancellation and fresh-decoder snapshots.
+Manual checks done: actual square 3-second video (60 samples, 2.00 s), actual 3-hour video (61 samples, 1.17 s), 3-hour/120-clip sequence (180 samples, 3.52 s), black video, camera recording with network offline, separate-time pixel hashes, and missing-media timeout (14.005 s). Private preview players leave the timeline and Video picker alone. Unused decoder retention is disabled only for sampling.
+Not done / open questions: long-video fixture is H.264 256×144 at 1 fps. Higher-resolution/long-GOP/RAW sources may produce partial results within the budget. Cross-platform measurements remain part of release QA.
+
+### 6.2 Title candidates
+Date: 2026-11-03
+Files changed: `thumbScore.js`, `designSuggest.js`, `suggest.js`, Suggestions dialog.
+Tests added: source priority, default sequence exclusion, Norwegian and English stop words, frequent phrases, case-insensitive uniqueness, length bounds, provider availability, transcript scope, provider changes and AI error recovery.
+Manual checks done: Norwegian caption titles, no-caption project, no AI button while unconfigured, named-provider disclosure before any call, explicit Send Transcript and simulated offline-provider error retaining local suggestions. Provider and transcript checks run again before sending.
+Not done / open questions: no actual provider was contacted during QA. Completion request cancellation is limited by the existing API; late responses are discarded, but an already-sent request cannot be recalled.
+
+### 6.3 Suggestions grid and editable creation
+Date: 2026-11-03
+Files changed: `SuggestionsDialog.jsx`, `suggest.js`, DesignRoom, LibraryPanel, assets/library helpers, registry, CSS, help article and FEATURES.
+Tests added: atomic creation from an empty Design room, full-quality source dimensions/crop, one-step undo, failed capture without a partial design, stale-session disposal, project/room/timeline changes. Existing capture tests still cover early completion before the start response.
+Manual checks done: 24 cards for six frames × four templates, offline title candidates, shuffle, new editable design, full square image preserved inside a wide canvas, unchanged timeline/media, undo/redo, rapid reopen/cancel and project/room switch. Production packaged ARM64 app launched with an isolated profile and rendered 24 cards with no test helpers.
+Not done / open questions: no remaining implementation items in phase 6. Generic feed preview, readability/safe zones, variants, multi-size export and video/thumbnail export pairing belong to phase 7 and are not included here.
+
+### Phase 6 validation
+All 451 automated tests pass. Production build and Mac ARM64 application packaging/start pass. No dependencies or version number changed. Final production bundles do not expose the temporary QA helper. Detailed limits and measurements are recorded in DESIGN-PHASE6-QA.md.

@@ -318,3 +318,13 @@ test('et område på ett bilde stopper ikke avspillingen', () => {
   assert.equal(s.playing.value, true);
   assert.ok(s.getTime() > 5);
 });
+
+test('fresh snapshots reject remembered frames until the requested decoder seek finishes', () => {
+  const s = setup(); s.tick(); const video = s.videos[0]; video.finish(); s.tick();
+  assert.equal(s.player.snapshot({ fresh: true }), s.canvas);
+  s.player.seek(3); s.tick();
+  assert.equal(s.player.snapshot(), s.canvas, 'scrubbing still shows the last completed frame');
+  assert.equal(s.player.snapshot({ fresh: true }), null, 'scoring must not relabel that frame with the new time');
+  video.finish(); s.tick(); assert.equal(s.player.snapshot({ fresh: true }), s.canvas);
+  assert.match(s.canvas.pixel, /@5\.000$/);
+});

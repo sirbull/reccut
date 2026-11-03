@@ -40,7 +40,7 @@ function applyFx(entry, clip) {
  * getProject: gir prosjektet som skal spilles.
  * playing: signal med true/false. getTime/setTime: spillhodet.
  */
-export function createPlayer({ getProject, playing, getTime, setTime }) {
+export function createPlayer({ getProject, playing, getTime, setTime, resolutionScale = previewResolutionScale, keepSeconds = KEEP }) {
   const master = audioCtx.createGain();
   master.connect(audioCtx.destination);
   const pool = new Map();
@@ -164,7 +164,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
 
   // Skaler før fargekorrigering og kildeeffekter, så også disse behandler færre piksler.
   function previewSource(src) {
-    if (!canvas || previewResolutionScale() === 1) return src;
+    if (!canvas || resolutionScale() === 1) return src;
     const scale = Math.min(1, canvas.width / src.w, canvas.height / src.h);
     if (scale >= 1) return src;
     const w = Math.max(2, Math.round(src.w * scale));
@@ -345,7 +345,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       if (seen.has(id)) continue;
       if (entry.gain) entry.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.015);
       if (!entry.el.paused) entry.el.pause();
-      if (now - entry.lastUsed > KEEP * 1000) disposeEntry(id, entry);
+      if (now - entry.lastUsed > keepSeconds * 1000) disposeEntry(id, entry);
     }
   }
 
@@ -371,7 +371,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     const dpr = window.devicePixelRatio || 1;
     const fit = Math.min(cssW / p.width, cssH / p.height);
     // Reduser etter at full oppløsning er begrenset, også i fullskjerm på Retina.
-    const scale = Math.min(1, fit * dpr, cap) * previewResolutionScale();
+    const scale = Math.min(1, fit * dpr, cap) * resolutionScale();
     const W = Math.max(2, Math.round(p.width * scale));
     const H = Math.max(2, Math.round(p.height * scale));
     if (canvas.width !== W || canvas.height !== H) {
@@ -527,8 +527,27 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     dirty = true;
   }
 
-  // snapshot: the viewer canvas once the current time is fully drawn, for AI previews.
-  return { attachCanvas, resizeCanvas, start, stopLoop, play, pause, toggle, getRate, shuttle, seek, scrubAudio, invalidate: () => (dirty = true), snapshot: () => (!dirty && canvas) || null, dispose };
+  // Sampling must wait for the requested video frame, while ordinary scrubbing
+  // is allowed to keep showing the previous frame during a decoder seek.
+  function snapshot({ fresh = false } = {}) {
+    if (dirty || !canvas) return null;
+    if (fresh) {
+      const p = getProject(), frame = computeFrame(p, getTime());
+      const sides = frame.layers.flatMap(l => l.clip ? [l] : [l.a, l.b].filter(Boolean));
+      for (const side of sides) for (const clip of [side.clip, ...(side.companions || [])]) {
+        const media = p.media[clip.mediaId];
+        if (media?.kind === 'image') {
+          const img = images.get(media.streams?.main?.proxy || media.path);
+          if (!img?.complete || !img.naturalWidth) return null;
+        } else for (const [key] of visualStreams(clip, media)) {
+          const entry = pool.get(`${clip.id}:${key}`), el = entry?.el;
+          if (!el || el.error || el.seeking || el.readyState < 2 || !el.videoWidth || Math.abs(el.currentTime - entry.target) > 0.5 / 60) return null;
+        }
+      }
+    }
+    return canvas;
+  }
+  return { attachCanvas, resizeCanvas, start, stopLoop, play, pause, toggle, getRate, shuttle, seek, scrubAudio, invalidate: () => (dirty = true), snapshot, dispose };
 
   function dispose() {
     stopLoop();

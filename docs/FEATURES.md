@@ -264,4 +264,7 @@ Open source used: Electron, Preact, Lucide (icons), Mediabunny (decoding and enc
 * 15 built-in text styles, up to 500 saved styles and 22 built-in design templates. Templates use frame, cutout, title, subtitle and logo placeholders, adapt to other canvas ratios, and import/export as .reccut-design-template files.
 * My Colors stores up to 20 colors; My Logo is copied into projects that use it.
 
-Automatic suggestions and feed previews remain scheduled for later Design phases.
+* Local Design Suggestions scores up to 180 sampled sequence frames, avoids fades/transitions, and offers up to six frames across four suitable layouts each. Titles come from names, timeline text and captions, including Norwegian. Shuffle changes titles/layouts; choosing a card captures the complete frame at full quality and creates an editable design with one-step undo.
+* Optional AI title suggestions name the configured provider and require an explicit Send Transcript action. Local suggestions work without AI or network access.
+
+Feed previews and later image-editing tools remain scheduled for later Design phases.

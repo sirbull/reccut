@@ -83,7 +83,15 @@ Templates offers 22 built-in layouts for wide, tall and square designs, plus My 
 
 My Colors stores up to 20 colors beside color controls. Save Color adds the current color; right click a swatch to remove it. My Logo is copied into each new design that uses it, so replacing the saved logo keeps existing projects intact.
 
-Automatic suggestions are planned for a later phase.`,
+## Design suggestions
+
+Choose Suggestions from the Design empty state, the Templates tab or the Design menu. Reccut analyzes the current sequence locally and offers up to six frames with four layouts for each. It favors clear, well-exposed frames, avoids fades and transitions, and spreads choices across the video. Camera visibility adds priority. Analysis is limited to about 14 seconds; slow or unavailable frames can be skipped.
+
+Choose a canvas size and title, or type your own title. Offline title ideas come from the project and sequence names, timeline titles and captions, including Norwegian captions. Shuffle changes the layouts and title. Click a card to capture that frame at full quality and create a new editable design in one undo step. The entire source frame is retained without automatic cropping. The timeline and its playhead stay unchanged.
+
+When an AI provider is configured, Suggest Titles with AI is available for sequences with captions. The first use in a Suggestions window names the provider and asks before sending up to 12,000 transcript characters. No image, audio or video file is sent by this action. AI never runs automatically, and offline suggestions remain available if the provider fails.
+
+Closing Suggestions cancels the analysis or pending frame capture. Switching projects, rooms or changing the sequence also discards stale results.`,
     see: ['projects', 'package', 'export-frame'],
   },
 

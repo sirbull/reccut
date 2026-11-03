@@ -20,8 +20,9 @@ export function templateContext(){
   const fallback=Object.values(p.designAssets||{}).filter(a=>a.origin==='frame').at(-1);
   return {projectName:p.name,title:p.name,frame:frame||fallback&&{asset:fallback.id},cutout,logo:brandLogo.value?{asset:'preview-logo'}:null};
 }
-export async function createFromTemplate(template,size='template'){
-  const epoch=projectEpoch.value,p=project.value,context=templateContext(),current=currentDesign.value,assets=[];
+export async function createFromTemplate(template,size='template',{context:overrides,assets:registrations=[],epoch:expectedEpoch=projectEpoch.value,signal,width,height}={}){
+  const epoch=projectEpoch.value,p=project.value,context={...templateContext(),...overrides},current=currentDesign.value,assets=[...registrations];
+  if(epoch!==expectedEpoch||signal?.aborted)return;
   const directory=await designDir(),sep=window.api.platform==='win32'?'\\':'/';
   let logo;
   if(brandLogo.value&&template.design.layers.some(l=>l.placeholder==='logo')){
@@ -29,15 +30,16 @@ export async function createFromTemplate(template,size='template'){
     const [path]=await window.api.copyIntoProject([brand.path],directory,{unique:true});
     const asset={id:uid(),name:brand.name,path,copied:true,origin:'placed',width:image.naturalWidth||image.width,height:image.naturalHeight||image.height};assets.push(asset);logo={asset:asset.id};
   }
-  const d=applyTemplate(template,{...context,logo,width:size==='current'&&current?current.width:template.design.width,height:size==='current'&&current?current.height:template.design.height});
+  const d=applyTemplate(template,{...context,logo,width:width??(size==='current'&&current?current.width:template.design.width),height:height??(size==='current'&&current?current.height:template.design.height)});
   for(const l of d.layers.filter(l=>l.type==='image'&&l.data)){
     const image=await ensureImage(l.data);if(!image)throw new Error('A template decoration could not be read.');
     const mime=l.data.slice(0,l.data.indexOf(';')),ext=mime==='data:image/jpeg'?'jpg':mime==='data:image/webp'?'webp':'png',binary=atob(l.data.slice(l.data.indexOf(',')+1));
     const bytes=Uint8Array.from(binary,c=>c.charCodeAt(0)),path=await window.api.writeDesignImage(`${directory}${sep}Decoration ${uid()}.${ext}`,bytes);
     const asset={id:uid(),name:l.name,path,copied:true,origin:'placed',width:image.naturalWidth||image.width,height:image.naturalHeight||image.height};assets.push(asset);l.asset=asset.id;delete l.data;
   }
-  if(epoch!==projectEpoch.value||p.id!==project.value.id)return;
+  if(epoch!==projectEpoch.value||p.id!==project.value.id||signal?.aborted)return;
   designCommit(p=>{for(const a of assets)p.designAssets[a.id]=a;p.designs[d.id]=d;});openDesign(d.id);
+  return d;
 }
 export function openSaveTemplate(){const d=currentDesign.value;if(d)templateDialog.value={design:d,name:d.name};}
 export async function saveTemplate(name,roles){const s=templateDialog.value;if(!s||!name.trim())return;const template=templateFromDesign(s.design,{name:name.trim(),placeholders:roles});const saved=await window.api.saveDesignTemplate(template);userTemplates.value=[...userTemplates.value,saved];templateDialog.value=null;toast(`Saved template: ${saved.name}`);}

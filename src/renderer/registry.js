@@ -170,6 +170,7 @@ export const COMMANDS = [
   { id: 'design:fillTextImage', label: 'Fill Text with Image', run: fillTextWithImage, enabled: () => { const l=design.selectedLayers();return l.length===2&&l.some(l=>l.type==='image')&&l.some(l=>l.type==='text'); }, menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:saveStyle', label: 'Save Style…', run: openSaveStyle, enabled: () => design.selectedLayers().length > 0, menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:saveTemplate', label: 'Save as Template…', run: openSaveTemplate, enabled: () => Boolean(design.currentDesign.value), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:suggestions', label: 'Design Suggestions', run: () => import('./design/suggest.js').then(m => m.openSuggestions()), menu: 'Design', rooms: DESIGN, help: 'design', keywords: 'thumbnail automatic frames titles suggestions' },
   { id: 'design:importTemplate', label: 'Import Design Template…', run: importTemplate, menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:new', label: 'New Design…', run: () => (design.newDesignOpen.value = true), menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:placeEmbedded', label: 'Place Embedded…', run: () => chooseImage(true), enabled: () => Boolean(design.currentDesign.value), menu: 'Design', rooms: DESIGN, help: 'design' },

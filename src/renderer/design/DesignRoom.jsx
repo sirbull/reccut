@@ -13,6 +13,8 @@ import { imageVersion, getImage, loadDesignImages, chooseImage, requestPlace, pl
 import { StylesPanel, TemplatesPanel, DesignLibraryDialogs } from './LibraryPanel.jsx';
 import { refreshTemplates } from './library.js';
 import { loadBrandLogo } from './brand.js';
+import { SuggestionsDialog } from './SuggestionsDialog.jsx';
+import { openSuggestions } from './suggest.js';
 import { DesignLayerImportDialog } from './LayerImportDialog.jsx';
 import { NewDesignDialog } from './NewDesignDialog.jsx';
 import { ExportDesignDialog } from './ExportDesignDialog.jsx';
@@ -77,10 +79,10 @@ export function DesignRoom({ active }) {
         <Button class="small" disabled={!d} title="Shape tools (Shift+U cycles)" onClick={async () => { const next = await window.api.popupMenu(DESIGN_SHAPES.map((s) => ({ id: s.value, label: `${s.label} Tool`, checked: shapeType.value === s.value }))); if (next) { shapeType.value = next; tool.value = 'shape'; } }}>{DESIGN_SHAPES.find((s) => s.value === shapeType.value)?.label} ▾</Button>
         <span class="spacer" /><IconButton icon={ZoomOut} title="Zoom out" onClick={() => setZoom((zoom.value === 'fit' ? viewScale.value : zoom.value) / 1.25)} /><button class="link" onClick={() => setZoom('fit')}>{zoom.value === 'fit' ? 'Fit on Screen' : `${Math.round(zoom.value * 100)}%`}</button><IconButton icon={ZoomIn} title="Zoom in" onClick={() => setZoom((zoom.value === 'fit' ? viewScale.value : zoom.value) * 1.25)} />
       </div>
-      {d ? <><DesignCanvas active={active} /><div class="dz-status"><span>{d.name} · {d.width} × {d.height}</span><span>{selection.value.length ? `${selection.value.length} selected` : `${d.layers.length} layers`}</span></div></> : <div class="dz-empty"><Palette size={36} /><h2>Make something worth clicking.</h2><p class="dim">Create a thumbnail or an image, with layers of your own.</p><Button variant="primary" icon={Plus} onClick={() => (newDesignOpen.value = true)}>New Design</Button><div class="dz-size-grid">{DESIGN_SIZES.slice(0, 6).map((s) => <button class="dz-size-card" key={s.id} onClick={() => addDesign({ ...s, name: `${p.name} ${s.label}`, size: s.id })}><b>{s.label}</b><small>{s.width} × {s.height}</small></button>)}</div><p class="hint">You can also drop an image here to get started.</p></div>}
+      {d ? <><DesignCanvas active={active} /><div class="dz-status"><span>{d.name} · {d.width} × {d.height}</span><span>{selection.value.length ? `${selection.value.length} selected` : `${d.layers.length} layers`}</span></div></> : <div class="dz-empty"><Palette size={36} /><h2>Make something worth clicking.</h2><p class="dim">Create a thumbnail or an image, with layers of your own.</p><Button variant="primary" icon={Plus} onClick={() => (newDesignOpen.value = true)}>New Design</Button><Button onClick={openSuggestions}>Suggestions</Button><div class="dz-size-grid">{DESIGN_SIZES.slice(0, 6).map((s) => <button class="dz-size-card" key={s.id} onClick={() => addDesign({ ...s, name: `${p.name} ${s.label}`, size: s.id })}><b>{s.label}</b><small>{s.width} × {s.height}</small></button>)}</div><p class="hint">You can also drop an image here to get started.</p></div>}
     </div>
     <aside class="dz-right panel"><div class="dz-properties" aria-label="Properties"><Properties /></div><LayersPanel /></aside>
-    <DesignLayerImportDialog /><DesignLibraryDialogs/>
+    <DesignLayerImportDialog /><DesignLibraryDialogs/><SuggestionsDialog/>
     {newDesignOpen.value && <NewDesignDialog design={p.designs?.[newDesignOpen.value.designId] || null} />}
     {exportDesignOpen.value && <ExportDesignDialog />}
     {deleting && <Modal title="Delete Design" width={420} onClose={() => setDeleting(null)} footer={<><Button onClick={() => setDeleting(null)}>Cancel</Button><Button variant="primary" onClick={() => { designCommit((p) => { delete p.designs[deleting]; }); setDeleting(null); }}>Delete</Button></>}><p>Delete "{p.designs?.[deleting]?.name}"? You can undo this.</p></Modal>}

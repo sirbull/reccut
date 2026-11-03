@@ -223,14 +223,15 @@ export async function locateImage(layer) {
     }
   });
 }
-export async function captureFrame(source, time) {
-  const epoch = projectEpoch.value, designId = currentDesignId.value;
+export async function captureFrameAsset(source, time, { signal } = {}) {
+  const epoch = projectEpoch.value;
+  if (signal?.aborted) return;
   const frame = frameExportSettings(source, { time, width: source.width, height: source.height });
   let offline = false;
   const used = new Set(Object.values(source.clips || {}).filter((c) => c.enabled !== false && c.start <= frame.time && c.start + c.dur > frame.time).map((c) => c.mediaId));
   for (const id of used) { const m = source.media?.[id]; if (m?.path && !(await api.exists(m.path))) offline = true; }
   const output = `${await designDir('Frames')}${sep}${designFileName(`${project.value.name} ${frame.time.toFixed(3)}s`)}.png`;
-  if (epoch !== projectEpoch.value || !project.value.designs?.[designId]) return;
+  if (epoch !== projectEpoch.value || signal?.aborted) return;
   const file = await new Promise((resolve, reject) => {
     let id, timer, stopped = false;
     const early = [];
@@ -247,6 +248,12 @@ export async function captureFrame(source, time) {
       if (t?.state === 'error' || t?.state === 'canceled') finish(new Error(t.error || 'Frame capture canceled.'));
     }));
     cleanups.push(effect(() => { if (projectEpoch.value !== epoch) { if (id) api.cancelTask(id); finish(new Error('The project changed.')); } }));
+    if (signal) {
+      const abort = () => { if (id) api.cancelTask(id); finish(new Error('Frame capture canceled.')); };
+      signal.addEventListener('abort', abort, { once: true });
+      cleanups.push(() => signal.removeEventListener('abort', abort));
+      if (signal.aborted) { abort(); return; }
+    }
     timer = setTimeout(() => { if (id) api.cancelTask(id); finish(new Error('Frame capture timed out. Try again.')); }, 120000);
     api.startExport({ project: source, settings: { frame, output, sourceMedia: 'original', quiet: true } }).then((jobId) => {
       id = jobId;
@@ -258,17 +265,24 @@ export async function captureFrame(source, time) {
       }).catch((err) => finish(err));
     }).catch((err) => finish(err));
   });
-  if (projectEpoch.value !== epoch || !project.value.designs?.[designId]) return;
+  if (projectEpoch.value !== epoch || signal?.aborted) return;
   const image = await ensureImage(file);
   if (!image) throw new Error('Could not load the captured frame.');
-  if (projectEpoch.value !== epoch || !project.value.designs?.[designId]) return;
+  if (projectEpoch.value !== epoch || signal?.aborted) return;
   const asset = { id: uid(), name: file.split(/[\\/]/).pop(), path: file, copied: true, origin: 'frame', width: image.naturalWidth, height: image.naturalHeight };
+  if (offline) toast('This frame includes missing media shown as Media Offline.', { kind: 'error' });
+  return asset;
+}
+export async function captureFrame(source, time) {
+  const epoch = projectEpoch.value, designId = currentDesignId.value;
+  if (!project.value.designs?.[designId]) return;
+  const asset = await captureFrameAsset(source, time);
+  if (!asset || epoch !== projectEpoch.value || !project.value.designs?.[designId]) return;
   const d = project.value.designs[designId];
   // Keep the entire frame visible and give its handles the source aspect ratio.
   const box = fitBox(asset.width, asset.height, d.width, d.height, 'contain');
   const l = newLayer('image', { asset: asset.id, name: 'Video frame', ...box, fit: 'contain' });
   designCommit((p) => { p.designAssets[asset.id] = asset; p.designs[designId].layers.unshift(l); });
   if (currentDesignId.value === designId) selection.value = [l.id];
-  if (offline) toast('This frame includes missing media shown as Media Offline.', { kind: 'error' });
   return l;
 }

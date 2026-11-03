@@ -172,3 +172,15 @@ test('crop drafts cancel safely when another action edits the layer or switches 
   q.design.designUndo();assert.deepEqual(JSON.parse(JSON.stringify(q.design.currentDesign.value.layers[0])),JSON.parse(JSON.stringify(original)));
   q.crop.startCrop();q.editor.setProject({...structuredClone(q.editor.project.value),id:'new-project'});assert.equal(q.crop.cropSession.value,null);
 });
+
+test('a captured frame asset can be prepared without creating or changing a design', async () => {
+  const q=setup(); q.design.designCommit(p=>{p.designs={};});
+  const before=q.editor.project.value,asset=await q.assets.captureFrameAsset({...before,width:1080,height:1920,duration:3,fps:30},1);
+  assert.equal(asset.origin,'frame');assert.equal(q.editor.project.value,before);
+  assert.equal(Object.keys(q.editor.project.value.designAssets).length,0);
+});
+test('an already canceled frame request does not start export or add assets',async()=>{
+  const q=setup(),controller=new AbortController();controller.abort();
+  await q.assets.captureFrameAsset({...q.editor.project.value,duration:3,fps:30},1,{signal:controller.signal});
+  assert.equal(q.exports.length,0);assert.equal(Object.keys(q.editor.project.value.designAssets).length,0);
+});
