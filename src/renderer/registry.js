@@ -33,6 +33,7 @@ import { startRefine, refineSession } from './design/refine.js';
 import { fillTextWithImage } from './design/masks.js';
 import { openSaveStyle, openSaveTemplate, importTemplate } from './design/library.js';
 import { startCrop } from './design/crop.js';
+import { feedPreview, showSafeZones, canFeedPreview, toggleFeedPreview, toggleSafeZones } from './design/tools.js';
 import { chooseImage, pasteImage, copyLayers } from './design/assets.js';
 import { toggleViewerFullscreen } from './editor/fullscreen.js';
 
@@ -192,6 +193,8 @@ export const COMMANDS = [
   { id: 'design:pasteInPlace', label: 'Paste in Place', keys: 'Shift+CmdOrCtrl+V', run: () => pasteImage(true), menu: 'Design', rooms: DESIGN, help: 'design' },
   ...[['left', 'Left Edges'], ['center', 'Horizontal Centers'], ['right', 'Right Edges'], ['top', 'Top Edges'], ['middle', 'Vertical Centers'], ['bottom', 'Bottom Edges']].map(([mode, label]) => ({ id: `design:align:${mode}`, label: `Align ${label}`, run: () => design.alignSelection(mode), enabled: () => design.selectedLayers().length > 0, menu: 'Design', rooms: DESIGN, help: 'design' })),
   ...[['x', 'Horizontal'], ['y', 'Vertical']].map(([axis, label]) => ({ id: `design:distribute:${axis}`, label: `Distribute ${label} Spacing`, run: () => design.distributeSelection(axis), enabled: () => design.selectedLayers().length >= 3, menu: 'Design', rooms: DESIGN, help: 'design' })),
+  { id: 'design:feedPreview', label: 'Feed Preview', keys: 'F', run: toggleFeedPreview, enabled: canFeedPreview, checked: () => feedPreview.value, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:safeZones', label: 'Safe Zones', keys: 'G', run: toggleSafeZones, enabled: () => Boolean(design.currentDesign.value), checked: () => showSafeZones.value, menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:hand', label: 'Hand Tool', keys: 'H', run: () => (design.tool.value = 'hand'), menu: 'Design', rooms: DESIGN, help: 'design' },
 
   { id: 'design:duplicate', label: 'Duplicate Layer', keys: 'CmdOrCtrl+J', run: design.duplicateSelection, menu: 'Design', rooms: DESIGN, help: 'design' },

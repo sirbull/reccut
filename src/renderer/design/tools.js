@@ -3,10 +3,13 @@ import { project,projectEpoch,room } from '../editor/store.js';
 import { currentDesign,designCommit,openDesign,changeDesign,endDesignTransient,tool,selection } from './store.js';
 import { duplicateDesign,designVariants,resizeDesignContent,cropDesignCanvas,rotateDesignCanvas,flipDesignCanvas } from '../../shared/design.js';
 import { presetCrop,cropViewport } from '../../shared/designCrop.js';
-import { finishCrop } from './crop.js';
-import { stopRefine } from './refine.js';
+import { finishCrop, cropSession } from './crop.js';
+import { stopRefine, refineSession } from './refine.js';
 import { maskEditing } from './masks.js';
 export const feedPreview=signal(false),showSafeZones=signal(false),compareOpen=signal(false),resizeOpen=signal(false),batchExportOpen=signal(false),canvasCrop=signal(null);
+export const canFeedPreview=()=>Boolean(currentDesign.value)&&!cropSession.value&&!refineSession.value&&!canvasCrop.value;
+export function toggleFeedPreview(){if(!canFeedPreview())return;endDesignTransient();feedPreview.value=!feedPreview.value;}
+export function toggleSafeZones(){if(currentDesign.value)showSafeZones.value=!showSafeZones.value;}
 export function makeVariant(){const d=currentDesign.value;if(!d)return;const copy=duplicateDesign(d,{variant:true});designCommit(p=>{p.designs[d.id].variantOf=copy.variantOf;p.designs[copy.id]=copy});openDesign(copy.id);}
 export function keepVariant(id){const d=project.value.designs[id];if(!d)return;const ids=designVariants(project.value.designs,d).map(v=>v.id);designCommit(p=>{for(const id of ids)p.designs[id].favorite=id===d.id});}
 export function makeSizes(targets,inPlace=false){const d=currentDesign.value;if(!d||!targets.length)return;const copies=targets.map(size=>{const next=resizeDesignContent(d,size.width,size.height);next.size=size.id||'custom';return inPlace?next:{...duplicateDesign(next),name:`${d.name} ${size.width}×${size.height}`};});designCommit(p=>{for(const copy of copies)p.designs[copy.id]=copy});openDesign(copies[0].id);resizeOpen.value=false;}

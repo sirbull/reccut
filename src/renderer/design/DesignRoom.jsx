@@ -1,5 +1,6 @@
+import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { Copy, Hand, ImagePlus, MousePointer2, Plus, Square, Trash2, Type, ZoomIn, ZoomOut, Palette, Crop } from 'lucide-preact';
+import { Copy, Hand, ImagePlus, MousePointer2, Plus, Square, Trash2, Type, ZoomIn, ZoomOut, Palette, Crop, ChevronDown, Eye, Scan, Frame, Circle, Pentagon, Star, Minus, MoveUpRight } from 'lucide-preact';
 import { DESIGN_SIZES, DESIGN_SHAPES, designList, duplicateDesign } from '../../shared/design.js';
 import { drawDesign } from '../../shared/designRender.js';
 import { uid } from '../../shared/model.js';
@@ -26,7 +27,7 @@ import { LayersPanel } from './LayersPanel.jsx';
 import { FeedPreview, CompareDialog } from './Preview.jsx';
 import { ReadabilityPanel } from './Readability.jsx';
 import { DesignToolsDialogs } from './ToolsDialogs.jsx';
-import { feedPreview, showSafeZones, compareOpen, resizeOpen, batchExportOpen, makeVariant, startCanvasCrop, transformCanvas, canvasCrop } from './tools.js';
+import { feedPreview, showSafeZones, canFeedPreview, toggleFeedPreview, toggleSafeZones, compareOpen, resizeOpen, batchExportOpen, makeVariant, startCanvasCrop, transformCanvas, canvasCrop } from './tools.js';
 import { refineSession } from './refine.js';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
 
@@ -46,6 +47,7 @@ function Thumbnail({ design, active }) {
   }, [design, version, active]);
   return <canvas class="dz-thumb" ref={ref} width={132} height={78} />;
 }
+const SHAPE_ICONS = { rect: Square, ellipse: Circle, polygon: Pentagon, star: Star, line: Minus, arrow: MoveUpRight };
 export function DesignRoom({ active }) {
   const p = project.value, epoch = projectEpoch.value, d = currentDesign.value, list = designList(p);
   const [tab, setTab] = useState('designs'), [renaming, setRenaming] = useState(null), [name, setName] = useState(''), [deleting, setDeleting] = useState(null);
@@ -81,12 +83,11 @@ export function DesignRoom({ active }) {
     </aside>
     <div class="dz-center">
       <div class="dz-toolbar">
-        {[['select', MousePointer2, 'Move Tool (V)'], ['text', Type, 'Type Tool (T)'], ['shape', Square, `${DESIGN_SHAPES.find((s) => s.value === shapeType.value)?.label} Tool (U)`], ['hand', Hand, 'Hand Tool (H)']].map(([value, icon, title]) => <IconButton key={value} icon={icon} title={title} active={tool.value === value} disabled={!d} onClick={() => { tool.value = value; }} />)}
+        {[['select', MousePointer2, 'Move Tool (V)'], ['text', Type, 'Type Tool (T)'], ['shape', SHAPE_ICONS[shapeType.value] || Square, `${DESIGN_SHAPES.find((s) => s.value === shapeType.value)?.label} Tool (U)`], ['hand', Hand, 'Hand Tool (H)']].map(([value, icon, title]) => <Fragment key={value}><IconButton icon={icon} title={title} active={tool.value === value} disabled={!d} onClick={() => { tool.value = value; }} />{value === 'shape' && <IconButton icon={ChevronDown} class="dz-shape-menu" size={12} title="Choose Shape (Shift+U)" disabled={!d} onClick={async () => { const next = await window.api.popupMenu(DESIGN_SHAPES.map((s) => ({ id: s.value, label: `${s.label} Tool`, checked: shapeType.value === s.value }))); if (next) { shapeType.value = next; tool.value = 'shape'; } }} />}</Fragment>)}
         <IconButton icon={Crop} title="Crop Tool (C)" active={Boolean(cropSession.value)} disabled={!d} onClick={startCrop} />
-        <Button class="small" disabled={!d} title="Shape tools (Shift+U cycles)" onClick={async () => { const next = await window.api.popupMenu(DESIGN_SHAPES.map((s) => ({ id: s.value, label: `${s.label} Tool`, checked: shapeType.value === s.value }))); if (next) { shapeType.value = next; tool.value = 'shape'; } }}>{DESIGN_SHAPES.find((s) => s.value === shapeType.value)?.label} ▾</Button>
-        <Button class="small" disabled={!d||Boolean(cropSession.value||refineSession.value||canvasCrop.value)} onClick={()=>{endDesignTransient();feedPreview.value=!feedPreview.value}}>{feedPreview.value?'Edit Canvas':'Preview'}</Button>
-        <Button class="small" disabled={!d} onClick={()=>showSafeZones.value=!showSafeZones.value} aria-pressed={showSafeZones.value}>Safe Zones</Button>
-        <Button class="small" disabled={!d||refineSession.value?.busy} onClick={async()=>{const action=await window.api.popupMenu([{id:'variant',label:'Make Variant'},{id:'compare',label:'Compare Variants'},{id:'resize',label:'Resize…'},{id:'export',label:'Export All Sizes…',enabled:!refineSession.value},{id:'crop',label:'Crop Canvas'},{id:'left',label:'Rotate Canvas Left'},{id:'right',label:'Rotate Canvas Right'},{id:'horizontal',label:'Flip Canvas Horizontally'},{id:'vertical',label:'Flip Canvas Vertically'}]);if(action==='variant')makeVariant();else if(action==='compare')compareOpen.value=true;else if(action==='resize')resizeOpen.value=true;else if(action==='export')batchExportOpen.value=true;else if(action==='crop')startCanvasCrop();else if(action)transformCanvas(action);}}>Canvas…</Button>
+        <IconButton icon={Eye} title={feedPreview.value?'Back to Canvas (F)':'Feed Preview (F)'} active={feedPreview.value} aria-pressed={feedPreview.value} disabled={!canFeedPreview()} onClick={toggleFeedPreview} />
+        <IconButton icon={Scan} title="Safe Zones (G)" active={showSafeZones.value} aria-pressed={showSafeZones.value} disabled={!d} onClick={toggleSafeZones} />
+        <IconButton icon={Frame} title="Canvas: variants, resize, crop, rotate" disabled={!d||refineSession.value?.busy} onClick={async()=>{const action=await window.api.popupMenu([{id:'variant',label:'Make Variant'},{id:'compare',label:'Compare Variants'},{id:'resize',label:'Resize…'},{id:'export',label:'Export All Sizes…',enabled:!refineSession.value},{id:'crop',label:'Crop Canvas'},{id:'left',label:'Rotate Canvas Left'},{id:'right',label:'Rotate Canvas Right'},{id:'horizontal',label:'Flip Canvas Horizontally'},{id:'vertical',label:'Flip Canvas Vertically'}]);if(action==='variant')makeVariant();else if(action==='compare')compareOpen.value=true;else if(action==='resize')resizeOpen.value=true;else if(action==='export')batchExportOpen.value=true;else if(action==='crop')startCanvasCrop();else if(action)transformCanvas(action);}} />
         <span class="spacer" /><IconButton icon={ZoomOut} title="Zoom out" onClick={() => setZoom((zoom.value === 'fit' ? viewScale.value : zoom.value) / 1.25)} /><button class="link" onClick={() => setZoom('fit')}>{zoom.value === 'fit' ? 'Fit on Screen' : `${Math.round(zoom.value * 100)}%`}</button><IconButton icon={ZoomIn} title="Zoom in" onClick={() => setZoom((zoom.value === 'fit' ? viewScale.value : zoom.value) * 1.25)} />
       </div>
       {d ? <>{feedPreview.value?<FeedPreview/>:<DesignCanvas active={active}/>} <div class="dz-status"><span>{d.name} · {d.width} × {d.height}</span><span>{selection.value.length ? `${selection.value.length} selected` : `${d.layers.length} layers`}</span></div></> : <div class="dz-empty"><Palette size={36} /><h2>Make something worth clicking.</h2><p class="dim">Create a thumbnail or an image, with layers of your own.</p><Button variant="primary" icon={Plus} onClick={() => (newDesignOpen.value = true)}>New Design</Button><Button onClick={openSuggestions}>Suggestions</Button><Button onClick={chooseOpenImage}>Open Image…</Button><div class="dz-size-grid">{DESIGN_SIZES.slice(0, 6).map((s) => <button class="dz-size-card" key={s.id} onClick={() => addDesign({ ...s, name: `${p.name} ${s.label}`, size: s.id })}><b>{s.label}</b><small>{s.width} × {s.height}</small></button>)}</div><p class="hint">You can also drop an image here to get started.</p></div>}
