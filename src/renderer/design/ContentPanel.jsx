@@ -1,16 +1,20 @@
 import { useState } from 'preact/hooks';
-import { ChevronDown, Plus, Upload } from 'lucide-preact';
+import { ChevronDown, Upload } from 'lucide-preact';
 import { project } from '../editor/store.js';
 import { prefs, setPrefs } from '../prefs.js';
 import { Button, IconButton, Row, toast } from '../ui.jsx';
 import { fileUrl } from '../player.js';
 import { filterLibraryItems } from '../../shared/designLibrary.js';
-import { BUILTIN_DESIGN_STYLES } from '../../shared/designTemplates.js';
-import { currentDesign, addText } from './store.js';
+import { brandPalette } from '../../shared/designContent.js';
+import { DESIGN_FONT_PAIRS } from '../../shared/designTemplates.js';
+import { addTextPreset } from './content.js';
+import { FontSelect } from '../editor/Inspector.jsx';
+import { AppearanceCard, fontPairs } from './OfflinePanels.jsx';
+import { currentDesign } from './store.js';
 import { LibraryCard, StylesPanel } from './LibraryPanel.jsx';
 import { LibrarySections } from './LibrarySection.jsx';
 import { chooseImage, chooseOpenImage, openImageFiles, requestPlace } from './assets.js';
-import { placeLibraryImage, previewLibraryImage, applyLibraryColor, previewLibraryColor, applyStyle } from './library.js';
+import { placeLibraryImage, previewLibraryImage, applyLibraryColor, previewLibraryColor } from './library.js';
 import { brandLogo, chooseBrandLogo, brandColors, saveBrandColor } from './brand.js';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
 
@@ -26,10 +30,11 @@ export function ImportImageButton() {
     if (id) (id === 'open' ? chooseOpenImage() : chooseImage(id === 'embedded')).catch(error);
   }}/></div>;
 }
-function ImageCard({ item, source, prefix }) {
+export function ImageCard({ item, source, prefix }) {
   const path = source.path || source.asset?.path || source.media?.streams?.main?.proxy || source.media?.streams?.main?.path || source.media?.path;
-  return <LibraryCard id={`${prefix}:${item.id}`} apply={(_, point) => placeLibraryImage(source, point)} preview={() => previewLibraryImage(source)} title={`${item.name}. Double-click or drag to place the image.`}><img src={fileUrl(path)} alt="" draggable={false}/><b>{item.name}</b></LibraryCard>;
+  return <LibraryCard id={`${prefix}:${item.id}`} apply={(_, point) => placeLibraryImage(source, point)} preview={() => previewLibraryImage(source)} title={`${item.name}. Click or drag to place the image.`}><img src={fileUrl(path)} alt="" draggable={false}/><b>{item.name}</b></LibraryCard>;
 }
+export function ColorCard({color}){return <LibraryCard id={`color:${color}`} apply={hit=>applyLibraryColor(color,hit)} preview={()=>previewLibraryColor(color)} menuItems={[{id:'delete',label:'Remove Color',run:()=>setPrefs({designColors:brandColors().filter(c=>c!==color)})}]} title={`${color}. Click to apply to selected text or shapes, or the background.`}><span class="dz-library-swatch" style={{background:color}}/><b>{color}</b></LibraryCard>;}
 export function ContentPanel({ query = '' }) {
   const p = project.value;
   const recent = filterLibraryItems(Object.values(p.designAssets || {}).filter(a => a.origin === 'placed'), query).reverse();
@@ -40,13 +45,14 @@ export function ContentPanel({ query = '' }) {
   ]}/></>;
 }
 export function TextPanel({ query = '' }) {
-  return <><Button icon={Plus} onClick={() => { if (currentDesign.value) addText(); else applyStyle(BUILTIN_DESIGN_STYLES[1]); }}>Add Text</Button><StylesPanel query={query}/></>;
+  return <><div class="dz-text-presets">{['title','subtitle','badge'].map(kind=><Button key={kind} onClick={()=>addTextPreset(kind)}>Add {kind[0].toUpperCase()+kind.slice(1)}</Button>)}</div><StylesPanel query={query} extraSections={[{id:'font-pairs',title:'Font Pairs',items:filterLibraryItems(fontPairs(),query),render:pair=><AppearanceCard key={pair.id} pair={pair} user={!DESIGN_FONT_PAIRS.some(p=>p.id===pair.id)}/>}]} /></>;
 }
 export function BrandPanel({ query = '' }) {
-  const logo = brandLogo.value, colors = brandColors(), [color, setColor] = useState('#ffd60a');
+  const logo = brandLogo.value, colors = brandColors(),fonts=prefs.value.designBrandFonts||{},palette=brandPalette(colors), [color, setColor] = useState('#ffd60a');
   const items = filterLibraryItems(colors.map(hex => ({ id: hex, name: hex })), query);
   return <><LibrarySections query={query} sections={[
     { id: 'logo', title: 'Logo', items: filterLibraryItems(logo ? [{ id: 'logo', name: logo.name }] : [], query), actions: <IconButton icon={Upload} title={logo ? 'Replace Logo' : 'Choose Logo'} onClick={() => chooseBrandLogo().catch(err => toast(err.message, { kind: 'error' }))}/>, empty: 'Choose a logo to reuse in your designs.', render: item => <ImageCard key={item.id} item={item} source={{ path: logo.path, name: logo.name }} prefix="brand"/> },
-    { id: 'colors', title: 'Brand Colors', items, empty: 'Save up to 20 colors to reuse in Design.', render: item => <LibraryCard key={item.id} id={`color:${item.id}`} apply={hit => applyLibraryColor(item.id, hit)} preview={() => previewLibraryColor(item.id)} menuItems={[{ id: 'delete', label: 'Remove Color', run: () => setPrefs({ designColors: brandColors().filter(c => c !== item.id) }) }]} title={`${item.name}. Double-click to apply to selected text or shapes, or the background.`}><span class="dz-library-swatch" style={{ background: item.id }}/><b>{item.name}</b></LibraryCard> },
-  ]}/><Row label="New color"><input aria-label="New brand color" type="color" value={color} onInput={e => setColor(e.currentTarget.value)}/><Button class="small" onClick={() => saveBrandColor(color)}>Save Color</Button></Row></>;
+    { id: 'colors', title: 'Brand Colors', items, empty: 'Save up to 20 colors to reuse in Design.', render: item => <ColorCard key={item.id} color={item.id}/> },
+    {id:'brand-palette',title:'Brand Palette',items:palette?filterLibraryItems([palette],query):[],empty:'Save brand colors to make a palette.',render:item=><AppearanceCard key={item.id} palette={item}/>},
+  ]}/><h3 class="dz-brand-fonts-title">Brand Fonts</h3><Row label="Title"><FontSelect value={fonts.title||'sans'} onChange={title=>setPrefs({designBrandFonts:{...fonts,title}})}/></Row><Row label="Body"><FontSelect value={fonts.body||'sans'} onChange={body=>setPrefs({designBrandFonts:{...fonts,body}})}/></Row><Row label="New color"><input aria-label="New brand color" type="color" value={color} onInput={e => setColor(e.currentTarget.value)}/><Button class="small" onClick={() => saveBrandColor(color)}>Save Color</Button></Row></>;
 }

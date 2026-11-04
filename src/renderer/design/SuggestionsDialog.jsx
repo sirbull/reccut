@@ -4,7 +4,7 @@ import { DESIGN_SIZES } from '../../shared/design.js';
 import { BUILTIN_DESIGN_TEMPLATES, applyTemplate } from '../../shared/designTemplates.js';
 import { suggestionTemplates } from '../../shared/thumbScore.js';
 import { aiTitleProvider, transcriptForTitles } from '../../shared/designSuggest.js';
-import { formatTimecode } from '../../shared/model.js';
+import { formatDesignTimecode as formatTimecode } from '../../shared/designPlayback.js';
 import { drawDesign } from '../../shared/designRender.js';
 import { templateContext } from './library.js';
 import { imageVersion, loadDesignImages, getImage, getImageAtPath } from './assets.js';

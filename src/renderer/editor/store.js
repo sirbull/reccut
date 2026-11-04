@@ -1,5 +1,5 @@
 // Tilstand for redigeringen: prosjekt, utvalg, historikk og lagring.
-import { signal, computed, effect } from '@preact/signals';
+import { signal, computed, effect, batch } from '@preact/signals';
 import { produce, setAutoFreeze } from 'immer';
 import {
   CAPTION_LANE,
@@ -14,7 +14,7 @@ import {
   parseTransitionSelection,
   updateDuration,
 } from '../../shared/model.js';
-import { addMediaClip, autoFormat } from '../../shared/ops.js';
+import { addMediaClip, autoFormat, editGroupContents, groupMembers } from '../../shared/ops.js';
 import { templateDefaults } from '../../shared/titletemplates.js';
 import { hasMotion, setMotion } from '../../shared/stabilize.js';
 import { CAMERA_LOGS, hasLut, setLut } from '../../shared/grade.js';
@@ -36,9 +36,57 @@ export const projectPath = signal(null);
 // Sekvensinnstillinger: null, {} fra menyen, eller { mediaId } når første klipp nettopp satte formatet.
 export const sequenceSettingsOpen = signal(null);
 export const selection = signal([]);
+// Gruppen som er åpnet for redigering. Dette er visningstilstand, og lagres ikke i prosjektet.
+export const editingGroup = signal(null);
+export const selectedGroup = computed(() => {
+  if (editingGroup.value || selection.value.length < 2) return null;
+  const ids = selection.value;
+  const g = project.value.clips[ids[0]]?.group;
+  return g && ids.every((id) => project.value.clips[id]?.group === g) && groupMembers(project.value, ids[0]).length === ids.length ? g : null;
+});
+
+export function inEditingGroup(clip) {
+  return !editingGroup.value || clip?.group === editingGroup.value;
+}
+
+export function enterGroup(id) {
+  const clip = project.value.clips[id];
+  if (!clip?.group || project.value.lanes?.[clip.lane]?.locked) return;
+  batch(() => {
+    editingGroup.value = clip.group;
+    selection.value = [id];
+    selectedTransition.value = null;
+    selectedComponent.value = null;
+    skim.value = null;
+  });
+}
+
+export function exitGroup() {
+  const g = editingGroup.value;
+  if (!g) return;
+  batch(() => {
+    editingGroup.value = null;
+    selection.value = Object.values(project.value.clips).filter((c) => c.group === g).map((c) => c.id);
+    selectedTransition.value = null;
+    selectedComponent.value = null;
+  });
+}
+
+export function clipSelection(id, individual = false) {
+  const clip = project.value.clips[id];
+  if (!clip || !inEditingGroup(clip)) return [];
+  return editingGroup.value || individual || clip.slideshowParent || clip.slideshowForeground ? [id] : groupMembers(project.value, id);
+}
 export const selectedTransition = signal(null);
 // Valgt lydkomponent i utvidet lyd: { clipId, key }. V slår den av og på.
 export const selectedComponent = signal(null);
+effect(() => {
+  const g = editingGroup.value;
+  if (!g) return;
+  const clips = project.value.clips;
+  // Sletting, opphevet gruppering, Angre eller valg fra biblioteket kan avslutte gruppemodusen.
+  if (Object.values(clips).filter((c) => c.group === g).length < 2 || selection.value.some((id) => clips[id] && clips[id].group !== g)) editingGroup.value = null;
+});
 export const tool = signal('select');
 export const snapping = signal(prefs.value.snapping);
 // Skumming som i Final Cut Pro: S slår av og på, N slår lyden av og på.
@@ -216,6 +264,14 @@ export function commit(mutator) {
   return result;
 }
 
+export function commitClipEdit(mutator) {
+  return commit((p) => editGroupContents(p, editingGroup.value, selection.value, mutator));
+}
+
+export function updateClipEdit(mutator) {
+  updateTransient((p) => editGroupContents(p, editingGroup.value, selection.value, mutator));
+}
+
 let transientBase = null;
 export function beginTransient() {
   endPreview();
@@ -289,6 +345,7 @@ function pruneSelection() {
 const sequenceTimes = new Map();
 
 function afterSequenceChange(prevId) {
+  editingGroup.value = null;
   sequenceTimes.set(prevId, getTime());
   selection.value = [];
   selectedTransition.value = null;
@@ -349,6 +406,7 @@ export async function saveNow() {
 }
 
 export function setProject(p, path = null) {
+  editingGroup.value = null;
   clearTimeout(saveTimer);
   projectFolders.value = null;
   p = normalizeDesignProject(p);

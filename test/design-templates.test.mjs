@@ -5,7 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { BUILTIN_DESIGN_STYLES, BUILTIN_DESIGN_TEMPLATES, validateDesignTemplate, applyTemplate, extractDesignStyle, applyDesignStyle, templateFromDesign } from '../src/shared/designTemplates.js';
-import { newLayer, layerBounds } from '../src/shared/design.js';
+import { newLayer, layerBounds, normalizeFill } from '../src/shared/design.js';
+import { longestDesignWord, layoutDesignText } from '../src/shared/designText.js';
+import { styleTextRange } from '../src/shared/designRichText.js';
 const require=createRequire(import.meta.url),{createDesignLibrary}=require('../src/main/designLibrary.js');
 const fixture=()=>structuredClone(BUILTIN_DESIGN_TEMPLATES[0]);
 
@@ -46,6 +48,44 @@ test('saved styles copy only appearance, scale text size and never keep a live l
   next.fill.color='#ff0000';assert.notEqual(style.style.fill.color,next.fill.color);
   for(const s of BUILTIN_DESIGN_STYLES)assert.equal(applyDesignStyle(layer,s,720).type,'text');
   const image=newLayer('image',{asset:'a'});assert.equal(applyDesignStyle(image,style,720),image);
+});
+test('multicolor text styles emphasize the longest word with the exact preset palette',()=>{
+  for(const entry of BUILTIN_DESIGN_STYLES){
+    const source=newLayer('text',{text:'Min fargerike tittel!',x:37,y:42,w:900,h:300,fill:{type:'solid',color:'#123456',alpha:1}});
+    const next=applyDesignStyle(source,entry,720);
+    assert.equal(next.text,source.text);assert.equal(next.x,37);assert.equal(next.y,42);
+    assert.deepEqual(next.fill,normalizeFill(entry.style.fill));assert.deepEqual(next.highlight,normalizeFill(entry.style.highlight));
+    if(entry.style.highlight){assert.equal(next.textStyles.length,1);const range=next.textStyles[0];assert.equal(next.text.slice(range.start,range.end),'fargerike');assert.deepEqual(range.style.fill,entry.style.highlight);}
+    else assert.equal(next.textStyles.length,0);
+    assert.equal(source.textStyles.length,0);
+    assert.deepEqual(applyDesignStyle(next,entry,720),next);
+  }
+});
+test('applying a text style replaces old word colors and fonts so they cannot override the example',()=>{
+  const entry=BUILTIN_DESIGN_STYLES[0];
+  const source=styleTextRange(newLayer('text',{text:'A better title'}),0,14,{fill:{type:'solid',color:'#00ff00',alpha:1},font:'mono',size:200});
+  const next=applyDesignStyle(source,entry,720);
+  assert.equal(next.textStyles.length,1);assert.equal(next.text.slice(next.textStyles[0].start,next.textStyles[0].end),'better');
+  assert.deepEqual(next.textStyles[0].style,{fill:entry.style.highlight});
+  assert.equal(source.textStyles[0].style.fill.color,'#00ff00');
+  const runs=layoutDesignText(next,s=>s.length*10).lineRuns.flat();
+  assert.deepEqual(runs.map(r=>[r.text,(r.style?.fill||next.fill).color]),[['A ', '#ffe600'],['BETTER','#ff453a'],[' TITLE','#ffe600']]);
+});
+test('existing explicit highlights take priority over automatic word selection',()=>{
+  const entry=BUILTIN_DESIGN_STYLES[1],source=newLayer('text',{text:'*Min* allerlengste tittel',w:2000,h:300});
+  const next=applyDesignStyle(source,entry,720);
+  assert.equal(next.text,source.text);assert.equal(next.textStyles.length,0);
+  const runs=layoutDesignText(next,s=>s.length*10).lineRuns.flat();
+  assert.deepEqual(runs.filter(r=>r.highlight).map(r=>r.text),['Min']);
+  assert.equal(next.fill.color,'#ffffff');assert.equal(next.highlight.color,'#ff453a');
+});
+test('automatic emphasis counts Unicode graphemes, ignores punctuation and breaks ties consistently',()=>{
+  for(const [text,expected]of[['🙂 blåbær éééé','blåbær'],['Hei,\nverden!','verden'],['first other','first'],['Solo','Solo'],['  !!! 👩‍💻 ',null],['',null]]){
+    const word=longestDesignWord(text);assert.equal(word?text.slice(word.start,word.end):null,expected);
+  }
+  const source=newLayer('text',{text:'\\*kort\\* allerlengste',w:2000,h:300}),next=applyDesignStyle(source,BUILTIN_DESIGN_STYLES[1],720);
+  const range=next.textStyles[0];assert.equal(next.text.slice(range.start,range.end),'allerlengste');
+  assert.equal(applyDesignStyle(newLayer('text',{text:'!!!'}),BUILTIN_DESIGN_STYLES[1],720).textStyles.length,0);
 });
 test('saving a design as template strips image references and assigns reusable placeholders',()=>{
   const d=applyTemplate(fixture(),{frame:{asset:'frame'},cutout:{asset:'person',cutout:{asset:'mask',enabled:true}},title:'Project title',logo:{asset:'brand'}});

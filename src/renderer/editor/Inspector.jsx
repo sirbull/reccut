@@ -2,7 +2,7 @@
 import { ProcessorEffects } from './ProcessorEffects.jsx';
 import { RemoveEffectButton } from './RemoveEffectButton.jsx';
 import { VideoEffects } from './VideoEffects.jsx';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { ArrowDown, ArrowUp, Captions, ChevronLeft, ChevronRight, Circle, Diamond, EyeOff, Film, PenTool, RectangleHorizontal, SquareDashed, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
 import {
@@ -46,7 +46,8 @@ import { recordingChildren, setClipDuration, setSpeed, setTransition } from '../
 import { GRADE_PROPS, CAMERA_LOGS } from '../../shared/grade.js';
 import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { beginTransient, commit, endPreview, endTransient, getWave, mirror, previewEdit, motionVersion, project, selectedClips, selectedTransition, selection, tasks, timeSig, updateTransient, waveVersion } from './store.js';
+import { beginTransient, commit, endPreview, endTransient, enterGroup, getWave, mirror, previewEdit, motionVersion, project, selectedClips, selectedGroup, selectedTransition, selection, tasks, timeSig, updateTransient, waveVersion } from './store.js';
+import { groupPositionClips, groupVisuals, setGroupOpacity, setGroupPosition } from '../../shared/groupSettings.js';
 import { seek } from './playback.js';
 import { setKeyframe } from './keyframes.js';
 import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
@@ -68,8 +69,31 @@ export function Inspector() {
   if (transId?.startsWith('ax:') && p.clips[transId.slice(3)]?.axfade) return <CrossfadeInspector clip={p.clips[transId.slice(3)]} />;
   const transition = parseTransitionSelection(transId);
   if (transId && p.clips[transition.id]?.[transition.key]) return <TransitionInspector clip={p.clips[transition.id]} edge={transition.edge} />;
-  if (clips.length) return <ClipInspector clip={clips[0]} clips={clips} />;
+  if (clips.length) return <ClipInspector clip={clips[0]} clips={clips} group={Boolean(selectedGroup.value)} />;
   return <ProjectInspector />;
+}
+
+function GroupVideoTab({ clips }) {
+  const p = project.value;
+  const ids = clips.map((c) => c.id);
+  const visuals = groupVisuals(p, ids);
+  const positioned = groupPositionClips(p, ids);
+  const T = timeSig.value;
+  const field = (label, value, min, max, unit, change) => <Row label={label}>
+    <NumberField value={value} min={min} max={max} unit={unit} precision={unit === '%' ? 1 : 0}
+      onStart={beginTransient} onChange={(v) => updateTransient((q) => change(q, v))} onCommit={() => endTransient(true)} />
+  </Row>;
+  return <>
+      {!!visuals.length && <Section title="Compositing">
+        {field('Opacity', (valueAt(visuals[0], 'opacity', T) ?? 1) * 100, 0, 100, '%', (q, v) => setGroupOpacity(q, ids, v / 100, T))}
+        <p class="hint">Applies to the group’s visual clips. The value shown is from the first visual clip.</p>
+      </Section>}
+      {!!positioned.length && <Section title="Transform">
+        {field('Position X', valueAt(positioned[0], 'x', T) ?? 0, -p.width, p.width, 'px', (q, v) => setGroupPosition(q, ids, 'x', v, T))}
+        {field('Position Y', valueAt(positioned[0], 'y', T) ?? 0, -p.height, p.height, 'px', (q, v) => setGroupPosition(q, ids, 'y', v, T))}
+        <p class="hint">Moves the clips together, preserving their offsets and animation.</p>
+      </Section>}
+  </>;
 }
 
 function MediaInspector({ media }) {
@@ -132,25 +156,26 @@ function tabsFor(clip, media) {
 // Fanene som gir mening for flere klipp samtidig. Endringene i dem kopieres til alle (mirror i store.js).
 const MULTI_TABS = ['video', 'color', 'effects', 'audio'];
 
-function ClipInspector({ clip, clips = [clip] }) {
+function ClipInspector({ clip, clips = [clip], group = false }) {
   const p = project.value;
   const media = p.media[clip.mediaId];
   const multi = clips.length > 1;
   const tabs = multi
     ? tabsFor(clip, media).filter((t) => MULTI_TABS.includes(t.id) && clips.every((c) => tabsFor(c, p.media[c.mediaId]).some((x) => x.id === t.id)))
     : tabsFor(clip, media);
+  if (group && groupVisuals(p, clips.map((c) => c.id)).length && !tabs.some((t) => t.id === 'video')) tabs.unshift({ id: 'video', label: 'Video', icon: Film });
   const tab = tabs.find((t) => t.id === inspectorTab.value) ? inspectorTab.value : tabs[0]?.id;
-  const title = multi ? `${clips.length} clips selected` : clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? redactLabel(clip) : clip.type === 'caption' ? 'Caption' : clip.type === 'gap' ? 'Gap' : clip.name || media?.name || 'Clip';
+  const title = group ? `Group · ${clips.length} clips` : multi ? `${clips.length} clips selected` : clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? redactLabel(clip) : clip.type === 'caption' ? 'Caption' : clip.type === 'gap' ? 'Gap' : clip.name || media?.name || 'Clip';
   const ids = clips.map((c) => c.id).join();
-  useEffect(() => {
-    if (!multi) return;
+  useLayoutEffect(() => {
+    if (!multi || (group && tab === 'video')) return;
     mirror.from = clip.id;
     mirror.to = clips.slice(1).map((c) => c.id);
     return () => {
       mirror.from = null;
       mirror.to = [];
     };
-  }, [ids]);
+  }, [ids, group, tab]);
   const mediaIds = [...new Set(clips.map((c) => c.mediaId).filter((id) => p.media[id] && p.media[id].kind !== 'audio'))];
 
   return (
@@ -169,11 +194,14 @@ function ClipInspector({ clip, clips = [clip] }) {
         <Toggle checked={clips.every((c) => c.enabled)} onChange={(v) => commit((q) => clips.forEach((c) => q.clips[c.id] && (q.clips[c.id].enabled = v)))} />
       </div>
       <div class="insp-body">
-        {multi && <p class="hint">{tabs.length ? 'Changes apply to all selected clips. The values shown are from the first clip.' : 'These clips have no settings in common.'}</p>}
+        {group ? <>
+          <p class="hint">Change shared settings here, or double click a clip to edit the group’s contents.</p>
+          <Button class="small" onClick={() => enterGroup(clip.id)}>Edit Group</Button>
+        </> : multi && <p class="hint">{tabs.length ? 'Changes apply to all selected clips. The values shown are from the first clip.' : 'These clips have no settings in common.'}</p>}
         {tab === 'text' && <TextTab clip={clip} />}
         {tab === 'caption' && <CaptionTab clip={clip} />}
         {tab === 'recording' && <RecordingTab clip={clip} media={media} />}
-        {tab === 'video' && <VideoTab clip={clip} />}
+        {tab === 'video' && (group ? <GroupVideoTab clips={clips} /> : <VideoTab clip={clip} />)}
         {tab === 'redact' && <RedactTab clip={clip} />}
         {tab === 'masks' && <MasksTab clip={clip} />}
         {tab === 'effects' && <EffectsTab clip={clip} multi={multi} />}

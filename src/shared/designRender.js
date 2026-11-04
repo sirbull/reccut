@@ -1,6 +1,7 @@
 import { fitBox, designShapePoints, effectMargin } from './design.js';
-import { layoutDesignText } from './designText.js';
+import { layoutDesignText, designFont } from './designText.js';
 import { dilateAlpha, erodeAlpha, readAlpha, alphaPixels, designClipGroups } from './designMasks.js';
+import { patternTile } from './designPattern.js';
 import { shapePath } from './shapes.js';
 import { gradientParams } from './gradient.js';
 import { renderGradient, gradientCanvasStyle } from './gradientRender.js';
@@ -10,6 +11,7 @@ const cache = new Map();
 let layerCache = new WeakMap();
 let cachedPixels = 0;
 const fields = new Map();
+const textSegments=new Intl.Segmenter(undefined,{granularity:'grapheme'});
 export function clearDesignRenderCache() { cache.clear(); layerCache = new WeakMap(); fields.clear(); cachedPixels = 0; }
 export function designRenderCacheStats() { return { layers: cache.size, pixels: cachedPixels }; }
 
@@ -71,6 +73,7 @@ function textGeometry(ctx, l) {
 }
 function drawText(ctx, l, kind = 'fill', spread = 0) {
   const g = textGeometry(ctx, l), box = { x: 0, y: 0, w: l.w, h: l.h };
+  if(g.styled){drawStyledText(ctx,l,g,kind,spread);return;}
   // Clip overflow to the text box, allowing contours and line-box padding out.
   ctx.save(); const pad = Math.max(spread, l.stroke?.width || 0, l.box?.padding || 0);
   ctx.beginPath(); ctx.rect(-pad, -pad, l.w + 2 * pad, l.h + 2 * pad); ctx.clip();
@@ -103,8 +106,17 @@ function drawText(ctx, l, kind = 'fill', spread = 0) {
     }
   }); ctx.restore();
 }
+function drawStyledText(ctx,l,g,kind,spread){
+ const pad=Math.max(spread,l.stroke?.width||0,l.box?.padding||0),box={x:0,y:0,w:l.w,h:l.h};ctx.save();ctx.beginPath();ctx.rect(-pad,-pad,l.w+pad*2,l.h+pad*2);ctx.clip();let top=g.top;
+ g.lineRuns.forEach((runs,i)=>{const lineHeight=g.lineHeights[i],y=top+lineHeight/2,left=g.x-(l.align==='center'?g.widths[i]/2:l.align==='right'?g.widths[i]:0);top+=lineHeight;
+  if((kind==='fill'||kind==='box')&&l.box?.fill&&g.lines[i]){const p=l.box.padding;paintFill(ctx,l.box.fill,box,()=>{ctx.beginPath();ctx.roundRect(left-p,y-lineHeight/2-p,g.widths[i]+p*2,lineHeight+p*2,Math.min(l.box.radius,(lineHeight+p*2)/2));ctx.fill();});}if(kind==='box')return;
+  const rtl=/[\u0590-\u08ff]/u.test(g.lines[i]);ctx.direction=rtl?'rtl':'ltr';let x=rtl?left+g.widths[i]:left;for(const run of runs){const style=run.style||{},tracking=style.tracking??l.tracking??0;ctx.font=designFont({...l,...style},(style.size??l.size)*g.size/l.size);ctx.textAlign=rtl?'right':'left';ctx.letterSpacing='0px';const width=ctx.measureText(run.text).width+Math.max(0,[...textSegments.segment(run.text)].length-1)*tracking;ctx.letterSpacing=`${tracking}px`;
+   if(kind==='stroke')ctx.strokeText(run.text,x,y);else if(kind==='silhouette'){ctx.fillStyle='#000000';ctx.fillText(run.text,x,y);if(spread>0){ctx.strokeStyle='#000000';ctx.lineWidth=spread*2;ctx.strokeText(run.text,x,y);}}else{const fill=Object.hasOwn(style,'fill')?style.fill:run.highlight?(Object.hasOwn(style,'highlight')?style.highlight||l.fill:l.highlight||l.fill):l.fill;paintFill(ctx,fill,box,()=>ctx.fillText(run.text,x,y));}x+=(rtl?-1:1)*(width+tracking);
+  }
+ });ctx.restore();
+}
 function drawContent(ctx, l, image, pixelRatio = 1) {
-  if (l.type === 'shape') { traceShape(ctx, l); paintFill(ctx, l.fill, { x: 0, y: 0, w: l.w, h: l.h }, () => ctx.fill()); }
+  if (l.type === 'shape') { traceShape(ctx, l); paintFill(ctx, l.fill, { x: 0, y: 0, w: l.w, h: l.h }, () => ctx.fill());if(l.pattern){const key=JSON.stringify(l.pattern);let tile=fields.get(key);if(!tile){tile=patternTile(l.pattern,canvasFactory);fields.set(key,tile);if(fields.size>8)fields.delete(fields.keys().next().value);}ctx.save();traceShape(ctx,l);ctx.clip();ctx.fillStyle=ctx.createPattern(tile,'repeat');ctx.fillRect(0,0,l.w,l.h);ctx.restore();} }
   else if (l.type === 'text') drawText(ctx, l);
   else {
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, l.w, l.h); ctx.clip();

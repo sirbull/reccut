@@ -50,6 +50,23 @@ export function gradientStopColor(stops, t) {
   }
   return gradientRGB(stops.at(-1).color);
 }
+// Clockwise from left-to-right (0°). Account for the actual source aspect ratio.
+export function gradientAngle(params, aspect = 1) {
+  const p = gradientParams(params), ratio = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  return (Math.atan2(p.end.y - p.start.y, (p.end.x - p.start.x) * ratio) * 180 / Math.PI + 360) % 360;
+}
+export function gradientAtAngle(params, angle, aspect = 1) {
+  const p = gradientParams(params), ratio = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const radians = ((Number.isFinite(angle) ? angle : 0) % 360) * Math.PI / 180;
+  const length = Math.hypot((p.end.x - p.start.x) * ratio, p.end.y - p.start.y) || Math.min(ratio, 1);
+  let dx = Math.cos(radians) * length / ratio / 2, dy = Math.sin(radians) * length / 2;
+  // Keep the length and midpoint where possible; fit/shift only when an edge requires it.
+  const fit = Math.min(1, .5 / Math.max(Math.abs(dx), 1e-12), .5 / Math.max(Math.abs(dy), 1e-12));
+  dx *= fit; dy *= fit;
+  const x = clampGradient((p.start.x + p.end.x) / 2, Math.abs(dx), 1 - Math.abs(dx));
+  const y = clampGradient((p.start.y + p.end.y) / 2, Math.abs(dy), 1 - Math.abs(dy));
+  return { start: { x: x - dx, y: y - dy }, end: { x: x + dx, y: y + dy } };
+}
 // Shared reference math for the CPU fallback and new-point color sampling.
 export function gradientColorAt(p, x, y, aspect = 1) {
   const ax = Math.max(1, aspect), ay = Math.max(1, 1 / aspect);

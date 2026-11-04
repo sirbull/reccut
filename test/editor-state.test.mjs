@@ -95,3 +95,61 @@ test('edits in the multi clip inspector are copied to the other selected clips',
   s.undo();
   assert.equal(s.project.value.clips[other.id].props.film, undefined);
 });
+
+function groupedSetup() {
+  const { store: s, id } = setup();
+  const other = s.makeCaptionClip(6, 'Other');
+  const outside = s.makeCaptionClip(10, 'Outside');
+  s.commit(p => {
+    p.clips[other.id] = other;
+    p.clips[outside.id] = outside;
+    p.clips[id].group = p.clips[other.id].group = 'group';
+  });
+  return { s, id, other: other.id, outside: outside.id };
+}
+
+test('entering a group persists across clip selections and Done selects the whole group without an undo step', () => {
+  const { s, id, other, outside } = groupedSetup();
+  s.selection.value = s.clipSelection(id);
+  assert.equal(s.selectedGroup.value, 'group');
+  const version = s.historyVersion.value;
+  s.enterGroup(id);
+  assert.equal(s.editingGroup.value, 'group');
+  assert.equal(s.selectedGroup.value, null);
+  assert.deepEqual([...s.clipSelection(other)], [other]);
+  assert.deepEqual([...s.clipSelection(outside)], []);
+  s.selection.value = s.clipSelection(other);
+  assert.equal(s.editingGroup.value, 'group');
+  s.exitGroup();
+  assert.equal(s.editingGroup.value, null);
+  assert.equal(s.selectedGroup.value, 'group');
+  assert.equal(s.historyVersion.value, version);
+});
+
+test('a clip edit inside a group is independent, undoable and does not ungroup the clips', () => {
+  const { s, id, other } = groupedSetup();
+  s.enterGroup(id);
+  s.beginTransient();
+  s.updateClipEdit(p => { p.clips[id].props.opacity = 0.4; });
+  s.updateClipEdit(p => { p.clips[id].props.opacity = 0.6; });
+  s.endTransient(true);
+  assert.equal(s.project.value.clips[id].props.opacity, 0.6);
+  assert.equal(s.project.value.clips[other].props.opacity, undefined);
+  assert.equal(s.project.value.clips[id].group, 'group');
+  s.undo();
+  assert.equal(s.project.value.clips[id].props.opacity, undefined);
+  assert.equal(s.editingGroup.value, 'group');
+  s.redo();
+  assert.equal(s.project.value.clips[id].props.opacity, 0.6);
+});
+
+test('group isolation clears when the group is removed or another project opens', () => {
+  const { s, id, other } = groupedSetup();
+  s.enterGroup(id);
+  s.commit(p => { delete p.clips[id].group; delete p.clips[other].group; });
+  assert.equal(s.editingGroup.value, null);
+  s.undo();
+  s.enterGroup(id);
+  s.setProject(structuredClone(s.project.value));
+  assert.equal(s.editingGroup.value, null);
+});

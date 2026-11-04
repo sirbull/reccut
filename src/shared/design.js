@@ -1,5 +1,7 @@
 import { uid, sourceTime } from './model.js';
 export { dilateAlpha, erodeAlpha, designClipGroups, layerToSourcePoint, sourceToLayerPoint } from './designMasks.js';
+import { normalizeTextStyles } from './designRichText.js';
+import { normalizeDesignPattern } from './designPattern.js';
 import { gradientParams } from './gradient.js';
 
 // Starting sizes, not upload requirements. YouTube's 2 MB is a conservative mobile limit.
@@ -111,7 +113,7 @@ export function normalizeLayer(input) {
     outline: l.outline ? { color: /^#[\da-f]{6}$/i.test(l.outline.color) ? l.outline.color : '#ffffff', width: number(l.outline.width, 0, 0, 500) } : null,
   };
   if (l.type === 'text') Object.assign(result, {
-    text: string(l.text, 'Title'), font: string(l.font, 'sans'), weight: number(l.weight, 800, 100, 900), size: number(l.size, 96, 6, 4096),
+    text: string(l.text, 'Title'), textStyles: normalizeTextStyles(l.textStyles,string(l.text,'Title')), font: string(l.font, 'sans'), weight: number(l.weight, 800, 100, 900), size: number(l.size, 96, 6, 4096),
     tracking: number(l.tracking, 0, -100, 500), lineHeight: number(l.lineHeight, 1.1, 0.5, 5),
     align: ['left', 'center', 'right'].includes(l.align) ? l.align : 'center', valign: ['top', 'middle', 'bottom'].includes(l.valign) ? l.valign : 'middle',
     uppercase: Boolean(l.uppercase), autofit: l.autofit !== false, highlight: fill(l.highlight, l.highlight === null ? null : solidFill('#ff453a')),
@@ -129,7 +131,7 @@ export function normalizeLayer(input) {
     });
   }
   if (l.type === 'shape') {
-    Object.assign(result, { shape: DESIGN_SHAPES.some((s) => s.value === l.shape) ? l.shape : 'rect', radius: number(l.radius, 0, 0, Math.min(result.w, result.h) / 2), sides: Math.round(number(l.sides, 6, 3, 12)), points: Math.round(number(l.points, 5, 3, 24)), inner: number(l.inner, 0.5, 0.05, 1), head: number(l.head, 1, 0.1, 10) });
+    Object.assign(result, { pattern: normalizeDesignPattern(l.pattern), shape: DESIGN_SHAPES.some((s) => s.value === l.shape) ? l.shape : 'rect', radius: number(l.radius, 0, 0, Math.min(result.w, result.h) / 2), sides: Math.round(number(l.sides, 6, 3, 12)), points: Math.round(number(l.points, 5, 3, 24)), inner: number(l.inner, 0.5, 0.05, 1), head: number(l.head, 1, 0.1, 10) });
     if (['line', 'arrow'].includes(result.shape)) {
       result.fill = null;
       if (l.stroke === undefined) result.stroke = normalizeStroke({ fill: solidFill(), width: 8 });

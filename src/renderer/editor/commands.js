@@ -43,6 +43,7 @@ import {
   addMediaRecords,
   reportFailed,
   commit,
+  commitClipEdit,
   commitSequence,
   previewEdit,
   endPreview,
@@ -61,6 +62,9 @@ import {
   selectedComponent,
   selectedTransition,
   selection,
+  clipSelection,
+  editingGroup,
+  inEditingGroup,
   sourceMediaId,
 } from './store.js';
 import { getViewerTime, openSource, pause, seek, seekViewer, sourceProject } from './playback.js';
@@ -357,17 +361,18 @@ function targetClipsAtPlayhead() {
   });
   if (sel.length) return sel;
   const p = primaryAt(project.value, T);
-  return p?.clip ? [p.clip.id] : [];
+  return p?.clip && inEditingGroup(p.clip) ? [p.clip.id] : [];
 }
 
 export function blade() {
   const ids = targetClipsAtPlayhead();
   if (!ids.length) return;
-  commit((p) => bladeAt(p, getTime(), ids));
+  commitClipEdit((p) => bladeAt(p, getTime(), ids));
 }
 
 export function bladeAll() {
-  commit((p) => bladeAt(p, getTime()));
+  const ids = editingGroup.value ? Object.values(project.value.clips).filter(inEditingGroup).map((c) => c.id) : null;
+  commitClipEdit((p) => bladeAt(p, getTime(), ids));
 }
 
 export function deleteSelection(ripple = true) {
@@ -385,7 +390,7 @@ export function deleteSelection(ripple = true) {
   }
   const ids = selection.value;
   if (!ids.length) return;
-  commit((p) => deleteClips(p, ids, { ripple }));
+  commitClipEdit((p) => deleteClips(p, ids, { ripple }));
   selection.value = [];
 }
 
@@ -470,7 +475,7 @@ export function trimToPlayhead(edge) {
   const T = getTime();
   const ids = targetClipsAtPlayhead();
   if (!ids.length) return;
-  commit((p) => {
+  commitClipEdit((p) => {
     for (const id of ids) {
       const c = p.clips[id];
       if (!c) continue;
@@ -489,7 +494,7 @@ export function selectAll() {
     browserPicked.value = Object.keys(project.value.media);
     return;
   }
-  selection.value = Object.keys(project.value.clips);
+  selection.value = Object.values(project.value.clips).filter(inEditingGroup).map((c) => c.id);
 }
 
 let clipboard = null;
@@ -970,7 +975,7 @@ export function selectClipAtPlayhead() {
   const T = getTime();
   const p = project.value;
   const c = Object.values(p.clips)
-    .filter((x) => x.lane !== CAPTION_LANE && T >= x.start && T < x.start + x.dur)
+    .filter((x) => inEditingGroup(x) && x.lane !== CAPTION_LANE && T >= x.start && T < x.start + x.dur)
     .sort((a, b) => b.lane - a.lane)[0];
   if (c) selection.value = [c.id];
 }
@@ -1237,7 +1242,7 @@ export function ungroupSelected() {
 
 // Klikk på et gruppert klipp velger hele gruppen.
 export function selectWithGroup(id) {
-  selection.value = groupMembers(project.value, id);
+  selection.value = clipSelection(id);
 }
 
 export function zoomAt(factor, T, offsetPx) {
@@ -1437,7 +1442,7 @@ export async function clipContextMenu(clipId, T) {
       overwriteSelectedToPrimary();
       break;
     case 'blade':
-      commit((p) => splitClip(p, clipId, T));
+      commitClipEdit((p) => splitClip(p, clipId, T));
       break;
     case 'toggle':
       toggleEnabled();

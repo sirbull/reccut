@@ -1,0 +1,19 @@
+import { gradientParams } from './gradient.js';
+export const TEXT_STYLE_FIELDS=['font','weight','size','tracking','fill','highlight','uppercase'];
+const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
+function styleFields(value={}){const out={};if(!value||typeof value!=='object'||Array.isArray(value))return out;for(const key of TEXT_STYLE_FIELDS){const v=value[key];if(v===undefined)continue;if(key==='font'&&typeof v==='string')out.font=v.slice(0,200);else if(key==='uppercase')out.uppercase=!!v;else if(['weight','size','tracking'].includes(key)&&Number.isFinite(v))out[key]=clamp(v,...({weight:[100,900],size:[6,4096],tracking:[-100,500]})[key]);else if(['fill','highlight'].includes(key)){if(v===null)out[key]=null;else if(v?.type==='gradient')out[key]={type:'gradient',gradient:gradientParams(v.gradient),alpha:clamp(Number.isFinite(v.alpha)?v.alpha:1,0,1)};else if(/^#[0-9a-f]{6}$/i.test(v?.color))out[key]={type:'solid',color:v.color,alpha:clamp(Number.isFinite(v.alpha)?v.alpha:1,0,1)};}}return out;}
+const segmenter=new Intl.Segmenter(undefined,{granularity:'grapheme'});
+export function textRange(text,start,end){const points=[...segmenter.segment(text)].map(s=>s.index).concat(text.length);start=clamp(Math.trunc(start)||0,0,text.length);end=clamp(Math.trunc(end)||0,start,text.length);if(start===end)return{start,end};return{start:points.findLast(i=>i<=start)??0,end:points.find(i=>i>=end)??text.length};}
+export function normalizeTextStyles(ranges,text){return(Array.isArray(ranges)?ranges:[]).slice(0,4096).flatMap(r=>{if(!r||!Number.isFinite(r.start)||!Number.isFinite(r.end))return[];const range=textRange(text,r.start,r.end),style=styleFields(r.style);return range.end>range.start&&Object.keys(style).length?[{...range,style}]:[];});}
+export function textStyleAt(layer,index){return Object.assign({},...(layer.textStyles||[]).filter(r=>r.start<=index&&r.end>index).map(r=>r.style));}
+export function styleTextRange(layer,start,end,props){const range=textRange(layer.text,start,end),patch=styleFields(props);if(range.end<=range.start||!Object.keys(patch).length)return layer;
+ const old=normalizeTextStyles(layer.textStyles,layer.text),cuts=[...new Set([0,layer.text.length,range.start,range.end,...old.flatMap(r=>[r.start,r.end])])].sort((a,b)=>a-b),out=[];
+ for(let i=0;i<cuts.length-1;i++){const start=cuts[i],end=cuts[i+1],style=Object.assign({},...old.filter(r=>r.start<=start&&r.end>start).map(r=>r.style),start>=range.start&&end<=range.end?patch:{});if(!Object.keys(style).length)continue;const last=out.at(-1);if(last&&last.end===start&&JSON.stringify(last.style)===JSON.stringify(style))last.end=end;else out.push({start,end,style});}
+ return{...layer,textStyles:out};
+}
+export function replaceStyledText(layer,text){const previous=layer.text;if(previous===text)return layer;let start=0,suffix=0;while(start<Math.min(previous.length,text.length)&&previous[start]===text[start])start++;while(suffix<Math.min(previous.length-start,text.length-start)&&previous[previous.length-1-suffix]===text[text.length-1-suffix])suffix++;
+ const oldEnd=previous.length-suffix,newEnd=text.length-suffix,delta=newEnd-oldEnd;
+ const ranges=(layer.textStyles||[]).map(r=>{if(r.end<=start)return r;if(r.start>=oldEnd)return{...r,start:r.start+delta,end:r.end+delta};return{...r,start:Math.min(r.start,start),end:r.end>=oldEnd?r.end+delta:newEnd};});
+ return{...layer,text,textStyles:normalizeTextStyles(ranges,text)};
+}
+export function styleWholeTextLayer(layer,props){const keys=Object.keys(props).filter(key=>TEXT_STYLE_FIELDS.includes(key));if(!keys.length||!layer.textStyles?.length)return{...layer,...props};const textStyles=layer.textStyles.map(r=>({...r,style:Object.fromEntries(Object.entries(r.style).filter(([key])=>!keys.includes(key)))})).filter(r=>Object.keys(r.style).length);return{...layer,...props,textStyles};}

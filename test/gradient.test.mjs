@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_GRADIENT, gradientParams, gradientColorAt, gradientStopColor, MAX_GRADIENT_POINTS } from '../src/shared/gradient.js';
+import { DEFAULT_GRADIENT, gradientParams, gradientColorAt, gradientStopColor, gradientAngle, gradientAtAngle, MAX_GRADIENT_POINTS } from '../src/shared/gradient.js';
 import { makeVideoEffect, activeVideoEffects } from '../src/shared/videoEffects.js';
 import { pasteAttributes } from '../src/shared/attributes.js';
 
@@ -58,4 +58,29 @@ test('gradient normalization bounds point counts, invalid geometry, colors and s
   assert.equal(p.points[0].radius, 0.01);
   assert.equal(p.points[0].color, '#487cff');
   assert.equal(p.stops.length, 2);
+});
+
+test('gradient angles follow physical direction on landscape, portrait and square sources', () => {
+  for (const aspect of [16/9, 9/16, 1]) for (const angle of [0, 22.5, 45, 90, 135, 180, 225, 270, 315, 359.9, 360, -90]) {
+    const patch = gradientAtAngle(DEFAULT_GRADIENT, angle, aspect);
+    assert.ok(Math.abs(gradientAngle(patch, aspect) - (angle % 360 + 360) % 360) < 1e-8);
+    for (const point of [patch.start, patch.end]) for (const value of Object.values(point)) assert.ok(value >= 0 && value <= 1);
+    const p = gradientParams({...DEFAULT_GRADIENT,...patch});
+    assert.deepEqual(gradientColorAt(p, p.start.x, p.start.y, aspect), [72,124,255]);
+    assert.deepEqual(gradientColorAt(p, p.end.x, p.end.y, aspect), [255,112,181]);
+  }
+});
+
+test('rotating gradients retains a short gradient length and midpoint, fitting long gradients inside the source', () => {
+  const original = {start:{x:.2,y:.4},end:{x:.6,y:.4}};
+  const rotated = gradientAtAngle(original, 90, 1);
+  assert.ok(Math.abs(rotated.start.x-.4)<1e-9);
+  assert.ok(Math.abs(rotated.start.y-.2)<1e-9);
+  assert.ok(Math.abs(rotated.end.y-.6)<1e-9);
+  const corner = gradientAtAngle({start:{x:0,y:0},end:{x:1,y:0}}, 90, 2);
+  assert.ok(Math.abs(corner.start.y)<1e-9);
+  assert.ok(Math.abs(corner.end.y-1)<1e-9);
+  const coincident = gradientAtAngle({start:{x:.3,y:.3},end:{x:.3,y:.3}}, 135, .5);
+  assert.ok(Math.abs(gradientAngle(coincident,.5)-135)<1e-9);
+  assert.equal(gradientAngle(gradientAtAngle({},NaN,0),0),0);
 });

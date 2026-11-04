@@ -154,8 +154,8 @@ Built from `LibraryCard` in `LibraryPanel.jsx` and `libraryPreview`, `startLibra
 | Action | Result |
 |---|---|
 | Hover | Live preview on the canvas. Nothing is saved, nothing goes into undo. Leaving the card restores the canvas. |
-| Click | Selects the card (blue outline). |
-| Double-click or Enter | Applies it: places a photo or element in the middle, applies a style or palette, creates a design from a template. |
+| Click | Applies once and selects the card (blue outline). |
+| Double-click or Enter | Applies once; the second click of a double-click is ignored: places a photo or element in the middle, applies a style or palette, creates a design from a template. |
 | Drag onto the canvas | Applies it at the drop point. A style or palette dropped on a layer applies to that layer only. |
 | Right-click | Card menu: Apply, Save to My…, Delete (user items), Show Credits (stock items). |
 
@@ -342,3 +342,35 @@ Generative AI images or templates, video thumbnails with motion, team libraries 
 - Validation: 480 tests pass, production build passes, and native macOS checks cover empty-room creation, hover/undo separation, real drag-and-drop, saved styles, 500-item pagination, brand assets, camera capture across design navigation, page actions and export. See [Phase A QA](DESIGN-REDESIGN-A-QA.md).
 
 Phase B and Phase C are not implemented by this entry. The suggestions dialog remains available; inline For This Video and Best Frames, title/subtitle/badge presets, font pairs, Elements, palettes/color roles, template tags/global Search and the readability warning dot belong to Phase B. Stock, online settings, credits, source plugins, OAuth/MCP and the template catalog belong to Phase C. No network provider or npm dependency was added.
+
+
+### 2026-11-04: Phase B complete
+
+- B1: For This Video in Templates and Best Frames in Video share a local, bounded analysis cache. Cards use the Phase A preview/select/apply/drag contract. Apply captures the original-quality frame; the full frame stays available with contain placement. Cut Out This Frame captures the selected composite and runs the existing local background-removal pipeline. Source changes cancel stale analysis; capture also checks project, design and undo/redo navigation.
+- B2: Text now has Add Title, Add Subtitle and Add Badge. Sizes follow the canvas, initial text is the project name, and Brand Fonts supplies title/body fonts. Font Pairs is available in Text and Styles; unavailable local pairs are hidden. The two brand fonts and a palette made from brand colors are editable in Brand.
+- B3: Elements contains shapes, editable badges including sequence duration, hand-drawn pointers, system emoji, stickers and solid/gradient/textured backgrounds. Built-in SVG artwork is rasterized through Canvas into independent project PNG assets on apply; textures are background image layers. Source artwork remains built in and works offline. My Elements saves reusable choices locally.
+- B4: Styles has Recommended, Colors and Fonts. Eight built-in five-color palettes, From This Frame sampling and Brand Palette use the same pure mapping. Optional template color roles survive import/export; untagged layers use type-based fallback. Images, hidden layers and locked groups are preserved. A dropped palette or combined recommendation changes only the compatible target layer. Saved palettes and font pairs remain local.
+- B5: Built-in templates have tags, Templates has By Style grouping, and Save as Template offers tags and color roles next to placeholder assignments. Search finds and ranks built-in/saved templates, text styles, elements, palettes, installed font pairs, project images, brand colors and the logo, using the existing section grids and card actions.
+- B6: Resize retains its fixed toolbar position from Phase A. Readability now checks after edits with a debounce, updates a warning dot, clears stale results and exposes the existing detailed warnings and manual recheck.
+- Main implementation: `src/shared/designContent.js`, `designTemplates.js`, `designLibrary.js`, plus `src/renderer/design/content.js`, `videoLibrary.js`, `VideoCards.jsx`, `OfflinePanels.jsx` and the existing room/library/frame/readability components. Help, feature list and preference defaults describe the new behavior.
+- Validation: 500 tests pass, including 20 new content, metadata, async-capture, history and preview regressions. Production build, packaged arm64 app startup and native macOS interaction checks pass, including offline operation in the production renderer. See [Phase B QA](DESIGN-REDESIGN-B-QA.md).
+
+Phase C remains pending: online providers, credits, API-key/sign-in plugins and the template catalog. Phase B adds no npm dependency, remote font download or provider request, and does not change the app version or timeline behavior.
+
+
+### 2026-11-04: Video frame-picker transport
+
+User-requested follow-up: the Video timecode is editable, accepts full frame timecodes or shorter time entries, applies on Enter/blur and cancels on Escape. Play/Pause and Space control the private preview, with five-second skip buttons and Shift-click for ten seconds. Left/Right step exactly one frame; Shift steps one second. Typing uses normal caret navigation. Capture pauses and snaps to the displayed source frame. Source changes and leaving the room stop playback. Playback ignores the Edit marked range and preserves its playhead and design history.
+
+Files: `src/shared/designPlayback.js`, `FramePicker.jsx`, the Design frame-card/dialog timecode labels, scoped CSS, help and feature list. Validation: 507 passing tests, including seven timecode/boundary/fractional-rate regressions; production build; native Electron checks on a 70-second local square video. Manual checks cover invalid and canceled timecodes, 5/10-second skips, single-frame stepping from the panel and slider, typing caret behavior, playback/Space/pause, natural end/restart, source/room changes, history isolation and uncropped capture. See the follow-up in [Phase B QA](DESIGN-REDESIGN-B-QA.md).
+
+
+### 2026-11-04: Properties and content refinements
+
+User-requested follow-up: alignment/distribution and paragraph alignment use icon controls; Save Style moves into the section header; Save Color is centralized in Brand. Character appears first for text, with installed-font search and refresh. Local Font Access is allowed only for the main app window. Google Fonts can be opened and installed locally; no online font download provider is added.
+
+Layers has a draggable, remembered height divider and a compact automatic height. Edit Mask now shows the actual ellipse path. Raw text selections from both canvas editing and Properties keep their range while changing Character/Text Color; optional `textStyles` store word-level overrides through model normalization and rendering. Whole layer updates that property across the text while retaining other overrides. Font packaging reports include fonts used in word ranges.
+
+Library cards apply on a single click or Enter; double clicks insert once. Gradients and colors create independent background layers above older backgrounds. Dots and grids are native editable pattern layers with optional `pattern` data, color, size and X/Y spacing. Existing raster Dotted/Grid textures can be converted reversibly. Emoji now has 3,781 Unicode 16.0 entries with English names, categories and bounded grids. Unicode License V3 accompanies the bundled data.
+
+Validation is recorded in [Design usability QA](DESIGN-USABILITY-QA.md). No dependency or version change; Phase C providers remain pending.

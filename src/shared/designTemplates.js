@@ -1,12 +1,48 @@
 import { newDesign, newLayer, normalizeLayer, normalizeDesign, solidFill, validDesignSize, layerBounds } from './design.js';
 import { uid } from './model.js';
+import { longestDesignWord, parseDesignText } from './designText.js';
+import { styleTextRange, styleWholeTextLayer } from './designRichText.js';
 
 export const DESIGN_TEMPLATE_FORMAT='reccut-design-template';
 export const PLACEHOLDERS=['frame','cutout','title','subtitle','logo'];
+export const DESIGN_COLOR_ROLES=['background','title','highlight','accent','stroke'];
+export const DESIGN_TEMPLATE_TAGS=['Bold','Minimal','Face + Title','Tutorial','Before/After','List / Number','Podcast','Gaming','News'];
+export const DESIGN_PALETTES=[
+  {id:'midnight',name:'Midnight Gold',colors:['#111827','#ffffff','#ffd60a','#64d2ff','#000000']},
+  {id:'paper',name:'Paper and Ink',colors:['#f2ede3','#161820','#d43d40','#38675a','#ffffff']},
+  {id:'neon',name:'Neon Nights',colors:['#17112c','#f4eeff','#d65aff','#64f4ff','#080512']},
+  {id:'ocean',name:'Ocean Blue',colors:['#0b2545','#ffffff','#51e5ff','#58a6ff','#06162b']},
+  {id:'sunset',name:'Sunset',colors:['#391b35','#fff5db','#ffb347','#ff6179','#190d1b']},
+  {id:'forest',name:'Forest',colors:['#102a23','#f1f8e9','#b9ed76','#73d7af','#071a14']},
+  {id:'signal',name:'Red Signal',colors:['#171717','#ffffff','#ff453a','#ffd60a','#000000']},
+  {id:'lavender',name:'Soft Lavender',colors:['#ece8f7','#29203b','#8055bd','#cc71a2','#ffffff']},
+];
+export const DESIGN_FONT_PAIRS=[
+  {id:'system',name:'System Sans',title:'sans',body:'sans'},
+  {id:'editorial',name:'Editorial',title:'serif',body:'sans'},
+  {id:'technical',name:'Technical',title:'mono',body:'sans'},
+  {id:'rounded',name:'Friendly',title:'rounded',body:'sans'},
+  {id:'helvetica',name:'Helvetica and Georgia',title:'Helvetica Neue',body:'Georgia'},
+  {id:'impact',name:'Impact and Arial',title:'Impact',body:'Arial'},
+  {id:'avenir',name:'Avenir and Georgia',title:'Avenir Next',body:'Georgia'},
+];
 const copy=(value)=>structuredClone(value);
 const styleFields={text:['font','weight','size','tracking','lineHeight','uppercase','fill','highlight','stroke','shadows','box','outline'],shape:['fill','stroke','shadows','radius','outline'],image:['adjust','shadows','outline']};
 export function extractDesignStyle(layer,height){const style={};for(const key of styleFields[layer.type]||[])if(layer[key]!==undefined)style[key]=copy(layer[key]);if(layer.type==='text')style.size=layer.size/height;return style;}
-export function applyDesignStyle(layer,entry,height){if(entry.type!==layer.type)return layer;const style=copy(entry.style);if(layer.type==='text')style.size=Math.max(6,(style.size||0.13)*height);return normalizeLayer({...layer,...style,style:entry.id});}
+export function applyDesignStyle(layer,entry,height){
+  if(entry.type!==layer.type)return layer;
+  const style=copy(entry.style);
+  if(layer.type!=='text')return normalizeLayer({...layer,...style,style:entry.id});
+  style.size=Math.max(6,(style.size||0.13)*height);
+  // Applying a style replaces previous character overrides for its appearance fields.
+  // Text, geometry and explicit *word* highlights remain the user's own.
+  let next=styleWholeTextLayer(layer,{...style,style:entry.id});
+  if(style.highlight&&JSON.stringify(style.highlight)!==JSON.stringify(next.fill)&&!parseDesignText(layer.text).some(run=>run.highlight)){
+    const word=longestDesignWord(layer.text);
+    if(word)next=styleTextRange(next,word.start,word.end,{fill:style.highlight});
+  }
+  return normalizeLayer(next);
+}
 const textStyle=(id,name,style)=>({id:`builtin:${id}`,name,type:'text',style:{font:'sans',weight:800,size:0.14,tracking:0,lineHeight:1.05,uppercase:false,fill:solidFill(),highlight:solidFill('#ff453a'),stroke:null,shadows:[],box:null,outline:null,...style}});
 export const BUILTIN_DESIGN_STYLES=[
   textStyle('yellow','Bold Yellow Outline',{fill:solidFill('#ffe600'),stroke:{fill:solidFill('#000000'),width:12,align:'outside',dash:'solid',join:'round'},uppercase:true}),
@@ -52,11 +88,13 @@ export function validateDesignTemplate(data){
       if(!raw.data&&!['frame','cutout','logo'].includes(raw.placeholder))throw new Error('Image layers need a placeholder or a small embedded decoration.');
     }
     const l=normalizeLayer(raw);
+    if(DESIGN_COLOR_ROLES.includes(raw.colorRole))l.colorRole=raw.colorRole;else delete l.colorRole;
     l.placeholder=PLACEHOLDERS.includes(raw.placeholder)?raw.placeholder:null;
     const a=raw.anchor||{};l.anchor={x:['left','center','right','stretch'].includes(a.x)?a.x:'center',y:['top','middle','bottom','stretch'].includes(a.y)?a.y:'middle'};
     layers.push(l);
   }
-  return {format:DESIGN_TEMPLATE_FORMAT,version:1,id:typeof data.id==='string'?data.id:uid(),name:String(data.name||'Custom Template').trim().slice(0,160)||'Custom Template',ratio:['16:9','9:16','1:1'].includes(data.ratio)?data.ratio:d.width>d.height?'16:9':d.width<d.height?'9:16':'1:1',design:{...normalizeDesign({...d,layers}),layers},warnings};
+  const tags=Array.isArray(data.tags)?[...new Set(data.tags.filter(t=>typeof t==='string').map(t=>t.trim().slice(0,60)).filter(Boolean))].slice(0,20):[];
+  return {format:DESIGN_TEMPLATE_FORMAT,version:1,id:typeof data.id==='string'?data.id:uid(),name:String(data.name||'Custom Template').trim().slice(0,160)||'Custom Template',tags,ratio:['16:9','9:16','1:1'].includes(data.ratio)?data.ratio:d.width>d.height?'16:9':d.width<d.height?'9:16':'1:1',design:{...normalizeDesign({...d,layers}),layers},warnings};
 }
 function anchorLayer(layer,source,width,height){
   const k=Math.min(width/source.width,height/source.height),a=layer.anchor||{x:'center',y:'middle'};
@@ -87,17 +125,18 @@ export function applyTemplate(input,{width=input.design.width,height=input.desig
   }
   return d;
 }
-export function templateFromDesign(design,{name=design.name,placeholders={}}={}){
+export function templateFromDesign(design,{name=design.name,placeholders={},colorRoles={},tags=[]}={}){
   let titleUsed=false;
   const layers=design.layers.map(l=>{
     const next=copy(l);delete next.style;
+    next.colorRole=Object.hasOwn(colorRoles,l.id)?colorRoles[l.id]||null:l.colorRole||null;
     next.anchor=l.anchor||{x:l.w>design.width*0.8?'stretch':l.x+l.w/2>design.width*0.6?'right':l.x+l.w/2<design.width*0.4?'left':'center',y:l.h>design.height*0.8?'stretch':l.y+l.h/2>design.height*0.6?'bottom':l.y+l.h/2<design.height*0.4?'top':'middle'};
     next.placeholder=placeholders[l.id]||l.placeholder||(l.type==='image'?(l.cutout?.enabled?'cutout':'frame'):l.type==='text'?(!titleUsed?'title':'subtitle'):null);
     if(l.type==='text'){titleUsed=true;next.text=next.placeholder==='title'?'Title':next.placeholder==='subtitle'?'Subtitle':l.text;}
     if(l.type==='image'){next.asset=null;next.media=null;next.cutout=null;delete next.path;delete next.src;delete next.url;}
     return next;
   });
-  return validateDesignTemplate({format:DESIGN_TEMPLATE_FORMAT,version:1,name,design:{...design,layers}});
+  return validateDesignTemplate({format:DESIGN_TEMPLATE_FORMAT,version:1,name,tags,design:{...design,layers}});
 }
 function makeTemplate(id,name,ratio,variant){
   const [width,height]=ratio==='16:9'?[1280,720]:ratio==='9:16'?[1080,1920]:[1080,1080],d=newDesign({name,width,height}),colors=['#ffd60a','#ff453a','#64d2ff','#bf5af2','#30d158','#ff9f0a'];
@@ -111,8 +150,9 @@ function makeTemplate(id,name,ratio,variant){
   const bar=shape({name:'Accent',x:pad,y:height*0.06,w:mode===2?width-pad*2:width*0.14,h:height*0.015,fill:solidFill(accent),anchor:{x:mode===2?'stretch':'left',y:'top'}});
   const logo=newLayer('image',{name:'Logo',placeholder:'logo',x:width*0.84,y:height*0.045,w:width*0.105,h:height*0.09,fit:'contain',anchor:{x:'right',y:'top'}});
   d.layers=[frame,...(mode===4?[shape({name:'Paper',x:0,y:0,w:width,h:height,fill:{...solidFill('#f2ede3'),alpha:0.88},anchor:{x:'stretch',y:'stretch'}})]:[]),...(mode===0||mode===3?[person]:[]),bar,title,subtitle,logo];
-  d.layers.forEach((l,i)=>{l.id=`${id}-${i}`;});
-  return validateDesignTemplate({format:DESIGN_TEMPLATE_FORMAT,version:1,id,name,ratio,design:d});
+  d.layers.forEach((l,i)=>{l.id=`${id}-${i}`;if(l.type!=='image')l.colorRole=l.placeholder==='title'?'title':l.placeholder==='subtitle'?'accent':l.name==='Paper'?'background':'highlight';});
+  const tags=[['Bold','Face + Title','Podcast'],['Minimal','Tutorial'],['News','List / Number'],['Bold','Gaming','Face + Title'],['Minimal','Before/After'],['Tutorial']][mode];
+  return validateDesignTemplate({format:DESIGN_TEMPLATE_FORMAT,version:1,id,name,ratio,tags,design:d});
 }
 const wideNames=['Presenter Focus','Clean Tutorial','Top Story','Neon Lesson','Editorial','Code Walkthrough','Quick Guide','Bold Interview','Product Reveal','Creative Tools','Paper Notes','Developer Update'];
 const tallNames=['Story Focus','Daily Lesson','Top Tip','Neon Short','Personal Story','Code Short'];

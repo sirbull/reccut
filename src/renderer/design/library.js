@@ -17,13 +17,14 @@ export function saveStyle(name){const s=styleDialog.value;if(!s||!name.trim())re
 // Explicit drop targets never fall back to unrelated selected layers.
 function styleTargets(style,d,target){if(target)return new Set(target.type===style.type&&!target.locked?[target.id]:[]);const picked=selectedLayers().filter(l=>l.type===style.type);return new Set((selection.value.length?picked:d.layers.filter(l=>l.type===style.type&&!l.locked)).map(l=>l.id));}
 export function applyStyle(style,target=null){clearLibraryPreview();let d=currentDesign.value;if(!d){if(style.type==='image'){toast('Import an image before applying an image style.');return;}d=newDesign({name:`${project.value.name} Thumbnail`});const l=newLayer(style.type,{x:d.width*.1,y:d.height*.3,w:d.width*.8,h:d.height*.4,text:project.value.name,size:d.height*.14});d.layers=[applyDesignStyle(l,style,d.height)];designCommit(p=>{p.designs[d.id]=d});openDesign(d.id);selection.value=[l.id];return;}const ids=styleTargets(style,d,target);if(target&&!ids.size){toast('Drop this style on an unlocked layer of the same type.');return;}changeDesign(d=>{for(const l of d.layers)if(ids.has(l.id))Object.assign(l,applyDesignStyle(l,style,d.height));});}
-export const libraryPreview=signal(null),selectedLibraryCard=signal(null);
+export const libraryPreview=signal(null),libraryPreviewImages=signal({}),selectedLibraryCard=signal(null);
 let previewBase=null,previewSelection=null,previewVersion=0,dragged=null;
-export function clearLibraryPreview(){previewVersion++;previewBase=null;previewSelection=null;libraryPreview.value=null;}
-export function showLibraryPreview(design){previewVersion++;previewBase=currentDesign.value;previewSelection=selection.value;libraryPreview.value=design;}
+export function clearLibraryPreview(){previewVersion++;previewBase=null;previewSelection=null;libraryPreview.value=null;libraryPreviewImages.value={};}
+export function showLibraryPreview(design,images={}){previewVersion++;previewBase=currentDesign.value;previewSelection=selection.value;libraryPreviewImages.value=images;libraryPreview.value=design;}
+export function beginLibraryPreview(){const version=++previewVersion,base=currentDesign.value,epoch=projectEpoch.value;return()=>version===previewVersion&&base===currentDesign.value&&epoch===projectEpoch.value;}
 export function previewStyle(style){let d=currentDesign.value;if(!d){if(style.type==='image')return;d=newDesign({name:`${project.value.name} Thumbnail`});d.layers=[newLayer(style.type,{x:d.width*.1,y:d.height*.3,w:d.width*.8,h:d.height*.4,text:project.value.name,size:d.height*.14})];}const ids=styleTargets(style,d);showLibraryPreview({...d,layers:d.layers.map(l=>ids.has(l.id)?applyDesignStyle(l,style,d.height):l)});}
 export function previewTemplate(template,size){const current=currentDesign.value;showLibraryPreview(applyTemplate(template,{...templateContext(),width:size==='current'&&current?current.width:template.design.width,height:size==='current'&&current?current.height:template.design.height}));}
-export function libraryImage(l){return l.asset==='preview-logo'?getImageAtPath(brandLogo.value?.path):l._libraryPath?getImageAtPath(l._libraryPath):getImage(l);}
+export function libraryImage(l){return libraryPreviewImages.value[l.asset]|| (l.asset==='preview-logo'?getImageAtPath(brandLogo.value?.path):l._libraryPath?getImageAtPath(l._libraryPath):getImage(l));}
 export const isLibraryDrag=e=>Array.from(e.dataTransfer?.types||[]).includes('application/x-reccut-library');
 export function startLibraryDrag(e,apply){dragged={apply,epoch:projectEpoch.value,designId:currentDesign.value?.id};e.dataTransfer.setData('application/x-reccut-library','');e.dataTransfer.effectAllowed='copy';}
 export function endLibraryDrag(){dragged=null;clearLibraryPreview();}
@@ -74,7 +75,7 @@ export async function createFromTemplate(template,size='template',{context:overr
   return d;
 }
 export function openSaveTemplate(){const d=currentDesign.value;if(d)templateDialog.value={design:d,name:d.name};}
-export async function saveTemplate(name,roles){const s=templateDialog.value;if(!s||!name.trim())return;const template=templateFromDesign(s.design,{name:name.trim(),placeholders:roles});const saved=await window.api.saveDesignTemplate(template);userTemplates.value=[...userTemplates.value,saved];templateDialog.value=null;toast(`Saved template: ${saved.name}`);}
+export async function saveTemplate(name,roles,colorRoles={},tags=[]){const s=templateDialog.value;if(!s||!name.trim())return;const template=templateFromDesign(s.design,{name:name.trim(),placeholders:roles,colorRoles,tags});const saved=await window.api.saveDesignTemplate(template);userTemplates.value=[...userTemplates.value,saved];templateDialog.value=null;toast(`Saved template: ${saved.name}`);}
 export async function importTemplate(){
   const path=await window.api.openFileDialog({title:'Import Design Template',filters:[{name:'Reccut Design Template',extensions:['reccut-design-template']}]});if(!path)return;
   let raw;try{raw=JSON.parse(await window.api.readText(path));}catch{throw new Error('The template file is not valid JSON.');}

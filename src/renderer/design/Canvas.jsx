@@ -3,11 +3,14 @@ import { hitTest, layerBounds, layerPoint, selectionBounds, resizeLayer, rotateP
 import { libraryDropTarget } from '../../shared/designLibrary.js';
 import { canvasCrop,showSafeZones } from './tools.js';
 import { drawDesign, imageFilter } from '../../shared/designRender.js';
+import { replaceStyledText } from '../../shared/designRichText.js';
+import { rememberTextSelection } from './textSelection.js';
 import { designFont, layoutDesignText } from '../../shared/designText.js';
 import { currentDesign, selection, selectLayer, tool, shapeType, zoom, viewScale, pan, setZoom, addText, beginDesignTransient, updateDesignTransient, endDesignTransient } from './store.js';
 import { imageVersion, loadDesignImages, requestPlace } from './assets.js';
 import { fontAvailable, fontVersion } from './fonts.js';
 import { refineSession, brushSettings, paintRefine, saveRefineStroke, stopRefine, startRefine, navigateRefineHistory } from './refine.js';
+import { shapePath } from '../../shared/shapes.js';
 import { maskEditing } from './masks.js';
 import { cropSession, startCrop, finishCrop } from './crop.js';
 import { cropViewport, moveCropImage, resizeCrop } from '../../shared/designCrop.js';
@@ -104,7 +107,7 @@ export function DesignCanvas({ active }) {
       }
       if (maskId) {
         const l=d.layers.find(l=>l.id===maskId);
-        if(l?.mask){const points=l.mask.points.map(([x,y])=>layerPoint(l,(l.flipX?1-x:x)*l.w,(l.flipY?1-y:y)*l.h));ctx.strokeStyle='#ffbf47';ctx.lineWidth=1.5/scale;ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.stroke();for(const p of points){ctx.fillStyle='#ffbf47';ctx.fillRect(p.x-5/scale,p.y-5/scale,10/scale,10/scale);}}
+        if(l?.mask){const points=l.mask.points.map(([x,y])=>layerPoint(l,(l.flipX?1-x:x)*l.w,(l.flipY?1-y:y)*l.h));ctx.strokeStyle='#ffbf47';ctx.lineWidth=1.5/scale;ctx.save();ctx.translate(l.x+l.w/2,l.y+l.h/2);ctx.rotate(l.rotation*Math.PI/180);ctx.scale(l.flipX?-1:1,l.flipY?-1:1);ctx.translate(-l.w/2,-l.h/2);const local=l.mask.points.map(([x,y])=>[x*l.w,y*l.h]),xs=local.map(p=>p[0]),ys=local.map(p=>p[1]),x=Math.min(...xs),y=Math.min(...ys),w=Math.max(...xs)-x,h=Math.max(...ys)-y;ctx.stroke(shapePath(l.mask.shape==='polygon'?{shape:'path',pts:local}:{shape:l.mask.shape,cx:x+w/2,cy:y+h/2,w,h,rot:0},l.mask.smooth));ctx.restore();for(const p of points){ctx.fillStyle='#ffbf47';ctx.fillRect(p.x-5/scale,p.y-5/scale,10/scale,10/scale);}}
       }
       if(refine&&brushHover){ctx.strokeStyle='#ffffff';ctx.lineWidth=1/scale;ctx.beginPath();ctx.arc(brushHover.x,brushHover.y,brushSettings.value.size/2,0,Math.PI*2);ctx.stroke();}
       ctx.strokeStyle = '#ff45d3'; ctx.setLineDash([4 / scale, 4 / scale]);
@@ -242,7 +245,7 @@ export function DesignCanvas({ active }) {
       <canvas class="dz-canvas" ref={canvas} style={{ width: size.w, height: size.h }} />
       {text && <textarea ref={textRef} class="dz-text-edit" value={text.text} spellcheck={false}
         style={{ left: offset.x + text.x * scale, top: offset.y + text.y * scale, width: text.w, height: text.h, transformOrigin: '0 0', transform: `scale(${scale}) translate(${text.w / 2}px, ${text.h / 2}px) rotate(${text.rotation}deg) scale(${text.flipX ? -1 : 1}, ${text.flipY ? -1 : 1}) translate(${-text.w / 2}px, ${-text.h / 2}px)`, font: designFont(text, textLayout?.size), lineHeight: text.lineHeight, textAlign: text.align, color: text.fill?.color || '#ffffff', textTransform: text.uppercase ? 'uppercase' : 'none', paddingTop: text.valign === 'top' ? 0 : Math.max(0, (text.h - (textLayout?.height || 0)) / (text.valign === 'middle' ? 2 : 1)) }}
-        onPointerDown={(e) => e.stopPropagation()} onInput={(e) => { const value = e.currentTarget.value; updateDesignTransient((p) => { const l = p.designs[d.id]?.layers.find((l) => l.id === editing); if (l) l.text = value; }); }} onBlur={finishText}
+        onPointerDown={(e) => e.stopPropagation()} onInput={(e) => { const value = e.currentTarget.value; updateDesignTransient((p) => { const l = p.designs[d.id]?.layers.find((l) => l.id === editing); if (l) Object.assign(l,replaceStyledText(l,value)); }); }} onBlur={finishText} onSelect={e=>rememberTextSelection(text,e.currentTarget)}
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') { e.preventDefault(); finishText(); host.current.focus(); } }} />}
     </div>
   );

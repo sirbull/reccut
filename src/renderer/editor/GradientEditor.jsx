@@ -1,16 +1,25 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { Button, NumberField, Row, Select } from '../ui.jsx';
 import {
-  MAX_GRADIENT_POINTS, clampGradient, gradientParams, gradientColorAt, gradientStopColor, gradientHex,
+  MAX_GRADIENT_POINTS, clampGradient, gradientParams, gradientColorAt, gradientStopColor, gradientHex, gradientAngle, gradientAtAngle,
 } from '../../shared/gradient.js';
 import { renderGradient } from '../../shared/gradientRender.js';
 
 export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onInput, onCommit, onCancel, renderColors }) {
   const p = gradientParams(params), free = p.mode === 'freeform';
   const [selected, setSelected] = useState(p.stops[0].id);
-  const preview = useRef(null), drag = useRef(null);
+  const [stopDrag, setStopDrag] = useState(null);
+  const preview = useRef(null), drag = useRef(null), editor = useRef(null), focusNext = useRef(null), suppressClick = useRef(false), angleBase = useRef(null);
   const items = free ? p.points : p.stops, field = free ? 'points' : 'stops';
   const active = items.find((s) => s.id === selected) || items[0];
+  const angle = Math.round(gradientAngle(p, aspect) * 10) / 10 % 360;
+  useLayoutEffect(() => {
+    const d = drag.current, id = focusNext.current || d?.id;
+    if (!id) return;
+    // Sorting stops can move a focused DOM node. Restore focus to the same color.
+    const button = [...editor.current.querySelectorAll('[data-id]')].find(el => el.dataset.id === id && (focusNext.current || el.dataset.gradientHandle === d?.kind));
+    if (button) { button.focus({ preventScroll: true }); focusNext.current = null; }
+  }, [params, selected]);
   // The preview and its handles retain the source aspect ratio.
   const width = Math.max(1, Math.min(360, 240 * aspect)), height = Math.max(1, Math.min(240, width / aspect));
   useLayoutEffect(() => {
@@ -25,6 +34,14 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
   const replace = (id, values, live = false) => (live ? onInput : onChange)({
     [field]: items.map((s) => s.id === id ? { ...s, ...values } : s),
   });
+  const select = (id) => { setSelected(id); focusNext.current = id; };
+  const remove = (id = active.id) => {
+    if (items.length <= 2) return;
+    const index = items.findIndex(s => s.id === id), remaining = items.filter(s => s.id !== id);
+    if (index < 0) return;
+    select(remaining[Math.min(index, remaining.length - 1)].id);
+    onChange({ [field]: remaining });
+  };
   const add = (x, y) => {
     if (items.length >= MAX_GRADIENT_POINTS) return;
     const id = crypto.randomUUID();
@@ -35,7 +52,7 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
       const color = gradientHex(gradientStopColor(p.stops, x));
       onChange({ stops: [...p.stops, { id, position: x, color }] });
     }
-    setSelected(id);
+    select(id);
   };
   const coords = (e) => {
     const box = e.currentTarget.getBoundingClientRect();
@@ -43,11 +60,13 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
   };
   const pointerDown = (e) => {
     const handle = e.target.closest('[data-gradient-handle]');
+    suppressClick.current = !!handle;
     if (!handle || e.button !== 0 || drag.current) return;
     e.preventDefault();
+    handle.focus({ preventScroll: true });
     const kind = handle.dataset.gradientHandle, id = handle.dataset.id;
     if (id) setSelected(id);
-    drag.current = { kind, id, p, pointerId: e.pointerId, clientX: e.clientX, box: e.currentTarget.getBoundingClientRect() };
+    drag.current = { kind, id, p, pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, box: e.currentTarget.getBoundingClientRect(), target: e.currentTarget };
     onStart();
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -56,7 +75,11 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
     if (!d || e.pointerId !== d.pointerId) return;
     const xy = coords(e);
     if (d.kind === 'point') onInput({ points: d.p.points.map((s) => s.id === d.id ? { ...s, ...xy } : s) });
-    else if (d.kind === 'stop') onInput({ stops: d.p.stops.map((s) => s.id === d.id ? { ...s, position: xy.x } : s) });
+    else if (d.kind === 'stop') {
+      d.remove = d.p.stops.length > 2 && e.clientY > d.box.bottom + 28;
+      setStopDrag({ id: d.id, offset: Math.max(0, e.clientY - d.clientY), remove: d.remove });
+      onInput({ stops: d.p.stops.map((s) => s.id === d.id ? { ...s, position: xy.x } : s) });
+    }
     else if (d.kind === 'spread') {
       const delta = (e.clientX - d.clientX) / Math.min(d.box.width, d.box.height);
       onInput({ points: d.p.points.map((s) => s.id === d.id ? { ...s, radius: clampGradient(s.radius + delta, 0.01, 2) } : s) });
@@ -69,8 +92,16 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
     const d = drag.current;
     if (!d || e.pointerId !== d.pointerId) return;
     drag.current = null;
+    setStopDrag(null);
     if (cancel) onCancel();
-    else onCommit();
+    else {
+      if (d.kind === 'stop' && d.p.stops.length > 2 && (e.type === 'pointerup' ? e.clientY > d.box.bottom + 28 : d.remove)) {
+        const index = d.p.stops.findIndex(s => s.id === d.id), remaining = d.p.stops.filter(s => s.id !== d.id);
+        select(remaining[Math.min(index, remaining.length - 1)].id);
+        onInput({ stops: remaining });
+      }
+      onCommit();
+    }
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   };
   const pointerEvents = {
@@ -79,9 +110,19 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
   };
   const handleKey = (e, kind, item) => {
     e.stopPropagation();
+    if (e.key === 'Escape' && drag.current) {
+      e.preventDefault();
+      const d = drag.current; drag.current = null; setStopDrag(null); onCancel();
+      if (d.target.hasPointerCapture(d.pointerId)) d.target.releasePointerCapture(d.pointerId);
+      return;
+    }
+    if (item && ['point', 'stop'].includes(kind) && ['Backspace', 'Delete'].includes(e.key)) {
+      e.preventDefault(); if (!drag.current) remove(item.id); return;
+    }
     const delta = e.shiftKey ? 0.05 : 0.01;
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
     e.preventDefault();
+    if (kind === 'stop') focusNext.current = item.id;
     const axis = ['ArrowLeft', 'ArrowRight'].includes(e.key) ? 'x' : 'y';
     const step = ['ArrowLeft', 'ArrowUp'].includes(e.key) ? -delta : delta;
     if (kind === 'point') replace(item.id, { [axis]: clampGradient(item[axis] + step) });
@@ -91,11 +132,11 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
     else onChange({ [kind]: { ...p[kind], [axis]: clampGradient(p[kind][axis] + step) } });
   };
   const handle = (kind, x, y, label, item, extra = '') => (
-    <button type="button" class={`gradient-handle ${extra}${item?.id === active.id ? ' selected' : ''}`}
+    <button key={`${kind}:${item?.id || kind}`} type="button" class={`gradient-handle ${extra}${item?.id === active.id ? ' selected' : ''}${kind === 'stop' && stopDrag?.id === item.id && stopDrag.remove ? ' removing' : ''}`}
       data-gradient-handle={kind} data-id={item?.id}
-      style={{ left: `${x * 100}%`, top: `${y * 100}%`, '--point-color': item?.color || '#fff' }}
+      style={{ left: `${x * 100}%`, top: `calc(${y * 100}% + ${kind === 'stop' && stopDrag?.id === item.id ? stopDrag.offset : 0}px)`, '--point-color': item?.color || '#fff' }}
       title={label} aria-label={label} aria-pressed={item ? item.id === active.id : undefined}
-      onClick={() => item && setSelected(item.id)} onKeyDown={(e) => handleKey(e, kind, item)} />
+      onClick={() => item && setSelected(item.id)} onFocus={() => item && setSelected(item.id)} onKeyDown={(e) => handleKey(e, kind, item)} />
   );
   const numeric = (label, value, change, min = 0, max = 100) => (
     <Row label={label}><NumberField value={value * 100} min={min} max={max} step={1} unit="%"
@@ -103,10 +144,17 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
   );
   const short = Math.min(width, height);
   return (
-    <div class="gradient-editor" data-gradient-mode={p.mode}>
+    <div ref={editor} class="gradient-editor" data-gradient-mode={p.mode}>
       <Row label="Type"><Select value={p.mode} options={[
         { value: 'linear', label: 'Linear' }, { value: 'radial', label: 'Radial' }, { value: 'freeform', label: 'Freeform' },
       ]} onChange={(mode) => onChange({ mode })} /></Row>
+      {p.mode === 'linear' && <Row label="Angle"><div class="gradient-angle">
+        <NumberField value={angle} min={0} max={360} precision={1} unit="°" onStart={() => { angleBase.current = p; onStart(); }}
+          onChange={value => onInput(gradientAtAngle(angleBase.current || p, value, aspect))} onCommit={() => { angleBase.current = null; onCommit(); }} />
+        <Select value={angle % 45 === 0 ? String(angle) : ''} options={[
+          { value: '', label: 'Presets…' }, ...[0,45,90,135,180,225,270,315].map(value => ({value:String(value),label:`${value}°`}))
+        ]} onChange={value => { if (value !== '') onChange(gradientAtAngle(p, Number(value), aspect)); }} />
+      </div></Row>}
       <div class="gradient-preview" style={{ aspectRatio: String(aspect), width, maxWidth: 'calc(100% - 18px)', maxHeight: 240 }} {...pointerEvents}
         onDblClick={(e) => { if (free && !e.target.closest('button')) { const xy = coords(e); add(xy.x, xy.y); } }}>
         <canvas ref={preview} aria-label="Gradient preview" />
@@ -130,12 +178,10 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
       </div>
       {!free && <div class="gradient-stop-track" {...pointerEvents}
         style={{ background: `linear-gradient(to right, ${p.stops.map((s) => `${s.color} ${s.position * 100}%`).join(', ')})` }}
-        onDblClick={(e) => { if (!e.target.closest('button')) add(coords(e).x); }}>
+        onClick={(e) => { const blocked = suppressClick.current; suppressClick.current = false; if (!blocked && e.detail === 1 && !e.target.closest('button')) add(coords(e).x); }}>
         {p.stops.map((s, i) => handle('stop', s.position, 0.5, `Color stop ${i + 1}`, s))}
       </div>}
-      <p class="hint">{free ? 'Double-click to add a point. Drag points to move; drag the square to adjust spread.' : 'Drag the handles to shape the gradient. Double-click the color bar to add a stop.'}</p>
-      <Row label={free ? 'Point' : 'Stop'}><Select value={active.id}
-        options={items.map((s, i) => ({ value: s.id, label: `${i + 1} · ${s.color.toUpperCase()}` }))} onChange={setSelected} /></Row>
+      <p class="hint">{free ? 'Double-click to add a point. Drag points to move; drag the square to adjust spread.' : 'Click the color bar to add a color. Drag a color down or press Backspace to remove it. Keep at least two colors.'}</p>
       {renderColors?.(active.color,(color)=>replace(active.id,{color}))}
       <Row label="Color"><input type="color" class="color" value={active.color} aria-label="Selected gradient color"
         onInput={(e) => replace(active.id, { color: e.currentTarget.value }, true)}
@@ -162,7 +208,7 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
             add(at);
           }
         }}>Add {free ? 'point' : 'stop'}</Button>
-        <Button class="small" disabled={items.length <= 2} onClick={() => onChange({ [field]: items.filter((s) => s.id !== active.id) })}>
+        <Button class="small" disabled={items.length <= 2} onClick={() => remove()}>
           Remove {free ? 'point' : 'stop'}
         </Button>
       </div>

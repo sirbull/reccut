@@ -20,6 +20,8 @@ import {
   tool,
   undo,
   sequenceSettingsOpen,
+  editingGroup,
+  exitGroup,
 } from './editor/store.js';
 import * as commands from './editor/commands.js';
 import * as playback from './editor/playback.js';
@@ -66,6 +68,10 @@ function toggleSignal(sig, pref, on, off) {
 function deselectAll() {
   if (document.fullscreenElement) {
     toggleViewerFullscreen();
+    return;
+  }
+  if (editingGroup.value) {
+    exitGroup();
     return;
   }
   selection.value = [];

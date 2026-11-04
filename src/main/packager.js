@@ -228,7 +228,7 @@ async function writePackage({ project, files, designFiles = [], dest, removed },
     ...log.map((l) => `  ${l}`),
   ];
   if (designLog.length) lines.push('', 'Design files:', ...designLog.map((l) => `  ${l}`));
-  const fonts = [...new Set(Object.values(p.designs || {}).flatMap((d) => (d.layers || []).filter((l) => l.type === 'text' && l.font && !['sans', 'serif', 'mono', 'rounded'].includes(l.font)).map((l) => l.font)))].sort();
+  const fonts = [...new Set(Object.values(p.designs || {}).flatMap((d) => (d.layers || []).filter(l=>l.type==='text').flatMap(l=>[l.font,...(l.textStyles||[]).map(r=>r.style?.font)]).filter(font=>font&&!['sans','serif','mono','rounded'].includes(font))))].sort();
   if (fonts.length) lines.push('', 'Fonts used in designs:', ...fonts.map((f) => `  ${f}`), 'Fonts are not copied. Install them on the other computer.');
   if (removed) {
     lines.push('', 'Removed from the packaged project (the original project is not changed):');

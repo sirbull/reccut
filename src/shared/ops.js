@@ -231,6 +231,26 @@ export function groupMembers(project, id) {
   return Object.values(project.clips).filter((c) => c.group === g).map((c) => c.id);
 }
 
+// Rediger innholdet som vanlige klipp, uten at gruppens tidskobling tar med de andre.
+// Vanlig magnetisk redigering utenfor gruppen og eksplisitte PiP-koblinger beholdes.
+export function editGroupContents(project, group, ids, edit) {
+  if (!group) return edit(project);
+  const selected = new Set(ids);
+  const members = Object.values(project.clips).filter((c) => c.group === group).map((c) => ({ id: c.id, start: c.start }));
+  for (const { id } of members) delete project.clips[id].group;
+  try {
+    return edit(project);
+  } finally {
+    const remaining = members.filter(({ id }) => project.clips[id]);
+    for (const { id, start } of remaining) {
+      const c = project.clips[id];
+      if (remaining.length > 1) c.group = group;
+      if (!selected.has(id) && c.lane !== 0) c.start = start;
+    }
+    updateDuration(project);
+  }
+}
+
 // Klippet i hovedsporet som styrer gruppen, eller null om alle er frie.
 export function groupLead(project, ids) {
   const groups = new Set(ids.map((id) => project.clips[id]?.group));

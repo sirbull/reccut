@@ -1049,7 +1049,7 @@ app.whenReady().then(async () => {
   if (!app.isPackaged) app.dock?.setIcon(path.join(__dirname, '../../assets/icon-mac.png'));
   protocol.handle('media', serveMedia);
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(['media', 'display-capture', 'mediaKeySystem', 'notifications', 'fullscreen'].includes(permission));
+    callback(['media', 'display-capture', 'mediaKeySystem', 'notifications', 'fullscreen'].includes(permission) || permission==='local-fonts'&&_wc===win?.webContents);
   });
 
   // getDisplayMedia i vinduet får skjermen som er valgt i appen, uten systemvelger.

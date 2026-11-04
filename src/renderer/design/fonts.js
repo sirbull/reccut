@@ -20,7 +20,8 @@ export function fontAvailable(family) {
   }
   known.set(family, available); return available;
 }
-const refresh = () => { known.clear(); clearDesignRenderCache(); fontVersion.value++; };
+export const refreshDesignFonts = () => { known.clear(); clearDesignRenderCache(); fontVersion.value++; };
+const refresh=refreshDesignFonts;
 if (typeof document !== 'undefined' && document.fonts) {
   document.fonts.ready.then(refresh);
   document.fonts.addEventListener('loadingdone', refresh);
