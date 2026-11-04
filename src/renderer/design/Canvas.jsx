@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { hitTest, layerBounds, layerPoint, selectionBounds, resizeLayer, rotatePoint, snapMove, snapRotation, newLayer, groupSelectionIds, rotateDesignLayers, scaleDesignLayers, designSafeZones } from '../../shared/design.js';
+import { libraryDropTarget } from '../../shared/designLibrary.js';
 import { canvasCrop,showSafeZones } from './tools.js';
 import { drawDesign, imageFilter } from '../../shared/designRender.js';
 import { designFont, layoutDesignText } from '../../shared/designText.js';
 import { currentDesign, selection, selectLayer, tool, shapeType, zoom, viewScale, pan, setZoom, addText, beginDesignTransient, updateDesignTransient, endDesignTransient } from './store.js';
-import { imageVersion, getImage, loadDesignImages, requestPlace } from './assets.js';
+import { imageVersion, loadDesignImages, requestPlace } from './assets.js';
 import { fontAvailable, fontVersion } from './fonts.js';
 import { refineSession, brushSettings, paintRefine, saveRefineStroke, stopRefine, startRefine, navigateRefineHistory } from './refine.js';
 import { maskEditing } from './masks.js';
@@ -12,7 +13,7 @@ import { cropSession, startCrop, finishCrop } from './crop.js';
 import { cropViewport, moveCropImage, resizeCrop } from '../../shared/designCrop.js';
 import { toast } from '../ui.jsx';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
-import { libraryPreview, isLibraryDrag, dropLibraryItem } from './library.js';
+import { libraryPreview, libraryImage, clearLibraryPreview, isLibraryDrag, dropLibraryItem } from './library.js';
 
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 const POSITIONS = [[0, 0], [0.5, 0], [1, 0], [1, 0.5], [1, 1], [0.5, 1], [0, 1], [0, 0.5]];
@@ -23,14 +24,16 @@ function handlesFor(box, scale) {
 export function DesignCanvas({ active }) {
   const crop = cropSession.value, refine = refineSession.value, maskId = maskEditing.value, canvasDraft=canvasCrop.value, safe=showSafeZones.value;
   const [brushHover,setBrushHover] = useState(null);
-  const d = libraryPreview.value || currentDesign.value, selected = selection.value, z = zoom.value, p = pan.value, version = `${imageVersion.value}:${fontVersion.value}`;
   const host = useRef(null), canvas = useRef(null), drag = useRef(null), textRef = useRef(null), space = useRef(false), latest = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 }), [guides, setGuides] = useState([]), [marquee, setMarquee] = useState(null), [editing, setEditing] = useState(null);
-  const scale = d ? (z === 'fit' ? Math.max(0.001, Math.min((size.w - 100) / d.width, (size.h - 100) / d.height)) : z) : 1;
+  const base=currentDesign.value, preview=!editing&&!crop&&!refine&&!canvasDraft?libraryPreview.value:null;
+  const d=preview||base,selected=selection.value,z=zoom.value,p=pan.value,version=`${imageVersion.value}:${fontVersion.value}`;
+  const scale = d ? (preview || z === 'fit' ? Math.max(0.001, Math.min((size.w - 100) / d.width, (size.h - 100) / d.height)) : z) : 1;
   const offset = { x: (size.w - (d?.width || 0) * scale) / 2 + p.x, y: (size.h - (d?.height || 0) * scale) / 2 + p.y };
   latest.current = { scale, offset, d, z };
   useEffect(() => { if (active) viewScale.value = scale; }, [active, scale]);
-  const picked = d?.layers.filter((l) => selected.includes(l.id) && !l.locked && !l.hidden) || [];
+  useEffect(()=>{if(libraryPreview.value&&(editing||crop||refine||canvasDraft))clearLibraryPreview();},[libraryPreview.value,editing,crop,refine,canvasDraft]);
+  const picked = !preview&&d?.layers.filter((l) => selected.includes(l.id) && !l.locked && !l.hidden) || [];
   const box = picked.length === 1 ? picked[0] : picked.length ? { ...selectionBounds(picked), rotation: 0 } : null;
   const point = (e) => {
     const rect = host.current.getBoundingClientRect();
@@ -66,7 +69,7 @@ export function DesignCanvas({ active }) {
   useEffect(() => {
     setEditing(null); drag.current = null; setGuides([]); setMarquee(null);
     return () => endDesignTransient();
-  }, [d?.id]);
+  }, [base?.id]);
   useEffect(() => { if (active && d) loadDesignImages(d); }, [active, d]);
   useLayoutEffect(() => {
     if (!active || !d || !canvas.current) return;
@@ -77,7 +80,7 @@ export function DesignCanvas({ active }) {
       const ctx = cv.getContext('2d');
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0); ctx.clearRect(0, 0, size.w, size.h);
       ctx.save(); ctx.translate(offset.x, offset.y);
-      drawDesign(ctx, d, (l)=>refine&&l.asset===refine.asset?refine.canvas:getImage(l), { scale, fontAvailable, hideLayers: new Set([editing, crop?.layer.id].filter(Boolean)) });
+      drawDesign(ctx, d, (l)=>refine&&l.asset===refine.asset?refine.canvas:libraryImage(l), { scale, fontAvailable, hideLayers: new Set([editing, crop?.layer.id].filter(Boolean)) });
       ctx.scale(scale, scale);
       ctx.strokeStyle = '#0a84ff'; ctx.lineWidth = 1 / scale;
       if(safe){ctx.save();ctx.fillStyle='#ffbf4730';ctx.strokeStyle='#ffbf47';ctx.lineWidth=1/scale;ctx.setLineDash([5/scale,4/scale]);for(const z of designSafeZones(d)){ctx.fillRect(z.x,z.y,z.w,z.h);ctx.strokeRect(z.x,z.y,z.w,z.h);ctx.font=`${12/scale}px sans-serif`;ctx.fillStyle='#ffbf47';ctx.fillText(z.label,z.x+4/scale,z.y+16/scale);ctx.fillStyle='#ffbf4730';}ctx.restore();}
@@ -128,6 +131,7 @@ export function DesignCanvas({ active }) {
     return {x:l.w/2+p.x*(l.flipX?-1:1),y:l.h/2+p.y*(l.flipY?-1:1)};
   }
   function down(e) {
+    if(libraryPreview.value){clearLibraryPreview();return;}
     if (!d || (e.button !== 0 && e.button !== 1) || e.target.tagName === 'TEXTAREA') return;
     if (editing) { finishText(); return; }
     e.preventDefault(); host.current.focus(); host.current.setPointerCapture(e.pointerId);
@@ -225,15 +229,15 @@ export function DesignCanvas({ active }) {
     if (state.type === 'shape') tool.value = 'select';
     if (host.current.hasPointerCapture(e.pointerId)) host.current.releasePointerCapture(e.pointerId);
   }
-  const text = d?.layers.find((l) => l.id === editing);
+  const text = base?.layers.find((l) => l.id === editing);
   let textLayout;
   if (text) { const ctx = canvas.current?.getContext('2d'); if (ctx) textLayout = layoutDesignText(text, (t, font) => { ctx.font = font; return ctx.measureText(t).width; }); }
   return (
     <div class={`dz-stage dz-tool-${tool.value}${crop ? ' dz-crop-mode' : ''}${refine ? ' dz-refine-mode' : ''}${canvasDraft?' dz-canvas-crop-mode':''}`} ref={host} tabIndex={0} aria-label="Design canvas" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={(e) => up(e, false)} onLostPointerCapture={up}
       onKeyDown={(e) => { if(refineSession.value||maskEditing.value){e.stopPropagation();if(refineSession.value&&(e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();navigateRefineHistory(e.shiftKey);return;}if(e.key==='Escape'){e.preventDefault();if(drag.current?.type==='mask')endDesignTransient(false);drag.current=null;stopRefine();maskEditing.value=null;}return;} if (cropSession.value) { e.stopPropagation(); if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); drag.current = null; finishCrop(e.key === 'Enter'); } return; } if (e.key === 'Escape' && drag.current) { e.stopPropagation(); up(e, false); } }}
-      onDblClick={(e) => { if(canvasCrop.value)return; const hit = d && hitTest(d, point(e).x, point(e).y); if (hit) selectLayer(hit.id, { single: true }); if (hit?.type === 'text') startText(hit.id); else if (hit?.type === 'image') startCrop(); }}
+      onDblClick={(e) => { if(canvasCrop.value||libraryPreview.value)return; const hit = d && hitTest(d, point(e).x, point(e).y); if (hit) selectLayer(hit.id, { single: true }); if (hit?.type === 'text') startText(hit.id); else if (hit?.type === 'image') startCrop(); }}
       onDragOver={(e) => { if (hasFiles(e.dataTransfer) || isLibraryDrag(e)) { e.preventDefault(); e.stopPropagation(); } }}
-      onDrop={(e) => { if (isLibraryDrag(e)) { e.preventDefault(); e.stopPropagation(); const cur = currentDesign.value; dropLibraryItem(cur && hitTest(cur, point(e).x, point(e).y)); return; } if (!hasFiles(e.dataTransfer)) return; e.preventDefault(); e.stopPropagation(); requestPlace(droppedPaths(e.dataTransfer, window.api.pathForFile), point(e), e.altKey).catch((err) => toast(err.message, { kind: 'error' })); }}>
+      onDrop={(e) => { if (isLibraryDrag(e)) { e.preventDefault(); e.stopPropagation(); const cur=currentDesign.value,rect=host.current.getBoundingClientRect(),k=cur?(z==='fit'?Math.max(.001,Math.min((size.w-100)/cur.width,(size.h-100)/cur.height)):z):1;const pos=cur?{x:(e.clientX-rect.left-(size.w-cur.width*k)/2-p.x)/k,y:(e.clientY-rect.top-(size.h-cur.height*k)/2-p.y)/k}:null;dropLibraryItem(cur&&pos?libraryDropTarget(cur,pos):null,pos);return; } if (!hasFiles(e.dataTransfer)) return; e.preventDefault(); e.stopPropagation(); requestPlace(droppedPaths(e.dataTransfer, window.api.pathForFile), point(e), e.altKey).catch((err) => toast(err.message, { kind: 'error' })); }}>
       {d && <div class="dz-checker" style={{ left: offset.x, top: offset.y, width: d.width * scale, height: d.height * scale }} />}
       <canvas class="dz-canvas" ref={canvas} style={{ width: size.w, height: size.h }} />
       {text && <textarea ref={textRef} class="dz-text-edit" value={text.text} spellcheck={false}

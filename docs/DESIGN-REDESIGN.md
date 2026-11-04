@@ -201,9 +201,9 @@ The terms below are what was known when this plan was written. **Check each prov
 | **Unsplash** | Photos | Access key. Requires attribution (photographer and Unsplash), hotlinked preview URLs, and a call to the download endpoint when a photo is used. Low request limit until the app is approved for production. |
 | **Openverse** | Openly licensed images | Works without a key. Licenses vary per image. Filter to licenses that allow commercial use and modification, and store the license with the asset. |
 
-Paid services, such as **Magnific**, are not built in. Users who have an account add them as an image source plugin (6.4) with their own key.
+Paid services are not built in. Users who have an account add them as a plugin: with their own key (6.4), or by signing in with their account (6.5, **Magnific** first).
 
-Each provider is one small module in `src/main/stock/` with the same two functions:
+The engine in `src/main/stock/` gives every source, built-in or plugin, the same two functions:
 
 ```js
 search({ query, page, kind }) // → { items: [{ id, provider, kind, preview, width, height, author, authorUrl, pageUrl, license }], more }
@@ -232,6 +232,32 @@ For paid services (Magnific and similar) and any other image service with an API
 - **Built-ins use the same format.** Pixabay, Pexels, Unsplash and Openverse are written as `reccut-image-source-v1` files shipped with the app (with Reccut's app key filled in), so there is one engine in `src/main/stock/` and not one module per service. Sources whose API needs more than this format allows (for example a required "download" ping) get a small named hook in that engine, not free code in the plugin.
 - **Only HTTPS**, only the hosts named in the plugin file, responses limited in size, the same 24 hour cache and the same offline rule (6.1, rule 4).
 - **Validation and tests** like `validatePlugin` today: a pure validator in `src/shared/` with tests for good files, missing fields, non-HTTPS URLs and unknown placeholders.
+
+### 6.5 Sign-in plugins (OAuth through MCP)
+
+Some services let the user **sign in with their own account** instead of pasting a key. The user clicks **Sign In**, the system browser opens the service's own login page, the user approves access, and Reccut gets a token. Reccut never sees or stores the password.
+
+Never ask for a user name and password inside Reccut, even if a service would accept it. Passwords stay on the service's own page.
+
+**Magnific** (formerly Freepik) is the first service. Checked when this plan was written; check again before building:
+
+- Magnific's ordinary REST API uses an API key (`x-magnific-api-key` header). That fits 6.4.
+- Magnific also runs an **MCP server** at `https://mcp.magnific.com` (streamable HTTP). It uses **OAuth 2.0 with the user's Magnific account**, so no API key is needed. The OAuth settings are found through `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`. No manual app registration is described. Source: [docs.magnific.com/modelcontextprotocol](https://docs.magnific.com/modelcontextprotocol).
+- Its stock tools: `stock_search` (keyword or visual similarity), `stock_get` (details, preview, size, formats, author), `stock_download` (the file). `stock_show`, `stock_to_creation` and the `creations_*` tools are for other clients and are not used.
+- Unknown: whether stock downloads use the account's credits or need a certain plan. Find out before building. If downloads cost credits, the card shows that before download, and apply asks once per session.
+
+How to build it:
+
+- **Plugin kind** `reccut-mcp-source-v1`: a JSON file with `id`, `name`, `icon`, `homepage`, `server` (HTTPS URL), the tool names for search, details and download, a mapping from the tool results to the item fields in 6.2, and `credit`. Magnific ships as a ready-made file of this kind that the user turns on in Settings → AI & Plugins, so they only need to click Sign In.
+- **OAuth for a desktop app**, done the standard way for native apps: authorization code flow with **PKCE**, the **system browser** (`shell.openExternal`, never an embedded login window), and a redirect to a temporary **loopback** address (`http://127.0.0.1:<random port>/callback`) that the main process listens on during sign-in. Use dynamic client registration when the server offers it, as the MCP authorization spec describes.
+- **Tokens** (access and refresh) go through `safeStorage` like other secrets, never into prefs or project files. Refresh silently. When refresh fails, the source is hidden and its settings row says **Sign In Again**. **Sign Out** deletes the tokens.
+- **MCP client**: a small JSON-RPC client over HTTPS in `src/main/stock/mcp.js` (`initialize`, `tools/call`). Only the tools named in the plugin file can be called. No new npm dependency: adding the official MCP SDK needs the user's approval (plan section 1.3).
+- The rest is the same as other sources: results under Stock Photos and in Search, download on use into `Designs/Assets/`, credits stored, offline rule.
+- Tests: a pure validator for the plugin file, the PKCE helper, and the result mapping, with a local test server standing in for the MCP server. No real Magnific account in tests.
+
+The same plugin kind works for any other image service that offers an MCP server with OAuth. Services with ordinary OAuth but no MCP server can be added later as a third kind if one turns up.
+
+**Envato Elements is not possible.** Envato Elements has no public API. Envato's API with OAuth only covers single purchases on Envato Market (ThemeForest and similar), not an Elements subscription. Unofficial download services break Envato's terms and must not be used. What works today: download a template from Envato in the browser and import it; PSD and PSB files come in with their layers.
 
 ---
 
@@ -281,7 +307,8 @@ Done when: everything that worked before works from its new place, and nothing i
 3. Stock Photos in Add Content and in Search, download on use, credits stored, **Copy Credits** in Export.
 4. The remaining built-in sources, one at a time, each after checking its terms.
 5. Image source plugins in Settings → AI & Plugins, with the user's own key.
-6. Reccut template catalog and **More Templates**.
+6. Sign-in plugins (6.5): OAuth with PKCE and loopback redirect, the MCP client, and the Magnific plugin file. First confirm the Magnific credit question.
+7. Reccut template catalog and **More Templates**.
 
 ---
 
@@ -290,10 +317,28 @@ Done when: everything that worked before works from its new place, and nothing i
 1. **Import Image vs Place.** The main button is now **Import Image…** with Embedded/Linked in its menu. Should section 5.8 of the plan be changed to use Import everywhere (menus, help), or keep Place Embedded / Place Linked in the Design menu for Photoshop users?
 2. **Template catalog.** Who makes and maintains the online templates, and in which repository?
 
-Decided: online resources are on by default and hidden when offline. Built-in sources use Reccut's own app keys, so users never see a key. Paid services such as Magnific come as image source plugins with the user's own key.
+Decided: online resources are on by default and hidden when offline. Built-in sources use Reccut's own app keys, so users never see a key. Paid services come as plugins: with the user's own key, or with sign-in through OAuth (Magnific, through its MCP server). Never a user name and password inside Reccut. Envato Elements cannot be supported, since it has no public API.
 
 ---
 
 ## 10. Not in this redesign
 
 Generative AI images or templates, video thumbnails with motion, team libraries or sharing, a browser of the user's whole disk, Google Fonts download (possible later as an online provider for fonts, with the same rules as 6.1).
+
+
+---
+
+## 11. Progress log
+
+### 2026-11-03: Phase A complete
+
+- A1: Templates, Video, Text, Add Content and Brand now use a 64 px rail and one open panel. The panel expands, closes and restores its last panel and width. Smaller windows use narrower columns.
+- A2: The bottom designs strip has page previews, open/rename, duplicate/variant/delete, New Design and the Export menu. The former Designs tab, left footer and title-bar export button are removed. Layers is above Properties.
+- A3: Existing templates, frame capture, saved styles, image imports, project images, logo and colors are available from their new panels. Recent shows placed project assets. Video capture can create the first design; full source frames retain their aspect ratio without automatic cropping.
+- A4: Library cards share selection, transient hover/focus preview, double-click/Enter apply, native drag-and-drop and context actions. Styles and colors dropped on a compatible layer affect that layer. Locked or incompatible drop targets do not redirect the change to other selected layers. Brand logos are copied into projects on use.
+- A5: Sections use horizontal rows and See All grids with Back. Panel search filters existing content, and large grids show 24 items per page.
+- Toolbar Resize and Readability now expose the existing tools directly. The warning dot and the new Phase B content remain pending.
+- The main action is Import Image, with Import Embedded, Import Linked and Open as New Design in its menu. The existing Place Embedded/Linked Design-menu commands remain available for compatibility. Section 5.8 of the original plan and help describe this arrangement.
+- Validation: 480 tests pass, production build passes, and native macOS checks cover empty-room creation, hover/undo separation, real drag-and-drop, saved styles, 500-item pagination, brand assets, camera capture across design navigation, page actions and export. See [Phase A QA](DESIGN-REDESIGN-A-QA.md).
+
+Phase B and Phase C are not implemented by this entry. The suggestions dialog remains available; inline For This Video and Best Frames, title/subtitle/badge presets, font pairs, Elements, palettes/color roles, template tags/global Search and the readability warning dot belong to Phase B. Stock, online settings, credits, source plugins, OAuth/MCP and the template catalog belong to Phase C. No network provider or npm dependency was added.

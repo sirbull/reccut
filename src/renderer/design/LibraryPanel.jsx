@@ -1,43 +1,61 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { Button, Row, Select, Modal, toast } from '../ui.jsx';
+import { Plus, Upload } from 'lucide-preact';
+import { LibrarySections } from './LibrarySection.jsx';
+import { filterLibraryItems } from '../../shared/designLibrary.js';
+import { Button, IconButton, Row, Select, Modal, toast } from '../ui.jsx';
 import { prefs } from '../prefs.js';
-import { currentDesign, selectedLayers, selection } from './store.js';
+import { currentDesign, selectedLayers } from './store.js';
+import { uid } from '../../shared/model.js';
 import { newDesign, newLayer } from '../../shared/design.js';
 import { BUILTIN_DESIGN_STYLES, BUILTIN_DESIGN_TEMPLATES, applyDesignStyle, applyTemplate } from '../../shared/designTemplates.js';
 import { drawDesign } from '../../shared/designRender.js';
 import { imageVersion, loadDesignImages, getImage, getImageAtPath } from './assets.js';
 import { fontAvailable, fontVersion } from './fonts.js';
-import { brandLogo, chooseBrandLogo } from './brand.js';
+import { brandLogo } from './brand.js';
 import { openSuggestions } from './suggest.js';
-import { savedStyles, storeStyles, styleDialog, templateDialog, userTemplates, saveStyle, openSaveStyle, applyStyle, createFromTemplate, templateContext, saveTemplate, openSaveTemplate, importTemplate, exportTemplate, refreshTemplates, libraryPreview, previewStyle, previewTemplate, startLibraryDrag, endLibraryDrag } from './library.js';
+import { savedStyles, storeStyles, styleDialog, templateDialog, userTemplates, saveStyle, openSaveStyle, applyStyle, createFromTemplate, templateContext, saveTemplate, openSaveTemplate, importTemplate, exportTemplate, refreshTemplates, selectedLibraryCard, clearLibraryPreview, previewStyle, previewTemplate, startLibraryDrag, endLibraryDrag } from './library.js';
 
 let demoImage;
 function styleImage(){if(!demoImage){demoImage=new OffscreenCanvas(420,240);const c=demoImage.getContext('2d'),g=c.createLinearGradient(0,0,420,240);g.addColorStop(0,'#5e91d6');g.addColorStop(1,'#142b45');c.fillStyle=g;c.fillRect(0,0,420,240);c.fillStyle='#edbe66';c.beginPath();c.arc(285,110,65,0,Math.PI*2);c.fill();}return demoImage;}
-function Preview({design}){
+export function LibraryPreview({design}){
   const signature=JSON.stringify({...design,id:null,created:0,layers:design.layers.map(l=>({...l,id:null}))});
   const ref=useRef(null),version=`${imageVersion.value}:${fontVersion.value}`;
   useEffect(()=>{loadDesignImages(design);},[signature]);
   useEffect(()=>{const id=requestAnimationFrame(()=>{const cv=ref.current;if(!cv)return;const ctx=cv.getContext('2d');ctx.clearRect(0,0,216,122);const k=Math.min(216/design.width,122/design.height);ctx.save();ctx.translate((216-design.width*k)/2,(122-design.height*k)/2);drawDesign(ctx,design,l=>l.asset==='preview-logo'?getImageAtPath(brandLogo.value?.path):l._stylePreview&&!l.asset&&!l.media?styleImage():getImage(l),{scale:k,fontAvailable,cacheLayers:false});ctx.restore();});return()=>cancelAnimationFrame(id);},[signature,version,brandLogo.value]);
   return <canvas width={216} height={122} ref={ref}/>;
 }
-function LibraryCard({picked,onPick,apply,preview,children,...rest}){
-  return <button class={`dz-library-card${picked?' active':''}`} draggable onClick={onPick} onDblClick={()=>apply()} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();apply();}}} onMouseEnter={preview} onMouseLeave={()=>{libraryPreview.value=null;}} onDragStart={e=>startLibraryDrag(e,apply)} onDragEnd={endLibraryDrag} {...rest}>{children}</button>;
+export function LibraryCard({id,picked,onPick,apply,preview,children,menuItems=[],onContextMenu,...rest}){
+  const pending=useRef(false),[busy,setBusy]=useState(false);
+  useEffect(()=>()=>clearLibraryPreview(),[]);
+  const run=async(hit,point)=>{if(pending.current)return;pending.current=true;setBusy(true);clearLibraryPreview();try{await apply(hit,point);}catch(err){toast(err.message,{kind:'error'});}finally{pending.current=false;setBusy(false);}};
+  const context=async e=>{e.preventDefault();if(onContextMenu){onContextMenu(e);return;}const action=await window.api.popupMenu([{id:'apply',label:'Apply'},...menuItems.map(item=>({id:item.id,label:item.label,enabled:item.enabled}))]);if(action==='apply')run();else{const item=menuItems.find(item=>item.id===action);if(item)try{await item.run()}catch(err){toast(err.message,{kind:'error'});}}};
+  const active=picked??(selectedLibraryCard.value===id);
+  return <button type="button" class={`dz-library-card${active?' active':''}${busy?' busy':''}`} aria-pressed={active} aria-busy={busy} disabled={busy} draggable={!busy} onClick={()=>{if(onPick)onPick();else selectedLibraryCard.value=id;}} onDblClick={()=>run()} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();run();}}} onMouseEnter={preview} onMouseLeave={clearLibraryPreview} onFocus={preview} onBlur={clearLibraryPreview} onDragStart={e=>startLibraryDrag(e,run)} onDragEnd={endLibraryDrag} onContextMenu={context} {...rest}>{children}{busy&&<span class="dz-card-busy">Applying…</span>}</button>;
 }
-function PageButtons({page,setPage,count}){return count>24?<Row><Button class="small" disabled={!page} onClick={()=>setPage(page-1)}>Previous</Button><span>{page+1} / {Math.ceil(count/24)}</span><Button class="small" disabled={(page+1)*24>=count} onClick={()=>setPage(page+1)}>Next</Button></Row>:null;}
 function stylePreview(style){const d=newDesign({width:480,height:270});d.background={type:'solid',color:'#292d3b',alpha:1};const source=style.type==='image'?templateContext().frame:null;const l=newLayer(style.type,{asset:source?.asset,media:source?.media,crop:source?.crop,_stylePreview:style.type==='image',fit:'contain',x:30,y:45,w:420,h:180,text:'A *better* title',shape:'rect',radius:24});d.layers=[applyDesignStyle(l,style,d.height)];return d;}
-export function StylesPanel(){
-  prefs.value;const [page,setPage]=useState(0),[picked,setPicked]=useState(null),styles=savedStyles(),safePage=Math.min(page,Math.max(0,Math.ceil(styles.length/24)-1));
-  const edit=async(e,s)=>{e.preventDefault();const action=await window.api.popupMenu([{id:'rename',label:'Rename Style…'},{id:'delete',label:'Delete Style'},{id:'update',label:'Update from Selection',enabled:selectedLayers().some(l=>l.type===s.type)}]);if(action==='delete')storeStyles(styles.filter(r=>r.id!==s.id));if(action==='rename')styleDialog.value={rename:s,name:s.name};if(action==='update'){const l=selectedLayers().find(l=>l.type===s.type);if(l){const {extractDesignStyle}=await import('../../shared/designTemplates.js');storeStyles(styles.map(r=>r.id===s.id?{...r,style:extractDesignStyle(l,currentDesign.value.height)}:r));}}};
-  // Dropped on a layer of the right type: style that layer. Otherwise the selection, or all layers of that type.
-  const styleCard=(s,children,rest)=><LibraryCard key={s.id} picked={picked===s.id} onPick={()=>setPicked(s.id)} apply={hit=>{if(hit?.type===s.type&&!hit.locked)selection.value=[hit.id];applyStyle(s);}} preview={()=>previewStyle(s)} title="Hover to preview. Double-click or drag onto a layer to apply." {...rest}><Preview design={stylePreview(s)}/>{children}</LibraryCard>;
-  return <><Button disabled={!selectedLayers().length} onClick={openSaveStyle}>Save Style…</Button><h3 class="dz-library-heading">Text Styles</h3>{BUILTIN_DESIGN_STYLES.map(s=>styleCard(s,<b>{s.name}</b>))}<h3 class="dz-library-heading">My Styles ({styles.length}/500)</h3>{!styles.length&&<p class="hint">Save a layer's appearance to reuse it in any project.</p>}{styles.slice(safePage*24,safePage*24+24).map(s=>styleCard(s,<><b>{s.name}</b><small>{s.type}</small></>,{onContextMenu:e=>edit(e,s)}))}<PageButtons page={safePage} setPage={setPage} count={styles.length}/></>;
+export function StylesPanel({query=''}){
+  prefs.value;const styles=savedStyles();
+  const menu = (s,user) => user ? [
+    {id:'rename',label:'Rename Style…',run:()=>{styleDialog.value={rename:s,name:s.name}}},
+    {id:'delete',label:'Delete Style',run:()=>storeStyles(savedStyles().filter(r=>r.id!==s.id))},
+    {id:'update',label:'Update from Selection',enabled:selectedLayers().some(l=>l.type===s.type),run:async()=>{
+      const l=selectedLayers().find(l=>l.type===s.type);if(!l)return;
+      const {extractDesignStyle}=await import('../../shared/designTemplates.js');
+      storeStyles(savedStyles().map(r=>r.id===s.id?{...r,style:extractDesignStyle(l,currentDesign.value.height)}:r));
+    }},
+  ] : [{id:'save',label:'Save to My Styles',run:()=>{
+    if(savedStyles().length>=500){toast('You can save up to 500 styles.');return;}
+    storeStyles([...savedStyles(),{...structuredClone(s),id:uid(),name:`${s.name} copy`}]);
+  }}];
+  const styleCard=(s,user=false)=><LibraryCard key={s.id} id={`style:${s.id}`} apply={hit=>applyStyle(s,hit)} preview={()=>previewStyle(s)} title="Hover to preview. Double-click or press Enter to apply." menuItems={menu(s,user)}><LibraryPreview design={stylePreview(s)}/><b>{s.name}</b>{user&&<small>{s.type}</small>}</LibraryCard>;
+  return <LibrarySections query={query} sections={[{id:'text-styles',title:'Text Styles',items:filterLibraryItems(BUILTIN_DESIGN_STYLES,query),render:s=>styleCard(s)},{id:'my-styles',title:`My Styles (${styles.length}/500)`,items:filterLibraryItems(styles,query),render:s=>styleCard(s,true),empty:"Save a layer's appearance to reuse it in any project.",actions:<IconButton icon={Plus} title="New Style" disabled={!selectedLayers().length} onClick={openSaveStyle}/>}]} />;
 }
-export function TemplatesPanel(){
-  const [size,setSize]=useState('template'),[page,setPage]=useState(0),[picked,setPicked]=useState(null);const context=templateContext(),users=userTemplates.value,safePage=Math.min(page,Math.max(0,Math.ceil(users.length/24)-1));
-  const place=t=>createFromTemplate(t,size).catch(e=>toast(e.message,{kind:'error'}));
-  const menu=async(e,t,user)=>{e.preventDefault();const action=await window.api.popupMenu([{id:'export',label:'Export Template…'},...(user?[{id:'delete',label:'Delete Template'}]:[])]);try{if(action==='export')await exportTemplate(t);if(action==='delete'){await window.api.removeDesignTemplate(t.id);await refreshTemplates();}}catch(e){toast(e.message,{kind:'error'});}};
-  const card=(t,user=false)=><LibraryCard key={t.id} picked={picked===t.id} onPick={()=>setPicked(t.id)} apply={()=>place(t)} preview={()=>previewTemplate(t,size)} title="Hover to preview. Double-click or drag onto the canvas to create a design." onContextMenu={e=>menu(e,t,user)}><Preview design={applyTemplate(t,context)}/><b>{t.name}</b></LibraryCard>;
-  return <><Button onClick={openSuggestions}>Suggestions</Button><Row label="Size"><Select value={size} options={[{value:'template',label:'Template Size'},{value:'current',label:'Current Canvas'}]} onChange={setSize}/></Row><div class="dz-library-actions"><Button class="small" onClick={()=>importTemplate().catch(e=>toast(e.message,{kind:'error'}))}>Import Template…</Button><Button class="small" disabled={!currentDesign.value} onClick={openSaveTemplate}>Save as Template…</Button></div><div class="dz-brand-kit"><b>My Logo</b><Button class="small" onClick={()=>chooseBrandLogo().catch(e=>toast(e.message,{kind:'error'}))}>{brandLogo.value?'Replace Logo…':'Choose Logo…'}</Button>{brandLogo.value&&<small>{brandLogo.value.name}</small>}</div>{['16:9','9:16','1:1'].map(ratio=><section key={ratio}><h3 class="dz-library-heading">{ratio}</h3>{BUILTIN_DESIGN_TEMPLATES.filter(t=>t.ratio===ratio).map(t=>card(t))}</section>)}<h3 class="dz-library-heading">My Templates</h3>{users.slice(safePage*24,safePage*24+24).map(t=>card(t,true))}<PageButtons page={safePage} setPage={setPage} count={users.length}/></>;
+export function TemplatesPanel({query=''}){
+  const [size,setSize]=useState('template');const context=templateContext(),users=userTemplates.value;
+  const card=(t,user=false)=><LibraryCard key={t.id} id={`template:${t.id}`} apply={()=>createFromTemplate(t,size)} preview={()=>previewTemplate(t,size)} title="Hover to preview. Double-click or press Enter to create a design." menuItems={[{id:'export',label:'Export Template…',run:()=>exportTemplate(t)},...(user?[{id:'delete',label:'Delete Template',run:async()=>{await window.api.removeDesignTemplate(t.id);await refreshTemplates();}}]:[{id:'save',label:'Save to My Templates',run:async()=>{await window.api.saveDesignTemplate(t);await refreshTemplates();}}])]}><LibraryPreview design={applyTemplate(t,context)}/><b>{t.name}</b></LibraryCard>;
+  const sections=['16:9','9:16','1:1'].map(ratio=>({id:ratio,title:ratio==='16:9'?'YouTube 16:9':ratio==='9:16'?'Shorts and Reels 9:16':'Square 1:1',items:filterLibraryItems(BUILTIN_DESIGN_TEMPLATES.filter(t=>t.ratio===ratio),query),render:t=>card(t)}));
+  sections.push({id:'my-templates',title:'My Templates',items:filterLibraryItems(users,query),render:t=>card(t,true),empty:'Import a template or save the current design.',actions:<><IconButton icon={Upload} title="Import Template" onClick={()=>importTemplate().catch(e=>toast(e.message,{kind:'error'}))}/><IconButton icon={Plus} title="Save as Template" disabled={!currentDesign.value} onClick={openSaveTemplate}/></>});
+  return <><Row label="Size"><Select value={size} options={[{value:'template',label:'Template Size'},{value:'current',label:'Current Canvas'}]} onChange={value=>{clearLibraryPreview();setSize(value)}}/></Row><Button class="small" onClick={openSuggestions}>Suggestions for This Video</Button><LibrarySections query={query} sections={sections}/></>;
 }
 function StyleName({request}){
   const [name,setName]=useState(request.name||'');

@@ -358,7 +358,7 @@ Everything in the Design room is in English: labels, buttons, menus, tooltips, t
 | Opacity | **Opacity** (%) | |
 | Image adjustments | **Brightness/Contrast**, **Hue/Saturation**, **Black & White**, **Gaussian Blur** | |
 | Text settings | **Character** (font family, font style/weight, size, **Tracking**, **Leading**, All Caps) and **Paragraph** (alignment) sections | |
-| Placing files | **Place Embedded…** (copies the file into the project, D4) and **Place Linked…** (leaves it where it is). A linked file that cannot be found shows a **Relink…** button. | |
+| Placing files | **Import Image…** is the main button in Add Content and the empty state. Its menu offers **Import Embedded…** (copies the file into the project, D4), **Import Linked…** (leaves it where it is) and **Open as New Design…**. The Design menu retains **Place Embedded…** and **Place Linked…** as familiar commands. A linked file that cannot be found shows a **Relink…** button. | |
 | Saved styles | **Styles** panel, **New Style…** | |
 | Saved colors | **Swatches** | |
 | Templates | **Templates** (in the New Design dialog, like presets in New Document) | |

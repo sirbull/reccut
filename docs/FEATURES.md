@@ -247,11 +247,13 @@ Open source used: Electron, Preact, Lucide (icons), Mediabunny (decoding and enc
 
 ## Design
 
-* Several independent image designs in each project, with size presets and custom canvases from 1 to 8192 pixels.
+* Several independent image designs in each project, with size presets and custom canvases from 1 to 8192 pixels. A bottom pages strip opens, renames, duplicates and deletes designs, adds new ones and holds the Export menu.
+* An icon rail opens one library panel at a time: Templates, Video, Text, Add Content and Brand. Panels can expand or close and remember their layout. Layers sits above Properties.
+* Shared library cards offer transient hover/focus previews, single-click selection, double-click or Enter to apply, drag-and-drop at the canvas position, and context menus. Sections use horizontal rows, See All grids, panel search and pagination for large saved libraries. Styles and colors dropped on a compatible unlocked layer affect that layer.
 * Image, text and rectangle layers, with selection, marquee, snapping, resize and rotation handles, opacity, flips, layer order, hiding and locking.
 * Text can be edited on the canvas or in Properties, with system fonts, wrapping, automatic fitting, alignment and uppercase.
-* Place Embedded copies images into Designs/Assets; Place Linked references their original location. Native drop follows the import copy preference, and Alt reverses it. Images can also be pasted from the clipboard. These assets stay separate from the Edit media browser. Existing Edit images can be referenced in a design.
-* An independent Video preview captures full quality sequence frames or frames from a source video into Designs/Frames. Captured frames keep their full image and original aspect ratio, fitted inside the design without automatic cropping. Move and scale them to compose the thumbnail. Later timeline edits do not change the captured images.
+* Import Image in Add Content offers embedded and linked imports plus Open as New Design. Embedded copies images into Designs/Assets; linked references their original location. The Design menu retains Place Embedded and Place Linked. Native drop follows the import copy preference, and Alt reverses it. Images can also be pasted from the clipboard. These assets stay separate from the Edit media browser. Existing Edit images can be referenced in a design.
+* An independent Video preview captures full quality sequence frames or frames from a source video into Designs/Frames. Captured frames keep their full image and original aspect ratio, fitted inside the design without automatic cropping. Move and scale them to compose the thumbnail. Later timeline edits do not change the captured images. Use This Frame can create the first design directly from the Video panel.
 * Design has its own Undo and Redo, independent of Edit. Designs save inside the existing project format, with relative asset paths for moved projects.
 * Export As saves PNG, JPEG or WebP, with optional transparency, size and quality controls, and a file size limit. Quick Export as PNG uses the current canvas size and background. Exports get unique names and use the same renderer as the canvas.
 * Package Project includes design assets and protects media used only by designs. The report lists system fonts that need to be installed on another computer.
@@ -262,7 +264,7 @@ Open source used: Electron, Preact, Lucide (icons), Mediabunny (decoding and enc
 * Offline Remove Background with bundled MIT-licensed BiRefNet models, progress and cancellation. Cut Out Camera captures the complete camera image independently of the timeline layout.
 * Nondestructive cutout masks, Erase/Restore brushes with per-stroke undo, Feather, Shift Edge, sticker outlines and shadows that follow transparency. Rectangle, ellipse and polygon masks, clipping groups and Fill Text With Image.
 * 15 built-in text styles, up to 500 saved styles and 22 built-in design templates. Templates use frame, cutout, title, subtitle and logo placeholders, adapt to other canvas ratios, and import/export as .reccut-design-template files.
-* My Colors stores up to 20 colors; My Logo is copied into projects that use it.
+* Brand collects the reusable logo and up to 20 colors. My Logo is copied into projects that use it. Recent and From Project in Add Content show reusable project images.
 
 * Local Design Suggestions scores up to 180 sampled sequence frames, avoids fades/transitions, and offers up to six frames across four suitable layouts each. Titles come from names, timeline text and captions, including Norwegian. Shuffle changes titles/layouts; choosing a card captures the complete frame at full quality and creates an editable design with one-step undo.
 * Optional AI title suggestions name the configured provider and require an explicit Send Transcript action. Local suggestions work without AI or network access.

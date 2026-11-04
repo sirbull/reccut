@@ -89,11 +89,11 @@ export async function chooseImage(copy = prefs.value.importCopy) {
 export function requestPlace(paths, point = null, alternate = false) {
   return placeFiles(paths, { point, copy: alternate ? !prefs.value.importCopy : prefs.value.importCopy });
 }
-export async function placeFiles(paths, { copy = prefs.value.importCopy, point = null, designId = currentDesignId.value, epoch = projectEpoch.value, copied: ownFile = false } = {}) {
+export async function placeFiles(paths, { copy = prefs.value.importCopy, point = null, designId = currentDesignId.value, epoch = projectEpoch.value, copied: ownFile = false, label = null } = {}) {
   const assets = [], groups = new Map();
   for (const original of paths) {
     try {
-      const name = original.split(/[\\/]/).pop();
+      const name = paths.length===1&&label?label:original.split(/[\\/]/).pop();
       let files = [{ path: original, name, owned: ownFile }];
       // Konverterte bilder ligger i hurtigbufferen, så de kopieres alltid inn i prosjektet.
       if (!/\.(psd|psb|svg)$/i.test(original) && !NATIVE_IMAGE.test(original)) files = [{ path: await api.readableImage(original), name, owned: ownFile, converted: true }];
@@ -131,12 +131,12 @@ export async function placeFiles(paths, { copy = prefs.value.importCopy, point =
   });
   if (currentDesignId.value === designId) selection.value = ids;
 }
-export function placeProjectImage(media) {
+export function placeProjectImage(media, point = null) {
   const d = currentDesign.value;
   if (!d || media.kind !== 'image') return;
   const st = media.streams?.main || {};
   const b = fitBox(st.width || d.width, st.height || d.height, d.width * 0.9, d.height * 0.9);
-  const l = newLayer('image', { media: media.id, name: media.name, x: (d.width - b.w) / 2, y: (d.height - b.h) / 2, w: b.w, h: b.h, fit: 'contain' });
+  const l = newLayer('image', { media: media.id, name: media.name, x: point ? point.x-b.w/2 : (d.width - b.w) / 2, y: point ? point.y-b.h/2 : (d.height - b.h) / 2, w: b.w, h: b.h, fit: 'contain' });
   designCommit((p) => { p.designs[d.id].layers.push(l); }); selection.value = [l.id];
 }
 export async function copyLayers(cut = false) {
@@ -278,21 +278,22 @@ export async function captureFrameAsset(source, time, { signal } = {}) {
   if (offline) toast('This frame includes missing media shown as Media Offline.', { kind: 'error' });
   return asset;
 }
-export async function captureFrame(source, time) {
-  const epoch = projectEpoch.value, designId = currentDesignId.value;
-  if (!project.value.designs?.[designId]) return;
+export async function captureFrame(source, time, { createDesign = false } = {}) {
+  const epoch=projectEpoch.value,initial=currentDesignId.value,draft=createDesign&&!initial?newDesign({name:`${project.value.name} Thumbnail`}):null,designId=draft?.id||initial;
+  if(!draft&&!project.value.designs?.[designId])return;
   const asset = await captureFrameAsset(source, time);
-  if (!asset || epoch !== projectEpoch.value || !project.value.designs?.[designId]) return;
-  const d = project.value.designs[designId];
+  if(!asset||epoch!==projectEpoch.value||(!draft&&!project.value.designs?.[designId])||(draft&&currentDesignId.value!==initial))return;
+  const d=draft||project.value.designs[designId];
   // Keep the entire frame visible and give its handles the source aspect ratio.
   const box = fitBox(asset.width, asset.height, d.width, d.height, 'contain');
   const l = newLayer('image', { asset: asset.id, name: 'Video frame', ...box, fit: 'contain' });
-  designCommit((p) => { p.designAssets[asset.id] = asset; p.designs[designId].layers.unshift(l); });
+  designCommit((p) => {if(draft)p.designs[designId]=draft;p.designAssets[asset.id] = asset; p.designs[designId].layers.unshift(l); });
+  if(draft)openDesign(draft.id);
   if (currentDesignId.value === designId) selection.value = [l.id];
   return l;
 }
 
-export async function openImageFiles(paths,{copy=prefs.value.importCopy}={}) {
+export async function openImageFiles(paths,{copy=prefs.value.importCopy,label=null}={}) {
   const epoch=projectEpoch.value;
   for(const source of paths)try{
     const readable=NATIVE_IMAGE.test(source)?source:await api.readableImage(source),mustCopy=copy||readable!==source;
@@ -303,7 +304,7 @@ export async function openImageFiles(paths,{copy=prefs.value.importCopy}={}) {
     let path=readable;if(mustCopy)[path]=await api.copyIntoProject([readable],await designDir(),{unique:true});
     if(path!==readable&&!await ensureImage(path))throw new Error('Could not read the copied image.');
     if(epoch!==projectEpoch.value)return;
-    const name=source.split(/[\\/]/).pop(),asset={id:uid(),name,path,copied:mustCopy,origin:'placed',width,height},d=newDesign({name:name.replace(/\.[^.]+$/,''),width,height,size:'custom'});
+    const name=paths.length===1&&label?label:source.split(/[\\/]/).pop(),asset={id:uid(),name,path,copied:mustCopy,origin:'placed',width,height},d=newDesign({name:name.replace(/\.[^.]+$/,''),width,height,size:'custom'});
     d.background=null;d.layers=[newLayer('image',{asset:asset.id,name,x:0,y:0,w:width,h:height,fit:'contain'})];
     designCommit(p=>{p.designAssets[asset.id]=asset;p.designs[d.id]=d});openDesign(d.id);
   }catch(err){if(epoch===projectEpoch.value)toast(`Could not open image: ${err.message}`,{kind:'error'});}

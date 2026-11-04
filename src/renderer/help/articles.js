@@ -9,13 +9,15 @@ export const ARTICLES = [
     id: 'design', section: 'Design', title: 'Design Thumbnails and Images',
     summary: 'Make layered images from video frames, photos, text and shapes, then export or package them.',
     keywords: 'thumbnail image design canvas text layers picture photo png jpeg webp',
-    body: `Open [[run:roomDesign|Design]] in the title bar. Choose New Design for a size preset or enter a custom size from 1 to 8192 pixels. You can keep several designs in a project. Double click a design name to rename it; duplicate and delete buttons are below its preview.
+    body: `Open [[run:roomDesign|Design]] in the title bar. Choose New Design for a size preset or enter a custom size from 1 to 8192 pixels. You can keep several designs in a project. The bottom strip shows them as pages: click to open, double click to rename, or right click to duplicate, make a variant or delete. The + button adds a design, and Export opens the export choices.
+
+The left rail opens Templates, Video, Text, Add Content or Brand. Only one panel is open at a time. Click its rail icon again or Close panel to give the canvas more room. Expand panel widens it. The last panel and width are remembered. Layers is above Properties on the right.
 
 ## Add pictures
 
-Place Embedded copies a photo into Designs/Assets. For a layered PSD, PSB or SVG, choose Place as one image or Place layers. Select the layers to keep. Layer positions and order are preserved, and imported layers are grouped. Place Linked references the original file. The split button offers both choices and its main action follows the import copy preference. Design pictures stay separate from the Edit media browser. From Project references images already imported in Edit.
+Open Add Content and choose Import Image. Its main action follows the import copy preference. The arrow menu offers Import Embedded, Import Linked and Open as New Design. Import Embedded copies a photo into Designs/Assets. For a layered PSD, PSB or SVG, choose Place as one image or Place layers. Select the layers to keep. Layer positions and order are preserved, and imported layers are grouped. Import Linked references the original file. The Design menu also keeps Place Embedded and Place Linked. Design pictures stay separate from the Edit media browser. Recent shows images imported into this project; From Project references images already imported in Edit.
 
-The Video tab has its own preview and scrubber. Use This Frame saves a full quality PNG of the sequence or selected source video into Designs/Frames. The full frame is placed with its original aspect ratio, fitted inside the design without cropping. Move and resize the layer to compose the thumbnail. Changing the timeline afterwards does not change this image. Arrow keys step one frame in the Video panel; Shift and arrows step one second. An empty or audio only timeline cannot supply a video frame.
+The Video panel has its own preview and scrubber. Use This Frame saves a full quality PNG of the sequence or selected source video into Designs/Frames. The full frame is placed with its original aspect ratio, fitted inside the design without cropping. Move and resize the layer to compose the thumbnail. Changing the timeline afterwards does not change this image. Arrow keys step one frame in the Video panel; Shift and arrows step one second. Use This Frame can also create the first design. An empty or audio only timeline cannot supply a video frame.
 
 Drop files to place them using the import copy preference. Hold Alt while dropping to reverse the choice. Cmd/Ctrl V pastes an image from the system clipboard. Cmd/Ctrl C and X copy and cut selected layers, and V pastes them into another design or project. Referenced images travel with the layers; embedded files are copied into the receiving project. Plain text becomes a text layer. Paste keeps relative centers when the design size changes. Shift Cmd/Ctrl V pastes in place. Linked images have a link icon. A missing image has a warning in Layers: click Relink to find the file before exporting.
 
@@ -73,19 +75,21 @@ Package Project includes design assets and image media used by designs, even whe
 
 Select an image and choose Remove Background in Properties. The model runs locally with the app, including without internet. Tasks shows progress and Cancel. The original image stays intact; the result is a separate mask. Feather softens the edge and Shift Edge expands or contracts it. Edit Layer Mask opens Erase and Restore brushes with Size and Hardness. Each stroke can be undone and redone. Done leaves brush mode. Sticker Outline follows the final visible edge; shadows follow it too.
 
-Layer Mask adds a rectangle, ellipse or polygon. Edit Mask moves its handles; Feather and Invert adjust its edge. Clip to Layer Below keeps a layer inside the visible layer below. Select one text layer and one image, then Fill Text With Image to make a clipping group. The Video tab offers Cut Out Camera when the selected recording has a camera stream.
+Layer Mask adds a rectangle, ellipse or polygon. Edit Mask moves its handles; Feather and Invert adjust its edge. Clip to Layer Below keeps a layer inside the visible layer below. Select one text layer and one image, then Fill Text With Image to make a clipping group. The Video panel offers Cut Out Camera when the selected recording has a camera stream.
 
 ## Reusable styles and templates
 
-The Styles tab offers 15 built-in styles and My Styles. Save Style stores the selected layer's appearance. Text size adapts to the design height. Right click a saved style to rename, update from the selection, or delete it. You can store up to 500 styles.
+The Text panel offers Add Text, 15 built-in styles and My Styles. Save Style stores the selected layer's appearance. Text size adapts to the design height. Right click a saved style to rename, update from the selection, or delete it. You can store up to 500 styles.
 
-Templates offers 22 built-in layouts for wide, tall and square designs, plus My Templates. Click a template to create a new design using its size or the current canvas size. It uses the current frame, cutout, project title and My Logo when available. Save as Template lets you assign picture and text placeholders. Import and export use .reccut-design-template files, without links to original project files.
+Library sections show a horizontal row of cards. See All opens the whole section as a grid; Back returns to the sections. Search filters the current panel. Hover or focus previews a card on the canvas without saving or adding undo steps. A single click selects the card; double click or Enter applies it. Drag an image to place it at that point. Drag a style or color onto a compatible unlocked layer to affect only that layer. Right click offers Apply and the actions available for that item.
 
-My Colors stores up to 20 colors beside color controls. Save Color adds the current color; right click a swatch to remove it. My Logo is copied into each new design that uses it, so replacing the saved logo keeps existing projects intact.
+Templates offers 22 built-in layouts for wide, tall and square designs, plus My Templates. Double click a template or press Enter to create a new design using its size or the current canvas size. It uses the current frame, cutout, project title and My Logo when available. Save as Template lets you assign picture and text placeholders. Import and export use .reccut-design-template files, without links to original project files.
+
+Brand has the reusable Logo and Brand Colors. Double click a color to apply it to selected text or shapes, or to the background when nothing is selected. My Colors also stores up to 20 colors beside color controls. Save Color adds the current color; right click a swatch to remove it. My Logo is copied into each new design that uses it, so replacing the saved logo keeps existing projects intact.
 
 ## Design suggestions
 
-Choose Suggestions from the Design empty state, the Templates tab or the Design menu. Reccut analyzes the current sequence locally and offers up to six frames with four layouts for each. It favors clear, well-exposed frames, avoids fades and transitions, and spreads choices across the video. Camera visibility adds priority. Analysis is limited to about 14 seconds; slow or unavailable frames can be skipped.
+Choose Suggestions from the Design empty state, the Templates panel or the Design menu. Reccut analyzes the current sequence locally and offers up to six frames with four layouts for each. It favors clear, well-exposed frames, avoids fades and transitions, and spreads choices across the video. Camera visibility adds priority. Analysis is limited to about 14 seconds; slow or unavailable frames can be skipped.
 
 Choose a canvas size and title, or type your own title. Offline title ideas come from the project and sequence names, timeline titles and captions, including Norwegian captions. Shuffle changes the layouts and title. Click a card to capture that frame at full quality and create a new editable design in one undo step. The entire source frame is retained without automatic cropping. The timeline and its playhead stay unchanged.
 
@@ -97,19 +101,19 @@ Closing Suggestions cancels the analysis or pending frame capture. Switching pro
 
 Preview in the toolbar shows generic video-list layouts at 360, 246 and 168 pixels wide and in a phone layout. Switch light/dark backgrounds and the progress bar. The duration badge uses the current sequence duration. The whole design is fitted inside each preview.
 
-Safe Zones highlights generic overlay areas for the selected size on the editing canvas. These areas are guides, not platform requirements, and are never exported. Check Readability in Properties finds small text, low text-fill contrast and text overlapping an overlay area. Select jumps to the affected text layer. Checks use the layers behind the text and a white backdrop for transparency. Outlines and shadows may improve actual legibility.
+Safe Zones highlights generic overlay areas for the selected size on the editing canvas. These areas are guides, not platform requirements, and are never exported. Readability in the toolbar finds small text, low text-fill contrast and text overlapping an overlay area. Select jumps to the affected text layer. Checks use the layers behind the text and a white backdrop for transparency. Outlines and shadows may improve actual legibility.
 
 ## Variants and sizes
 
-Canvas offers Make Variant and Compare Variants. Each variant is independently editable. Keep this one marks a favorite without deleting any design. Favorites appear in the Designs list.
+Canvas offers Make Variant. Export in the bottom strip offers Compare Variants. Each variant is independently editable. Keep this one marks a favorite without deleting any design. Favorites appear in the designs strip.
 
-Resize creates designs for one or more selected sizes, scaling and positioning layers using anchors or relative centers. Resize current design requires exactly one target size. Export All Sizes saves the selected designs to a folder as PNG, JPEG or WebP, with dimensions in their file names. Existing files get unique names.
+Resize in the toolbar creates designs for one or more selected sizes, scaling and positioning layers using anchors or relative centers. Resize current design requires exactly one target size. Export All Sizes saves the selected designs to a folder as PNG, JPEG or WebP, with dimensions in their file names. Existing files get unique names.
 
 The Export room and Easy Export offer Also save thumbnail when the project has designs. Choose a design to save a JPEG next to the completed video with the same base name. Its appearance is prepared before video export starts, so later edits do not change it. An existing JPEG is kept and an error is shown rather than overwriting it.
 
 ## Open Image and canvas tools
 
-Open Image creates a separate design at the image's displayed pixel size, with just that image and a transparent canvas. Dropping images on the empty Design room does the same. The import-copy preference controls embedded or linked sources. JPEG orientation is honored. Open Image supports up to 8192 pixels per side; larger images can be placed into an existing design.
+Open as New Design in the Import Image menu, or the Open Image command, creates a separate design at the image's displayed pixel size, with just that image and a transparent canvas. Dropping images on the empty Design room does the same. The import-copy preference controls embedded or linked sources. JPEG orientation is honored. Open Image supports up to 8192 pixels per side; larger images can be placed into an existing design.
 
 Canvas offers Crop Canvas, Rotate Canvas Left/Right and Flip Canvas Horizontally/Vertically. Crop Canvas has aspect presets and draggable handles; drag inside to move the crop. Enter or Apply Canvas Crop applies it; Escape or Cancel discards it. Cropping moves every layer and changes the canvas size. Image sources and masks stay intact, so they can still be repositioned. The canvas background adapts to the new size. All canvas operations can be undone.`,
     see: ['projects', 'package', 'export-frame'],

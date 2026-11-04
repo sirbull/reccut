@@ -191,3 +191,9 @@ test('Open Image creates one exact-size transparent design and independent undo 
 test('Open Image rejects oversize sources instead of cropping or creating an empty design',async()=>{
  const q=setup({width:12000,height:100});const before=Object.keys(q.editor.project.value.designs).length;await q.assets.openImageFiles(['/wide.png'],{copy:false});assert.equal(Object.keys(q.editor.project.value.designs).length,before);assert.ok(q.messages.some(m=>m.includes('8192')));
 });
+
+test('Video frame capture can create a complete design from an empty room in one undo step',async()=>{
+ const q=setup();q.design.designCommit(p=>{p.designs={}});const p=q.editor.project.value;await q.assets.captureFrame({...p,width:1080,height:1080,duration:3,fps:30},1,{createDesign:true});const d=q.design.currentDesign.value;assert.equal(d.layers.length,1);assert.equal(d.layers[0].fit,'contain');assert.equal(d.layers[0].crop.w,1);q.design.designUndo();assert.equal(Object.keys(q.editor.project.value.designs).length,0);assert.equal(Object.keys(q.editor.project.value.designAssets).length,0);
+});
+
+test('library imports keep the friendly name instead of exposing a global logo cache filename',async()=>{const q=setup();await q.assets.placeFiles(['/brand/logo-uuid.png'],{copy:true,label:'My Logo.png'});const a=Object.values(q.editor.project.value.designAssets)[0];assert.equal(a.name,'My Logo.png');assert.equal(q.design.currentDesign.value.layers[0].name,'My Logo.png')});

@@ -26,8 +26,8 @@ export async function saveMaskCanvas(canvas, label, { width = canvas.width, heig
   if (!image) throw new Error('Could not read the saved cutout mask.');
   return {id:uid(),name:`${label} cutout`,path,width,height,copied:true,origin:'cutout'};
 }
-export async function removeBackground(layerId = selection.value[0]) {
-  const d = currentDesign.value, layer = d?.layers.find(l=>l.id===layerId);
+export async function removeBackground(layerId = selection.value[0], designId = currentDesign.value?.id) {
+  const d = project.value.designs?.[designId], layer = d?.layers.find(l=>l.id===layerId);
   if (!layer || layer.type !== 'image' || layer.locked) return;
   cancelBackground(layerId);
   const job = { layerId,designId:d.id,epoch:projectEpoch.value,history:historyNavigation.value,asset:layer.asset,media:layer.media,cutout:layer.cutout,canceled:false,id:null };
