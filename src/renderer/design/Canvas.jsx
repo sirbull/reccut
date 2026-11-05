@@ -1,3 +1,5 @@
+import {brandLayer} from '../../shared/designBrand.js';
+import {prefs} from '../prefs.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { hitTest, layerBounds, layerPoint, selectionBounds, resizeLayer, rotatePoint, snapMove, snapRotation, newLayer, groupSelectionIds, rotateDesignLayers, scaleDesignLayers, designSafeZones } from '../../shared/design.js';
 import { libraryDropTarget } from '../../shared/designLibrary.js';
@@ -159,7 +161,7 @@ export function DesignCanvas({ active }) {
     }
     if (tool.value === 'text') { const l = addText(pt.x, pt.y); if (l) { beginDesignTransient(); setEditing(l.id); } return; }
     if (tool.value === 'shape') {
-      const l = newLayer('shape', { shape: shapeType.value, name: shapeType.value[0].toUpperCase() + shapeType.value.slice(1), x: pt.x, y: pt.y, w: 1, h: 1 });
+      const l = brandLayer(newLayer('shape', { shape: shapeType.value, name: shapeType.value[0].toUpperCase() + shapeType.value.slice(1), x: pt.x, y: pt.y, w: 1, h: 1 }),prefs.value.designBrand,prefs.value.designBrandFonts);
       beginDesignTransient(); drag.current = { type: 'shape', start: pt, layer: l }; selection.value = [l.id]; return;
     }
     const hit = hitTest(d, pt.x, pt.y);

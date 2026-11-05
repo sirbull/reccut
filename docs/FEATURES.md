@@ -266,7 +266,7 @@ Open source used: Electron, Preact, Lucide (icons), Mediabunny (decoding and enc
 * Rectangle, ellipse, polygon, star, line and arrow tools; groups, alignment/distribution, crop modes and layered PSD/SVG import.
 * Offline Remove Background with bundled MIT-licensed BiRefNet models, progress and cancellation. Cut Out Camera captures the complete camera image independently of the timeline layout. Cut Out This Frame captures the selected composite and removes its background locally.
 * Nondestructive cutout masks, Erase/Restore brushes with per-stroke undo, Feather, Shift Edge, sticker outlines and shadows that follow transparency. Rectangle, ellipse and polygon masks, clipping groups and Fill Text With Image.
-* 15 built-in text styles, up to 500 saved styles and 22 built-in design templates. Templates use frame, cutout, title, subtitle and logo placeholders, adapt to other canvas ratios, and import/export as .reccut-design-template files.
+* 111 built-in text styles, up to 500 saved styles and 22 built-in design templates. Templates use frame, cutout, title, subtitle and logo placeholders, adapt to other canvas ratios, and import/export as .reccut-design-template files.
 * Brand collects the reusable logo, title/body fonts, up to 20 colors and a palette made from those colors. My Logo is copied into projects that use it. Recent and From Project in Add Content show reusable project images.
 
 * Local Design Suggestions scores up to 180 sampled sequence frames, avoids fades/transitions, and offers up to six frames across four suitable layouts each. Titles come from names, timeline text and captions, including Norwegian. Shuffle changes titles/layouts; choosing a card captures the complete frame at full quality and creates an editable design with one-step undo.
@@ -281,3 +281,8 @@ Open source used: Electron, Preact, Lucide (icons), Mediabunny (decoding and enc
 * Independent design variants with comparison and favorites. Resize to multiple anchored/relative layouts and batch export selected designs with dimensions in file names.
 * Also save thumbnail in video export prepares a design snapshot and writes a JPEG alongside the completed video using its actual base name. Existing JPEG files are preserved with an error message.
 * Open Image or an empty-room image drop creates a design at the displayed pixel dimensions, honoring JPEG orientation. Nondestructive canvas cropping, quarter-turn rotations, flips and Canvas Size with a nine-point content anchor.
+
+* Design Brand Kits store color roles, title/body fonts and default System/Flat/Outline emoji style. Font edits update current matching text; new elements use Brand defaults. The bundled library includes 111 text styles, 40 palettes, 224 other elements and 3,781 emoji.
+* Design online resources: main-process source engine, cached previews, independent project downloads/credits, source plugins, OAuth/PKCE/MCP and configurable template catalog. Provider registration, publication and live-account acceptance remain necessary before Phase C is production complete; see DESIGN-REDESIGN-C-QA.md.
+
+* Optional personal API-key photo plugins: Design → Plugins → Image Source Plugins. Add Pixabay without JSON, open its key page, save/replace/remove a locally stored key and test the connection. Pexels setup retains its app-approval gate. No shared Pixabay publisher key is required; Unsplash is not offered as a personal-key source.

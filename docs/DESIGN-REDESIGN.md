@@ -374,3 +374,21 @@ Layers has a draggable, remembered height divider and a compact automatic height
 Library cards apply on a single click or Enter; double clicks insert once. Gradients and colors create independent background layers above older backgrounds. Dots and grids are native editable pattern layers with optional `pattern` data, color, size and X/Y spacing. Existing raster Dotted/Grid textures can be converted reversibly. Emoji now has 3,781 Unicode 16.0 entries with English names, categories and bounded grids. Unicode License V3 accompanies the bundled data.
 
 Validation is recorded in [Design usability QA](DESIGN-USABILITY-QA.md). No dependency or version change; Phase C providers remain pending.
+
+### 2026-11-05: Brand/library follow-up and Phase C implementation
+
+Layers now opens an animated insertion gap while dragging, supports retargeting, atomic groups, cancel/outside drop and edge scrolling, and commits only on drop. Brand has named reusable kits, explicit color roles, live Title/Body font application and defaults for new elements. System/Flat/Outline emoji styles work in Brand, library and Properties with locally bundled OpenMoji artwork/credits. The library contains 111 text styles, 40 palettes, 224 other elements and 3,781 emoji. Export Design is a primary button at the top right.
+
+Phase C now has a main-process image-source host, declarative manifests/validation, settings, encrypted plugin credentials, Openverse and publisher-gated Pixabay/Pexels adapters, local previews/downloads/credits, Copy Credits, OAuth/PKCE/MCP support and a Magnific sign-in source. A configurable online template catalog and 22 publication-ready template/preview entries are prepared. No npm dependency, version change, account login, paid call or external publication was made.
+
+**Phase C remains pending production acceptance:** the owner confirmed app credentials/catalog do not yet exist. Pixabay/Pexels registrations and approved deployment credentials, catalog publication, actual Magnific account/result-schema verification and live Openverse connectivity are outstanding. Unsplash is not embedded because its current guidelines require confidential keys/proxy arrangements. See [QA and provider review](DESIGN-REDESIGN-C-QA.md) and [publisher setup](DESIGN-ONLINE-SETUP.md). This entry does not mark the entire phase complete.
+
+### 2026-11-05: Personal API-key source plugins
+
+At the user's request, personal-key photo plugins supersede section 6.1's original publisher-key-only rule. Design → Plugins → Image Source Plugins now opens a ready-made source catalog in Settings → Plugins (also accessible from Design and AI). Pixabay can be added without editing JSON; the user opens the provider key page, saves a masked personal key, tests a fresh connection and can replace/remove it. The key never enters projects, source exports or renderer settings responses. Pexels can be prepared but its app-approval requirement is still enforced; Unsplash is not included as a personal-key source, in accordance with its official guidelines.
+
+Search skips unconfigured sources. Key removal disconnects them, plugin removal deletes credentials, and changed API destinations invalidate prior credentials/results. Provider requests use the user's key and account limits. Source templates live in keyProviders.js/availablePlugins.js; Openverse and Magnific remain built in. No shared photo app key, npm dependency or version change was introduced.
+
+Validation: 550 passing tests, including opt-in installation, query/header key use, uncached connection checks, invalid-key feedback, secret-free exports, key removal, app-approval gates, changed-destination invalidation, encrypted restart/session fallback and paid REST consent. Native Electron checks use a controlled provider/dummy key: Plugins entry, install/save/test/search/download/remove/re-add and the Pexels gate all pass without renderer errors. Real user-key/provider approval checks remain external. See [setup](DESIGN-ONLINE-SETUP.md).
+
+Provider sources reviewed: [Pixabay API](https://pixabay.com/api/docs/), [Pexels app requirements](https://help.pexels.com/hc/en-us/articles/900005852323-How-do-I-get-unlimited-requests) and [Unsplash guidelines](https://help.unsplash.com/en/articles/2511245-unsplash-api-guidelines).

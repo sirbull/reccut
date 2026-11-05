@@ -137,6 +137,7 @@ export function normalizeLayer(input) {
       if (l.stroke === undefined) result.stroke = normalizeStroke({ fill: solidFill(), width: 8 });
     }
   }
+  if((l.type!=='text'||l.text===l.emoji?.text)&&l.emoji&&typeof l.emoji.text==='string'&&l.emoji.text.length<=100&&['system','flat','outline'].includes(l.emoji.style))result.emoji={text:l.emoji.text,style:l.emoji.style};else delete result.emoji;
   return result;
 }
 export function normalizeDesign(input) {

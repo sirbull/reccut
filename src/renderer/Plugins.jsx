@@ -222,12 +222,15 @@ export function PluginsButton() {
           <header>
             <b>{name} plugins</b>
           </header>
-          {!list.length && (
+          {!list.length && r !== 'design' && (
             <p class="hint plugin-empty">
               No {name} plugins yet.
               {r !== 'edit' && ' Plugins for this section are not supported yet; they will be listed here when they are.'}
             </p>
           )}
+          {r === 'design' && <button class="plugin-item" onClick={() => {
+            sessionStorage.setItem('focus-image-sources','1');openPluginSettings('image-sources');setOpen(false);
+          }}><Puzzle size={22}/><span><b>Image Source Plugins</b><small>Add photo sources and connect your own API key.</small></span></button>}
           {list.map((p) => (
             <button
               key={p.id}

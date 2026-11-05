@@ -1,3 +1,4 @@
+import {OnlineSettings} from './design/Online.jsx';
 // Innstillinger (Cmd ,), bygd som i Final Cut Pro: faner med ikoner øverst, og en kommandoeditor
 // for hurtigtaster. Alle valg lagres med en gang og gjelder hele appen.
 import { ExtensionsPane } from './Extensions.jsx';
@@ -34,6 +35,7 @@ const PANES = [
   { id: 'import', label: 'Import', icon: Download },
   { id: 'audio', label: 'Audio', icon: AudioLines },
   { id: 'export', label: 'Export', icon: Share },
+  { id:'design',label:'Design',icon:Settings2 },
   { id: 'extensions', label: 'AI', icon: Sparkles },
   { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard },
@@ -488,9 +490,10 @@ export function SettingsWindow() {
           {current.id === 'import' && <ImportPane />}
           {current.id === 'audio' && <AudioPane />}
           {current.id === 'export' && <ExportPane />}
+          {current.id === 'design' && <OnlineSettings/>}
           {current.id === 'keyboard' && <KeyboardPane />}
-          {current.id === 'extensions' && <ExtensionsPane />}
-          {current.id === 'plugins' && <PluginsPane />}
+          {current.id === 'extensions' && <><ExtensionsPane/><OnlineSettings/></>}
+          {current.id === 'plugins' && <><PluginsPane/><OnlineSettings/></>}
         </div>
       </div>
     </div>

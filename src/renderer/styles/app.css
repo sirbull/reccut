@@ -5309,3 +5309,13 @@ kbd.keycap {
 .dz-emoji-search input { width:100%; }
 .dz-font-choice { display:flex; gap:6px; align-items:center; }
 .dz-font-choice .select { flex:1; min-width:0; }
+.dz-brand { padding-bottom: 24px; }
+.dz-brand-section { padding:16px 0; border-top:1px solid var(--line-2); display:flex; flex-direction:column; gap:12px; }
+.dz-brand-section h3 { font-size:12px; margin:0 0 4px; }
+.dz-brand-section .row { margin:0; }
+.dz-brand-section .row-control { gap:8px; }
+.dz-emoji-symbol img { width:100%; height:100%; object-fit:contain; }
+.dz-online-source { padding:14px 0; border-top:1px solid var(--line-2); }
+.dz-online-source .row-control { flex-wrap:wrap; gap:8px; }
+.dz-stock-loading { display:grid; place-items:center; min-height:88px; color:var(--text-2); }
+.dz-library-card small { display:block; white-space:normal; font-size:10px; color:var(--text-2); }

@@ -43,6 +43,7 @@
       "assets/reccut-wordmark.svg",
       "src/shared/pluginTerms.json",
       "src/shared/recordingFormats.cjs",
+      "src/shared/stockSources.cjs",
       "package.json"
     ],
     "icon": "assets/icon.png",

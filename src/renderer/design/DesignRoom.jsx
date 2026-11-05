@@ -1,3 +1,4 @@
+import {StockPanel,MoreTemplates} from './Online.jsx';
 import { Fragment } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { Hand, MousePointer2, Plus, Square, Type, ZoomIn, ZoomOut, Palette, Crop, ChevronDown, Eye, Scan, Frame, Circle, Pentagon, Star, Minus, MoveUpRight, LayoutTemplate, Clapperboard, SquareArrowUp, BadgeCheck, Minimize2, Maximize2, X, Scaling, ScanText, Search, Shapes } from 'lucide-preact';
@@ -49,10 +50,10 @@ export function DesignRoom({ active }) {
       <header class="dz-library-panel-head"><b>{panels.find(p=>p.id===panel)?.label}</b><span class="spacer"/><IconButton icon={wide?Minimize2:Maximize2} title={wide?'Narrow panel':'Expand panel'} onClick={expandDesignPanel}/><IconButton icon={X} title="Close panel" onClick={()=>openDesignPanel(null)}/></header>
       {panel!=='video'&&<div class="dz-panel-search"><input type="search" class="text-input" placeholder={panel==='search'?'Search all content':`Search ${panels.find(p=>p.id===panel)?.label.toLowerCase()}`} aria-label={panel==='search'?'Search all content':'Search current library'} value={query} onInput={e=>setQuery(e.currentTarget.value)}/></div>}
       <div class="dz-library-panel-body">
-        {panel==='search'&&<SearchPanel query={query}/>}
+        {panel==='search'&&<><SearchPanel query={query}/><StockPanel query={query}/></>}
         {panel==='elements'&&<ElementsPanel query={query}/>}
         {panel==='styles'&&<DesignStylesPanel query={query}/>}
-        {panel==='templates'&&<TemplatesPanel query={query}/>}
+        {panel==='templates'&&<><TemplatesPanel query={query}/><MoreTemplates/></>}
         {panel==='video'&&<VideoPanel><section class="dz-library-section"><header><h3>Pick a Frame</h3></header><FramePicker active={active}/></section></VideoPanel>}
         {panel==='text'&&<TextPanel query={query}/>}
         {panel==='content'&&<ContentPanel query={query}/>}

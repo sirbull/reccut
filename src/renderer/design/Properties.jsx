@@ -4,6 +4,8 @@ import { textSelection,selectedTextRange,rememberTextSelection,patchTextSelectio
 import { textStyleAt,replaceStyledText,TEXT_STYLE_FIELDS } from '../../shared/designRichText.js';
 import { normalizeDesignPattern } from '../../shared/designPattern.js';
 import { editLegacyPattern } from './content.js';
+import { EMOJI_STYLES,replaceEmoji } from './emoji.js';
+import {toast} from '../ui.jsx';
 import { Row, Section, NumberField, Slider, Toggle, Select, Segmented, Button, IconButton } from '../ui.jsx';
 import { solidFill, BLEND_MODES, DESIGN_SHAPES, selectionBounds, transformDesignLayers } from '../../shared/design.js';
 import { currentDesign, selection, selectedLayers, changeDesign, changeLayers, groupSelection, alignSelection, distributeSelection, currentDesignId, newDesignOpen, beginDesignTransient, updateDesignTransient, endDesignTransient } from './store.js';
@@ -65,6 +67,7 @@ export function Properties() {
   </Section>;
   const text = layers.every((l) => l.type === 'text'), image = layers.every((l) => l.type === 'image'), hasFill = layers.every((l) => l.type !== 'image');
   return <>
+    {l.emoji&&<Section title="Emoji Style" collapsible={false}><Row label="Style"><Select value={l.emoji.style||'system'} options={EMOJI_STYLES} onChange={style=>replaceEmoji(original,style).catch(e=>toast(e.message,{kind:'error'}))}/></Row><p class="hint">Changes only this emoji. Set the default in Brand. Flat and Outline use OpenMoji (CC BY-SA 4.0).</p></Section>}
     {text&&<Section title="Character" collapsible={false} actions={<IconButton icon={BookmarkPlus} title="Save Style" onClick={openSaveStyle}/>}>
       {range&&<div class="dz-text-selection-note">Formatting selected text: “{l.text.slice(range.start,range.end)}” <button class="link" onClick={()=>textSelection.value=null}>Whole layer</button></div>}
       <Row label="Font Family" stacked><DesignFontSelect value={l.font} onChange={font=>patch({font})}/></Row>

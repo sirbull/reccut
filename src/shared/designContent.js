@@ -1,3 +1,4 @@
+import {EXTRA_ELEMENTS} from './designLibraryExtras.js';
 // Emoji names/sequences: Unicode Emoji 16.0, licensed under Unicode License V3.
 // See assets/licenses/UNICODE-3.0.txt. Rendering uses installed system fonts.
 import emojiData from './designEmoji.json' with {type:'json'};
@@ -6,7 +7,7 @@ import { gradientRGB, gradientHex } from './gradient.js';
 
 const svg = body => `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">${body}</svg>`;
 export const DESIGN_EMOJIS=emojiData.map(([text,name,group,subgroup])=>({id:`emoji-${[...text].map(c=>c.codePointAt(0).toString(16)).join('-')}`,name,text,group,section:'emoji',kind:'emoji',tags:['emoji',name,group,subgroup,...(/smil|grin|laugh/.test(name)?['happy','smile','laugh']:[]),...(/heart|kiss/.test(name)?['love']:[])]}));
-export const DESIGN_ELEMENTS = [
+export const DESIGN_ELEMENTS = [...EXTRA_ELEMENTS,
   ...['rect','rounded','ellipse','polygon','star','line','arrow'].map(shape => ({id:`shape-${shape}`,name:({rect:'Rectangle',rounded:'Rounded Rectangle',ellipse:'Ellipse',polygon:'Polygon',star:'Star',line:'Line',arrow:'Arrow'})[shape],section:'shapes',kind:'shape',shape,tags:['shape',shape]})),
   {id:'curved-arrow',name:'Hand-drawn Arrow',section:'pointers',kind:'drawing',tags:['arrow','point','hand drawn'],svg:svg('<path d="M70 280 Q150 40 510 120 M435 55 L515 120 L430 165" fill="none" stroke="#ffd60a" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>')},
   {id:'scribble-circle',name:'Hand-drawn Circle',section:'pointers',kind:'drawing',tags:['circle','ring','highlight'],svg:svg('<path d="M515 90 C420 5 100 45 80 185 S430 355 535 210 S280 5 140 80" fill="none" stroke="#ff453a" stroke-width="15" stroke-linecap="round"/>')},
@@ -30,8 +31,8 @@ export function elementLayers(element,design,{point,duration='0:00'}={}) {
   if(['background','drawing','sticker','texture'].includes(element.kind))return [];
   let l;
   if(element.kind==='badge'){l=textPreset(design,'badge',element.text==='duration'?duration:element.text);l.name=element.name;}
-  else if(element.kind==='emoji')l=newLayer('text',{name:element.name,text:element.text,font:'sans',size:design.height*.22,x:0,y:0,w:design.height*.3,h:design.height*.3,fill:solidFill(),highlight:null});
-  else l=newLayer('shape',{name:element.name,colorRole:'highlight',shape:element.shape==='rounded'?'rect':element.shape,w:design.width*.3,h:design.height*(element.shape==='line'||element.shape==='arrow' ? .12 : .3),radius:element.shape==='rounded'?design.height*.05:0,fill:solidFill('#ffd60a'),...(['line','arrow'].includes(element.shape)?{stroke:{fill:solidFill('#ffd60a'),width:Math.max(3,design.height*.015),align:'center'}}:{})});
+  else if(element.kind==='emoji')l=newLayer('text',{name:element.name,emoji:{text:element.text,style:'system'},text:element.text,font:'sans',size:design.height*.22,x:0,y:0,w:design.height*.3,h:design.height*.3,fill:solidFill(),highlight:null});
+  else l=newLayer('shape',{name:element.name,colorRole:'highlight',shape:element.shape==='rounded'?'rect':element.shape,...element.props,w:design.width*.3,h:design.height*(element.shape==='line'||element.shape==='arrow' ? .12 : .3),radius:element.shape==='rounded'?design.height*.05:0,fill:solidFill('#ffd60a'),...(['line','arrow'].includes(element.shape)?{stroke:{fill:solidFill('#ffd60a'),width:Math.max(3,design.height*.015),align:'center'}}:{})});
   l.x=(point?.x??design.width/2)-l.w/2;l.y=(point?.y??design.height/2)-l.h/2;
   return [l];
 }

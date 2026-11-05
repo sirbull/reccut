@@ -1,3 +1,5 @@
+import {emojiURL} from './emoji.js';
+import {brandLayer} from '../../shared/designBrand.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { RefreshCw } from 'lucide-preact';
 import { prefs } from '../prefs.js';
@@ -11,7 +13,7 @@ import { LibraryCard, LibraryPreview, TemplateCard, StyleCard } from './LibraryP
 import { LibrarySections } from './LibrarySection.jsx';
 import { ImageCard, ColorCard } from './ContentPanel.jsx';
 import { fontAvailable, fontVersion } from './fonts.js';
-import { applyElement, previewElement, applyAppearance, previewAppearance, savedContent, saveContent, removeContent } from './content.js';
+import { applyElement, previewElement, brandedElement,backgroundElementLayer, applyAppearance, previewAppearance, savedContent, saveContent, removeContent } from './content.js';
 import { savedStyles, userTemplates, clearLibraryPreview } from './library.js';
 import { brandColors, brandLogo } from './brand.js';
 import { framePalette, sampleCurrentPalette, canSampleFrame } from './videoLibrary.js';
@@ -25,10 +27,10 @@ export function AppearanceCard({palette,pair,user=false}){
 }
 function fontLabel(font){return({sans:'System Sans',serif:'Serif',mono:'Monospace',rounded:'Rounded'})[font]||font;}
 function fontCSS(font){return({sans:'system-ui',mono:'monospace',serif:'serif',rounded:'ui-rounded, system-ui'})[font]||JSON.stringify(font);}
-export function ElementCard({element,user=false}){
-  if(element.kind==='emoji')return <LibraryCard id={`element:${element.id}`} apply={(_,point)=>applyElement(element,point)} preview={()=>previewElement(element)} menuItems={savedMenu('Elements',element,user)} title={element.name}><span class="dz-emoji-symbol" aria-label={element.name}>{element.text}</span></LibraryCard>;
-  const d=newDesign({width:640,height:360}),layers=elementLayers(element,d,{duration:'2:34'});d.background=element.kind==='background'?element.fill:solidFill('#292d3b');d.layers=layers;
-  return <LibraryCard id={`element:${element.id}`} apply={(_,point)=>applyElement(element,point)} preview={()=>previewElement(element)} menuItems={savedMenu('Elements',element,user)} title={`${element.name}. Click or drag to add.`}>{element.svg?<img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(element.svg)}`} alt="" draggable={false}/>:<LibraryPreview design={d}/>}<b>{element.name}</b></LibraryCard>;
+export function ElementCard({element,user=false}){element=brandedElement(element);
+  if(element.kind==='emoji')return <LibraryCard id={`element:${element.id}`} apply={(_,point)=>applyElement(element,point)} preview={()=>previewElement(element)} menuItems={savedMenu('Elements',element,user)} title={element.name}><span class="dz-emoji-symbol" aria-label={element.name}>{emojiURL(element.text)?<img src={emojiURL(element.text)} alt={element.name}/>:element.text}</span></LibraryCard>;
+  const d=newDesign({width:640,height:360}),layers=elementLayers(element,d,{duration:'2:34'});d.background=element.kind==='background'?element.fill:solidFill('#292d3b');d.layers=element.kind==='texture'?[backgroundElementLayer(element,d)]:layers.map(l=>brandLayer(l,prefs.value.designBrand,prefs.value.designBrandFonts));
+  return <LibraryCard id={`element:${element.id}`} apply={(_,point)=>applyElement(element,point)} preview={()=>previewElement(element)} menuItems={savedMenu('Elements',element,user)} title={`${element.name}. Click or drag to add.`}>{element.svg&&element.kind!=='texture'?<img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(element.svg)}`} alt="" draggable={false}/>:<LibraryPreview design={d}/>}<b>{element.name}</b></LibraryCard>;
 }
 export function ElementsPanel({query=''}){
   const [emojiQuery,setEmojiQuery]=useState(''),[group,setGroup]=useState('all');prefs.value;const sections=ELEMENT_SECTIONS.filter(([id])=>id!=='emoji').map(([id,title])=>({id,title,items:filterLibraryItems(DESIGN_ELEMENTS.filter(e=>e.section===id),query),render:element=><ElementCard key={element.id} element={element}/>}));

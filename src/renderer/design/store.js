@@ -1,3 +1,5 @@
+import {prefs} from '../prefs.js';
+import {brandLayer} from '../../shared/designBrand.js';
 import { signal, computed, effect, batch } from '@preact/signals';
 import { produce } from 'immer';
 import { project, projectEpoch, scheduleSave } from '../editor/store.js';
@@ -102,7 +104,7 @@ export function addText(x, y) {
   const d = currentDesign.value;
   if (!d) return;
   const w = d.width * 0.8, h = d.height * 0.3;
-  const l = newLayer('text', { text: project.value.name, x: x ?? (d.width - w) / 2, y: y ?? (d.height - h) / 2, w, h, size: Math.max(6, d.height * 0.1) });
+  const l = brandLayer(newLayer('text', { text: project.value.name, x: x ?? (d.width - w) / 2, y: y ?? (d.height - h) / 2, w, h, size: Math.max(6, d.height * 0.1) }),prefs.value.designBrand,prefs.value.designBrandFonts);
   changeDesign((d) => { d.layers.push(l); }); selection.value = [l.id]; tool.value = 'select';
   return l;
 }

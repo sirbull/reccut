@@ -44,6 +44,7 @@ function copyStatic() {
   }
   fs.copyFileSync(path.join(root, 'src/renderer/help/handbook.css'), path.join(out, 'handbook.css'));
   const licenses=path.join(root,'assets/licenses');
+  fs.cpSync(path.join(root,'assets/emoji'),path.join(out,'emoji'),{recursive:true});
   if(fs.existsSync(licenses))fs.cpSync(licenses,path.join(out,'licenses'),{recursive:true});
   // Bilder til hjelpen.
   const help = path.join(root, 'assets/help');

@@ -1,0 +1,4 @@
+module.exports=[
+ {format:'reccut-image-source-v1',id:'openverse',name:'Openverse',homepage:'https://openverse.org/',hosts:['api.openverse.org'],search:{url:'https://api.openverse.org/v1/images/?q={query}&page={page}&page_size=20&license_type=commercial,modification'},results:{items:'results',fields:{id:'id',title:'title',preview:'thumbnail',full:'url',width:'width',height:'height',author:'creator',authorUrl:'creator_url',pageUrl:'foreign_landing_url',license:'license',licenseVersion:'license_version',licenseUrl:'license_url'}}},
+ {format:'reccut-mcp-source-v1',id:'magnific',name:'Magnific',homepage:'https://www.magnific.com/',hosts:['mcp.magnific.com'],server:'https://mcp.magnific.com',tools:{search:'stock_search',details:'stock_get',download:'stock_download'},costsCredits:true,results:{items:'results',fields:{id:'id',preview:'preview_url',full:'url',author:'author.name',pageUrl:'url',title:'title',license:'license'}}}
+];

@@ -12,6 +12,7 @@ const on = (channel) => (cb) => {
 };
 
 contextBridge.exposeInMainWorld('api', {
+  stockAddPlugin:invoke('stock:addPlugin'),stockTestConnection:invoke('stock:testConnection'),stockSettings: invoke('stock:settings'),stockProviders:invoke('stock:providers'),stockSearch:invoke('stock:search'),stockPreview:invoke('stock:preview'),stockDownload:invoke('stock:download'),stockInstall:invoke('stock:install'),stockRemove:invoke('stock:remove'),stockManifest:invoke('stock:manifest'),stockSaveKey:invoke('stock:saveKey'),stockSignIn:invoke('stock:signIn'),stockSignOut:invoke('stock:signOut'),stockAcceptCosts:invoke('stock:acceptCosts'),stockCatalog:invoke('stock:catalog'),stockCatalogFile:invoke('stock:catalogFile'),stockCatalogPreview:invoke('stock:catalogPreview'),
   startupStage: invoke('startup:stage'),
   openHelp: invoke('help:open'),
   updateHelp: invoke('help:update'),

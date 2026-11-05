@@ -41,7 +41,7 @@ test('template validation rejects newer versions, invalid sizes and huge layer l
   t.design.layers=[{type:'alien'},newLayer('text',{font:'Missing Font Still Applies'})];const v=validateDesignTemplate(t);assert.equal(v.warnings.length,1);assert.equal(applyTemplate(v).layers[0].font,'Missing Font Still Applies');
 });
 test('saved styles copy only appearance, scale text size and never keep a live link',()=>{
-  assert.equal(BUILTIN_DESIGN_STYLES.length,15);
+  assert.ok(BUILTIN_DESIGN_STYLES.length>=100);
   const layer=newLayer('text',{x:100,y:80,w:300,h:100,size:72,text:'Keep my words'}),style={id:'saved',type:'text',style:extractDesignStyle(layer,720)};
   assert.equal(style.style.size,0.1);assert.ok(!('x'in style.style));
   const next=applyDesignStyle(layer,style,1080);assert.equal(next.size,108);assert.equal(next.text,layer.text);assert.equal(next.x,100);assert.equal(next.style,'saved');

@@ -44,6 +44,8 @@ const { createExtensionHost, readDocument } = require('./extensions');
 const { renderGraphic } = require('./graphics');
 const extensions = createExtensionHost({ dir: path.join(app.getPath('userData'), 'extensions'), safeStorage, ffmpegPath: ff.getFfmpegPath() });
 
+const stock=require('./stock').createStockHost({dir:path.join(app.getPath('userData'),'stock'),cacheDir:path.join(app.getPath('userData'),'Cache','Stock'),fetchImpl:(...args)=>require('electron').net.fetch(...args),safeStorage,openExternal:url=>shell.openExternal(url)});
+for(const [channel,method]of Object.entries({providers:'providers',addPlugin:'addPlugin',testConnection:'testConnection',settings:'settings',search:'search',preview:'preview',download:'download',install:'install',remove:'remove',manifest:'manifest',saveKey:'saveKey',signIn:'signIn',signOut:'signOut',acceptCosts:'acceptCosts',catalog:'catalog',catalogFile:'catalogFile',catalogPreview:'catalogPreview'}))ipcMain.handle('stock:'+channel,(_event,...args)=>stock[method](...args));
 const isMac = process.platform === 'darwin';
 
 // Keep Electron's built-in UI in English, including on Norwegian systems.

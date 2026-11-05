@@ -1,3 +1,4 @@
+import {EXTRA_PALETTES} from './designLibraryExtras.js';
 import { newDesign, newLayer, normalizeLayer, normalizeDesign, solidFill, validDesignSize, layerBounds } from './design.js';
 import { uid } from './model.js';
 import { longestDesignWord, parseDesignText } from './designText.js';
@@ -5,7 +6,7 @@ import { styleTextRange, styleWholeTextLayer } from './designRichText.js';
 
 export const DESIGN_TEMPLATE_FORMAT='reccut-design-template';
 export const PLACEHOLDERS=['frame','cutout','title','subtitle','logo'];
-export const DESIGN_COLOR_ROLES=['background','title','highlight','accent','stroke'];
+export const DESIGN_COLOR_ROLES=['background','title','highlight','accent','stroke','body','cta','secondary','fill'];
 export const DESIGN_TEMPLATE_TAGS=['Bold','Minimal','Face + Title','Tutorial','Before/After','List / Number','Podcast','Gaming','News'];
 export const DESIGN_PALETTES=[
   {id:'midnight',name:'Midnight Gold',colors:['#111827','#ffffff','#ffd60a','#64d2ff','#000000']},
@@ -17,6 +18,7 @@ export const DESIGN_PALETTES=[
   {id:'signal',name:'Red Signal',colors:['#171717','#ffffff','#ff453a','#ffd60a','#000000']},
   {id:'lavender',name:'Soft Lavender',colors:['#ece8f7','#29203b','#8055bd','#cc71a2','#ffffff']},
 ];
+DESIGN_PALETTES.push(...EXTRA_PALETTES);
 export const DESIGN_FONT_PAIRS=[
   {id:'system',name:'System Sans',title:'sans',body:'sans'},
   {id:'editorial',name:'Editorial',title:'serif',body:'sans'},
@@ -61,6 +63,18 @@ export const BUILTIN_DESIGN_STYLES=[
   textStyle('pastel','Soft Pastel',{fill:solidFill('#f2d7ff'),weight:700,shadows:[{color:'#5e467b',alpha:0.4,blur:20,x:0,y:6,spread:0}]}),
   textStyle('outline','Outline Only',{fill:null,highlight:null,stroke:{fill:solidFill('#ffffff'),width:3,align:'outside',dash:'solid',join:'round'}}),
 ];
+// Six distinct typography treatments in coordinated studio palettes.
+for(const palette of EXTRA_PALETTES.slice(0,16))for(const treatment of ['Headline','Editorial','Label','Outline','Duotone','Glow']){
+ const [background,fill,accent,secondary,stroke]=palette.colors;
+ BUILTIN_DESIGN_STYLES.push(textStyle(`${palette.id}-${treatment}`,`${palette.name} ${treatment}`,{
+  fill:solidFill(fill),highlight:solidFill(accent),font:treatment==='Editorial'?'serif':treatment==='Label'?'mono':'sans',weight:treatment==='Editorial'?600:900,
+  uppercase:treatment==='Headline'||treatment==='Outline',
+  ...(treatment==='Label'?{box:{fill:solidFill(background),padding:18,radius:16}}:{}),
+  ...(treatment==='Outline'?{stroke:{fill:solidFill(stroke),width:8,align:'outside',dash:'solid',join:'round'}}:{}),
+  ...(treatment==='Duotone'?{fill:solidFill(secondary),shadows:[{color:stroke,alpha:1,blur:0,x:6,y:6,spread:0}]}:{}),
+  ...(treatment==='Glow'?{shadows:[{color:accent,alpha:.8,blur:25,x:0,y:0,spread:2}]}:{})
+ }));
+}
 function inspectImageFields(value,key='',depth=0){
   if(depth>24)throw new Error('The template image data is too deeply nested.');
   if(value===null||value===undefined||value===false)return;
