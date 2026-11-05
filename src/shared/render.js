@@ -14,6 +14,7 @@ import {
   DEFAULT_CAPTION_STYLE,
   FONTS,
   cameraRectAt,
+  screenAreaAt,
   clamp,
   clicksAt,
   cursorAt,
@@ -643,17 +644,25 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
   const filter = colorFilter(clip, T, H);
   let screenRect = { x: 0, y: 0, w: W, h: H };
   const screen = media.streams.screen;
+  const camera = media.streams.camera;
   if (screen && clip.recordingPart !== 'camera') {
+    // Side om side krymper skjermen. Med eget PiP-spor styrer kameraklippet oppsettet.
+    const owner = clip.recordingPart === 'screen' ? Object.values(project.clips).find((c) => c.recordingPart === 'camera' && c.linkedTo === clip.id) : clip;
+    const area = camera?.hasVideo && owner && valueAt(owner, 'showCamera', T) !== false ? screenAreaAt(owner, s, W, H) : screenRect;
+    const fit = (w, h) => {
+      const r = containRect(w, h, area.w, area.h);
+      return { ...r, x: r.x + area.x, y: r.y + area.y };
+    };
     let src = getSource(clip, 'screen', s - (screen.offset || 0));
     if (src) src = graded(clip, T, src, 'screen', media);
     if (src) {
-      const r = (screenRect = containRect(src.w, src.h, W, H));
+      const r = (screenRect = fit(src.w, src.h));
       drawWithEffects(ctx, clip, T, r, H, (ctx) => {
         ctx.filter = filter;
         ctx.drawImage(src.img, r.x, r.y, r.w, r.h);
       });
     } else if (screen.width) {
-      screenRect = containRect(screen.width, screen.height, W, H);
+      screenRect = fit(screen.width, screen.height);
     }
     const rec = media.rec || {};
     if (clip.props.showClicks) drawClicks(ctx, clicksAt(rec.clicks, s), screenRect);
@@ -664,7 +673,6 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
     }
   }
 
-  const camera = media.streams.camera;
   const showCamera = valueAt(clip, 'showCamera', T) !== false;
   if (camera?.hasVideo && showCamera && clip.recordingPart !== 'screen') {
     const rect = screen ? cameraRectAt(clip, s, W, H) : { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
@@ -675,7 +683,7 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
       ctx.globalAlpha *= rect.a;
       drawWithEffects(ctx, clip, T, rect, H, (ctx) => {
         ctx.filter = colorFilter(clip, T, H, 'camera');
-        drawCamera(ctx, src.img, src.w, src.h, rect, clip.props.mirror, rect.w < W * 0.9 && !(valueAt(clip, 'shadow', T) > 0));
+        drawCamera(ctx, src.img, src.w, src.h, rect, clip.props.mirror, rect.h < H * 0.9 && !(valueAt(clip, 'shadow', T) > 0));
       });
       ctx.restore();
     }

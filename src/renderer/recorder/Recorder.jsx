@@ -35,6 +35,9 @@ const LAYOUTS = [
   { n: 4, label: 'Top right', cls: 'screen', cam: 'tr' },
   { n: 5, label: 'Bottom left', cls: 'screen', cam: 'bl' },
   { n: 6, label: 'Bottom right', cls: 'screen', cam: 'br' },
+  { n: 7, label: 'Camera left', cls: 'side cam-left' },
+  // ponytail: 8 is the pause shortcut, so this layout is click only.
+  { n: 8, label: 'Camera right', cls: 'side cam-right', noKey: true },
 ];
 
 export const inputStatus = { value: null };
@@ -97,7 +100,7 @@ export function Recorder({ active }) {
         </div>
         <div class="layout-row">
           {LAYOUTS.map((l) => (
-            <button key={l.n} class={`layout-btn${s.layout === l.n ? ' active' : ''}`} title={`${mod.short}${l.n}`} onClick={() => engine.setLayout(l.n)}>
+            <button key={l.n} class={`layout-btn${s.layout === l.n ? ' active' : ''}`} title={l.noKey ? l.label : `${mod.short}${l.n}`} onClick={() => engine.setLayout(l.n)}>
               <div class={`mini ${l.cls}`}>{l.cam && <div class={`cam ${l.cam} ${s.pipShape}`} />}</div>
               <span>
                 <b>{l.n}</b> {l.label}

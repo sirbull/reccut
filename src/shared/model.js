@@ -678,8 +678,19 @@ export function removeKeyframe(clip, prop, s) {
 
 /* Oppsett for bilde i bilde, felles for opptak og redigering. */
 
+export const isCorner = (layout) => layout >= 3 && layout <= 6;
+
+// Skjermens område: hele bildet, eller én halvdel når kamera og skjerm står side om side (7, 8).
+export function screenArea(layout, W, H) {
+  if (layout === 7) return { x: W / 2, y: 0, w: W / 2, h: H, r: 0, a: 1 };
+  if (layout === 8) return { x: 0, y: 0, w: W / 2, h: H, r: 0, a: 1 };
+  return { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
+}
+
 export function pipRect(layout, lastCorner, W, H, size, shape) {
   if (layout === 1) return { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
+  if (layout === 7) return { x: 0, y: 0, w: W / 2, h: H, r: 0, a: 1 };
+  if (layout === 8) return { x: W / 2, y: 0, w: W / 2, h: H, r: 0, a: 1 };
   const base = W * (PIP_SIZES[size] || PIP_SIZES.medium);
   const w = shape === 'rect' || !shape ? base : base * 0.7;
   const h = shape === 'rect' || !shape ? (w * 9) / 16 : w;
@@ -696,23 +707,31 @@ export function lerpRect(a, b, t) {
   return { x: l(a.x, b.x), y: l(a.y, b.y), w: l(a.w, b.w), h: l(a.h, b.h), r: l(a.r, b.r), a: l(a.a, b.a) };
 }
 
-// Kamerarammen ved kildetid s, med myk overgang rett etter hvert oppsettsbytte.
-export function cameraRectAt(clip, s, W, H) {
+// Rammen for oppsettet ved kildetid s, med myk overgang rett etter hvert oppsettsbytte.
+function layoutRectAt(clip, s, rectFor) {
   const list = clip.kf?.layout?.length ? clip.kf.layout : [[0, 6]];
   let idx = 0;
   for (let i = 0; i < list.length; i++) if (list[i][0] <= s) idx = i;
   const cur = list[idx][1];
   const prev = idx > 0 ? list[idx - 1][1] : cur;
   const cornerBefore = (i) => {
-    for (let j = i; j >= 0; j--) if (list[j][1] >= 3) return list[j][1];
+    for (let j = i; j >= 0; j--) if (isCorner(list[j][1])) return list[j][1];
     return 6;
   };
-  const { pipSize, pipShape } = clip.props;
-  const to = pipRect(cur, cornerBefore(idx), W, H, pipSize, pipShape);
+  const to = rectFor(cur, cornerBefore(idx));
   const t = idx > 0 || list[0][0] > 0 ? clamp((s - list[idx][0]) / LAYOUT_ANIM, 0, 1) : 1;
   if (t >= 1 || prev === cur) return to;
-  const from = pipRect(prev, cornerBefore(idx - 1), W, H, pipSize, pipShape);
+  const from = rectFor(prev, cornerBefore(idx - 1));
   return lerpRect(from, to, easeOutCubic(t));
+}
+
+export function cameraRectAt(clip, s, W, H) {
+  const { pipSize, pipShape } = clip.props;
+  return layoutRectAt(clip, s, (layout, corner) => pipRect(layout, corner, W, H, pipSize, pipShape));
+}
+
+export function screenAreaAt(clip, s, W, H) {
+  return layoutRectAt(clip, s, (layout) => screenArea(layout, W, H));
 }
 
 /* Hendelser fra opptaket: musepeker, forstørring, klikk og taster. */

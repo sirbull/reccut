@@ -215,15 +215,16 @@ export function drawTestCard(ctx, W, H, { top = 'MEDIA OFFLINE', bottom = '', in
     fitFont(ctx, info, R * 0.9, R * 0.075, 6, 700);
     ctx.fillText(info, cx, Y(-0.585));
   }
-  // Tekstboksene: øverst (som «CHANNEL 6») og nederst (som stedsnavnet).
-  const minFont = Math.max(8, S * 0.022);
-  if (top) textBox(ctx, top, cx, cy, Y(-0.86), R * 0.17, R, W, minFont);
-  if (bottom) textBox(ctx, bottom, cx, cy, Y(0.665), R * 0.17, R, W, minFont);
-
   ctx.beginPath();
   ctx.arc(cx, cy, R, 0, Math.PI * 2);
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = Math.max(1, S * 0.004);
   ctx.stroke();
+
+  // Tekstboksene: øverst (som «CHANNEL 6») og nederst (som stedsnavnet). Tegnes etter
+  // sirkelkanten, så kanten ikke går over boksene når de er bredere enn sirkelen.
+  const minFont = Math.max(8, S * 0.022);
+  if (top) textBox(ctx, top, cx, cy, Y(-0.86), R * 0.17, R, W, minFont);
+  if (bottom) textBox(ctx, bottom, cx, cy, Y(0.665), R * 0.17, R, W, minFont);
   ctx.restore();
 }

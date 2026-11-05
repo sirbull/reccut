@@ -1,7 +1,8 @@
 // Opptaksmotor: kilder, live forhåndsvisning og opptak til separate filer.
 import { signal } from '@preact/signals';
 import { drawCamera, drawClicks, drawCursor, drawKeys } from '../../shared/render.js';
-import { KEY_LIFE, LAYOUT_ANIM, easeOutCubic, lerpRect, pipRect, ZOOM_RAMP, clamp } from '../../shared/model.js';
+import { KEY_LIFE, LAYOUT_ANIM, easeOutCubic, isCorner, lerpRect, pipRect, screenArea, ZOOM_RAMP, clamp } from '../../shared/model.js';
+import { containRect } from '../../shared/follow.js';
 import { settings, saveSettings } from './settings.js';
 import { recordingAudioChoice, recordingPlan, recordingVideoFormat } from '../../shared/recordingFormats.cjs';
 import { projectFolders } from '../editor/store.js';
@@ -301,6 +302,9 @@ let cam = null;
 let camFrom = null;
 let camTo = null;
 let camAnimStart = 0;
+let scr = null;
+let scrFrom = null;
+let scrTo = null;
 let lastCorner = 6;
 let liveZoom = { on: false, at: 0, off: 0 };
 let liveCursor = null;
@@ -328,7 +332,7 @@ function syncPipPreview(now, force = false) {
   const s = settings.value;
   const visible = s.showPipOnScreen && (roomActive || recording.value || countdown.value) &&
     !editingArea.value && !isWindowSource() && !document.hasFocus() &&
-    ready(screenVideo) && ready(cameraVideo) && effectiveLayout() >= 3 && cam?.a > 0.01;
+    ready(screenVideo) && ready(cameraVideo) && isCorner(effectiveLayout()) && cam?.a > 0.01;
   if (!visible) {
     if (pipVisible) api.recPipPreview(null);
     pipVisible = false;
@@ -394,7 +398,7 @@ export function attachCanvas(el) {
 }
 
 export function setLayout(n) {
-  if (n >= 3) lastCorner = n;
+  if (isCorner(n)) lastCorner = n;
   saveSettings({ layout: n });
   if (recording.value) layouts.push([round((Date.now() - t0) / 1000), n]);
 }
@@ -473,30 +477,42 @@ function draw() {
 
   const hasScreen = ready(screenVideo);
   const hasCamera = ready(cameraVideo);
-  const target = pipRect(effectiveLayout(), lastCorner, W, H, s.pipSize, s.pipShape);
+  const layout = effectiveLayout();
+  const target = pipRect(layout, lastCorner, W, H, s.pipSize, s.pipShape);
+  const scrTarget = screenArea(layout, W, H);
   // Fortsett fra posisjonen akkurat nå, også når en ny snarvei avbryter en pågående flytting.
   const t = Math.min(1, (now - camAnimStart) / (LAYOUT_ANIM * 1000));
-  if (cam) cam = t >= 1 ? camTo : lerpRect(camFrom, camTo, easeOutCubic(t));
-  if (!cam) cam = camFrom = camTo = target;
-  else if (['x', 'y', 'w', 'h', 'r', 'a'].some((k) => Math.abs(target[k] - camTo[k]) > 0.5 || (k === 'a' && target.a !== camTo.a))) {
+  if (cam) {
+    cam = t >= 1 ? camTo : lerpRect(camFrom, camTo, easeOutCubic(t));
+    scr = t >= 1 ? scrTo : lerpRect(scrFrom, scrTo, easeOutCubic(t));
+  }
+  if (!cam) {
+    cam = camFrom = camTo = target;
+    scr = scrFrom = scrTo = scrTarget;
+  } else if (['x', 'y', 'w', 'h', 'r', 'a'].some((k) => Math.abs(target[k] - camTo[k]) > 0.5 || (k === 'a' && target.a !== camTo.a) || Math.abs(scrTarget[k] - scrTo[k]) > 0.5)) {
     camFrom = { ...cam };
     camTo = target;
+    scrFrom = { ...scr };
+    scrTo = scrTarget;
     camAnimStart = now;
   }
 
   let rect = { x: 0, y: 0, w: W, h: H };
   const area = activeArea();
   const editing = editingArea.value && area;
+  // Skjermen passes inn i sitt område: hele bildet, eller én halvdel side om side.
+  const fit = (w, h, a) => {
+    const r = containRect(w, h, a.w, a.h);
+    return { ...r, x: r.x + a.x, y: r.y + a.y };
+  };
   if (hasScreen && area && !editing) {
     // Bare området: samme utsnitt som opptaket får.
     const r = areaPixels(area, screenVideo.videoWidth, screenVideo.videoHeight);
-    ctx.drawImage(screenVideo, r.x, r.y, r.w, r.h, 0, 0, W, H);
+    rect = fit(r.w, r.h, scr);
+    ctx.drawImage(screenVideo, r.x, r.y, r.w, r.h, rect.x, rect.y, rect.w, rect.h);
   }
   if (hasScreen && (!area || editing)) {
-    const sc = Math.min(W / screenVideo.videoWidth, H / screenVideo.videoHeight);
-    rect = { w: screenVideo.videoWidth * sc, h: screenVideo.videoHeight * sc };
-    rect.x = (W - rect.w) / 2;
-    rect.y = (H - rect.h) / 2;
+    rect = fit(screenVideo.videoWidth, screenVideo.videoHeight, editing ? rect : scr);
     ctx.drawImage(screenVideo, rect.x, rect.y, rect.w, rect.h);
   }
   if (hasScreen && !editing) {
@@ -515,7 +531,7 @@ function draw() {
   if (hasCamera && cam.a > 0.01 && !editing) {
     ctx.save();
     ctx.globalAlpha = cam.a;
-    drawCamera(ctx, cameraVideo, cameraVideo.videoWidth, cameraVideo.videoHeight, cam, s.mirror, cam.w < W * 0.9);
+    drawCamera(ctx, cameraVideo, cameraVideo.videoWidth, cameraVideo.videoHeight, cam, s.mirror, cam.h < H * 0.9);
     ctx.restore();
   }
   if (s.showKeys) {

@@ -364,7 +364,7 @@ Choose a countdown of 3, 5 or 10 seconds under Recording. The numbers are shown 
 
 ![The Record room. The layouts at the bottom switch between camera, screen and picture in picture.](record.jpg)
 
-- The layout buttons, or the shortcuts shown on them, switch between camera full screen, screen only and the camera in a corner. To use these keys from another app, enable **Allow shortcuts in other apps** under **Record → Shortcuts**.
+- The layout buttons, or the shortcuts shown on them, switch between camera full screen, screen only, the camera in a corner and camera and screen side by side (7 and 8; layout 8 has no shortcut because 8 pauses). To use these keys from another app, enable **Allow shortcuts in other apps** under **Record → Shortcuts**.
 - Choose the camera shape (circle, square or 16:9), size and mirroring.
 - Turn on **Show PiP on screen** under Camera to see the camera over the app you are demonstrating. It follows the recording's position, size and shape, including when recording a screen area. Clicks pass through to the app underneath. It appears while Reccut is in the background and hides when you return. Use the layout shortcuts with **3–6** to switch corners. This is available for display and area capture. On macOS and Linux, the on-screen camera can also appear in the screen file; leave it off if you need a clean screen file for later editing.
 - **Show keystrokes** shows shortcuts you press, but never normal typing and never Reccut's own shortcuts.
@@ -1273,11 +1273,87 @@ Most values in the inspector, including position, scale, opacity, color, effects
 
 **Pattern backgrounds:** in Editing, open **Titles → Backgrounds** and add Shape Background or Grid Background. The Video inspector has the same pattern controls as Design, with diamonds for animation. Size, spacing, variation, distribution strength, seed, symbol rotation and X/Y offsets interpolate between keyframes. Symbol, pattern type, colors and distribution direction switch at the next keyframe.
 
-**Expressions:** Alt/Option-click a numeric property name or its diamond to open the preset list. Choose Wiggle, Oscillate, Pulse, Rotation (for rotation properties), Drift, Bounce, Ramp or Flicker. Adjust Amount, Speed, Phase and, for random motion, Random Seed. Expressions add to the base value and its keyframes. The number field edits the base value; the viewer shows the animated result. Click the ƒx link to reopen the controls. Enabled pauses the expression; Remove Expression keeps your base value and keyframes. Reset clears the expression and keyframes. Expressions are saved with the project and used in exports. This version uses presets; custom expression code is not available.
+**Expressions:** hold Alt/Option over a property name or its diamond. When the pointer shows **ƒx**, click to add automatic motion such as Wiggle or Oscillate. See [[article:expressions|Expressions]].
 
 New keyframes use **Ease In and Out** by default. Change this to **Linear** in Settings → Editing → Default keyframe interpolation, or use the curve button in the timeline toolbar. The default applies to all properties; existing keyframes keep their easing.
 `,
-    see: ['inspector'],
+    see: ['inspector', 'expressions'],
+  },
+  {
+    id: 'expressions',
+    section: 'Editing',
+    title: 'Expressions',
+    summary: 'Add automatic motion such as wiggle, pulse or continuous rotation to a value without setting keyframes.',
+    keywords: 'expression expressions fx ƒx wiggle shake jitter oscillate sine pulse rotate spin drift bounce ramp saw flicker random seed procedural automatic animation loop alt option',
+    body: `
+An expression animates a value for you. Instead of placing many keyframes to make a title shake, a logo spin or a light flicker, you choose a preset and set how strong and how fast it is. Expressions are presets with settings, not code you type.
+
+## Which values can have an expression
+
+Every numeric value in the inspector that has a keyframe diamond can have an expression: position, scale, rotation, opacity, crop, effect amounts, color values, pattern background settings, volume and so on. Values without a diamond, and the layout value of split screens, cannot.
+
+## Add an expression
+
+1. Select the clip and find the value in the inspector.
+2. Hold **Alt/Option** and move the pointer over the value's name or its diamond. The pointer changes to an arrow with a red **ƒx** badge when the value supports expressions.
+3. Click while holding Alt/Option. The expression controls open under the value.
+4. Choose a preset in the Expression menu and adjust its settings.
+5. Click **Done** to close the controls.
+
+You can also reach the name with Tab and press Alt/Option and Enter or Space. The playhead must be inside the clip to Alt-click the diamond; the name works at any time.
+
+## Presets
+
+- **Wiggle:** smooth random movement around the value, up and down. A new random target is reached once per cycle.
+- **Oscillate:** moves smoothly back and forth, like a sine wave, between the value minus Amount and the value plus Amount.
+- **Pulse:** grows from the value up to the value plus Amount and back, once per cycle.
+- **Rotation:** continuous rotation. Only offered for rotation values. Amount is degrees per second.
+- **Drift:** a steady change that keeps going. Amount is units per second, for example pixels per second for position.
+- **Bounce:** a repeating hop above the value, like a ball bouncing on the floor.
+- **Ramp:** rises from the value to the value plus Amount and jumps back, once per cycle.
+- **Flicker:** jumps to a new random value between the value minus Amount and the value plus Amount at every cycle, with no smoothing.
+
+Use a negative Amount to turn the direction around, for example a Pulse that shrinks instead of grows, or a Rotation that turns counterclockwise.
+
+## Settings
+
+- **Enabled:** turns the expression off without removing it, so you can compare with and without.
+- **Amount:** how far the value moves, in the same unit as the value itself (pixels, percent, degrees and so on). For Rotation and Drift it is the change per second.
+- **Cycles / second:** how fast the motion repeats. 2 means two cycles every second; 0.5 means one cycle every two seconds. For Rotation and Drift this is called **Speed multiplier** and multiplies Amount.
+- **Phase (°):** where in the cycle the motion starts. 360° is one full cycle, so 180° starts halfway. Give two clips the same preset with different phases to keep them out of step.
+- **Random Seed:** only for Wiggle and Flicker. Clips with the same seed and settings move the same way; change the seed for a different random pattern.
+
+New expressions start with a moderate Amount for the value, a speed of 1 and a phase of 0. Rotation starts at 45 degrees per second.
+
+## How expressions combine with keyframes
+
+The expression is added on top of the value. Without keyframes it moves around the number in the inspector. With keyframes it moves around the keyframed animation, so you can for example animate a title across the screen with two keyframes and let Wiggle add a shake as it travels.
+
+The number field and the slider still edit the base value, and the diamond still adds keyframes to it. The viewer, playback and export show the result with the expression added. The result stays inside the value's normal range: an opacity cannot go above 100% or below 0%, for example. The Rotation preset is not limited.
+
+Time is counted from the start of the clip, so the motion moves with the clip when you move it on the timeline. Trimming the start of the clip keeps the motion in place, as with keyframes. Clip speed and speed ramps are taken into account.
+
+## See, change and remove an expression
+
+- A value with an active expression has a red diamond, and a **ƒx** link with the preset name under the value. Click the link to open the controls again. A turned off expression shows (disabled) after the name.
+- The diamond's tooltip shows the active preset.
+- **Remove Expression**, or None in the Expression menu, removes the expression and keeps the base value and keyframes.
+- **Reset** (the arrow at the end of the row) removes the expression, the keyframes and returns the value to its default.
+
+## Copying and groups
+
+Expressions are saved with the project and used in exports. Copy and Paste Attributes copies them with the other attributes, and Remove Attributes removes them. With several clips selected, an expression you add or change in the inspector is applied to all of them.
+
+When a clip follows a track in **Live** mode, the track controls position and rotation (and scale if Scale is on), so expressions on those values are not used while it follows. Use **Keyframes** mode if you want a wiggle on top of the tracked motion.
+
+## Tips
+
+- A small Wiggle on Position (Amount 3 to 8, about 2 cycles per second) gives a handheld camera feel.
+- Pulse on Scale at 1 cycle per second makes a logo or button breathe.
+- Flicker on Opacity with a small Amount and high speed looks like an old film or a faulty light.
+- Rotation on a pattern background's symbol rotation gives a slowly turning background.
+`,
+    see: ['keyframes', 'inspector', 'effects'],
   },
 
   /* Lyd */

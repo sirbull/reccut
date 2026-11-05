@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
-import { pipRect } from '../src/shared/model.js';
+import { cameraRectAt, pipRect, screenAreaAt } from '../src/shared/model.js';
 
 // Test native vindustyring uten å starte Electron eller be om kameratilgang.
 function setup() {
@@ -148,4 +148,17 @@ test('et forsinket PiP-vindu dukker ikke opp etter at forhåndsvisningen er slå
   assert.equal(s.windows[0].messages.length, 0);
   s.preview.update({ ...s.frame, displayId: 999 });
   assert.equal(s.windows[0].visible, false);
+});
+
+test('side by side layouts split the frame and keep the last corner', () => {
+  const clip = { props: {}, kf: { layout: [[0, 3], [1, 7], [2, 8], [3, 2]] } };
+  assert.deepEqual(cameraRectAt(clip, 1.5, 1920, 1080), { x: 0, y: 0, w: 960, h: 1080, r: 0, a: 1 });
+  assert.deepEqual(screenAreaAt(clip, 1.5, 1920, 1080), { x: 960, y: 0, w: 960, h: 1080, r: 0, a: 1 });
+  assert.equal(cameraRectAt(clip, 2.5, 1920, 1080).x, 960);
+  assert.equal(screenAreaAt(clip, 2.5, 1920, 1080).x, 0);
+  // Screen only after 8 hides the camera in the corner from before (3), not at 8.
+  const hidden = cameraRectAt(clip, 3.5, 1920, 1080);
+  assert.equal(hidden.a, 0);
+  assert.ok(hidden.x < 100 && hidden.y < 100);
+  assert.deepEqual(screenAreaAt(clip, 3.5, 1920, 1080), { x: 0, y: 0, w: 1920, h: 1080, r: 0, a: 1 });
 });

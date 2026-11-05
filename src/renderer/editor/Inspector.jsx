@@ -1469,6 +1469,8 @@ const LAYOUT_OPTIONS = [
   { value: 4, label: '4', title: 'Top right' },
   { value: 5, label: '5', title: 'Bottom left' },
   { value: 6, label: '6', title: 'Bottom right' },
+  { value: 7, label: '7', title: 'Camera left, screen right' },
+  { value: 8, label: '8', title: 'Screen left, camera right' },
 ];
 
 function RecordingTab({ clip, media }) {

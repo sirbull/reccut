@@ -15,7 +15,7 @@ Record, edit and export video in one app, for Mac, Windows and Linux. The app is
 * **Countdown** of 3, 5 or 10 seconds before recording starts, in the preview and in the middle of the area on screen
 * **System audio** with one switch
 * The camera image as a circle, square or 16:9, in three sizes
-* Six layouts you switch with a shortcut while recording: 1 camera, 2 screen, 3 to 6 picture in picture in each corner
+* Eight layouts you switch while recording: 1 camera, 2 screen, 3 to 6 picture in picture in each corner, 7 and 8 camera and screen side by side (7 has a shortcut; 8 is pause)
 * **Keystrokes shown on screen** (can be turned off). Only shortcuts with Cmd, Ctrl or Alt are shown, never regular typing. Reccut's own shortcuts are not shown.
 * **Magnified pointer:** hold a key (right Cmd on Mac by default, right Ctrl on Windows), and the pointer grows with an animation until you let go
 * Highlighting of mouse clicks (optional)
@@ -77,6 +77,7 @@ Record, edit and export video in one app, for Mac, Windows and Linux. The app is
 * **Eats almost anything, like VLC**: MP4, MOV, MKV, WebM, AVI, WMV, FLV, MPEG 1 and 2, MXF, DV, 3GP, OGV, Y4M, MPEG-TS, M2TS and AVCHD (.mts) from cameras, and raw H.264 and HEVC streams. Codecs such as ProRes (including 4444 with alpha), DNxHD and DNxHR, H.264 and HEVC in 10-bit and 4:2:2, AV1, VP9, FFV1, MJPEG and Theora. Audio in WAV, AIFF, FLAC, MP3, AAC, ALAC, Ogg, Opus, WMA, AC3, E-AC3, DTS, AMR, CAF, WavPack, TTA, Speex and more. Images in JPEG, PNG, GIF, WebP, HEIC, JPEG XL, AVIF, TIFF, TGA, EXR, HDR, DPX, JPEG 2000 and QOI. Animated GIF and WebP become video. Anything the app cannot play directly is converted in the background: interlaced video is deinterlaced, video with alpha keeps its transparency, and damaged files are read as far as possible (with a second, error-tolerant pass if the first attempt fails). If FFmpeg cannot open a TS or AVCHD file, the app unpacks it itself. Tested with 70 different files.
 * Trim, cut, move, copy and paste, turn clips on and off, undo and redo
 * **Keyframes with smooth easing** (Linear, Ease In, Ease Out, Ease In and Out, Hold) on opacity, position, scale, rotation, color, effects and volume. The diamonds on the clip can be dragged, and right-click lets you choose the easing.
+* **Expressions** on every value with a keyframe diamond: Wiggle, Oscillate, Pulse, Rotation, Drift, Bounce, Ramp and Flicker, with Amount, speed, phase and random seed. Hold Option/Alt over a value's name or diamond (the pointer shows ƒx) and click to open the controls. The expression is added on top of the value and its keyframes, follows the clip when it is moved or trimmed, and is identical in the viewer and in export. See Help › Expressions.
 * **Animation presets**: Fade In, Fade Out, Slow Zoom In and Out, Slide In from three edges, Pop In and Spin In
 * Drag clips, titles and subtitles directly in the viewer to position them
 * **Effects**: Blur, Vignette, Sepia, Black & White, Invert, Hue Shift, Rounded Corners, Drop Shadow and Border
@@ -151,7 +152,7 @@ By default the shortcuts only work when Reccut is in focus, outside fields and d
 
 | Action | Mac (default) | Windows (default) |
 | --- | --- | --- |
-| Layout 1 to 6 | Ctrl Option 1 to 6 | Ctrl Shift 1 to 6 |
+| Layout 1 to 7 | Ctrl Option 1 to 7 | Ctrl Shift 1 to 7 |
 | Start and stop recording | Ctrl Option 0 | Ctrl Shift 0 |
 | Magnify the pointer | Hold right Cmd | Hold right Ctrl |
 

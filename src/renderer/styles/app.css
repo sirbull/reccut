@@ -636,7 +636,7 @@ input[type='color'].color::-webkit-color-swatch {
 }
 .layout-row {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   gap: 8px;
 }
 .layout-btn {
@@ -697,6 +697,12 @@ input[type='color'].color::-webkit-color-swatch {
 .mini .tr { top: 3px; right: 3px; }
 .mini .bl { bottom: 3px; left: 3px; }
 .mini .br { bottom: 3px; right: 3px; }
+.mini.side {
+  background: linear-gradient(90deg, #4c8dff 50%, #3b4d72 50%, #262d3d);
+}
+.mini.side.cam-right {
+  background: linear-gradient(90deg, #3b4d72, #262d3d 50%, #4c8dff 50%);
+}
 
 .rec-panel {
   width: 310px;
