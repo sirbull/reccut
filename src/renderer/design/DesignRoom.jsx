@@ -5,7 +5,7 @@ import { DESIGN_SIZES, DESIGN_SHAPES, designList } from '../../shared/design.js'
 import { project, projectEpoch } from '../editor/store.js';
 import { Button, IconButton, Modal, toast } from '../ui.jsx';
 import { currentDesign, openDesign, addDesign, selection, tool, shapeType, zoom, viewScale, setZoom, newDesignOpen, exportDesignOpen, endDesignTransient } from './store.js';
-import { startCrop, cropSession } from './crop.js';
+import { cropSession } from './crop.js';
 import { TemplatesPanel, DesignLibraryDialogs } from './LibraryPanel.jsx';
 import { refreshTemplates, libraryPreview, endLibraryDrag } from './library.js';
 import { loadBrandLogo } from './brand.js';
@@ -24,7 +24,7 @@ import { DesignSidebar, PanelResizer } from './DesignSidebar.jsx';
 import { FeedPreview, CompareDialog } from './Preview.jsx';
 import { ReadabilityPanel, useReadability, readabilityStatus } from './Readability.jsx';
 import { DesignToolsDialogs } from './ToolsDialogs.jsx';
-import { feedPreview, showSafeZones, canFeedPreview, toggleFeedPreview, toggleSafeZones, compareOpen, resizeOpen, makeVariant, startCanvasCrop, transformCanvas } from './tools.js';
+import { feedPreview, showSafeZones, canFeedPreview, toggleFeedPreview, toggleSafeZones, compareOpen, resizeOpen, makeVariant, startCanvasCrop, transformCanvas, canvasCrop } from './tools.js';
 import { refineSession } from './refine.js';
 import { TOOL_ICONS } from './toolArt.jsx';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
@@ -60,7 +60,7 @@ function ToolGroup({ tools, disabled }) {
       onPointerUp={stop} onPointerLeave={stop} onContextMenu={(e) => { if (more) { e.preventDefault(); setOpen(true); } }}
       onClick={() => { if (!held.current) pickTool(shown); }} />
     {more && <i class="dz-tool-more" aria-hidden="true" />}
-    {open && <div class="dz-tool-flyout" role="menu" ref={menu}>{tools.map((t) => <button type="button" role="menuitem" key={t.label} class={isTool(t) ? 'active' : ''} onClick={() => { setOpen(false); pickTool(t); }}><t.icon size={16} /><span>{t.label}</span><kbd>{t.key}</kbd></button>)}</div>}
+    {open && <div class="dz-tool-flyout" role="menu" ref={menu}>{tools.map((t) => <button type="button" role="menuitem" key={t.label} class={isTool(t) ? 'active' : ''} onClick={() => { setOpen(false); pickTool(t); }}><t.icon size={16} /><span class="dz-tool-label">{t.label}</span><kbd>{t.key}</kbd></button>)}</div>}
   </span>;
 }
 export function DesignRoom({ active }) {
@@ -97,7 +97,7 @@ export function DesignRoom({ active }) {
     <div class="dz-center">
       <div class="dz-toolbar">
         {TOOL_GROUPS.map((tools) => <ToolGroup key={tools[0].id} tools={tools} disabled={!d} />)}
-        <IconButton icon={Crop} title="Crop Tool (C)" active={Boolean(cropSession.value)} disabled={!d} onClick={startCrop} />
+        <IconButton icon={Crop} title="Crop Tool (C)" active={Boolean(cropSession.value||canvasCrop.value)} disabled={!d||refineSession.value?.busy} onClick={startCanvasCrop} />
         <IconButton icon={Scaling} title="Resize Design" disabled={!d} onClick={()=>resizeOpen.value=true}/>
         <span class="dz-readability-tool"><IconButton icon={ScanText} title={warnings.length?`Readability: ${warnings.length} warnings`:"Readability"} disabled={!d} onClick={()=>setReadability(true)}/>{warnings.length>0&&<i class="dz-warning-dot" aria-label="Readability warnings"/>}</span>
         <IconButton icon={Eye} title={feedPreview.value?'Back to Canvas (F)':'Feed Preview (F)'} active={feedPreview.value} aria-pressed={feedPreview.value} disabled={!canFeedPreview()} onClick={toggleFeedPreview} />

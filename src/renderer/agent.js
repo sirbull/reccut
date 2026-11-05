@@ -405,7 +405,7 @@ const RUNTIME_TOOLS = [
     parameters: { type: 'object', properties: { query: { type: 'string' } } },
     async run(a) {
       const words = String(a.query || '').toLowerCase().split(/\W+/).filter(Boolean);
-      const hits = COMMANDS.filter((c) => words.every((w) => `${c.id} ${c.label} ${c.menu || ''} ${c.keywords || ''} ${c.desc || ''}`.toLowerCase().includes(w)));
+      const hits = COMMANDS.filter((c) => !c.menuOnly && words.every((w) => `${c.id} ${c.label} ${c.menu || ''} ${c.keywords || ''} ${c.desc || ''}`.toLowerCase().includes(w)));
       return {
         content: JSON.stringify(
           hits.map((c) => ({
@@ -428,7 +428,7 @@ const RUNTIME_TOOLS = [
     parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
     async run(a) {
       const cmd = byId.get(a.id);
-      if (!cmd) throw new Error('Unknown command. Use find_commands.');
+      if (!cmd || cmd.menuOnly) throw new Error('Unknown command. Use find_commands.');
       if (!runCommand(cmd)) throw new Error(`${cmd.label} is not available right now.`);
       await new Promise((r) => setTimeout(r, 150));
       return { content: JSON.stringify({ ran: cmd.label, room: room.value, selected: selection.value, playhead: getTime() }) };

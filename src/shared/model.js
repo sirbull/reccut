@@ -8,6 +8,8 @@ import { BUILTIN_TEMPLATES, templateDefaults } from './titletemplates.js';
 
 export const LAYOUT_ANIM = 0.32;
 export const PIP_SIZES = { small: 0.17, medium: 0.23, large: 0.31 };
+// Kamera ved siden av skjermen (oppsett 7 og 8). Størrelsen er prosent av bildets bredde.
+export const SIDE_LAYOUT = { size: 30, min: 15, max: 50, shape: 'square' };
 export const CAMERA_COLOR_PROPS = { cameraExposure: 0, cameraContrast: 0, cameraSaturation: 0, cameraTemperature: 0 };
 export const CAPTION_LANE = 1000;
 
@@ -439,6 +441,8 @@ export function defaultProps(type, media) {
         showCamera: true,
         pipSize: rec.pip?.size || 'medium',
         pipShape: rec.pip?.shape || 'rect',
+        sideSize: rec.pip?.sideSize ?? SIDE_LAYOUT.size,
+        sideShape: rec.pip?.sideShape || SIDE_LAYOUT.shape,
         mirror: Boolean(rec.pip?.mirror),
         showKeys: rec.overlays?.keys ?? true,
         cursorZoom: rec.overlays?.cursorZoom ?? true,
@@ -679,18 +683,31 @@ export function removeKeyframe(clip, prop, s) {
 /* Oppsett for bilde i bilde, felles for opptak og redigering. */
 
 export const isCorner = (layout) => layout >= 3 && layout <= 6;
+export const isSide = (layout) => layout === 7 || layout === 8;
 
-// Skjermens område: hele bildet, eller én halvdel når kamera og skjerm står side om side (7, 8).
-export function screenArea(layout, W, H) {
-  if (layout === 7) return { x: W / 2, y: 0, w: W / 2, h: H, r: 0, a: 1 };
-  if (layout === 8) return { x: 0, y: 0, w: W / 2, h: H, r: 0, a: 1 };
+// Kameraet står midt på høyden ved siden av skjermen, og skjermen får resten av bredden.
+function sideRects(layout, W, H, { size = SIDE_LAYOUT.size, shape = SIDE_LAYOUT.shape } = {}) {
+  const m = Math.min(W, H) * 0.025;
+  const maxH = H - 2 * m;
+  const wide = shape === 'rect';
+  const w = Math.min((W * size) / 100, wide ? (maxH * 16) / 9 : maxH);
+  const h = wide ? (w * 9) / 16 : w;
+  const left = layout === 7;
+  return {
+    camera: { x: left ? m : W - m - w, y: (H - h) / 2, w, h, r: shape === 'circle' ? w / 2 : w * 0.06, a: 1 },
+    screen: { x: left ? w + 2 * m : m, y: m, w: W - w - 3 * m, h: maxH, r: 0, a: 1 },
+  };
+}
+
+// Skjermens område: hele bildet, eller det kameraet lar stå igjen side om side (7, 8).
+export function screenArea(layout, W, H, side) {
+  if (isSide(layout)) return sideRects(layout, W, H, side).screen;
   return { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
 }
 
-export function pipRect(layout, lastCorner, W, H, size, shape) {
+export function pipRect(layout, lastCorner, W, H, size, shape, side) {
   if (layout === 1) return { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
-  if (layout === 7) return { x: 0, y: 0, w: W / 2, h: H, r: 0, a: 1 };
-  if (layout === 8) return { x: W / 2, y: 0, w: W / 2, h: H, r: 0, a: 1 };
+  if (isSide(layout)) return sideRects(layout, W, H, side).camera;
   const base = W * (PIP_SIZES[size] || PIP_SIZES.medium);
   const w = shape === 'rect' || !shape ? base : base * 0.7;
   const h = shape === 'rect' || !shape ? (w * 9) / 16 : w;
@@ -725,13 +742,15 @@ function layoutRectAt(clip, s, rectFor) {
   return lerpRect(from, to, easeOutCubic(t));
 }
 
+const sideOf = (clip) => ({ size: clip.props.sideSize, shape: clip.props.sideShape });
+
 export function cameraRectAt(clip, s, W, H) {
   const { pipSize, pipShape } = clip.props;
-  return layoutRectAt(clip, s, (layout, corner) => pipRect(layout, corner, W, H, pipSize, pipShape));
+  return layoutRectAt(clip, s, (layout, corner) => pipRect(layout, corner, W, H, pipSize, pipShape, sideOf(clip)));
 }
 
 export function screenAreaAt(clip, s, W, H) {
-  return layoutRectAt(clip, s, (layout) => screenArea(layout, W, H));
+  return layoutRectAt(clip, s, (layout) => screenArea(layout, W, H, sideOf(clip)));
 }
 
 /* Hendelser fra opptaket: musepeker, forstørring, klikk og taster. */

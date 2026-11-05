@@ -490,6 +490,10 @@ input[type='color'].color::-webkit-color-swatch {
 .section.closed > header h3 {
   color: var(--text-3);
 }
+.section > header .section-actions { margin-left: auto; }
+.section > header.collapsible { cursor: pointer; }
+.section-chevron { flex: none; margin-left: 8px; color: var(--text-3); transition: transform 0.15s; }
+.section.closed .section-chevron { transform: rotate(-90deg); }
 
 .row {
   display: flex;
@@ -697,12 +701,18 @@ input[type='color'].color::-webkit-color-swatch {
 .mini .tr { top: 3px; right: 3px; }
 .mini .bl { bottom: 3px; left: 3px; }
 .mini .br { bottom: 3px; right: 3px; }
-.mini.side {
-  background: linear-gradient(90deg, #4c8dff 50%, #3b4d72 50%, #262d3d);
+.mini .cam.side {
+  top: 50%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  transform: translateY(-50%);
 }
-.mini.side.cam-right {
-  background: linear-gradient(90deg, #3b4d72, #262d3d 50%, #4c8dff 50%);
+.mini .cam.side.square, .mini .cam.side.circle {
+  height: auto;
+  aspect-ratio: 1;
 }
+.mini .cam.left { left: 3px; }
+.mini .cam.right { right: 3px; }
 
 .rec-panel {
   width: 310px;
@@ -4553,7 +4563,8 @@ kbd.keycap {
 
 /* Keying controls, local processors and the BYOK assistant. */
 .vfx-advanced { margin-top: 10px; }
-.gradient-preview { position: relative; margin: 10px 9px; touch-action: none; isolation: isolate; }
+.gradient-frame { height: 160px; margin: 10px 9px; display: flex; align-items: center; justify-content: center; }
+.gradient-preview { position: relative; touch-action: none; isolation: isolate; }
 .gradient-preview canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; border-radius: 4px; }
 .gradient-preview svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
 .gradient-preview svg line, .gradient-preview svg circle { fill: none; stroke: #ffffffbf; stroke-width: 1.5; stroke-dasharray: 5 4; filter: drop-shadow(0 1px 1px #0008); }
@@ -5318,7 +5329,7 @@ kbd.keycap {
 .dz-tool-flyout { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; display: flex; flex-direction: column; min-width: 220px; padding: 4px; background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 8px 24px #0008; }
 .dz-tool-flyout button { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 10px; border: 0; border-radius: 5px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .dz-tool-flyout button:hover, .dz-tool-flyout button:focus-visible { background: var(--bg-3); outline: 0; }
-.dz-tool-flyout span { flex: 1; }
+.dz-tool-flyout .dz-tool-label { flex: 1; white-space: nowrap; }
 .dz-tool-flyout kbd { color: var(--text-2); font: inherit; font-size: 11px; }
 
 /* Design layout: rail, focused library, canvas/pages, layers and properties. */
@@ -5420,3 +5431,27 @@ kbd.keycap {
 .dz-online-source-heading > span { color:var(--text-2); font-size:11px; padding:3px 7px; border:1px solid var(--line-2); border-radius:5px; }
 .dz-stock-loading { display:grid; place-items:center; min-height:88px; color:var(--text-2); }
 .dz-library-card small { display:block; white-space:normal; font-size:10px; color:var(--text-2); }
+
+/* Fontvelger med forhåndsvisning (FontPicker i ui.jsx) */
+.font-picker { color: var(--text); text-align: left; white-space: nowrap; overflow: hidden; }
+.font-picker-list {
+  -webkit-app-region: no-drag;
+  position-area: bottom span-right; position-try-fallbacks: flip-block;
+  margin: 4px 0; min-width: anchor-size(width); width: 300px; max-width: 420px; max-height: 420px;
+  padding: 4px; background: #252527; color: var(--text); border: 1px solid var(--line-2); border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+.font-picker-list:popover-open { display: flex; flex-direction: column; gap: 4px; }
+.font-picker-list > input { flex: none; }
+.font-picker-list > [role='listbox'] { overflow-y: auto; min-height: 0; }
+.font-picker-list .hint { margin: 8px; }
+.font-picker-list button {
+  display: flex; align-items: baseline; gap: 12px; width: 100%; padding: 6px 8px; border: 0; border-radius: 5px;
+  background: none; color: inherit; text-align: left;
+  content-visibility: auto; contain-intrinsic-size: auto 32px;
+}
+.font-picker-list button span { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.font-picker-list button small { flex: none; max-width: 45%; color: var(--text-3); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.font-picker-list button:hover, .font-picker-list button:focus { background: var(--bg-4); outline: none; }
+.font-picker-list button[aria-selected='true'] { background: var(--accent); }
+.font-picker-list button[aria-selected='true'] small { color: inherit; }

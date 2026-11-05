@@ -67,6 +67,7 @@ import {
   sourceOptions,
   sourceProject,
   sources,
+  roomActions,
 } from './state.js';
 
 const api = window.api;
@@ -135,6 +136,8 @@ async function exportSource(id, name, thumbnailId=null) {
   return true;
 }
 
+roomActions.togglePlay = player.toggle;
+
 export function ExportRoom({ active }) {
   const [over, setOver] = useState(false);
   const p = selectedProject.value;
@@ -180,6 +183,7 @@ export function ExportRoom({ active }) {
     if(preparing)return;setPreparing(true);
     try { if (await exportSource(id, name, p.designs?.[thumbnailId]?thumbnailId:null)) toast('Export started. Follow the progress in the queue on the left.', { timeout: 4000 }); } catch(err) { toast(`Could not start export: ${err.message}`,{kind:'error'}); } finally { setPreparing(false); }
   };
+  roomActions.start = doExport;
   const exportAll = async () => {
     let n = 0;
     for (const f of files.value) if (await exportSource(f.id, f.project.name)) n++;
@@ -255,6 +259,7 @@ export function ExportRoom({ active }) {
             value={previewTime.value}
             style={{ '--lo': `${(a / Math.max(0.01, p.duration)) * 100}%`, '--hi': `${(b / Math.max(0.01, p.duration)) * 100}%` }}
             onInput={(e) => player.seek(Number(e.currentTarget.value))}
+            onPointerUp={(e) => e.currentTarget.blur()}
           />
           <span class="tc">{formatTimecode(previewTime.value, p.fps)}</span>
           {!s.audioOnly && (

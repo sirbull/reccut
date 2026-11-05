@@ -51,14 +51,17 @@ test('inputs, composition and dialogs release native shortcuts; other app window
   assert.equal(keys.size, 10);
 });
 
-test('inactive recorder keeps start/pause keys, suppresses layout keys and stale bindings', () => {
+test('the recording keys belong to the Record room: other rooms get none and stale bindings do nothing', () => {
   const { state, keys, actions, shortcuts } = setup();
-  const queued = keys.get('Control+Alt+1');
+  const queued = [keys.get('Control+Alt+0'), keys.get('Control+Alt+1')];
   state.active = false;
+  state.background = true;
   shortcuts.refresh();
-  assert.deepEqual([...keys.keys()], ['Control+Alt+0', 'Control+Alt+8']);
-  queued();
+  assert.equal(keys.size, 0);
+  for (const run of queued) run();
   assert.equal(actions.length, 0);
+  state.active = true;
+  shortcuts.refresh();
   const oldModifier = keys.get('Control+Alt+0');
   state.modifier = 'Command+Alt';
   shortcuts.refresh(); oldModifier();

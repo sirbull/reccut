@@ -60,6 +60,13 @@ test('crop handles and aspect presets stay within source bounds and preserve the
   }
   const p=presetCrop(full,crop,1);near(p.w*400/(p.h*300),1);
 });
+test('canvas crop handles grow past the canvas up to the size limit',()=>{
+  const full={x:0,y:0,w:400,h:300},crop={x:0,y:0,w:1,h:1},max={w:2,h:2};
+  assert.deepEqual(resizeCrop(full,crop,'e',200,0,null,max),{x:0,y:0,w:1.5,h:1});
+  const west=resizeCrop(full,crop,'w',-100,0,null,max);near(west.x,-0.25);near(west.w,1.25);
+  assert.equal(resizeCrop(full,crop,'se',9000,9000,null,max).w,2);
+  const ratio=resizeCrop(full,crop,'se',9000,9000,1,max);near(ratio.w*400,ratio.h*300);assert.ok(ratio.w<=2&&ratio.h<=2);
+});
 test('applying a crop on rotated and flipped layers keeps the source at the same world position',()=>{
   for(const rotation of [0,30,90])for(const flipX of [false,true])for(const flipY of [false,true]){
     const l=newLayer('image',{x:100,y:80,w:400,h:300,rotation,flipX,flipY}),full={x:0,y:0,w:400,h:300},crop={x:0.25,y:0.2,w:0.5,h:0.6};

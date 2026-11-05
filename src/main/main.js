@@ -267,7 +267,7 @@ function menuFromTemplate(items) {
   return items.map((it) => {
     if (it.separator) return { type: 'separator' };
     if (it.role === 'about') return { label: it.label, click: about.show };
-    if (it.role && !it.submenu) return { role: it.role, label: it.label };
+    if (it.role && !it.submenu) return { role: it.role, label: it.label, accelerator: it.accelerator };
     if (it.submenu) return { label: it.label, role: it.role, submenu: menuFromTemplate(it.submenu) };
     return {
       label: it.label,
@@ -371,7 +371,7 @@ ipcMain.handle('shortcuts:set', (_e, modifier) => {
 });
 ipcMain.handle('shortcuts:active', (_e, active) => {
   shortcutsActive = active;
-  registerShortcuts();
+  return registerShortcuts();
 });
 ipcMain.handle('shortcuts:scope', (e, scope) => {
   if (e.sender !== win?.webContents) return [];

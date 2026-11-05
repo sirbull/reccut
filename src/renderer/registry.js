@@ -34,10 +34,11 @@ import { removeBackground } from './design/cutout.js';
 import { startRefine, refineSession } from './design/refine.js';
 import { fillTextWithImage } from './design/masks.js';
 import { openSaveStyle, openSaveTemplate, importTemplate } from './design/library.js';
-import { startCrop } from './design/crop.js';
 import { feedPreview, showSafeZones, canFeedPreview, toggleFeedPreview, toggleSafeZones } from './design/tools.js';
 import { chooseImage, pasteImage, copyLayers } from './design/assets.js';
 import { toggleViewerFullscreen } from './editor/fullscreen.js';
+import { LAYOUTS, modifierInfo, settings as recordSettings } from './recorder/settings.js';
+import { addFiles, roomActions } from './export/state.js';
 
 const api = window.api;
 export const isMac = api.platform === 'darwin';
@@ -48,11 +49,21 @@ export const paletteOpen = signal(false);
 // Mens en ny hurtigtast tas opp i Settings, registrerer ikke menyen tastene, så alle tastetrykk når fram.
 export const recordingShortcut = signal(false);
 
+// Hvert rom har egne kommandoer og taster. ALL er bare det som gjelder hele appen: prosjekt, rom, innstillinger og hjelp.
+const RECORD = ['record'];
 const EDIT = ['edit'];
+const EXPORT = ['export'];
 const DESIGN = ['design'];
 const EDIT_DESIGN = ['edit', 'design'];
-const VIDEO = ['record', 'edit', 'export'];
-const ALL = [...VIDEO, 'design'];
+const ALL = ['record', 'edit', 'export', 'design'];
+
+export const inRoom = (cmd, r = room.value) => (cmd.rooms || EDIT).includes(r);
+
+// Opptakstastene registreres i hovedprosessen med modifikatoren fra Record (src/main/shortcuts.js). Her vises de bare.
+const recordCommand = (id, label, group, key, run, extra) => ({
+  id: `record:${id}`, label, menu: 'Record', group, rooms: RECORD, menuOnly: true, allowWhileTyping: true, help: 'recording', run, ...extra,
+  get keys() { return key && `${modifierInfo().value}+${key}`; },
+});
 
 function setTool(t) {
   tool.value = t;
@@ -114,18 +125,18 @@ export const COMMANDS = [
   { id: 'history', label: 'Project History…', menu: 'File', keys: 'Shift+Alt+CmdOrCtrl+H', rooms: ALL, run: () => (commands.historyOpen.value = true), help: 'history', keywords: 'versions autosave auto save backup restore revert earlier older crash', desc: 'Go back to an earlier version of the project. Reccut saves a copy every few minutes and when you close it.' },
   { id: 'package', label: 'Package Project…', menu: 'File', keys: 'Alt+Shift+CmdOrCtrl+P', rooms: ALL, run: () => (commands.packageOpen.value = true), help: 'package', keywords: 'collect files archive reduce consolidate backup hand over export project media', desc: 'Copy the project and every file it uses into one folder, for archiving or handing over. Unused and disabled material can be left out.' },
   { id: 'revealProject', label: isMac ? 'Reveal Project in Finder' : 'Show Project in Explorer', menu: 'File', keys: 'Shift+CmdOrCtrl+R', rooms: ALL, run: () => projectPath.value && api.reveal(projectPath.value), help: 'projects' },
-  { id: 'newSequence', label: 'New Sequence', menu: 'File', group: 'sequence', keys: 'Alt+CmdOrCtrl+N', rooms: VIDEO, run: () => commands.newSequence(), help: 'projects', keywords: 'timeline add another version cut edit', desc: 'Add an empty timeline to the project. All sequences share the same media. Double click a sequence in the Media browser to open it.' },
-  { id: 'duplicateSequence', label: 'Duplicate Sequence', menu: 'File', group: 'sequence', rooms: VIDEO, run: () => commands.duplicateSequence(), help: 'projects', keywords: 'copy timeline version clone', desc: 'Make a copy of the open sequence and open it, for example to make a vertical or shorter version.' },
-  { id: 'sequenceSettings', label: 'Sequence Settings…', menu: 'File', group: 'sequence', keys: 'CmdOrCtrl+J', rooms: VIDEO, run: () => (sequenceSettingsOpen.value = {}), help: 'projects', keywords: 'project properties format resolution size frame rate fps width height aspect', desc: 'Change the size and frame rate of the open sequence. Clips scale to fit the new size.' },
-  { id: 'import', label: 'Import Media', menu: 'File', group: 'media', keys: 'CmdOrCtrl+I', register: true, rooms: VIDEO, run: () => ((room.value = 'edit'), commands.importDialog()), help: 'import', desc: 'Import video, audio and images. Choose to copy them into the project folder or leave them in place.' },
+  { id: 'newSequence', label: 'New Sequence', menu: 'File', group: 'sequence', keys: 'Alt+CmdOrCtrl+N', run: () => commands.newSequence(), help: 'projects', keywords: 'timeline add another version cut edit', desc: 'Add an empty timeline to the project. All sequences share the same media. Double click a sequence in the Media browser to open it.' },
+  { id: 'duplicateSequence', label: 'Duplicate Sequence', menu: 'File', group: 'sequence', run: () => commands.duplicateSequence(), help: 'projects', keywords: 'copy timeline version clone', desc: 'Make a copy of the open sequence and open it, for example to make a vertical or shorter version.' },
+  { id: 'sequenceSettings', label: 'Sequence Settings…', menu: 'File', group: 'sequence', keys: 'CmdOrCtrl+J', run: () => (sequenceSettingsOpen.value = {}), help: 'projects', keywords: 'project properties format resolution size frame rate fps width height aspect', desc: 'Change the size and frame rate of the open sequence. Clips scale to fit the new size.' },
+  { id: 'import', label: 'Import Media', menu: 'File', group: 'media', keys: 'CmdOrCtrl+I', register: true, run: () => commands.importDialog(), help: 'import', desc: 'Import video, audio and images. Choose to copy them into the project folder or leave them in place.' },
   { id: 'optimize', label: 'Optimize Media', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+O', run: () => commands.optimizeMedia(), help: 'optimize', desc: 'Convert the selected clips to a high quality format that is smooth to edit. Runs in the background.' },
   { id: 'syncAudio', label: 'Synchronize Audio', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+G', run: () => commands.autoSyncAudio(), help: 'sync', keywords: 'auto sync audio merge external microphone recorder', desc: 'In the browser: merge audio files into the video clips they belong to. On the timeline: place audio clips under the matching video.' },
   { id: 'removeSync', label: 'Remove Synchronized Audio', menu: 'File', group: 'media', keys: 'Shift+Alt+CmdOrCtrl+G', run: () => commands.removeSyncedAudio(), help: 'sync', desc: 'Remove merged audio from the selected clips and switch the camera audio back on.' },
   { id: 'importTemplate', label: 'Import Title Template', menu: 'File', group: 'media', keys: 'Shift+Alt+CmdOrCtrl+I', run: () => commands.importTitleTemplate(), help: 'templates', keywords: 'after effects reccut-title lower third custom' },
   { id: 'templateKit', label: 'Get the Template Kit', menu: 'Help', group: 'help', keys: 'Shift+Alt+CmdOrCtrl+K', rooms: ALL, run: () => commands.downloadTemplateKit(), help: 'templates', keywords: 'after effects script jsx lower third design' },
   { id: 'relink', label: 'Relink File', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+L', run: () => { const id = commands.browserTargets()[0]; return id ? commands.relinkDialog(id) : toast('Select a clip in the browser or on the timeline first.'); }, help: 'offline', keywords: 'missing offline media find reconnect', desc: 'Point the selected media to a new file, for example when it is missing or has been moved.' },
-  { id: 'export', label: 'Easy Export', menu: 'File', group: 'export', keys: 'CmdOrCtrl+E', register: true, allowWhileTyping: true, rooms: VIDEO, run: () => (commands.exportOpen.value = true), help: 'export', keywords: 'quick export project presets video', desc: 'Open the simple project export dialog with presets, format, resolution and destination.' },
-  { id: 'exportFrame', label: 'Export Frame…', menu: 'File', group: 'export', keys: 'Shift+CmdOrCtrl+E', register: true, allowWhileTyping: true, rooms: VIDEO, run: commands.openFrameExport, help: 'export-frame', keywords: 'still image picture snapshot screenshot png jpeg jpg webp alpha transparent transparency mask chroma key', desc: 'Save the timeline frame at the playhead as an image. Choose its size, format, location and alpha channel.' },
+  { id: 'export', label: 'Easy Export', menu: 'File', group: 'export', keys: 'CmdOrCtrl+E', register: true, allowWhileTyping: true, run: () => (commands.exportOpen.value = true), help: 'export', keywords: 'quick export project presets video', desc: 'Open the simple project export dialog with presets, format, resolution and destination.' },
+  { id: 'exportFrame', label: 'Export Frame…', menu: 'File', group: 'export', keys: 'Shift+CmdOrCtrl+E', register: true, allowWhileTyping: true, run: commands.openFrameExport, help: 'export-frame', keywords: 'still image picture snapshot screenshot png jpeg jpg webp alpha transparent transparency mask chroma key', desc: 'Save the timeline frame at the playhead as an image. Choose its size, format, location and alpha channel.' },
   { id: 'prefs', label: 'Settings', menu: isMac ? 'App' : 'File', group: 'prefs', keys: 'CmdOrCtrl+,', register: true, rooms: ALL, run: () => (commands.prefsOpen.value = true), help: 'preferences' },
 
   /* Edit */
@@ -198,7 +209,7 @@ export const COMMANDS = [
   { id: 'design:text', label: 'Type Tool', keys: 'T', run: () => (design.tool.value = 'text'), menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:shape', label: 'Shape Tool', keys: 'U', run: () => (design.tool.value = 'shape'), menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:cycleShape', label: 'Next Shape Tool', keys: 'Shift+U', run: design.cycleShape, menu: 'Design', rooms: DESIGN, help: 'design' },
-  { id: 'design:crop', label: 'Crop Tool', keys: 'C', run: startCrop, enabled: () => design.selectedLayers().some((l) => l.type === 'image'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:crop', label: 'Crop Tool', keys: 'C', run: () => import('./design/tools.js').then(m => m.startCanvasCrop()), enabled: () => Boolean(design.currentDesign.value), menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:group', label: 'Group Layers', keys: 'CmdOrCtrl+G', run: () => design.groupSelection(), menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:ungroup', label: 'Ungroup Layers', keys: 'Shift+CmdOrCtrl+G', run: () => design.groupSelection(true), menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:pasteInPlace', label: 'Paste in Place', keys: 'Shift+CmdOrCtrl+V', run: () => pasteImage(true), menu: 'Design', rooms: DESIGN, help: 'design' },
@@ -227,6 +238,15 @@ export const COMMANDS = [
   { id: 'design:down', label: 'Send Backward', keys: 'CmdOrCtrl+[', run: () => design.orderSelection('down'), menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:front', label: 'Bring to Front', keys: 'Shift+CmdOrCtrl+]', run: () => design.orderSelection('front'), menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:back', label: 'Send to Back', keys: 'Shift+CmdOrCtrl+[', run: () => design.orderSelection('back'), menu: 'Design', rooms: DESIGN, help: 'design' },
+
+  /* Record */
+  recordCommand('toggle', 'Start or Stop Recording', 'record', '0'), // run settes i app.jsx, der opptaket avsluttes.
+  recordCommand('pause', 'Pause or Resume', 'record', '8', () => import('./recorder/engine.js').then((m) => m.togglePause())),
+  ...LAYOUTS.map((l) => recordCommand(`layout:${l.n}`, l.label, 'layout', l.noKey ? null : l.n, () => import('./recorder/engine.js').then((m) => m.setLayout(l.n)), { checked: () => recordSettings.value.layout === l.n })),
+
+  /* Export */
+  { id: 'export:start', label: 'Export', menu: 'Export', keys: 'CmdOrCtrl+E', register: true, allowWhileTyping: true, rooms: EXPORT, run: () => roomActions.start(), help: 'export', desc: 'Export the selected project or file with the settings in the Export room.' },
+  { id: 'export:addFiles', label: 'Import Files to Convert', menu: 'Export', keys: 'CmdOrCtrl+I', register: true, rooms: EXPORT, run: () => api.openMediaDialog().then(addFiles), help: 'export' },
 
   /* Mark */
   { id: 'setIn', label: 'Set Range Start', menu: 'Mark', keys: 'I', run: () => commands.setRange('in'), help: 'range' },
@@ -318,7 +338,7 @@ export const COMMANDS = [
   { id: 'viewerFullscreen', label: 'Toggle Preview Full Screen', menu: 'View', group: 'screen', keys: 'Shift+CmdOrCtrl+F', run: () => toggleViewerFullscreen(), help: 'playback' },
 
   /* Playback */
-  { id: 'play', label: 'Play or Pause', menu: 'Playback', keys: 'Space', run: playback.toggle, help: 'playback' },
+  { id: 'play', label: 'Play or Pause', menu: 'Playback', keys: 'Space', rooms: ['edit', 'export'], run: () => room.value === 'export' ? roomActions.togglePlay() : playback.toggle(), help: 'playback' },
   { id: 'playReverse', label: 'Play Reverse', menu: 'Playback', keys: 'Shift+Space', run: playback.playReverse, help: 'playback' },
   { id: 'shuttleBack', label: 'Play Backward (faster each press)', menu: 'Playback', group: 'jkl', keys: 'J', run: () => playback.shuttle(-1), help: 'playback' },
   { id: 'stop', label: 'Stop', menu: 'Playback', group: 'jkl', keys: 'K', run: () => playback.shuttle(0), help: 'playback' },
@@ -449,7 +469,7 @@ function codeMatches(k, e) {
 export function commandForEvent(e, currentRoom, { includeRegistered = false } = {}) {
   for (const cmd of COMMANDS) {
     if (cmd.menuOnly || (cmd.register && !includeRegistered)) continue;
-    if (!(cmd.rooms || EDIT).includes(currentRoom)) continue;
+    if (!inRoom(cmd, currentRoom)) continue;
     for (const k of parsedKeys(cmd)) {
       if (!codeMatches(k, e)) continue;
       if (k.meta !== e.metaKey || k.ctrl !== e.ctrlKey || k.alt !== e.altKey) continue;
@@ -497,16 +517,15 @@ export function runCommand(id) {
 
 /* Menylinjen */
 
-const MENU_ORDER = isMac ? ['App', 'File', 'Edit', 'Mark', 'Clip', 'Tools', 'Playback', 'Design', 'View', 'Window', 'Help'] : ['File', 'Edit', 'Mark', 'Clip', 'Tools', 'Playback', 'Design', 'View', 'Window', 'Help'];
+const MENU_ORDER = [...(isMac ? ['App'] : []), 'File', 'Edit', 'Record', 'Export', 'Mark', 'Clip', 'Tools', 'Playback', 'Design', 'View', 'Window', 'Help'];
 
-// The menu bar follows the room: Design shows only design commands, the video rooms hide them.
-function inMenu(cmd) {
-  const rooms = cmd.rooms || EDIT;
-  return room.value === 'design' ? rooms.includes('design') : rooms.some((r) => r !== 'design');
-}
+// Menylinjen følger rommet. Tekstkommandoene står alltid der, ellers virker ikke Cmd C og Cmd V i tekstfelt på Mac.
+const inMenu = (cmd) => inRoom(cmd) || Boolean(cmd.text);
 
 function itemFor(cmd) {
   const accel = keysFor(cmd)[0];
+  // Utenfor rommet sitt er dette bare den vanlige tekstkommandoen, så tastene ikke når klipp eller lag.
+  if (cmd.text && !inRoom(cmd) && !recordingShortcut.value) return { role: cmd.text, label: cmd.label, accelerator: accel };
   const it = { id: cmd.id, label: cmd.menuLabel || cmd.label, accelerator: accel, register: Boolean(cmd.register) && !recordingShortcut.value };
   if (cmd.checked) it.checked = Boolean(cmd.checked());
   if (cmd.enabled) it.enabled = Boolean(cmd.enabled());

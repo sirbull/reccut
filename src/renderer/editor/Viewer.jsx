@@ -4,7 +4,7 @@ import { deepClone, formatTimecode, isVisual, kfTime, valueAt } from '../../shar
 import { captionLayout, wrapText } from '../../shared/render.js';
 import { clipMatrix, maskList, shapeAt } from '../../shared/shapes.js';
 import { followMatrix } from '../../shared/follow.js';
-import { beginTransient, browserPlayhead, commit, endTransient, getTime, playing, project, selectedClips, selectedTransition, selection, skim, timeSig, updateTransient } from './store.js';
+import { beginTransient, browserPlayhead, commit, endTransient, getTime, playing, project, selectedClips, room, selectedTransition, selection, skim, timeSig, updateTransient } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
 import { IconButton } from '../ui.jsx';
@@ -467,7 +467,7 @@ function PenOverlay({ clip, canvasRef }) {
     ro.observe(cv);
     // Tastene fanges før hurtigtastene, så Retur, Escape og rettetasten bare virker på pennen.
     const onKey = (e) => {
-      if (commandsBlocked(e)) return;
+      if (room.value !== 'edit' || commandsBlocked(e)) return;
       if (!['Enter', 'Escape', 'Backspace', 'Delete'].includes(e.key)) return;
       e.preventDefault();
       e.stopImmediatePropagation();

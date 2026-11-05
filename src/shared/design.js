@@ -83,8 +83,9 @@ export function designShapePoints(l) {
     return [0.5 + Math.cos(a) * r / 2, 0.5 + Math.sin(a) * r / 2];
   });
 }
+export const MAX_DESIGN_SIDE = 8192;
 export function validDesignSize(width, height) {
-  return [width, height].every((v) => Number.isInteger(v) && v >= 1 && v <= 8192);
+  return [width, height].every((v) => Number.isInteger(v) && v >= 1 && v <= MAX_DESIGN_SIDE);
 }
 export function newDesign({ name = 'Thumbnail', width = 1280, height = 720, size = 'youtube' } = {}) {
   if (!validDesignSize(width, height)) throw new Error('Width and height must be whole numbers from 1 to 8192 pixels.');
@@ -392,8 +393,9 @@ export function resizeDesignContent(d,width,height) {
   });return{...d,width,height,size:'custom',layers};
 }
 export function cropDesignCanvas(d,rect) {
-  const x=Math.max(0,Math.min(d.width-1,Math.round(rect.x))),y=Math.max(0,Math.min(d.height-1,Math.round(rect.y))),width=Math.min(d.width-x,Math.round(rect.w)),height=Math.min(d.height-y,Math.round(rect.h));
-  if(!validDesignSize(width,height))throw new Error('Crop must contain at least one pixel.');
+  // The rect may reach past the canvas: that makes the design wider or taller.
+  const x=Math.round(rect.x),y=Math.round(rect.y),width=Math.round(rect.w),height=Math.round(rect.h);
+  if(!validDesignSize(width,height))throw new Error('Crop must be 1 to 8192 pixels per side.');
   return{...d,width,height,size:'custom',layers:d.layers.map(l=>({...l,x:l.x-x,y:l.y-y}))};
 }
 function transformBackground(fill,point) {

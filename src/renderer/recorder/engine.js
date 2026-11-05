@@ -439,7 +439,7 @@ function currentMeta() {
     pauses: pauses.map(([a, b]) => [round((a - t0) / 1000), round(((b ?? Date.now()) - t0) / 1000)]),
     ...(activeArea() ? { area: activeArea() } : {}),
     ...(isWindowSource() ? { source: 'window' } : {}),
-    pip: { size: s.pipSize, shape: s.pipShape, mirror: s.mirror },
+    pip: { size: s.pipSize, shape: s.pipShape, mirror: s.mirror, sideSize: s.sideSize, sideShape: s.sideShape },
     // Pekerzoom og klikk følger skjermen, så de er av når bare et vindu tas opp.
     overlays: { keys: s.showKeys, cursorZoom: s.cursorZoom && !isWindowSource(), clicks: s.showClicks && !isWindowSource() },
   };
@@ -478,8 +478,9 @@ function draw() {
   const hasScreen = ready(screenVideo);
   const hasCamera = ready(cameraVideo);
   const layout = effectiveLayout();
-  const target = pipRect(layout, lastCorner, W, H, s.pipSize, s.pipShape);
-  const scrTarget = screenArea(layout, W, H);
+  const side = { size: s.sideSize, shape: s.sideShape };
+  const target = pipRect(layout, lastCorner, W, H, s.pipSize, s.pipShape, side);
+  const scrTarget = screenArea(layout, W, H, side);
   // Fortsett fra posisjonen akkurat nå, også når en ny snarvei avbryter en pågående flytting.
   const t = Math.min(1, (now - camAnimStart) / (LAYOUT_ANIM * 1000));
   if (cam) {
@@ -500,7 +501,7 @@ function draw() {
   let rect = { x: 0, y: 0, w: W, h: H };
   const area = activeArea();
   const editing = editingArea.value && area;
-  // Skjermen passes inn i sitt område: hele bildet, eller én halvdel side om side.
+  // Skjermen passes inn i sitt område: hele bildet, eller plassen ved siden av kameraet.
   const fit = (w, h, a) => {
     const r = containRect(w, h, a.w, a.h);
     return { ...r, x: r.x + a.x, y: r.y + a.y };

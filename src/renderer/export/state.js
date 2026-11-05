@@ -9,6 +9,9 @@ const api = window.api;
 
 export const PROJECT_SOURCE = 'project';
 
+// ExportRoom fyller inn disse, så kommandoene i menyen kan styre rommet.
+export const roomActions = { start() {}, togglePlay() {} };
+
 // Importerte filer pakkes inn i et eget lite prosjekt, så de går gjennom samme eksport.
 export const files = signal([]);
 export const selectedId = signal(PROJECT_SOURCE);

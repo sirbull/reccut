@@ -1,6 +1,9 @@
 import { textStyleAt } from './designRichText.js';
 import { fontFamily } from './render.js';
 
+// One line of text is LINE_BOX x size tall; leading only sets the distance
+// between baselines, so it never pads the first or last line.
+export const LINE_BOX = 1.1;
 export function designFont(layer, size = layer.size) {
   return `${layer.weight} ${size}px ${fontFamily(layer.font)}`;
 }
@@ -12,7 +15,7 @@ export function fitDesignBadge(layer, measure, maxWidth) {
   const limit = Math.max(1, maxWidth), probe = {...layer,autofit:false,w:65536,h:65536};
   const natural = layoutDesignText(probe,measure);
   const w = Math.min(limit,Math.max(layer.size*.5,...natural.widths));
-  const layout = layoutDesignText({...probe,w},measure), h = Math.max(layer.size*layer.lineHeight,layout.height);
+  const layout = layoutDesignText({...probe,w},measure), h = layout.height;
   return {...layer,x:layer.x+(layer.w-w)/2,y:layer.y+(layer.h-h)/2,w,h,autofit:false};
 }
 // Single paired asterisks mark highlights. Consecutive stars and unmatched
@@ -88,7 +91,7 @@ export function layoutDesignText(layer, measure) {
       }
     }
     push();
-    const lineHeight = size * layer.lineHeight, height = lines.length * lineHeight;
+    const lineHeight = size * layer.lineHeight, leadTop = (lineHeight - size * LINE_BOX) / 2, height = lines.length * lineHeight - leadTop * 2;
     const widths = lines.map(width);
     const overflow = height > layer.h + 0.01 || widths.some((w) => w > layer.w + 0.01);
     const lineRuns = rich.map((cs) => {
@@ -99,7 +102,7 @@ export function layoutDesignText(layer, measure) {
       }
       return out;
     });
-    return { size, font, lines, lineRuns, widths, lineHeight, height, overflow };
+    return { size, font, lines, lineRuns, widths, lineHeight, leadTop, height, overflow };
   };
   let result = layout(layer.size);
   if (!layer.autofit || !result.overflow || layer.size <= 6) return result;
@@ -120,7 +123,7 @@ function layoutStyledText(layer,measure){
  const width=cs=>{const rs=runs(cs);return rs.reduce((sum,r)=>sum+measure(r.text,fontFor(r))+Math.max(0,graphemes(r.text).length-1)*tracking(r),0)+rs.slice(0,-1).reduce((sum,r)=>sum+tracking(r),0);};
  const rich=[];let line=[],pending=[];const push=()=>{rich.push(line);line=[]};let word=[];const tokens=[];for(const c of chars){if(c.text==='\n'){if(word.length)tokens.push(word);tokens.push([c]);word=[];}else if(word.length&&/\s/u.test(word[0].text)!==/\s/u.test(c.text)){tokens.push(word);word=[c]}else word.push(c);}if(word.length)tokens.push(word);
  for(const word of tokens){if(word[0].text==='\n'){push();pending=[];continue;}if(/\s/u.test(word[0].text)){pending=line.length?[{...word[0],text:' '}]:[];continue;}if(line.length&&width([...line,...pending,...word])>layer.w){push();pending=[];}if(line.length)line.push(...pending);pending=[];for(const c of word){if(line.length&&width([...line,c])>layer.w)push();line.push(c);}}push();
- const lineRuns=rich.map(runs),lineHeights=rich.map(cs=>Math.max(size,...cs.map(c=>(c.style.size??layer.size)*scale))*layer.lineHeight),height=lineHeights.reduce((a,b)=>a+b,0),widths=rich.map(width);
- return{styled:true,size,font:designFont(layer,size),lines:rich.map(cs=>cs.map(c=>c.text).join('')),lineRuns,lineHeights,lineHeight:size*layer.lineHeight,height,widths,overflow:height>layer.h+.01||widths.some(w=>w>layer.w+.01)};};
+ const lineRuns=rich.map(runs),lineHeights=rich.map(cs=>Math.max(size,...cs.map(c=>(c.style.size??layer.size)*scale))*layer.lineHeight),lead=h=>h*(1-LINE_BOX/layer.lineHeight)/2,leadTop=lead(lineHeights[0]),height=lineHeights.reduce((a,b)=>a+b,0)-leadTop-lead(lineHeights.at(-1)),widths=rich.map(width);
+ return{styled:true,size,font:designFont(layer,size),lines:rich.map(cs=>cs.map(c=>c.text).join('')),lineRuns,lineHeights,lineHeight:size*layer.lineHeight,leadTop,height,widths,overflow:height>layer.h+.01||widths.some(w=>w>layer.w+.01)};};
  let result=layout(layer.size);if(!layer.autofit||!result.overflow||layer.size<=6)return result;let lo=6,hi=layer.size;result=layout(lo);for(let i=0;i<14;i++){const mid=(lo+hi)/2,next=layout(mid);if(next.overflow)hi=mid;else{lo=mid;result=next;}}return result;
 }

@@ -45,7 +45,7 @@ Cmd/Ctrl G groups selected layers and Shift Cmd/Ctrl G ungroups them. A click se
 
 Align and Distribute in Properties aligns selected bounds. With one layer, alignment uses the canvas. Distribution needs at least three layers and makes the gaps equal. Rotated layers use their visible rectangular bounds.
 
-Double click an image or choose Crop Tool to show the full source dimmed around the crop. Drag the image to reposition it and drag handles to change the crop. Choose Free, Design, 1:1, 16:9, 9:16 or 4:5. Enter or Apply Crop applies it in one undo step; Escape or Cancel discards it. Reset Crop restores the full source within the current layer box.
+Double click an image or choose Crop… in Properties to show the full source dimmed around the crop. This also works on locked image layers. Drag the image to reposition it and drag handles to change the crop. Choose Free, Design, 1:1, 16:9, 9:16 or 4:5. Enter or Apply Crop applies it in one undo step; Escape or Cancel discards it. Reset Crop restores the full source within the current layer box.
 
 ## Design shortcuts
 
@@ -131,7 +131,7 @@ The Export room and Easy Export offer Also save thumbnail when the project has d
 
 Open as New Design in the Import Image menu, or the Open Image command, creates a separate design at the image's displayed pixel size, with just that image and a transparent canvas. Dropping images on the empty Design room does the same. The import-copy preference controls embedded or linked sources. JPEG orientation is honored. Open Image supports up to 8192 pixels per side; larger images can be placed into an existing design.
 
-Canvas offers Crop Canvas, Rotate Canvas Left/Right and Flip Canvas Horizontally/Vertically. Crop Canvas has aspect presets and draggable handles; drag inside to move the crop. Enter or Apply Canvas Crop applies it; Escape or Cancel discards it. Cropping moves every layer and changes the canvas size. Image sources and masks stay intact, so they can still be repositioned. The canvas background adapts to the new size. All canvas operations can be undone.`,
+Canvas offers Crop Canvas, Rotate Canvas Left/Right and Flip Canvas Horizontally/Vertically. The Crop Tool ({{key:design:crop}}) is the same as Crop Canvas and works whatever layer is selected or locked. It has aspect presets and draggable handles; drag a handle past the canvas edge to make the design wider or taller, up to 8192 pixels per side, and drag inside to move the crop. Enter or Apply Canvas Crop applies it; Escape or Cancel discards it. Cropping moves every layer and changes the canvas size. Image sources and masks stay intact, so they can still be repositioned. The canvas background adapts to the new size. All canvas operations can be undone.`,
     see: ['projects', 'package', 'export-frame'],
   },
 
@@ -1538,6 +1538,8 @@ Under **Keyboard** you can change the shortcut of any command:
 - If the keys are already used, Reccut says by which command, and you choose whether to move them.
 - The × removes a shortcut, and the arrow brings back the default. Changed only shows what you have changed, and Reset All goes back to the defaults.
 - Export saves your shortcuts to a file, and Import loads them, for example on another computer.
+
+Record, Edit, Export and Design each have their own shortcuts, and the menu bar changes with the room. A key only works in the room you are in, so the same key can do different things in Edit and Design. Project, room, Settings and Help commands work everywhere. The recording keys are set under Shortcuts in Record.
 
 The menus, the Keyboard Shortcuts list ({{key:shortcuts}}) and Quick Search always show your own shortcuts.
 

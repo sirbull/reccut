@@ -27,7 +27,7 @@ import { Recorder } from './recorder/Recorder.jsx';
 import * as engine from './recorder/engine.js';
 import { modifierInfo, settings } from './recorder/settings.js';
 import { Editor } from './editor/Editor.jsx';
-import { byId, commandForEvent, menuTemplate, runCommand } from './registry.js';
+import { byId, commandForEvent, inRoom, menuTemplate, runCommand } from './registry.js';
 import { effect, signal } from '@preact/signals';
 import {
   canRedo,
@@ -94,6 +94,8 @@ export function toggleRecording() {
   if (engine.recording.value) finishRecording().catch((err) => toast(`Could not save the recording: ${err.message}`, { kind: 'error' }));
   else engine.startRecording().catch((err) => toast(`Could not start recording: ${err.message}`, { kind: 'error' }));
 }
+
+byId.get('record:toggle').run = toggleRecording;
 
 function TasksIndicator() {
   const [open, setOpen] = useState(false);
@@ -301,7 +303,8 @@ function handleMenu(id) {
     if (!cmd?.allowWhileTyping) return;
     document.activeElement?.blur?.();
   }
-  if (dialogOwnsKeyboard()) return;
+  // Menyen bygges om etter et rombytte, så et tastetrykk rett etter byttet kan treffe den gamle menyen.
+  if (dialogOwnsKeyboard() || !cmd || !inRoom(cmd)) return;
   runCommand(id);
 }
 

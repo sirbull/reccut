@@ -1,5 +1,5 @@
 import { PATTERN_SHAPES, PATTERN_DISTRIBUTIONS, patternClipProps } from '../../shared/designPattern.js';
-import { baseValueAt } from '../../shared/model.js';
+import { SIDE_LAYOUT, baseValueAt, isSide } from '../../shared/model.js';
 import { ExpressionControls } from './ExpressionControls.jsx';
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
 import { ProcessorEffects } from './ProcessorEffects.jsx';
@@ -59,7 +59,7 @@ import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js
 import { attachToTrack, deleteTrack, detach, removeTrackingKeyframes, trackArea, trackForward, trackRedaction, tracksFor } from './track.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { MASK_MODES, MASK_SHAPES, canMask, defaultPoints, ellipsePoints, maskKey, maskList, setMaskShape } from '../../shared/shapes.js';
-import { Button, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
+import { Button, FontPicker, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
 
 export function Inspector() {
   const clips = selectedClips.value;
@@ -1478,6 +1478,9 @@ function RecordingTab({ clip, media }) {
   const Tc = Math.min(Math.max(T, clip.start), clip.start + clip.dur);
   const s = sourceTime(clip, Tc);
   const layout = valueAt(clip, 'layout', Tc) ?? 6;
+  const side = isSide(layout);
+  const sideSize = clip.props.sideSize ?? SIDE_LAYOUT.size;
+  const setSideSize = (v) => updateTransient((q) => { q.clips[clip.id].props.sideSize = v; });
   const atSwitch = keyframeIndexAt(clip, 'layout', s, 0.05) >= 0;
   const hasCam = clip.recordingPart !== 'screen' && media?.streams?.camera?.hasVideo;
   const camera = recordingChildren(project.value, clip.id)[0];
@@ -1539,8 +1542,8 @@ function RecordingTab({ clip, media }) {
           </div>
           <Row label="Shape">
             <Segmented
-              value={clip.props.pipShape}
-              onChange={(v) => setProp(clip, { pipShape: v })}
+              value={side ? clip.props.sideShape || SIDE_LAYOUT.shape : clip.props.pipShape}
+              onChange={(v) => setProp(clip, side ? { sideShape: v } : { pipShape: v })}
               options={[
                 { value: 'circle', label: 'Circle' },
                 { value: 'square', label: 'Square' },
@@ -1548,17 +1551,27 @@ function RecordingTab({ clip, media }) {
               ]}
             />
           </Row>
-          <Row label="Size">
-            <Segmented
-              value={clip.props.pipSize}
-              onChange={(v) => setProp(clip, { pipSize: v })}
-              options={[
-                { value: 'small', label: 'Small' },
-                { value: 'medium', label: 'Medium' },
-                { value: 'large', label: 'Large' },
-              ]}
-            />
-          </Row>
+          {side ? (
+            <div class="param">
+              <span class="param-label">Camera width</span>
+              <Slider value={sideSize} min={SIDE_LAYOUT.min} max={SIDE_LAYOUT.max} step={0.5} onStart={beginTransient} onInput={setSideSize} onCommit={() => endTransient(true)} />
+              <NumberField value={sideSize} min={SIDE_LAYOUT.min} max={SIDE_LAYOUT.max} step={0.5} precision={1} unit="%" onStart={beginTransient} onChange={setSideSize} onCommit={() => endTransient(true)} />
+              <span />
+              <span />
+            </div>
+          ) : (
+            <Row label="Size">
+              <Segmented
+                value={clip.props.pipSize}
+                onChange={(v) => setProp(clip, { pipSize: v })}
+                options={[
+                  { value: 'small', label: 'Small' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'large', label: 'Large' },
+                ]}
+              />
+            </Row>
+          )}
           <Row label="Mirror">
             <Toggle checked={clip.props.mirror} onChange={(v) => setProp(clip, { mirror: v })} />
           </Row>
@@ -1607,13 +1620,13 @@ export async function loadSystemFonts() {
   }
 }
 
-export function FontSelect({ value, onChange }) {
+export function FontSelect({ value, onChange, sample }) {
   const fonts = systemFonts.value || COMMON_FONTS;
   const options = [...BUILTIN_FONTS, ...fonts.map((f) => ({ value: f, label: f }))];
   if (!options.some((o) => o.value === value)) options.push({ value, label: value });
   return (
     <div onPointerDown={loadSystemFonts} style={{ width: '100%' }}>
-      <Select value={value} options={options} onChange={onChange} />
+      <FontPicker value={value} options={options} onChange={onChange} sample={sample} />
     </div>
   );
 }
@@ -1665,7 +1678,7 @@ function TemplateTab({ clip }) {
           </Row>
         ))}
         <Row label="Font">
-          <FontSelect value={pr.font || 'sans'} onChange={(v) => setProp(clip, { font: v })} />
+          <FontSelect value={pr.font || 'sans'} sample={Object.values(pr.fields || {}).find(Boolean)} onChange={(v) => setProp(clip, { font: v })} />
         </Row>
       </Section>
       {(tpl.colors || []).length > 0 && (
@@ -1727,7 +1740,7 @@ function TextTab({ clip }) {
           <Select value={pr.style} options={TITLE_STYLES.map((s) => ({ value: s.id, label: s.label }))} onChange={(v) => setProp(clip, { style: v })} />
         </Row>
         <Row label="Font" stacked>
-          <FontSelect value={pr.font} onChange={(v) => setProp(clip, { font: v })} />
+          <FontSelect value={pr.font} sample={pr.text} onChange={(v) => setProp(clip, { font: v })} />
         </Row>
         <Row label="Size">
           <NumberField value={pr.size} min={8} max={400} unit="pt" onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.clips[id].props.size = v))} onCommit={() => endTransient(true)} />

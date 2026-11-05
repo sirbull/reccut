@@ -7,8 +7,8 @@ import { toast } from '../ui.jsx';
 
 export const cropSession = signal(null);
 export function startCrop() {
-  const d=currentDesign.value, layer=d?.layers.find((l)=>selection.value.includes(l.id)&&l.type==='image'&&!l.locked&&!l.hidden);
-  if(!layer){toast('Select an unlocked image layer to crop.');return;}
+  const d=currentDesign.value, layer=d?.layers.find((l)=>selection.value.includes(l.id)&&l.type==='image'&&!l.hidden);
+  if(!layer){toast('Select an image layer to crop.');return;}
   const image=getImage(layer,true);if(!image){toast('Wait for the image to load, or relink the missing file.');return;}
   if(cropSession.value)finishCrop(false);
   endDesignTransient();tool.value='select';selection.value=[layer.id];

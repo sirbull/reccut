@@ -155,7 +155,8 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
           { value: '', label: 'Presets…' }, ...[0,45,90,135,180,225,270,315].map(value => ({value:String(value),label:`${value}°`}))
         ]} onChange={value => { if (value !== '') onChange(gradientAtAngle(p, Number(value), aspect)); }} />
       </div></Row>}
-      <div class="gradient-preview" style={{ aspectRatio: String(aspect), width, maxWidth: 'calc(100% - 18px)', maxHeight: 240 }} {...pointerEvents}
+      {/* Fixed-height frame: the preview keeps the layer's proportions without resizing the panel. */}
+      <div class="gradient-frame"><div class="gradient-preview" style={{ aspectRatio: String(aspect), width: `min(100%, ${160 * aspect}px)` }} {...pointerEvents}
         onDblClick={(e) => { if (free && !e.target.closest('button')) { const xy = coords(e); add(xy.x, xy.y); } }}>
         <canvas ref={preview} aria-label="Gradient preview" />
         <svg viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
@@ -175,7 +176,7 @@ export function GradientEditor({ params, aspect = 16 / 9, onChange, onStart, onI
           {p.points.map((s, i) => handle('point', s.x, s.y, `Color point ${i + 1}`, s))}
           {handle('spread', clampGradient(active.x + active.radius * short / width, 0.03, 0.97), active.y, 'Point spread', active, 'size')}
         </>}
-      </div>
+      </div></div>
       {!free && <div class="gradient-stop-track" {...pointerEvents}
         style={{ background: `linear-gradient(to right, ${p.stops.map((s) => `${s.color} ${s.position * 100}%`).join(', ')})` }}
         onClick={(e) => { const blocked = suppressClick.current; suppressClick.current = false; if (!blocked && e.detail === 1 && !e.target.closest('button')) add(coords(e).x); }}>

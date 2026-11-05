@@ -1,7 +1,7 @@
 import {brandLayer,designBrand} from '../../shared/designBrand.js';
 import {prefs} from '../prefs.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { hitTest, layerBounds, layerPoint, selectionBounds, resizeLayer, rotatePoint, snapMove, snapRotation, newLayer, groupSelectionIds, rotateDesignLayers, scaleDesignLayers, designSafeZones, solidFill } from '../../shared/design.js';
+import { hitTest, layerBounds, layerPoint, selectionBounds, resizeLayer, rotatePoint, snapMove, snapRotation, newLayer, groupSelectionIds, rotateDesignLayers, scaleDesignLayers, designSafeZones, solidFill, cropDesignCanvas, MAX_DESIGN_SIDE } from '../../shared/design.js';
 import { shapeNodes, shapeClosed, localNodes, fitPathLayer, toLocal, toWorld, tracePathNodes } from '../../shared/designPath.js';
 import { libraryDropTarget } from '../../shared/designLibrary.js';
 import { canvasCrop,showSafeZones } from './tools.js';
@@ -127,7 +127,7 @@ export function DesignCanvas({ active }) {
       if (grid) drawGrid(ctx, d, scale);
       ctx.strokeStyle = '#0a84ff'; ctx.lineWidth = 1 / scale;
       if(safe){ctx.save();ctx.fillStyle='#ffbf4730';ctx.strokeStyle='#ffbf47';ctx.lineWidth=1/scale;ctx.setLineDash([5/scale,4/scale]);for(const z of designSafeZones(d)){ctx.fillRect(z.x,z.y,z.w,z.h);ctx.strokeRect(z.x,z.y,z.w,z.h);ctx.font=`${12/scale}px sans-serif`;ctx.fillStyle='#ffbf47';ctx.fillText(z.label,z.x+4/scale,z.y+16/scale);ctx.fillStyle='#ffbf4730';}ctx.restore();}
-      if(canvasDraft){const b=cropViewport({x:0,y:0,w:d.width,h:d.height},canvasDraft.crop);ctx.save();ctx.fillStyle='#00000090';ctx.beginPath();ctx.rect(0,0,d.width,d.height);ctx.rect(b.x,b.y,b.w,b.h);ctx.fill('evenodd');ctx.strokeStyle='#ffffff';ctx.lineWidth=1.5/scale;ctx.strokeRect(b.x,b.y,b.w,b.h);for(const [x,y]of POSITIONS){ctx.fillStyle='#ffffff';ctx.fillRect(b.x+x*b.w-4/scale,b.y+y*b.h-4/scale,8/scale,8/scale)}ctx.restore();}
+      if(canvasDraft){const b=cropViewport({x:0,y:0,w:d.width,h:d.height},canvasDraft.crop);ctx.save();ctx.fillStyle='#00000090';ctx.fillRect(0,0,d.width,d.height);ctx.save();ctx.scale(1/scale,1/scale);ctx.translate(Math.round(b.x)*scale,Math.round(b.y)*scale);drawDesign(ctx,cropDesignCanvas(d,b),libraryImage,{scale,fontAvailable,cacheLayers:false});ctx.restore();ctx.strokeStyle='#ffffff';ctx.lineWidth=1.5/scale;ctx.strokeRect(b.x,b.y,b.w,b.h);for(const [x,y]of POSITIONS){ctx.fillStyle='#ffffff';ctx.fillRect(b.x+x*b.w-4/scale,b.y+y*b.h-4/scale,8/scale,8/scale)}ctx.restore();}
       if (box && !pathTool && !editing && !crop && !refine && !maskId && !canvasDraft) {
         const corners = [[0, 0], [box.w, 0], [box.w, box.h], [0, box.h]].map(([x, y]) => layerPoint(box, x, y));
         ctx.beginPath(); corners.forEach((pt, i) => i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y)); ctx.closePath(); ctx.stroke();
@@ -325,7 +325,7 @@ export function DesignCanvas({ active }) {
       writePath(state.layer, nodes, state.closed); return;
     }
     let dx = pt.x - state.start.x, dy = pt.y - state.start.y;
-    if(state.type==='canvasCrop'){const s=state.session,full={x:0,y:0,w:d.width,h:d.height},c=s.crop,ratio=s.ratio==='free'?null:Number(s.ratio);canvasCrop.value={...s,crop:state.handle?resizeCrop(full,c,state.handle,dx,dy,ratio):{...c,x:Math.max(0,Math.min(1-c.w,c.x+dx/d.width)),y:Math.max(0,Math.min(1-c.h,c.y+dy/d.height))}};return;}
+    if(state.type==='canvasCrop'){const s=state.session,full={x:0,y:0,w:d.width,h:d.height},c=s.crop,ratio=s.ratio==='free'?null:Number(s.ratio);canvasCrop.value={...s,crop:state.handle?resizeCrop(full,c,state.handle,dx,dy,ratio,{w:MAX_DESIGN_SIDE/d.width,h:MAX_DESIGN_SIDE/d.height}):{...c,x:c.x+dx/d.width,y:c.y+dy/d.height}};return;}
     if (state.type === 'crop') {
       const s=state.session,local=cropPoint(pt,s.layer),cx=local.x-state.start.x,cy=local.y-state.start.y;
       const ratio=s.ratio==='design'?d.width/d.height:s.ratio==='free'?null:Number(s.ratio);
@@ -383,6 +383,8 @@ export function DesignCanvas({ active }) {
   const text = base?.layers.find((l) => l.id === editing);
   let textLayout;
   if (text) { const ctx = canvas.current?.getContext('2d'); if (ctx) textLayout = layoutDesignText(text, (t, font) => { ctx.font = font; return ctx.measureText(t).width; }); }
+  // CSS splits leading above and below each line; shift the editor so its lines sit where the canvas draws them.
+  const editTop = textLayout ? (text.valign === 'top' ? 0 : (text.h - textLayout.height) / (text.valign === 'middle' ? 2 : 1)) - textLayout.leadTop : 0;
   return (
     <div class={`dz-stage dz-tool-${tool.value}${crop ? ' dz-crop-mode' : ''}${refine ? ' dz-refine-mode' : ''}${canvasDraft?' dz-canvas-crop-mode':''}`} ref={host} tabIndex={0} aria-label="Design canvas" style={{ cursor: crop || refine || maskId || canvasDraft ? undefined : CURSORS[hoverCursor || TOOL_CURSORS[tool.value]] }} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={(e) => up(e, false)} onLostPointerCapture={up}
       onKeyDown={(e) => { if (pen.current && (e.key === 'Enter' || e.key === 'Escape')) { e.preventDefault(); e.stopPropagation(); finishPen(); return; } if(refineSession.value||maskEditing.value){e.stopPropagation();if(refineSession.value&&(e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();navigateRefineHistory(e.shiftKey);return;}if(e.key==='Escape'){e.preventDefault();if(drag.current?.type==='mask')endDesignTransient(false);drag.current=null;stopRefine();maskEditing.value=null;}return;} if (cropSession.value) { e.stopPropagation(); if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); drag.current = null; finishCrop(e.key === 'Enter'); } return; } if (e.key === 'Escape' && drag.current) { e.stopPropagation(); up(e, false); } }}
@@ -392,7 +394,7 @@ export function DesignCanvas({ active }) {
       {d && <div class="dz-checker" style={{ left: offset.x, top: offset.y, width: d.width * scale, height: d.height * scale }} />}
       <canvas class="dz-canvas" ref={canvas} style={{ width: size.w, height: size.h }} />
       {text && <textarea ref={textRef} class="dz-text-edit" aria-label="Edit text" value={text.text} spellcheck={false}
-        style={{ left: offset.x + text.x * scale, top: offset.y + text.y * scale, width: text.w, height: text.h, transformOrigin: '0 0', transform: `scale(${scale}) translate(${text.w / 2}px, ${text.h / 2}px) rotate(${text.rotation}deg) scale(${text.flipX ? -1 : 1}, ${text.flipY ? -1 : 1}) translate(${-text.w / 2 + (text.textX || 0)}px, ${-text.h / 2 + (text.textY || 0)}px)`, font: designFont(text, textLayout?.size), lineHeight: text.lineHeight, letterSpacing: text.tracking, textAlign: text.align, color: text.box?'transparent':text.fill?.color || '#ffffff', caretColor: text.fill?.color || '#ffffff', textTransform: text.uppercase ? 'uppercase' : 'none', paddingTop: text.valign === 'top' ? 0 : Math.max(0, (text.h - (textLayout?.height || 0)) / (text.valign === 'middle' ? 2 : 1)) }}
+        style={{ left: offset.x + text.x * scale, top: offset.y + text.y * scale, width: text.w, height: Math.max(text.h, (textLayout?.height || 0) + (textLayout?.leadTop || 0) * 2), transformOrigin: '0 0', transform: `scale(${scale}) translate(${text.w / 2}px, ${text.h / 2}px) rotate(${text.rotation}deg) scale(${text.flipX ? -1 : 1}, ${text.flipY ? -1 : 1}) translate(${-text.w / 2 + (text.textX || 0)}px, ${-text.h / 2 + (text.textY || 0) + editTop}px)`, font: designFont(text, textLayout?.size), lineHeight: text.lineHeight, letterSpacing: text.tracking, textAlign: text.align, color: text.box?'transparent':text.fill?.color || '#ffffff', caretColor: text.fill?.color || '#ffffff', textTransform: text.uppercase ? 'uppercase' : 'none'}}
         onPointerDown={(e) => e.stopPropagation()} onInput={(e) => { const value = e.currentTarget.value; updateDesignTransient((p) => { const l = p.designs[d.id]?.layers.find((l) => l.id === editing); if (l) Object.assign(l,replaceStyledText(l,value)); }); }} onBlur={finishText} onSelect={e=>rememberTextSelection(text,e.currentTarget)}
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') { e.preventDefault(); finishText(); host.current.focus(); } }} />}
     </div>

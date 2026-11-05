@@ -12,18 +12,21 @@ export function moveCropImage(full, crop, dx, dy) {
   const x = clamp(crop.x-dx/full.w,0,1-crop.w), y = clamp(crop.y-dy/full.h,0,1-crop.h);
   return { crop: { ...crop,x,y }, full: { ...full,x:full.x+(crop.x-x)*full.w,y:full.y+(crop.y-y)*full.h } };
 }
-export function resizeCrop(full, crop, handle, dx, dy, ratio = null) {
+// `max` (fractions of full) drops the source bounds, so a canvas crop can grow past the canvas up to that size.
+export function resizeCrop(full, crop, handle, dx, dy, ratio = null, max = null) {
   const hx = handle.includes('w')?-1:handle.includes('e')?1:0, hy=handle.includes('n')?-1:handle.includes('s')?1:0;
   const anchorX = crop.x+(hx<0?crop.w:0), anchorY = crop.y+(hy<0?crop.h:0);
-  let w=clamp(crop.w+hx*dx/full.w,1/full.w, hx<0?anchorX:1-anchorX), h=clamp(crop.h+hy*dy/full.h,1/full.h,hy<0?anchorY:1-anchorY);
+  const roomX=max?max.w:hx<0?anchorX:1-anchorX, roomY=max?max.h:hy<0?anchorY:1-anchorY;
+  let w=clamp(crop.w+hx*dx/full.w,1/full.w,roomX), h=clamp(crop.h+hy*dy/full.h,1/full.h,roomY);
   if (ratio) {
     const fractionalRatio=ratio*full.h/full.w;
     if (!hy || (hx && Math.abs(w/crop.w-1)>=Math.abs(h/crop.h-1))) h=w/fractionalRatio;
     else w=h*fractionalRatio;
-    const limit=Math.min(1,(hx<0?anchorX:1-anchorX)/w,(hy<0?anchorY:1-anchorY)/h);
+    const limit=Math.min(1,roomX/w,roomY/h);
     w*=limit;h*=limit;
   }
-  return { x:clamp(hx<0?anchorX-w:crop.x,0,1-w), y:clamp(hy<0?anchorY-h:crop.y,0,1-h), w,h };
+  const x=hx<0?anchorX-w:crop.x, y=hy<0?anchorY-h:crop.y;
+  return max?{x,y,w,h}:{ x:clamp(x,0,1-w), y:clamp(y,0,1-h), w,h };
 }
 export function presetCrop(full, crop, ratio) {
   if (!ratio) return crop;

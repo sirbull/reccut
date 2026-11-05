@@ -1,6 +1,7 @@
 import { computed, effect, signal } from '@preact/signals';
 import { FLAT_MIX, normalizeMix } from './mixer.js';
 import { RECORDING_AUDIO_FORMATS, recordingVideoFormat } from '../../shared/recordingFormats.cjs';
+import { SIDE_LAYOUT } from '../../shared/model.js';
 
 const isMac = window.api.platform === 'darwin';
 
@@ -15,6 +16,18 @@ export const MODIFIERS = isMac
       { value: 'Control+Alt', label: 'Ctrl + Alt + 1 to 6', short: 'Ctrl+Alt+' },
     ];
 
+export const LAYOUTS = [
+  { n: 1, label: 'Camera', cls: 'full-cam' },
+  { n: 2, label: 'Screen', cls: 'screen' },
+  { n: 3, label: 'Top left', cls: 'screen', cam: 'tl' },
+  { n: 4, label: 'Top right', cls: 'screen', cam: 'tr' },
+  { n: 5, label: 'Bottom left', cls: 'screen', cam: 'bl' },
+  { n: 6, label: 'Bottom right', cls: 'screen', cam: 'br' },
+  { n: 7, label: 'Camera left', cls: 'screen', cam: 'side left' },
+  // ponytail: 8 is the pause shortcut, so this layout is click only.
+  { n: 8, label: 'Camera right', cls: 'screen', cam: 'side right', noKey: true },
+];
+
 const DEFAULTS = {
   screenId: null,
   cameraId: null,
@@ -25,6 +38,9 @@ const DEFAULTS = {
   layout: 6,
   pipSize: 'medium',
   pipShape: 'rect',
+  // Malen for kamera ved siden av skjermen, også når oppsettet velges under opptak.
+  sideSize: SIDE_LAYOUT.size,
+  sideShape: SIDE_LAYOUT.shape,
   showPipOnScreen: false,
   mirror: false,
   fps: 30,
@@ -61,6 +77,7 @@ function load() {
       s.captureVisibilityVersion = 1;
     }
     if (!['circle', 'square', 'rect'].includes(s.pipShape)) s.pipShape = 'rect';
+    if (!['circle', 'square', 'rect'].includes(s.sideShape)) s.sideShape = SIDE_LAYOUT.shape;
     if (!MODIFIERS.some((m) => m.value === s.modifier)) s.modifier = MODIFIERS[0].value;
     s.micMixer = normalizeMix(s.micMixer);
     s.videoFormat = recordingVideoFormat(s.videoFormat).value;

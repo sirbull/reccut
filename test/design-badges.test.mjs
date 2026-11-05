@@ -86,3 +86,9 @@ test('property edits resize badges, while moving and empty commits keep their di
   const before=s.currentDesign.value;s.changeDesign(()=>{});assert.equal(s.currentDesign.value,before);
   s.designUndo();assert.equal(s.currentDesign.value.layers[0],edited);
 });
+test('leading only sets the space between lines, not the height of a single line',()=>{
+  const l={...elementLayers(DESIGN_BADGES[0],newDesign())[0],text:'one',size:50,autofit:false,w:1000,h:100};
+  const one=layoutDesignText({...l,lineHeight:1.1},measure),tall=layoutDesignText({...l,lineHeight:4},measure);
+  assert.ok(Math.abs(tall.height-one.height)<1e-9);
+  assert.ok(Math.abs(layoutDesignText({...l,text:'one\ntwo',lineHeight:4},measure).height-one.height-200)<1e-9);
+});

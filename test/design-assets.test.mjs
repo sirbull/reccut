@@ -170,6 +170,7 @@ test('crop drafts cancel safely when another action edits the layer or switches 
   q.design.designUndo();assert.equal(q.design.currentDesign.value.layers[0].name,original.name);
   q.crop.startCrop();q.crop.setCropRatio('0.8');q.crop.finishCrop();assert.ok(Math.abs(q.design.currentDesign.value.layers[0].w/q.design.currentDesign.value.layers[0].h-0.8)<1e-8);
   q.design.designUndo();assert.deepEqual(JSON.parse(JSON.stringify(q.design.currentDesign.value.layers[0])),JSON.parse(JSON.stringify(original)));
+  q.design.changeLayers(l=>{l.locked=true});q.crop.startCrop();assert.ok(q.crop.cropSession.value);q.crop.finishCrop(false);
   q.crop.startCrop();q.editor.setProject({...structuredClone(q.editor.project.value),id:'new-project'});assert.equal(q.crop.cropSession.value,null);
 });
 

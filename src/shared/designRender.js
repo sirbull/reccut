@@ -1,5 +1,5 @@
 import { fitBox, designShapePoints, effectMargin } from './design.js';
-import { layoutDesignText, designFont } from './designText.js';
+import { layoutDesignText, designFont, LINE_BOX } from './designText.js';
 import { dilateAlpha, erodeAlpha, readAlpha, alphaPixels, designClipGroups } from './designMasks.js';
 import { paintPattern } from './designPattern.js';
 import { shapePath } from './shapes.js';
@@ -98,16 +98,15 @@ function drawText(ctx, l, kind = 'fill', spread = 0) {
   const g = textGeometry(ctx, l), box = { x: 0, y: 0, w: l.w, h: l.h };
   if(l.box?.block){if(kind==='fill'||kind==='box')drawBadgeBox(ctx,l,g);if(kind==='box')return;}
   if(g.styled){drawStyledText(ctx,l,g,kind,spread);return;}
-  // Clip overflow to the text box, allowing contours and line-box padding out.
+  // Text is never clipped to its box; bitmap() sizes the layer to fit any overflow.
   ctx.save(); const pad = Math.max(spread, l.stroke?.width || 0, l.box?.padding || 0) + Math.max(Math.abs(l.textX || 0), Math.abs(l.textY || 0));
-  ctx.beginPath(); ctx.rect(-pad, -pad, l.w + 2 * pad, l.h + 2 * pad); ctx.clip();
   g.lines.forEach((line, i) => {
-    const y = g.top + (i + 0.5) * g.lineHeight, width = g.widths[i];
+    const y = g.top - g.leadTop + (i + 0.5) * g.lineHeight, width = g.widths[i], lh = g.size * LINE_BOX;
     ctx.direction = /[\u0590-\u08ff]/u.test(line) ? 'rtl' : 'ltr';
     const left = g.x - (l.align === 'center' ? width / 2 : l.align === 'right' ? width : 0);
     if (!l.box?.block && (kind === 'fill' || kind === 'box') && l.box?.fill && line) {
       const p = l.box.padding;
-      paintFill(ctx, l.box.fill, box, () => { ctx.beginPath(); ctx.roundRect(left - p, y - g.lineHeight / 2 - p, width + 2 * p, g.lineHeight + 2 * p, Math.min(l.box.radius, (g.lineHeight + 2 * p) / 2)); ctx.fill(); });
+      paintFill(ctx, l.box.fill, box, () => { ctx.beginPath(); ctx.roundRect(left - p, y - lh / 2 - p, width + 2 * p, lh + 2 * p, Math.min(l.box.radius, (lh + 2 * p) / 2)); ctx.fill(); });
     }
     if (kind === 'box') return;
     if (kind === 'stroke') { ctx.strokeText(line, g.x, y); return; }
@@ -131,9 +130,9 @@ function drawText(ctx, l, kind = 'fill', spread = 0) {
   }); ctx.restore();
 }
 function drawStyledText(ctx,l,g,kind,spread){
- const pad=Math.max(spread,l.stroke?.width||0,l.box?.padding||0)+Math.max(Math.abs(l.textX||0),Math.abs(l.textY||0)),box={x:0,y:0,w:l.w,h:l.h};ctx.save();ctx.beginPath();ctx.rect(-pad,-pad,l.w+pad*2,l.h+pad*2);ctx.clip();let top=g.top;
- g.lineRuns.forEach((runs,i)=>{const lineHeight=g.lineHeights[i],y=top+lineHeight/2,left=g.x-(l.align==='center'?g.widths[i]/2:l.align==='right'?g.widths[i]:0);top+=lineHeight;
-  if(!l.box?.block&&(kind==='fill'||kind==='box')&&l.box?.fill&&g.lines[i]){const p=l.box.padding;paintFill(ctx,l.box.fill,box,()=>{ctx.beginPath();ctx.roundRect(left-p,y-lineHeight/2-p,g.widths[i]+p*2,lineHeight+p*2,Math.min(l.box.radius,(lineHeight+p*2)/2));ctx.fill();});}if(kind==='box')return;
+ const box={x:0,y:0,w:l.w,h:l.h};ctx.save();let top=g.top-g.leadTop;
+ g.lineRuns.forEach((runs,i)=>{const lineHeight=g.lineHeights[i],y=top+lineHeight/2,left=g.x-(l.align==='center'?g.widths[i]/2:l.align==='right'?g.widths[i]:0);top+=lineHeight;const lh=lineHeight*LINE_BOX/l.lineHeight;
+  if(!l.box?.block&&(kind==='fill'||kind==='box')&&l.box?.fill&&g.lines[i]){const p=l.box.padding;paintFill(ctx,l.box.fill,box,()=>{ctx.beginPath();ctx.roundRect(left-p,y-lh/2-p,g.widths[i]+p*2,lh+p*2,Math.min(l.box.radius,(lh+p*2)/2));ctx.fill();});}if(kind==='box')return;
   const rtl=/[\u0590-\u08ff]/u.test(g.lines[i]);ctx.direction=rtl?'rtl':'ltr';let x=rtl?left+g.widths[i]:left;for(const run of runs){const style=run.style||{},tracking=style.tracking??l.tracking??0;ctx.font=designFont({...l,...style},(style.size??l.size)*g.size/l.size);ctx.textAlign=rtl?'right':'left';ctx.letterSpacing='0px';const width=ctx.measureText(run.text).width+Math.max(0,[...textSegments.segment(run.text)].length-1)*tracking;ctx.letterSpacing=`${tracking}px`;
    if(kind==='stroke')ctx.strokeText(run.text,x,y);else if(kind==='silhouette'){ctx.fillStyle='#000000';ctx.fillText(run.text,x,y);if(spread>0){ctx.strokeStyle='#000000';ctx.lineWidth=spread*2;ctx.strokeText(run.text,x,y);}}else{const fill=Object.hasOwn(style,'fill')?style.fill:run.highlight?(Object.hasOwn(style,'highlight')?style.highlight||l.fill:l.highlight||l.fill):l.fill;paintFill(ctx,fill,box,()=>ctx.fillText(run.text,x,y));}x+=(rtl?-1:1)*(width+tracking);
   }
@@ -190,8 +189,13 @@ function applyMasks(canvas, l, image, cutout, ratio, margin, w, h, create) {
   }
   return canvas;
 }
+// Room for text that runs past its box: extra lines, long words, glyph overhang and tracking.
+function textOverflow(l, makeCanvas) {
+  const g = textGeometry(makeCanvas(1, 1).getContext('2d'), l);
+  return Math.ceil(Math.max(0, Math.max(0, ...g.widths) - l.w, g.height - l.h) + g.size * 0.5 + Math.abs(l.tracking || 0));
+}
 function bitmap(l, image, cutout, ratio, makeCanvas) {
-  const margin = effectMargin(l), w = l.w + margin * 2, h = l.h + margin * 2;
+  const margin = effectMargin(l) + (l.type === 'text' ? textOverflow(l, makeCanvas) : 0), w = l.w + margin * 2, h = l.h + margin * 2;
   // Bound allocations even for deliberately enormous off-canvas layers.
   ratio = Math.max(0.0001, Math.min(ratio, 8192 / w, 8192 / h, Math.sqrt(16_777_216 / (w * h))));
   const create = () => makeCanvas(Math.max(1, Math.ceil(w * ratio)), Math.max(1, Math.ceil(h * ratio)));
