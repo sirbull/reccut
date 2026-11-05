@@ -1,3 +1,4 @@
+import { paintPattern, patternFromClip } from './designPattern.js';
 // Tegner ett bilde av prosjektet. Samme kode brukes i forhåndsvisning og eksport,
 // så det du ser i redigeringen er det som havner i filen.
 import { containRect, followed } from './follow.js';
@@ -399,7 +400,10 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmaske
   } else if (clip.type === 'recording' && media) {
     drawRecording(ctx, project, clip, media, T, s, getSource);
   } else if (clip.type === 'title') {
-    if (clip.props.template) {
+    if (clip.props.patternKind) {
+      ctx.fillStyle = valueAt(clip, 'patternBackground', T) || '#182133'; ctx.fillRect(0, 0, W, H);
+      paintPattern(ctx, patternFromClip(clip, T, valueAt), W, H);
+    } else if (clip.props.template) {
       // Malbasert tittel: inn- og ut-animasjonen følger starten og slutten på klippet.
       const tpl = findTemplate(clip.props.template, project.templates || {});
       if (tpl) drawTemplate(ctx, tpl, T - clip.start, clip.dur, W, H, clip.props);

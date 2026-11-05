@@ -4,7 +4,7 @@ The offline library and Brand work without any accounts. Openverse is built in a
 
 ## Connect your own API key
 
-1. In Design, choose **Plugins → Image Source Plugins**. The same setup is available in Settings → Plugins, Design or AI.
+1. In Design, choose **Plugins → Image Source Plugins**. In Settings → Plugins, photo sources and the template catalog are grouped under **Design**. The current workspace is shown first; use the workspace buttons to jump between sections. The same source setup is also available in Settings → Design or AI.
 2. Choose **Add Pixabay**, then **Get API Key…** to visit the provider's own website. Create/sign in to your account there and obtain your key.
 3. Paste it into the masked API key field and choose **Save Key**. The field clears; the stored value is never sent back to the interface.
 4. Choose **Test Connection**. This sends one fresh sample request using the saved key rather than reusing cached search results. Invalid keys and rate limits get clear feedback.

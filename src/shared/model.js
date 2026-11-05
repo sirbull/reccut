@@ -2,6 +2,8 @@
 // på et gitt tidspunkt. Brukes av forhåndsvisning, eksport og tester.
 
 import { current, isDraft } from 'immer';
+import { expressionValue } from './expressions.js';
+import { patternClipProps } from './designPattern.js';
 import { BUILTIN_TEMPLATES, templateDefaults } from './titletemplates.js';
 
 export const LAYOUT_ANIM = 0.32;
@@ -43,7 +45,7 @@ export const TITLE_TEMPLATES = [
 
 // Supringer og titler laget som malfiler (se titletemplates.js). De vises i samme bibliotek.
 export const TEMPLATE_TITLES = BUILTIN_TEMPLATES.map((t) => ({ id: t.id, label: t.name, category: t.category, props: { template: t.id, ...templateDefaults(t) } }));
-TITLE_TEMPLATES.push(...TEMPLATE_TITLES);
+TITLE_TEMPLATES.push(...TEMPLATE_TITLES, ...['dots', 'grid'].map(kind => ({ id: `pattern-${kind}`, label: kind === 'dots' ? 'Shape Background' : 'Grid Background', category: 'Backgrounds', props: { ...patternClipProps(kind), text: kind === 'dots' ? 'Shape Background' : 'Grid Background', anim: 'none' } })));
 
 // Fargekoder for klipp. Turkis er holdt av til klipp som analyseres, så den finnes ikke her.
 export const CLIP_COLORS = [
@@ -579,6 +581,12 @@ export const RAMP_PRESETS = [
 ];
 
 export function valueAt(clip, prop, T) {
+  const base = baseValueAt(clip, prop, T);
+  const expression = clip.expressions?.[prop];
+  return expression ? expressionValue(base, expression, kfTime(clip, T) / kfRate(clip)) : base;
+}
+
+export function baseValueAt(clip, prop, T) {
   const list = clip.kf?.[prop];
   if (!list || !list.length) return clip.props[prop];
   if (prop === 'layout') return stepValue(list, sourceTime(clip, T));

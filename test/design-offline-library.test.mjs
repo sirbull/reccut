@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { build } from 'esbuild';
 import { newProject, makeClip } from '../src/shared/model.js';
+import { DESIGN_BADGES } from '../src/shared/designContent.js';
 const bundle=(await build({stdin:{contents:"export * as video from './src/renderer/design/videoLibrary.js';export * as content from './src/renderer/design/content.js';export * as library from './src/renderer/design/library.js';export * as prefs from './src/renderer/prefs.js';export * as editor from './src/renderer/editor/store.js';export * as design from './src/renderer/design/store.js';export * as templates from './src/shared/designTemplates.js';",resolveDir:process.cwd()},bundle:true,write:false,format:'cjs',platform:'browser',plugins:[{name:'services',setup(b){b.onResolve({filter:/\/player\.js$|\/ui\.jsx$|\/frameSampler\.js$/},({path})=>({path,external:true}));}}]})).outputFiles[0].text;
 function setup(){
  const module={exports:{}},messages=[],exports=[],listeners=new Set(),aiCalls=[];let config={provider:'compatible',endpoint:'http://localhost:11434/v1',model:'test'};
@@ -21,6 +22,20 @@ test('navigating during frame capture cannot insert an asset in another design',
 test('failed inline capture leaves a complete editable design and no partial asset',async()=>{const q=setup();await q.video.ensureVideoFrames(sampler);q.api.startExport=async()=>{throw Error('Permission denied')};await assert.rejects(q.video.applyVideoFrame(q.video.videoFrames.value.frames[0]),/Permission denied/);assert.equal(Object.keys(q.editor.project.value.designs).length,0);assert.equal(Object.keys(q.editor.project.value.designAssets).length,0);});
 test('text presets, palettes and font pairs each create one undo step and respect brand fonts',()=>{const q=setup();q.prefs.setPrefs({designBrandFonts:{title:'serif',body:'mono'}});q.content.addTextPreset('title');assert.equal(q.design.currentDesign.value.layers[0].font,'serif');assert.equal(q.design.currentDesign.value.layers[0].text,'Norsk prosjekt');q.content.addTextPreset('subtitle');assert.equal(q.design.currentDesign.value.layers[1].font,'mono');q.content.applyAppearance({palette:q.templates.DESIGN_PALETTES[0]});assert.equal(q.design.currentDesign.value.background.color,'#111827');q.design.designUndo();assert.equal(q.design.currentDesign.value.layers.length,2);q.design.designUndo();assert.equal(q.design.currentDesign.value.layers.length,1);q.design.designUndo();assert.equal(Object.keys(q.editor.project.value.designs).length,0);q.content.applyAppearance({pair:q.templates.DESIGN_FONT_PAIRS[1]});assert.equal(q.design.currentDesign.value.layers.length,2);q.design.designUndo();assert.equal(Object.keys(q.editor.project.value.designs).length,0);});
 test('element previews clear without history and apply is undoable with its drop position',async()=>{const q=setup(),element={id:'badge',kind:'badge',name:'NEW Badge',text:'NEW'};q.content.previewElement(element);assert.equal(q.design.currentDesign.value,null);q.library.clearLibraryPreview();assert.equal(q.library.libraryPreview.value,null);await q.content.applyElement(element,{x:222,y:333});const l=q.design.currentDesign.value.layers[0];assert.equal(l.x+l.w/2,222);assert.equal(l.y+l.h/2,333);assert.equal(l.text,'NEW');q.design.designUndo();assert.equal(q.design.currentDesign.value,null);});
+test('badge previews, placement and saved elements retain their distinct styles with Brand enabled',async()=>{
+ const q=setup();q.prefs.setPrefs({designBrand:{enabled:true,roles:{cta:'#ff0000',title:'#00ff00'}},designBrandFonts:{title:'serif'}});
+ for(const element of DESIGN_BADGES){
+  q.content.previewElement(element);const preview=q.library.libraryPreview.value.layers.at(-1);
+  assert.equal(preview.box.fill.type,element.badgeStyle.box.fill.type);
+  assert.equal(preview.box.fill.color,element.badgeStyle.box.fill.color);
+  await q.content.applyElement(element);const l=q.design.currentDesign.value.layers.at(-1);
+  assert.equal(l.fill.color,element.badgeStyle.fill.color);assert.equal(l.font,element.badgeStyle.font);
+  assert.equal(JSON.stringify(l.box),JSON.stringify(preview.box));
+ }
+ q.content.saveContent('Elements',DESIGN_BADGES[3]);
+ const saved=q.content.savedContent('Elements')[0];await q.content.applyElement(saved);
+ assert.equal(q.design.currentDesign.value.layers.at(-1).box.shape,'ribbon');
+});
 test('late SVG hover after leaving the card cannot restore a preview',async()=>{const q=setup(),pending=q.content.previewElement({id:'arrow',kind:'drawing',name:'Arrow',svg:'<svg/>'});q.library.clearLibraryPreview();await pending;assert.equal(q.library.libraryPreview.value,null);});
 test('saved palettes and font pairs are local, removable and independent of their source',()=>{const q=setup(),palette=q.templates.DESIGN_PALETTES[0];q.content.saveContent('Palettes',palette);const saved=q.content.savedContent('Palettes')[0];assert.notEqual(saved.id,palette.id);saved.colors[0]='#ff0000';assert.equal(palette.colors[0],'#111827');q.content.removeContent('Palettes',saved.id);assert.equal(q.content.savedContent('Palettes').length,0);});
 test('a recommended palette and font drop on a shape changes only that shape',()=>{const q=setup();q.design.addDesign();const shape={id:'shape',type:'shape',name:'Shape',x:0,y:0,w:100,h:100,fill:{type:'solid',color:'#ffffff',alpha:1}};q.design.designCommit(p=>{p.designs[q.design.currentDesign.value.id].layers.push(shape)});const before=q.design.currentDesign.value;q.content.applyAppearance({palette:q.templates.DESIGN_PALETTES[0],pair:q.templates.DESIGN_FONT_PAIRS[1]},shape);const d=q.design.currentDesign.value;assert.equal(d.layers.length,1);assert.equal(d.background,before.background);assert.equal(d.layers[0].fill.color,'#ffd60a');});

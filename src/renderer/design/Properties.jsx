@@ -2,7 +2,7 @@ import { FlipHorizontal, FlipVertical, AlignStartVertical, AlignCenterVertical, 
 import { DesignFontSelect } from './FontSelect.jsx';
 import { textSelection,selectedTextRange,rememberTextSelection,patchTextSelection } from './textSelection.js';
 import { textStyleAt,replaceStyledText,TEXT_STYLE_FIELDS } from '../../shared/designRichText.js';
-import { normalizeDesignPattern } from '../../shared/designPattern.js';
+import { normalizeDesignPattern, PATTERN_SHAPES, PATTERN_DISTRIBUTIONS } from '../../shared/designPattern.js';
 import { editLegacyPattern } from './content.js';
 import { EMOJI_STYLES,replaceEmoji } from './emoji.js';
 import {toast} from '../ui.jsx';
@@ -83,7 +83,14 @@ export function Properties() {
     {text&&<Section title="Paragraph"><Row label="Align"><Segmented value={l.align} options={[{value:'left',label:'Align Left',icon:AlignLeft},{value:'center',label:'Align Center',icon:AlignCenter},{value:'right',label:'Align Right',icon:AlignRight}]} onChange={align=>patch({align})}/></Row><Row label="Vertical"><Segmented value={l.valign} options={[{value:'top',label:'Align Top',icon:AlignStartHorizontal},{value:'middle',label:'Align Middle',icon:AlignCenterHorizontal},{value:'bottom',label:'Align Bottom',icon:AlignEndHorizontal}]} onChange={valign=>patch({valign})}/></Row></Section>}
     {l.pattern&&layers.length===1&&<Section title="Pattern" collapsible={false}>
       <FillControls label="Background" value={l.fill} aspect={l.w/l.h} onChange={fill=>patch({fill})} onInput={fill=>live({fill})}/><Row label="Pattern Color"><input type="color" aria-label="Pattern color" value={l.pattern.color} onFocus={beginDesignTransient} onInput={e=>live({pattern:normalizeDesignPattern({...l.pattern,color:e.currentTarget.value})})} onChangeCapture={end} onBlur={end}/></Row>
-      <StyleNumber label={l.pattern.kind==='dots'?'Dot Radius':'Line Width'} value={l.pattern.size} min={.5} max={Math.min(l.pattern.spacingX,l.pattern.spacingY)/(l.pattern.kind==='dots'?2:1)} step={.5} precision={1} onInput={size=>live({pattern:normalizeDesignPattern({...l.pattern,size})})}/>
+      <Row label="Pattern"><Select value={l.pattern.kind} options={[{value:'dots',label:'Shapes'},{value:'grid',label:'Grid'}]} onChange={kind=>patch({pattern:normalizeDesignPattern({...l.pattern,kind})})}/></Row>
+      {l.pattern.kind==='dots'&&<Row label="Symbol"><Select value={l.pattern.shape} options={PATTERN_SHAPES} onChange={shape=>patch({pattern:normalizeDesignPattern({...l.pattern,shape})})}/></Row>}
+      <Row label="Size Variation"><Slider min={0} max={1} step={.01} value={l.pattern.random} onStart={beginDesignTransient} onInput={random=>live({pattern:normalizeDesignPattern({...l.pattern,random})})} onCommit={end}/><span>{Math.round(l.pattern.random*100)}%</span></Row>
+      <StyleNumber label="Random Seed" value={l.pattern.seed} min={0} max={99999} onInput={seed=>live({pattern:normalizeDesignPattern({...l.pattern,seed})})}/>
+      <Row label="Size Distribution"><Select value={l.pattern.distribution} options={PATTERN_DISTRIBUTIONS} onChange={distribution=>patch({pattern:normalizeDesignPattern({...l.pattern,distribution})})}/></Row>
+      <Row label="Distribution Strength"><Slider min={0} max={1} step={.01} value={l.pattern.strength} onStart={beginDesignTransient} onInput={strength=>live({pattern:normalizeDesignPattern({...l.pattern,strength})})} onCommit={end}/><span>{Math.round(l.pattern.strength*100)}%</span></Row>
+      {l.pattern.kind==='dots'&&<StyleNumber label="Symbol Rotation" value={l.pattern.rotation} min={-36000} max={36000} onInput={rotation=>live({pattern:normalizeDesignPattern({...l.pattern,rotation})})}/>}
+      <StyleNumber label={l.pattern.kind==='dots'?'Symbol Size':'Line Width'} value={l.pattern.size} min={.5} max={Math.min(l.pattern.spacingX,l.pattern.spacingY)/(l.pattern.kind==='dots'?2:1)} step={.5} precision={1} onInput={size=>live({pattern:normalizeDesignPattern({...l.pattern,size})})}/>
       <StyleNumber label="Spacing X" value={l.pattern.spacingX} min={4} max={1024} onInput={spacingX=>live({pattern:normalizeDesignPattern({...l.pattern,spacingX})})}/>
       <StyleNumber label="Spacing Y" value={l.pattern.spacingY} min={4} max={1024} onInput={spacingY=>live({pattern:normalizeDesignPattern({...l.pattern,spacingY})})}/>
     </Section>}
@@ -117,7 +124,7 @@ export function Properties() {
     {hasFill && <Section title="Stroke"><StrokeControls layer={l} onChange={(stroke) => patch({ stroke })} onInput={(stroke) => live({ stroke })} /></Section>}
     <Section title="Layer Styles"><ShadowControls layer={l} onChange={(shadows) => patch({ shadows })} onInput={(shadows) => live({ shadows })} /></Section>
     {layers.every((l) => l.type === 'shape') && <Section title="Shape">
-      <Row label="Shape"><Select value={l.shape} options={DESIGN_SHAPES} onChange={(shape) => patch({ shape, ...(['line','arrow'].includes(shape) ? { fill: null, stroke: l.stroke || { fill: solidFill(), width: 8, align: 'center', dash: 'solid', join: 'round' } } : {}) })} /></Row>
+      <Row label="Shape"><Select value={l.shape} options={l.shape === 'path' ? [...DESIGN_SHAPES, { value: 'path', label: 'Path' }] : DESIGN_SHAPES} onChange={(shape) => patch({ shape, ...(['line','arrow'].includes(shape) ? { fill: null, stroke: l.stroke || { fill: solidFill(), width: 8, align: 'center', dash: 'solid', join: 'round' } } : {}) })} /></Row>
       {l.shape === 'rect' && number('radius', 'Corner Radius', 0, Math.min(l.w, l.h) / 2)}
       {l.shape === 'polygon' && number('sides', 'Sides', 3, 12)}
       {l.shape === 'star' && <>{number('points', 'Points', 3, 24)}{number('inner', 'Inner Radius', 0.05, 1, 0.01, 2)}</>}

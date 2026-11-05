@@ -128,6 +128,7 @@ function mediaLength(project, clip) {
 
 export function shiftKeyframes(c, delta) {
   if (Math.abs(delta) < 1e-9) return;
+  for (const expression of Object.values(c.expressions || {})) expression.timeOffset = (expression.timeOffset || 0) - delta / kfRate(c);
   for (const [prop, list] of Object.entries(c.kf || {})) {
     if (prop === 'layout') continue;
     for (const k of list) k[0] = round(k[0] + delta);

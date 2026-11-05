@@ -1,7 +1,6 @@
 import {StockPanel,MoreTemplates} from './Online.jsx';
-import { Fragment } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
-import { Hand, MousePointer2, Plus, Square, Type, ZoomIn, ZoomOut, Palette, Crop, ChevronDown, Eye, Scan, Frame, Circle, Pentagon, Star, Minus, MoveUpRight, LayoutTemplate, Clapperboard, SquareArrowUp, BadgeCheck, Minimize2, Maximize2, X, Scaling, ScanText, Search, Shapes } from 'lucide-preact';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { Hand, MousePointer2, Plus, Square, Type, ZoomIn, ZoomOut, Palette, Crop, Eye, Scan, Frame, Circle, Pentagon, Star, Minus, MoveUpRight, LayoutTemplate, Clapperboard, SquareArrowUp, BadgeCheck, Minimize2, Maximize2, X, Scaling, ScanText, Search, Shapes, SplinePointer, PenTool, Spline, DiamondMinus } from 'lucide-preact';
 import { DESIGN_SIZES, DESIGN_SHAPES, designList } from '../../shared/design.js';
 import { project, projectEpoch } from '../editor/store.js';
 import { Button, IconButton, Modal, toast } from '../ui.jsx';
@@ -30,6 +29,40 @@ import { refineSession } from './refine.js';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
 
 const SHAPE_ICONS = { rect: Square, ellipse: Circle, polygon: Pentagon, star: Star, line: Minus, arrow: MoveUpRight };
+// One toolbar button per group. Click, hold or right-click it for the other tools in the group, as in modCut.
+const TOOL_GROUPS = [
+  [{ id: 'select', icon: MousePointer2, label: 'Move Tool', key: 'V' }, { id: 'direct', icon: SplinePointer, label: 'Direct Selection Tool', key: 'A' }],
+  [{ id: 'text', icon: Type, label: 'Type Tool', key: 'T' }],
+  DESIGN_SHAPES.map((s) => ({ id: 'shape', shape: s.value, icon: SHAPE_ICONS[s.value], label: `${s.label} Tool`, key: 'U' })),
+  [{ id: 'pen', icon: PenTool, label: 'Pen Tool', key: 'P' }, { id: 'anchor', icon: Spline, label: 'Anchor Point Tool', key: '⇧C' }, { id: 'deleteAnchor', icon: DiamondMinus, label: 'Delete Anchor Point Tool', key: '-' }],
+  [{ id: 'hand', icon: Hand, label: 'Hand Tool', key: 'H' }, { id: 'zoom', icon: ZoomIn, label: 'Zoom Tool', key: 'Z' }],
+];
+const isTool = (t) => tool.value === t.id && (!t.shape || shapeType.value === t.shape);
+function pickTool(t) { if (t.shape) shapeType.value = t.shape; tool.value = t.id; }
+function ToolGroup({ tools, disabled }) {
+  const [open, setOpen] = useState(false), last = useRef(tools[0]), timer = useRef(0), held = useRef(false), menu = useRef(null);
+  const active = tools.find(isTool);
+  if (active) last.current = active;
+  const shown = active || last.current, more = tools.length > 1;
+  useEffect(() => {
+    if (!open) return;
+    menu.current?.querySelector('button')?.focus();
+    const close = (e) => { if (!menu.current?.contains(e.target)) setOpen(false); };
+    const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
+    const blur = () => setOpen(false);
+    document.addEventListener('pointerdown', close, true); document.addEventListener('keydown', key, true); window.addEventListener('blur', blur);
+    return () => { document.removeEventListener('pointerdown', close, true); document.removeEventListener('keydown', key, true); window.removeEventListener('blur', blur); };
+  }, [open]);
+  const stop = () => clearTimeout(timer.current);
+  return <span class="dz-tool-group">
+    <IconButton icon={shown.icon} title={`${shown.label} (${shown.key})${more ? ', hold for more' : ''}`} active={Boolean(active)} disabled={disabled} aria-haspopup={more ? 'menu' : undefined} aria-expanded={more ? open : undefined}
+      onPointerDown={(e) => { held.current = false; if (more && e.button === 0) timer.current = setTimeout(() => { held.current = true; setOpen(true); }, 450); }}
+      onPointerUp={stop} onPointerLeave={stop} onContextMenu={(e) => { if (more) { e.preventDefault(); setOpen(true); } }}
+      onClick={() => { if (!held.current) pickTool(shown); }} />
+    {more && <i class="dz-tool-more" aria-hidden="true" />}
+    {open && <div class="dz-tool-flyout" role="menu" ref={menu}>{tools.map((t) => <button type="button" role="menuitem" key={t.label} class={isTool(t) ? 'active' : ''} onClick={() => { setOpen(false); pickTool(t); }}><t.icon size={16} /><span>{t.label}</span><kbd>{t.key}</kbd></button>)}</div>}
+  </span>;
+}
 export function DesignRoom({ active }) {
   const p = project.value, epoch = projectEpoch.value, d = currentDesign.value, list = designList(p);
   const panel=activeDesignPanel.value,wide=wideDesignPanel.value;
@@ -62,7 +95,7 @@ export function DesignRoom({ active }) {
     </aside>}
     <div class="dz-center">
       <div class="dz-toolbar">
-        {[['select', MousePointer2, 'Move Tool (V)'], ['text', Type, 'Type Tool (T)'], ['shape', SHAPE_ICONS[shapeType.value] || Square, `${DESIGN_SHAPES.find((s) => s.value === shapeType.value)?.label} Tool (U)`], ['hand', Hand, 'Hand Tool (H)']].map(([value, icon, title]) => <Fragment key={value}><IconButton icon={icon} title={title} active={tool.value === value} disabled={!d} onClick={() => { tool.value = value; }} />{value === 'shape' && <IconButton icon={ChevronDown} class="dz-shape-menu" size={12} title="Choose Shape (Shift+U)" disabled={!d} onClick={async () => { const next = await window.api.popupMenu(DESIGN_SHAPES.map((s) => ({ id: s.value, label: `${s.label} Tool`, checked: shapeType.value === s.value }))); if (next) { shapeType.value = next; tool.value = 'shape'; } }} />}</Fragment>)}
+        {TOOL_GROUPS.map((tools) => <ToolGroup key={tools[0].id} tools={tools} disabled={!d} />)}
         <IconButton icon={Crop} title="Crop Tool (C)" active={Boolean(cropSession.value)} disabled={!d} onClick={startCrop} />
         <IconButton icon={Scaling} title="Resize Design" disabled={!d} onClick={()=>resizeOpen.value=true}/>
         <span class="dz-readability-tool"><IconButton icon={ScanText} title={warnings.length?`Readability: ${warnings.length} warnings`:"Readability"} disabled={!d} onClick={()=>setReadability(true)}/>{warnings.length>0&&<i class="dz-warning-dot" aria-label="Readability warnings"/>}</span>

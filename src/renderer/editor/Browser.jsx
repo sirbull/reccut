@@ -767,7 +767,8 @@ function TitlesTab() {
   const custom = Object.values(project.value.templates || {}).map((t) => ({ id: t.id, label: t.name, category: 'Custom', props: { template: t.id, ...templateDefaults(t) } }));
   const groups = [
     ['Lower Thirds', TITLE_TEMPLATES.filter((t) => t.category === 'Lower Thirds')],
-    ['Titles', TITLE_TEMPLATES.filter((t) => t.category !== 'Lower Thirds')],
+    ['Titles', TITLE_TEMPLATES.filter((t) => !['Lower Thirds', 'Backgrounds'].includes(t.category))],
+    ['Backgrounds', TITLE_TEMPLATES.filter((t) => t.category === 'Backgrounds')],
     ['Custom', custom],
   ];
   return (

@@ -58,7 +58,7 @@ export function strokeMargin(l) {
   return !l.stroke || l.stroke.align === 'inside' ? 0 : l.stroke.width * (l.stroke.align === 'outside' ? 1 : 0.5);
 }
 export function effectMargin(l) {
-  const spread = Math.max(0, l.box?.padding || 0) + (l.outline?.width || 0);
+  const spread = Math.max(0, l.box?.padding || 0) + (l.box?.border?.width || 0) + (l.outline?.width || 0) + (l.box?.shape==='ellipse'?Math.max(l.w,l.h)*(Math.SQRT2-1)/2:0);
   return Math.ceil(strokeMargin(l) + Math.max(spread, (l.adjust?.blur || 0) * 2,
     ...(l.shadows || []).map((s) => s.blur * 2 + Math.max(Math.abs(s.x), Math.abs(s.y)) + s.spread + spread)));
 }
@@ -99,11 +99,18 @@ export function normalizeDesignMask(mask) {
   const points = Array.isArray(mask.points) ? mask.points.filter((p) => Array.isArray(p) && p.length >= 2 && p.slice(0,2).every(Number.isFinite)).slice(0,64).map(([x,y]) => [number(x,0,0,1),number(y,0,0,1)]) : [];
   return { shape: mask.shape, points: points.length >= 3 ? points : [[0,0],[1,0],[1,1],[0,1]], smooth: Boolean(mask.smooth), feather: number(mask.feather,0,0,100), invert: Boolean(mask.invert) };
 }
+// Pen paths: nodes are fractions of the layer box, see designPath.js.
+export function normalizeDesignPath(p) {
+  const keys = ['x', 'y', 'ix', 'iy', 'ox', 'oy'];
+  const nodes = (Array.isArray(p?.nodes) ? p.nodes : []).slice(0, 2000).filter((n) => n && keys.every((k) => Number.isFinite(n[k])))
+    .map((n) => Object.fromEntries(keys.map((k) => [k, number(n[k], 0, -1000, 1000)])));
+  return nodes.length >= 2 ? { closed: Boolean(p.closed) && nodes.length > 2, nodes } : null;
+}
 export function normalizeLayer(input) {
   const l = object(input);
   if (!['text', 'image', 'shape'].includes(l.type)) return null;
   const result = {
-    ...l, id: string(l.id, uid()), type: l.type, name: string(l.name, l.type === 'text' ? 'Title' : l.type === 'shape' ? DESIGN_SHAPES.find((s) => s.value === l.shape)?.label || 'Rectangle' : 'Image'),
+    ...l, id: string(l.id, uid()), type: l.type, name: string(l.name, l.type === 'text' ? 'Title' : l.type === 'shape' ? DESIGN_SHAPES.find((s) => s.value === l.shape)?.label || (l.shape === 'path' ? 'Path' : 'Rectangle') : 'Image'),
     x: number(l.x, 0), y: number(l.y, 0), w: number(l.w, 400, 1, 65536), h: number(l.h, l.type === 'text' ? 150 : 300, 1, 65536),
     rotation: number(l.rotation, 0, -36000, 36000), flipX: Boolean(l.flipX), flipY: Boolean(l.flipY),
     opacity: number(l.opacity, 1, 0, 1), blend: BLEND_MODES.includes(l.blend) ? l.blend : 'source-over',
@@ -117,7 +124,12 @@ export function normalizeLayer(input) {
     tracking: number(l.tracking, 0, -100, 500), lineHeight: number(l.lineHeight, 1.1, 0.5, 5),
     align: ['left', 'center', 'right'].includes(l.align) ? l.align : 'center', valign: ['top', 'middle', 'bottom'].includes(l.valign) ? l.valign : 'middle',
     uppercase: Boolean(l.uppercase), autofit: l.autofit !== false, highlight: fill(l.highlight, l.highlight === null ? null : solidFill('#ff453a')),
-    box: l.box ? { fill: fill(l.box.fill, l.box.fill === null ? null : solidFill('#000000')), padding: number(l.box.padding, 8, 0, 500), radius: number(l.box.radius, 8, 0, 500) } : null,
+    box: l.box ? {
+      fill: fill(l.box.fill, l.box.fill === null ? null : solidFill('#000000')), padding: number(l.box.padding, 8, 0, 500), radius: number(l.box.radius, 8, 0, 500),
+      ...(l.box.block ? {block:true} : {}), ...(l.box.autoSize ? {autoSize:true} : {}),
+      ...(l.box.shape ? {shape:['rounded','cut','ribbon','ellipse','ticket'].includes(l.box.shape)?l.box.shape:'rounded'} : {}),
+      ...(l.box.border ? {border:{color:/^#[\da-f]{6}$/i.test(l.box.border.color)?l.box.border.color:'#000000',width:number(l.box.border.width,2,0,100),dash:l.box.border.dash==='dashed'?'dashed':'solid'}} : {}),
+    } : null,
   });
   if (l.type === 'image') {
     const c = object(l.crop), a = object(l.adjust);
@@ -131,7 +143,9 @@ export function normalizeLayer(input) {
     });
   }
   if (l.type === 'shape') {
-    Object.assign(result, { pattern: normalizeDesignPattern(l.pattern), shape: DESIGN_SHAPES.some((s) => s.value === l.shape) ? l.shape : 'rect', radius: number(l.radius, 0, 0, Math.min(result.w, result.h) / 2), sides: Math.round(number(l.sides, 6, 3, 12)), points: Math.round(number(l.points, 5, 3, 24)), inner: number(l.inner, 0.5, 0.05, 1), head: number(l.head, 1, 0.1, 10) });
+    const path = l.shape === 'path' ? normalizeDesignPath(l.path) : null;
+    if (path) result.path = path; else delete result.path;
+    Object.assign(result, { pattern: normalizeDesignPattern(l.pattern), shape: path ? 'path' : DESIGN_SHAPES.some((s) => s.value === l.shape) ? l.shape : 'rect', radius: number(l.radius, 0, 0, Math.min(result.w, result.h) / 2), sides: Math.round(number(l.sides, 6, 3, 12)), points: Math.round(number(l.points, 5, 3, 24)), inner: number(l.inner, 0.5, 0.05, 1), head: number(l.head, 1, 0.1, 10) });
     if (['line', 'arrow'].includes(result.shape)) {
       result.fill = null;
       if (l.stroke === undefined) result.stroke = normalizeStroke({ fill: solidFill(), width: 8 });
@@ -369,7 +383,7 @@ export function resizeDesignContent(d,width,height) {
   if(!validDesignSize(width,height))throw new Error('Width and height must be whole numbers from 1 to 8192 pixels.');
   const k=Math.min(width/d.width,height/d.height);
   const axis=(pos,len,total,target,anchor)=>anchor==='stretch'?{pos:pos*k,len:Math.max(1,target-(total-len)*k)}:{len:len*k,pos:anchor==='left'||anchor==='top'?pos*k:anchor==='right'||anchor==='bottom'?target-(total-pos)*k:(pos+len/2)/total*target-len*k/2};
-  const scaleAppearance=(l,s)=>({...l,...(l.type==='text'?{size:Math.max(6,l.size*s),tracking:l.tracking*s}:{}),radius:(l.radius||0)*s,stroke:l.stroke?{...l.stroke,width:l.stroke.width*s}:null,outline:l.outline?{...l.outline,width:l.outline.width*s}:null,box:l.box?{...l.box,padding:l.box.padding*s,radius:l.box.radius*s}:null,shadows:l.shadows.map(sh=>({...sh,x:sh.x*s,y:sh.y*s,blur:sh.blur*s,spread:sh.spread*s}))});
+  const scaleAppearance=(l,s)=>({...l,...(l.type==='text'?{size:Math.max(6,l.size*s),tracking:l.tracking*s}:{}),radius:(l.radius||0)*s,stroke:l.stroke?{...l.stroke,width:l.stroke.width*s}:null,outline:l.outline?{...l.outline,width:l.outline.width*s}:null,box:l.box?{...l.box,padding:l.box.padding*s,radius:l.box.radius*s,...(l.box.border?{border:{...l.box.border,width:l.box.border.width*s}}:{})}:null,shadows:l.shadows.map(sh=>({...sh,x:sh.x*s,y:sh.y*s,blur:sh.blur*s,spread:sh.spread*s}))});
   const layers=d.layers.map(original=>{
     const x=axis(original.x,original.w,d.width,width,original.anchor?.x),y=axis(original.y,original.h,d.height,height,original.anchor?.y);
     let l=scaleAppearance({...structuredClone(original),x:x.pos,y:y.pos,w:x.len,h:y.len},k),b=layerBounds(l),fit=Math.min(1,width/b.w,height/b.h);

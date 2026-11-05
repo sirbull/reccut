@@ -164,7 +164,7 @@ export function addTitle(style = 'center', T = getTime()) {
   const clip = makeTitleClip(style, T);
   commit((p) => placeFree(p, clip, T, 1));
   selection.value = [clip.id];
-  inspectorTab.value = 'text';
+  inspectorTab.value = clip.props.patternKind ? 'video' : 'text';
 }
 
 // Masker: formen som er valgt for redigering i visningen ({ clipId, id }).

@@ -1,3 +1,6 @@
+import { PATTERN_SHAPES, PATTERN_DISTRIBUTIONS, patternClipProps } from '../../shared/designPattern.js';
+import { baseValueAt } from '../../shared/model.js';
+import { ExpressionControls } from './ExpressionControls.jsx';
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
 import { ProcessorEffects } from './ProcessorEffects.jsx';
 import { RemoveEffectButton } from './RemoveEffectButton.jsx';
@@ -139,7 +142,7 @@ function MediaInspector({ media }) {
 // Fanene som i Final Cut Pro: et ikon for hver del, og klippet velges bare ved å markere det.
 function tabsFor(clip, media) {
   const tabs = [];
-  if (clip.type === 'title') tabs.push({ id: 'text', label: 'Text', icon: Type });
+  if (clip.type === 'title' && !clip.props.patternKind) tabs.push({ id: 'text', label: 'Text', icon: Type });
   if (clip.type === 'caption') tabs.push({ id: 'caption', label: 'Caption', icon: Captions });
   if (clip.type === 'recording') tabs.push({ id: 'recording', label: 'Recording', icon: MonitorPlay });
   if (clip.type === 'redact') tabs.push({ id: 'redact', label: 'Redact', icon: EyeOff });
@@ -222,10 +225,14 @@ function setValue(c, prop, v, T) {
 }
 
 export function Param({ clip, prop, label, min, max, step = 1, unit = '', precision = 0, scale = 1, slider = true, center, keyframes = true, def }) {
+  const [expressionOpen, setExpressionOpen] = useState(false);
+  const expression = clip.expressions?.[prop];
+  const expressionActive = expression && expression.enabled !== false;
+  const canExpress = keyframes && prop !== 'layout';
   const T = timeSig.value;
   const inside = T >= clip.start && T <= clip.start + clip.dur;
   const Tc = Math.min(Math.max(T, clip.start), clip.start + clip.dur);
-  const raw = valueAt(clip, prop, Tc) ?? def ?? 0;
+  const raw = baseValueAt(clip, prop, Tc) ?? def ?? 0;
   const value = raw * scale;
   const s = kfTime(clip, Tc);
   const list = clip.kf?.[prop] || [];
@@ -236,13 +243,16 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
   const prev = list.filter(([t]) => t < s - 1e-3).at(-1);
   const next = list.find(([t]) => t > s + 1e-3);
   const goto = (t) => seek(kfToTimeline(clip, t));
-  const fallback = def ?? defaultProps(clip.type)[prop] ?? 0;
-  const isDefault = !list.length && raw === fallback;
+  const fallback = def ?? (clip.props.patternKind ? patternClipProps(clip.props.patternKind)[prop] : undefined) ?? defaultProps(clip.type)[prop] ?? 0;
+  const isDefault = !expression && !list.length && raw === fallback;
 
   return (
     <>
       <div class="param" data-prop={prop}>
-        <span class="param-label" title={label}>
+        <span class="param-label" title={canExpress ? `${label} · Alt/Option-click for expressions` : label}
+          role={canExpress ? 'button' : undefined} tabIndex={canExpress ? 0 : undefined}
+          onClick={e=>{if(canExpress && e.altKey){e.preventDefault();setExpressionOpen(v=>!v);}}}
+          onKeyDown={e=>{if(canExpress && e.altKey && ['Enter',' '].includes(e.key)){e.preventDefault();setExpressionOpen(v=>!v);}}}>
           {label}
         </span>
         {slider ? (
@@ -255,16 +265,17 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
           <div class="kf-ctl">
             <IconButton icon={ChevronLeft} size={12} title="Previous keyframe" disabled={!prev} onClick={() => prev && goto(prev[0])} />
             <button
-              class={`kf-btn${atKf ? ' on' : list.length ? ' has' : ''}`}
+              class={`kf-btn${atKf ? ' on' : list.length ? ' has' : ''}${expressionActive ? ' expression' : ''}`}
               disabled={!inside}
-              title={atKf ? 'Remove keyframe' : 'Add keyframe at the playhead'}
-              onClick={() =>
+              title={`${atKf ? 'Remove keyframe' : 'Add keyframe at the playhead'}${expressionActive ? ` · Active expression: ${expression.preset}` : ''} · Alt/Option-click for expressions`}
+              onClick={e => {
+                if(e.altKey && canExpress){e.preventDefault();setExpressionOpen(v=>!v);return;}
                 commit((q) => {
                   const c = q.clips[id];
                   if (atKf) removeKeyframe(c, prop, s);
                   else setKeyframe(c, prop, s, raw);
-                })
-              }
+                });
+              }}
             >
               <Diamond size={11} />
             </button>
@@ -282,11 +293,14 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
             commit((q) => {
               const c = q.clips[id];
               delete c.kf[prop];
+              if(c.expressions) delete c.expressions[prop];
               c.props[prop] = fallback;
             })
           }
         />
       </div>
+      {canExpress && expression && !expressionOpen && <div class="ease-row"><button class="link" onClick={()=>setExpressionOpen(true)}>ƒx {expression.preset}{expression.enabled===false?' (disabled)':''}</button></div>}
+      {canExpress && expressionOpen && <ExpressionControls clip={clip} prop={prop} min={min} max={max} scale={scale} baseValue={raw} onClose={()=>setExpressionOpen(false)}/>}
       {atKf && next && (
         <div class="ease-row">
           <span>Easing</span>
@@ -352,6 +366,7 @@ function VideoTab({ clip }) {
   const p = project.value;
   return (
     <>
+      {clip.props.patternKind && <PatternSection clip={clip}/>}
       {clip.type === 'image' && <Section title="Image framing & motion" data-section="image-motion">
         <Row label="Fit"><Select value={clip.props.imageFit || 'contain'} options={IMAGE_FITS}
           onChange={(imageFit) => commit((q) => { q.clips[clip.id].props.imageFit = imageFit; })} /></Row>
@@ -374,7 +389,7 @@ function VideoTab({ clip }) {
         <Param clip={clip} prop="y" label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} />
         <Param clip={clip} prop="scale" label="Scale" min={10} max={400} scale={100} unit="%" />
         <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
-        <p class="hint">Tip: drag the clip directly in the viewer to move it.</p>
+        <p class="hint">Drag the clip in the viewer to move it. Alt/Option-click a property name or diamond to choose an expression.</p>
       </Section>}
       {(clip.type === 'video' || clip.type === 'recording') && <TrackSection clip={clip} />}
       {clip.type !== 'adjustment' && clip.lane > 0 && <FollowSection clip={clip} />}
@@ -394,6 +409,37 @@ function VideoTab({ clip }) {
       </Section>
     </>
   );
+}
+
+function PatternChoice({ clip, prop, label, options, color = false }) {
+  const T = Math.max(clip.start, Math.min(timeSig.value, clip.start + clip.dur)), s = kfTime(clip, T);
+  const value = valueAt(clip, prop, T) ?? clip.props[prop], at = keyframeIndexAt(clip, prop, s) >= 0;
+  const set = v => commit(q => setValue(q.clips[clip.id], prop, v, T));
+  return <Row label={label}>
+    {color ? <ColorField value={value} onLive={v=>updateTransient(q=>setValue(q.clips[clip.id],prop,v,T))}/> : <Select value={value} options={options} onChange={set}/>}
+    <button class={`kf-btn${at?' on':clip.kf?.[prop]?.length?' has':''}`} title={at?'Remove keyframe':`Keyframe ${label} at the playhead`} onClick={()=>commit(q=>{
+      const c=q.clips[clip.id];if(at)removeKeyframe(c,prop,s);else setKeyframe(c,prop,s,value);
+    })}><Diamond size={11}/></button>
+  </Row>;
+}
+
+function PatternSection({ clip }) {
+  const kind = valueAt(clip, 'patternKind', timeSig.value);
+  const number = (key,label,min,max,step=1,scale=1) => <Param clip={clip} prop={`pattern.${key}`} label={label} min={min} max={max} step={step} scale={scale} precision={step<1?1:0}/>;
+  return <Section title="Pattern Background" collapsible={false}>
+    <PatternChoice clip={clip} prop="patternKind" label="Pattern" options={[{value:'dots',label:'Shapes'},{value:'grid',label:'Grid'}]}/>
+    {kind==='dots'&&<PatternChoice clip={clip} prop="patternShape" label="Symbol" options={PATTERN_SHAPES}/>}
+    <PatternChoice clip={clip} prop="patternBackground" label="Background" color/>
+    <PatternChoice clip={clip} prop="patternColor" label="Pattern Color" color/>
+    <PatternChoice clip={clip} prop="patternDistribution" label="Size Distribution" options={PATTERN_DISTRIBUTIONS}/>
+    {number('size',kind==='grid'?'Line Width':'Symbol Size',.5,256,.5)}
+    {number('spacingX','Spacing X',4,1024,.5)}{number('spacingY','Spacing Y',4,1024,.5)}
+    {number('random','Size Variation',0,100,1,100)}{number('strength','Distribution Strength',0,100,1,100)}
+    {number('seed','Random Seed',0,99999)}
+    {kind==='dots'&&number('rotation','Symbol Rotation',-36000,36000)}
+    {number('offsetX','Offset X',-4096,4096)}{number('offsetY','Offset Y',-4096,4096)}
+    <p class="hint">Use diamonds to animate the background. Symbol, pattern, colors and distribution switch at their keyframes. Alt/Option-click a numeric property name or diamond for automatic motion.</p>
+  </Section>;
 }
 
 // Sladding: stil, form, styrke og plassering. Plassering og størrelse kan animeres med nøkkelbilder,

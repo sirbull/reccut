@@ -493,7 +493,7 @@ export function SettingsWindow() {
           {current.id === 'design' && <OnlineSettings/>}
           {current.id === 'keyboard' && <KeyboardPane />}
           {current.id === 'extensions' && <><ExtensionsPane/><OnlineSettings/></>}
-          {current.id === 'plugins' && <><PluginsPane/><OnlineSettings/></>}
+          {current.id === 'plugins' && <PluginsPane designSettings={<OnlineSettings/>}/>}
         </div>
       </div>
     </div>

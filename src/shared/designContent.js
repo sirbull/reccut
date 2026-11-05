@@ -7,12 +7,31 @@ import { gradientRGB, gradientHex } from './gradient.js';
 
 const svg = body => `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">${body}</svg>`;
 export const DESIGN_EMOJIS=emojiData.map(([text,name,group,subgroup])=>({id:`emoji-${[...text].map(c=>c.codePointAt(0).toString(16)).join('-')}`,name,text,group,section:'emoji',kind:'emoji',tags:['emoji',name,group,subgroup,...(/smil|grin|laugh/.test(name)?['happy','smile','laugh']:[]),...(/heart|kiss/.test(name)?['love']:[])]}));
+const badgeGradient=(a,b)=>({type:'gradient',alpha:1,gradient:{mode:'linear',start:{x:0,y:0},end:{x:1,y:1},stops:[{position:0,color:a},{position:1,color:b}]}});
+// These are appearances, rather than a list of interchangeable text labels.
+export const DESIGN_BADGES = [
+  {id:'badge-0',name:'Classic Label',text:'NEW',color:'#111827',background:solidFill('#ffd60a'),radius:8},
+  {id:'badge-1',name:'Soft Pill',text:'PART 2',color:'#173e35',background:solidFill('#baf5d7'),radius:500,weight:600},
+  {id:'badge-2',name:'Cut Corner',text:'FREE',color:'#ffffff',background:solidFill('#2155ff'),shape:'cut'},
+  {id:'badge-3',name:'Ribbon Banner',text:'VS',color:'#ffffff',background:solidFill('#dd3557'),shape:'ribbon'},
+  {id:'badge-4',name:'Oval Seal',text:'1',color:'#553c18',background:solidFill('#ffe6a7'),shape:'ellipse',font:'serif'},
+  {id:'badge-5',name:'Duration Badge',text:'duration',color:'#ffffff',background:solidFill('#16181d'),radius:4,font:'mono',weight:600},
+  {id:'badge-outline',name:'Outline Capsule',text:'OUTLINE',color:'#8be6ff',background:solidFill('#102536'),radius:500,border:{color:'#8be6ff',width:2}},
+  {id:'badge-ticket',name:'Ticket',text:'ADMIT ONE',color:'#3d2b27',background:solidFill('#f7e9d4'),shape:'ticket',font:'mono',weight:600,border:{color:'#b88b63',width:1.5,dash:'dashed'}},
+  {id:'badge-pop',name:'Pop Sticker',text:'WOW!',color:'#241c26',background:solidFill('#ff8fca'),radius:10,border:{color:'#241c26',width:3},shadows:[{color:'#241c26',alpha:1,x:7,y:7,blur:0}]},
+  {id:'badge-sunset',name:'Sunset Gradient',text:'FEATURED',color:'#ffffff',background:badgeGradient('#e93868','#ff922b'),radius:18,shadows:[{color:'#b92e62',alpha:.45,x:0,y:5,blur:12}]},
+  {id:'badge-neon',name:'Neon Frame',text:'ON AIR',color:'#d4ff8a',background:solidFill('#17231b'),radius:0,border:{color:'#b3ff65',width:2},font:'mono',shadows:[{color:'#b3ff65',alpha:.65,x:0,y:0,blur:12}]},
+  {id:'badge-editorial',name:'Editorial Stamp',text:'EXCLUSIVE',color:'#8c2e28',background:solidFill('#fff5e5'),radius:0,border:{color:'#8c2e28',width:3,dash:'dashed'},font:'serif',weight:600},
+].map(({color,background,radius=0,shape='rounded',border,font='sans',weight=800,shadows=[],...item})=>({
+  ...item,kind:'badge',section:'badges',tags:['badge','label',item.name,item.text],
+  badgeStyle:{font,weight,fill:solidFill(color),shadows,box:{fill:background,padding:18,radius,shape,border,block:true,autoSize:true}},
+}));
 export const DESIGN_ELEMENTS = [...EXTRA_ELEMENTS,
   ...['rect','rounded','ellipse','polygon','star','line','arrow'].map(shape => ({id:`shape-${shape}`,name:({rect:'Rectangle',rounded:'Rounded Rectangle',ellipse:'Ellipse',polygon:'Polygon',star:'Star',line:'Line',arrow:'Arrow'})[shape],section:'shapes',kind:'shape',shape,tags:['shape',shape]})),
   {id:'curved-arrow',name:'Hand-drawn Arrow',section:'pointers',kind:'drawing',tags:['arrow','point','hand drawn'],svg:svg('<path d="M70 280 Q150 40 510 120 M435 55 L515 120 L430 165" fill="none" stroke="#ffd60a" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>')},
   {id:'scribble-circle',name:'Hand-drawn Circle',section:'pointers',kind:'drawing',tags:['circle','ring','highlight'],svg:svg('<path d="M515 90 C420 5 100 45 80 185 S430 355 535 210 S280 5 140 80" fill="none" stroke="#ff453a" stroke-width="15" stroke-linecap="round"/>')},
   {id:'underline',name:'Hand-drawn Underline',section:'pointers',kind:'drawing',tags:['underline','highlight'],svg:svg('<path d="M65 210 Q300 155 570 185 M120 242 Q365 203 530 225" fill="none" stroke="#ffd60a" stroke-width="18" stroke-linecap="round"/>')},
-  ...['NEW','PART 2','FREE','VS','1','duration'].map((text,i)=>({id:`badge-${i}`,name:text==='duration'?'Duration Badge':`${text} Badge`,section:'badges',kind:'badge',text,tags:['badge','label',text]})),
+  ...DESIGN_BADGES,
   ...DESIGN_EMOJIS,
   {id:'sticker-bolt',name:'Lightning Sticker',section:'emoji',kind:'sticker',tags:['sticker','lightning','bolt'],svg:svg('<path d="M355 25 L185 205 H290 L255 335 L465 135 H345 Z" fill="#ffd60a" stroke="#ffffff" stroke-width="16" stroke-linejoin="round"/>')},
   {id:'sticker-sparkle',name:'Sparkle Sticker',section:'emoji',kind:'sticker',tags:['sticker','star','sparkle'],svg:svg('<path d="M320 25 Q335 165 470 180 Q335 195 320 335 Q305 195 170 180 Q305 165 320 25 Z" fill="#bf5af2" stroke="#ffffff" stroke-width="14"/>')},
@@ -25,12 +44,21 @@ export const ELEMENT_SECTIONS=[['shapes','Shapes'],['pointers','Arrows and Circl
 
 export function textPreset(design,kind,title,fonts={}) {
   const subtitle=kind==='subtitle',badge=kind==='badge',w=design.width*(badge ? .32 : .84),h=design.height*(badge ? .16 : subtitle ? .16 : .3);
-  return newLayer('text',{name:badge?'Badge':subtitle?'Subtitle':'Title',placeholder:badge?null:kind,colorRole:badge?'highlight':subtitle?'accent':'title',text:title,font:subtitle?fonts.body||'sans':fonts.title||'sans',weight:subtitle?500:800,size:design.height*(badge ? .075 : subtitle ? .06 : .14),x:(design.width-w)/2,y:design.height*(subtitle ? .72 : badge ? .12 : .35),w,h,fill:solidFill(badge?'#111827':'#ffffff'),box:badge?{fill:solidFill('#ffd60a'),padding:12,radius:12}:null});
+  return newLayer('text',{name:badge?'Badge':subtitle?'Subtitle':'Title',placeholder:badge?null:kind,colorRole:badge?'highlight':subtitle?'accent':'title',text:title,font:subtitle?fonts.body||'sans':fonts.title||'sans',weight:subtitle?500:800,size:design.height*(badge ? .075 : subtitle ? .06 : .14),x:(design.width-w)/2,y:design.height*(subtitle ? .72 : badge ? .12 : .35),w,h,fill:solidFill(badge?'#111827':'#ffffff'),box:badge?{fill:solidFill('#ffd60a'),padding:12,radius:12,block:true,autoSize:true}:null});
 }
 export function elementLayers(element,design,{point,duration='0:00'}={}) {
   if(['background','drawing','sticker','texture'].includes(element.kind))return [];
   let l;
-  if(element.kind==='badge'){l=textPreset(design,'badge',element.text==='duration'?duration:element.text);l.name=element.name;}
+  if(element.kind==='badge'){
+    l=textPreset(design,'badge',element.text==='duration'?duration:element.text);l.name=element.name;
+    if(element.badgeStyle){
+      const s=design.height/720,style=structuredClone(element.badgeStyle);
+      style.box.padding*=s;style.box.radius*=s;
+      if(style.box.border)style.box.border.width*=s;
+      style.shadows=style.shadows.map(sh=>({...sh,x:sh.x*s,y:sh.y*s,blur:sh.blur*s}));
+      l=newLayer('text',{...l,...style});
+    }
+  }
   else if(element.kind==='emoji')l=newLayer('text',{name:element.name,emoji:{text:element.text,style:'system'},text:element.text,font:'sans',size:design.height*.22,x:0,y:0,w:design.height*.3,h:design.height*.3,fill:solidFill(),highlight:null});
   else l=newLayer('shape',{name:element.name,colorRole:'highlight',shape:element.shape==='rounded'?'rect':element.shape,...element.props,w:design.width*.3,h:design.height*(element.shape==='line'||element.shape==='arrow' ? .12 : .3),radius:element.shape==='rounded'?design.height*.05:0,fill:solidFill('#ffd60a'),...(['line','arrow'].includes(element.shape)?{stroke:{fill:solidFill('#ffd60a'),width:Math.max(3,design.height*.015),align:'center'}}:{})});
   l.x=(point?.x??design.width/2)-l.w/2;l.y=(point?.y??design.height/2)-l.h/2;

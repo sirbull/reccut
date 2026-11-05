@@ -4,6 +4,17 @@ import { fontFamily } from './render.js';
 export function designFont(layer, size = layer.size) {
   return `${layer.weight} ${size}px ${fontFamily(layer.font)}`;
 }
+
+// Badges grow around their text. Long labels wrap at the canvas limit instead
+// of making the type smaller; explicit newlines also increase their height.
+export function fitDesignBadge(layer, measure, maxWidth) {
+  if (layer.type !== 'text' || !layer.box?.autoSize) return layer;
+  const limit = Math.max(1, maxWidth), probe = {...layer,autofit:false,w:65536,h:65536};
+  const natural = layoutDesignText(probe,measure);
+  const w = Math.min(limit,Math.max(layer.size*.5,...natural.widths));
+  const layout = layoutDesignText({...probe,w},measure), h = Math.max(layer.size*layer.lineHeight,layout.height);
+  return {...layer,x:layer.x+(layer.w-w)/2,y:layer.y+(layer.h-h)/2,w,h,autofit:false};
+}
 // Single paired asterisks mark highlights. Consecutive stars and unmatched
 // delimiters stay literal; escaping never starts or ends a highlight.
 function designCharacters(text = '') {

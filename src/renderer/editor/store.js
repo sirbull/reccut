@@ -226,8 +226,11 @@ function copyChanges(before, after, targets) {
 function mirrored(base, next) {
   const { from, to, paused } = mirror;
   const a = base.clips[from], b = next.clips[from];
-  if (paused || !a || !b || a.props === b.props) return next;
-  return produce(next, (d) => copyChanges(a.props, b.props, to.map((id) => d.clips[id]?.props).filter(Boolean)));
+  if (paused || !a || !b || (a.props === b.props && a.expressions === b.expressions)) return next;
+  return produce(next, (d) => {
+    copyChanges(a.props, b.props, to.map((id) => d.clips[id]?.props).filter(Boolean));
+    if (a.expressions !== b.expressions) copyChanges(a.expressions || {}, b.expressions || {}, to.map(id => d.clips[id]).filter(Boolean).map(c => (c.expressions ||= {})));
+  });
 }
 
 // Forhåndsvisning: viser en endring i seeren mens musa er over et valg, uten angresteg eller lagring.

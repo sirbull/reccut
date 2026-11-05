@@ -1,8 +1,9 @@
 import { fitBox, designShapePoints, effectMargin } from './design.js';
 import { layoutDesignText, designFont } from './designText.js';
 import { dilateAlpha, erodeAlpha, readAlpha, alphaPixels, designClipGroups } from './designMasks.js';
-import { patternTile } from './designPattern.js';
+import { paintPattern } from './designPattern.js';
 import { shapePath } from './shapes.js';
+import { openShape, tracePathNodes } from './designPath.js';
 import { gradientParams } from './gradient.js';
 import { renderGradient, gradientCanvasStyle } from './gradientRender.js';
 
@@ -55,6 +56,7 @@ function traceShape(ctx, l) {
   ctx.beginPath();
   if (l.shape === 'ellipse') ctx.ellipse(l.w / 2, l.h / 2, l.w / 2, l.h / 2, 0, 0, Math.PI * 2);
   else if (!l.shape || l.shape === 'rect') ctx.roundRect(0, 0, l.w, l.h, Math.min(l.radius || 0, l.w / 2, l.h / 2));
+  else if (l.shape === 'path') tracePathNodes(ctx, l.path.nodes, l.path.closed, l.w, l.h);
   else {
     designShapePoints(l).forEach(([x, y], i) => i ? ctx.lineTo(x * l.w, y * l.h) : ctx.moveTo(x * l.w, y * l.h));
     if (!['line', 'arrow'].includes(l.shape)) ctx.closePath();
@@ -71,8 +73,29 @@ function textGeometry(ctx, l) {
   const top = l.valign === 'top' ? 0 : l.valign === 'bottom' ? l.h - layout.height : (l.h - layout.height) / 2;
   return { ...layout, x, top };
 }
+function drawBadgeBox(ctx,l,g) {
+  const p=l.box.padding, width=Math.max(l.size*.5,...g.widths);
+  const left=g.x-(l.align==='center'?width/2:l.align==='right'?width:0);
+  const extra=l.box.shape==='ellipse'?(Math.SQRT2-1)/2:0;
+  const x=left-p-width*extra,y=g.top-p-g.height*extra,w=width*(1+extra*2)+p*2,h=g.height*(1+extra*2)+p*2;
+  const trace=()=>{
+    ctx.beginPath();
+    const cut=Math.min(p*.75,w/4,h/4);
+    if(l.box.shape==='cut'){
+      [[x+cut,y],[x+w-cut,y],[x+w,y+cut],[x+w,y+h-cut],[x+w-cut,y+h],[x+cut,y+h],[x,y+h-cut],[x,y+cut]].forEach(([px,py],i)=>i?ctx.lineTo(px,py):ctx.moveTo(px,py));ctx.closePath();
+    }else if(l.box.shape==='ribbon'){
+      [[x,y],[x+w,y],[x+w-cut,y+h/2],[x+w,y+h],[x,y+h],[x+cut,y+h/2]].forEach(([px,py],i)=>i?ctx.lineTo(px,py):ctx.moveTo(px,py));ctx.closePath();
+    }else if(l.box.shape==='ticket'){
+      ctx.moveTo(x,y);ctx.lineTo(x+w,y);ctx.lineTo(x+w,y+h/2-cut);ctx.quadraticCurveTo(x+w-cut*2,y+h/2,x+w,y+h/2+cut);ctx.lineTo(x+w,y+h);ctx.lineTo(x,y+h);ctx.lineTo(x,y+h/2+cut);ctx.quadraticCurveTo(x+cut*2,y+h/2,x,y+h/2-cut);ctx.closePath();
+    }else if(l.box.shape==='ellipse')ctx.ellipse(x+w/2,y+h/2,w/2,h/2,0,0,Math.PI*2);
+    else ctx.roundRect(x,y,w,h,Math.min(l.box.radius,w/2,h/2));
+  };
+  paintFill(ctx,l.box.fill,{x,y,w,h},()=>{trace();ctx.fill();});
+  if(l.box.border?.width){ctx.save();trace();ctx.strokeStyle=l.box.border.color;ctx.lineWidth=l.box.border.width;ctx.setLineDash(l.box.border.dash==='dashed'?[ctx.lineWidth*3,ctx.lineWidth*2]:[]);ctx.stroke();ctx.restore();}
+}
 function drawText(ctx, l, kind = 'fill', spread = 0) {
   const g = textGeometry(ctx, l), box = { x: 0, y: 0, w: l.w, h: l.h };
+  if(l.box?.block){if(kind==='fill'||kind==='box')drawBadgeBox(ctx,l,g);if(kind==='box')return;}
   if(g.styled){drawStyledText(ctx,l,g,kind,spread);return;}
   // Clip overflow to the text box, allowing contours and line-box padding out.
   ctx.save(); const pad = Math.max(spread, l.stroke?.width || 0, l.box?.padding || 0);
@@ -81,7 +104,7 @@ function drawText(ctx, l, kind = 'fill', spread = 0) {
     const y = g.top + (i + 0.5) * g.lineHeight, width = g.widths[i];
     ctx.direction = /[\u0590-\u08ff]/u.test(line) ? 'rtl' : 'ltr';
     const left = g.x - (l.align === 'center' ? width / 2 : l.align === 'right' ? width : 0);
-    if ((kind === 'fill' || kind === 'box') && l.box?.fill && line) {
+    if (!l.box?.block && (kind === 'fill' || kind === 'box') && l.box?.fill && line) {
       const p = l.box.padding;
       paintFill(ctx, l.box.fill, box, () => { ctx.beginPath(); ctx.roundRect(left - p, y - g.lineHeight / 2 - p, width + 2 * p, g.lineHeight + 2 * p, Math.min(l.box.radius, (g.lineHeight + 2 * p) / 2)); ctx.fill(); });
     }
@@ -109,14 +132,14 @@ function drawText(ctx, l, kind = 'fill', spread = 0) {
 function drawStyledText(ctx,l,g,kind,spread){
  const pad=Math.max(spread,l.stroke?.width||0,l.box?.padding||0),box={x:0,y:0,w:l.w,h:l.h};ctx.save();ctx.beginPath();ctx.rect(-pad,-pad,l.w+pad*2,l.h+pad*2);ctx.clip();let top=g.top;
  g.lineRuns.forEach((runs,i)=>{const lineHeight=g.lineHeights[i],y=top+lineHeight/2,left=g.x-(l.align==='center'?g.widths[i]/2:l.align==='right'?g.widths[i]:0);top+=lineHeight;
-  if((kind==='fill'||kind==='box')&&l.box?.fill&&g.lines[i]){const p=l.box.padding;paintFill(ctx,l.box.fill,box,()=>{ctx.beginPath();ctx.roundRect(left-p,y-lineHeight/2-p,g.widths[i]+p*2,lineHeight+p*2,Math.min(l.box.radius,(lineHeight+p*2)/2));ctx.fill();});}if(kind==='box')return;
+  if(!l.box?.block&&(kind==='fill'||kind==='box')&&l.box?.fill&&g.lines[i]){const p=l.box.padding;paintFill(ctx,l.box.fill,box,()=>{ctx.beginPath();ctx.roundRect(left-p,y-lineHeight/2-p,g.widths[i]+p*2,lineHeight+p*2,Math.min(l.box.radius,(lineHeight+p*2)/2));ctx.fill();});}if(kind==='box')return;
   const rtl=/[\u0590-\u08ff]/u.test(g.lines[i]);ctx.direction=rtl?'rtl':'ltr';let x=rtl?left+g.widths[i]:left;for(const run of runs){const style=run.style||{},tracking=style.tracking??l.tracking??0;ctx.font=designFont({...l,...style},(style.size??l.size)*g.size/l.size);ctx.textAlign=rtl?'right':'left';ctx.letterSpacing='0px';const width=ctx.measureText(run.text).width+Math.max(0,[...textSegments.segment(run.text)].length-1)*tracking;ctx.letterSpacing=`${tracking}px`;
    if(kind==='stroke')ctx.strokeText(run.text,x,y);else if(kind==='silhouette'){ctx.fillStyle='#000000';ctx.fillText(run.text,x,y);if(spread>0){ctx.strokeStyle='#000000';ctx.lineWidth=spread*2;ctx.strokeText(run.text,x,y);}}else{const fill=Object.hasOwn(style,'fill')?style.fill:run.highlight?(Object.hasOwn(style,'highlight')?style.highlight||l.fill:l.highlight||l.fill):l.fill;paintFill(ctx,fill,box,()=>ctx.fillText(run.text,x,y));}x+=(rtl?-1:1)*(width+tracking);
   }
  });ctx.restore();
 }
 function drawContent(ctx, l, image, pixelRatio = 1) {
-  if (l.type === 'shape') { traceShape(ctx, l); paintFill(ctx, l.fill, { x: 0, y: 0, w: l.w, h: l.h }, () => ctx.fill());if(l.pattern){const key=JSON.stringify(l.pattern);let tile=fields.get(key);if(!tile){tile=patternTile(l.pattern,canvasFactory);fields.set(key,tile);if(fields.size>8)fields.delete(fields.keys().next().value);}ctx.save();traceShape(ctx,l);ctx.clip();ctx.fillStyle=ctx.createPattern(tile,'repeat');ctx.fillRect(0,0,l.w,l.h);ctx.restore();} }
+  if (l.type === 'shape') { traceShape(ctx, l); paintFill(ctx, l.fill, { x: 0, y: 0, w: l.w, h: l.h }, () => ctx.fill());if(l.pattern){ctx.save();traceShape(ctx,l);ctx.clip();paintPattern(ctx,l.pattern,l.w,l.h,canvasFactory);ctx.restore();} }
   else if (l.type === 'text') drawText(ctx, l);
   else {
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, l.w, l.h); ctx.clip();
@@ -178,7 +201,7 @@ function bitmap(l, image, cutout, ratio, makeCanvas) {
   if (l.type === 'text' && l.box) drawText(ctx, l, 'box');
   if (l.stroke?.width > 0 && l.stroke.fill && (l.stroke.fill.alpha ?? 1) > 0 && l.type !== 'image') {
     const sc = create(), s = sc.getContext('2d'); setup(s);
-    s.lineWidth = l.stroke.width * (l.stroke.align === 'center' || ['line', 'arrow'].includes(l.shape) ? 1 : 2);
+    s.lineWidth = l.stroke.width * (l.stroke.align === 'center' || openShape(l) ? 1 : 2);
     s.lineJoin = l.stroke.join; s.lineCap = l.stroke.dash === 'dotted' ? 'round' : 'butt';
     s.setLineDash(l.stroke.dash === 'dotted' ? [0, l.stroke.width * 2] : l.stroke.dash === 'dashed' ? [l.stroke.width * 3, l.stroke.width * 2] : []);
     s.strokeStyle = '#000000';
@@ -187,7 +210,7 @@ function bitmap(l, image, cutout, ratio, makeCanvas) {
       else { traceShape(s, l); if (stroke) s.stroke(); else s.fill(); }
     };
     trace(true);
-    if (l.stroke.align !== 'center' && !['line', 'arrow'].includes(l.shape)) {
+    if (l.stroke.align !== 'center' && !openShape(l)) {
       s.globalCompositeOperation = l.stroke.align === 'inside' ? 'destination-in' : 'destination-out'; s.setLineDash([]); trace(false);
     }
     s.globalCompositeOperation = 'source-in';

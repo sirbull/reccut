@@ -78,7 +78,8 @@ export function followed(p, clip, T) {
   const s = Math.hypot(F.a, F.b);
   const props = { ...clip.props, x: q.x - W / 2, y: q.y - H / 2, rotation: (valueAt(clip, 'rotation', T) || 0) + (Math.atan2(F.b, F.a) * 180) / Math.PI };
   delete props.follow;
-  const kf = { ...clip.kf };
+  const kf = { ...clip.kf }, expressions = { ...clip.expressions };
+  for (const prop of ['x', 'y', 'rotation']) delete expressions[prop];
   delete kf.x;
   delete kf.y;
   delete kf.rotation;
@@ -86,11 +87,12 @@ export function followed(p, clip, T) {
     const v = valueAt(clip, prop, T) ?? d;
     props[prop] = Array.isArray(v) ? v.map((x) => x * s) : v * s;
     delete kf[prop];
+    delete expressions[prop];
   };
   if (Math.abs(s - 1) > 1e-6) {
     if (clip.type !== 'redact') scaled('scale', 1);
     else if (valueAt(clip, 'points', T)) scaled('points', null), scaled('w', 480), scaled('h', 120);
     else scaled('w', 480), scaled('h', 120);
   }
-  return { ...clip, props, kf };
+  return { ...clip, props, kf, expressions };
 }

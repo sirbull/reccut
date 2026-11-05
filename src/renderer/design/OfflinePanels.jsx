@@ -8,7 +8,7 @@ import { IconButton, Segmented, Select, toast } from '../ui.jsx';
 import { DESIGN_PALETTES, DESIGN_FONT_PAIRS, BUILTIN_DESIGN_TEMPLATES, BUILTIN_DESIGN_STYLES } from '../../shared/designTemplates.js';
 import { DESIGN_ELEMENTS, DESIGN_EMOJIS, ELEMENT_SECTIONS, elementLayers, availableFontPairs, brandPalette } from '../../shared/designContent.js';
 import { rankLibraryItems, filterLibraryItems } from '../../shared/designLibrary.js';
-import { newDesign, solidFill } from '../../shared/design.js';
+import { newDesign, solidFill, effectMargin } from '../../shared/design.js';
 import { LibraryCard, LibraryPreview, TemplateCard, StyleCard } from './LibraryPanel.jsx';
 import { LibrarySections } from './LibrarySection.jsx';
 import { ImageCard, ColorCard } from './ContentPanel.jsx';
@@ -17,6 +17,7 @@ import { applyElement, previewElement, brandedElement,backgroundElementLayer, ap
 import { savedStyles, userTemplates, clearLibraryPreview } from './library.js';
 import { brandColors, brandLogo } from './brand.js';
 import { framePalette, sampleCurrentPalette, canSampleFrame } from './videoLibrary.js';
+import { fitDesignBadges } from './badges.js';
 import { useVideoLibrary, videoSection } from './VideoCards.jsx';
 
 const savedMenu=(kind,item,user)=>user?[{id:'delete',label:'Delete Saved Item',run:()=>removeContent(kind,item.id)}]:[{id:'save',label:`Save to My ${kind.replace('FontPairs','Font Pairs')}`,run:()=>saveContent(kind,item)}];
@@ -29,7 +30,12 @@ function fontLabel(font){return({sans:'System Sans',serif:'Serif',mono:'Monospac
 function fontCSS(font){return({sans:'system-ui',mono:'monospace',serif:'serif',rounded:'ui-rounded, system-ui'})[font]||JSON.stringify(font);}
 export function ElementCard({element,user=false}){element=brandedElement(element);
   if(element.kind==='emoji')return <LibraryCard id={`element:${element.id}`} apply={(_,point)=>applyElement(element,point)} preview={()=>previewElement(element)} menuItems={savedMenu('Elements',element,user)} title={element.name}><span class="dz-emoji-symbol" aria-label={element.name}>{emojiURL(element.text)?<img src={emojiURL(element.text)} alt={element.name}/>:element.text}</span></LibraryCard>;
-  const d=newDesign({width:640,height:360}),layers=elementLayers(element,d,{duration:'2:34'});d.background=element.kind==='background'?element.fill:solidFill('#292d3b');d.layers=element.kind==='texture'?[backgroundElementLayer(element,d)]:layers.map(l=>brandLayer(l,prefs.value.designBrand,prefs.value.designBrandFonts));
+  let d=newDesign({width:640,height:360});const layers=elementLayers(element,d,{duration:'2:34'});d.background=element.kind==='background'?element.fill:solidFill('#292d3b');d.layers=element.kind==='texture'?[backgroundElementLayer(element,d)]:layers.map(l=>element.badgeStyle?l:brandLayer(l,prefs.value.designBrand,prefs.value.designBrandFonts));d=fitDesignBadges(d);
+  if(element.kind==='badge'){
+    const l=d.layers[0],margin=effectMargin(l)+12;
+    d.width=Math.max(l.w+margin*2,(l.h+margin*2)*16/9)*1.15;d.height=d.width*9/16;
+    d.layers=[{...l,x:(d.width-l.w)/2,y:(d.height-l.h)/2}];
+  }
   return <LibraryCard id={`element:${element.id}`} apply={(_,point)=>applyElement(element,point)} preview={()=>previewElement(element)} menuItems={savedMenu('Elements',element,user)} title={`${element.name}. Click or drag to add.`}>{element.svg&&element.kind!=='texture'?<img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(element.svg)}`} alt="" draggable={false}/>:<LibraryPreview design={d}/>}<b>{element.name}</b></LibraryCard>;
 }
 export function ElementsPanel({query=''}){

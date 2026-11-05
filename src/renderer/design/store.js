@@ -1,11 +1,12 @@
 import {prefs} from '../prefs.js';
 import {brandLayer} from '../../shared/designBrand.js';
 import { signal, computed, effect, batch } from '@preact/signals';
-import { produce } from 'immer';
+import { produce, current as draftSnapshot } from 'immer';
 import { project, projectEpoch, scheduleSave } from '../editor/store.js';
 import { designList, newDesign, newLayer, reorderLayers, groupSelectionIds, groupDesignLayers, ungroupDesignLayers, alignDesignLayers, distributeDesignLayers, DESIGN_SHAPES } from '../../shared/design.js';
 import { toast } from '../ui.jsx';
 import { uid } from '../../shared/model.js';
+import { fitDesignBadges } from './badges.js';
 
 export const currentDesignId = signal(null);
 export const selection = signal([]);
@@ -23,6 +24,13 @@ const undoStack = [], redoStack = [];
 let transient = null;
 const pair = () => ({ designs: project.value.designs || {}, designAssets: project.value.designAssets || {} });
 const same = (a, b) => a.designs === b.designs && a.designAssets === b.designAssets;
+function fitChangedBadges(draft,previous) {
+  for(const [id,design] of Object.entries(draftSnapshot(draft).designs)){
+    if(design===previous.designs[id])continue;
+    const fitted=fitDesignBadges(design,previous.designs[id]);
+    if(fitted!==design)draft.designs[id]=fitted;
+  }
+}
 function write(value) {
   project.value = { ...project.value, ...value };
   const list = designList(project.value);
@@ -50,7 +58,7 @@ export function openDesign(id) {
 }
 export function designCommit(mutator) {
   endDesignTransient();
-  const prev = pair(), next = produce(prev, (d) => { mutator(d); });
+  const prev = pair(), next = produce(prev, (d) => { mutator(d); fitChangedBadges(d,prev); });
   if (same(prev, next)) return;
   push(prev); write(next); scheduleSave();
 }
@@ -60,7 +68,7 @@ export function beginDesignTransient() {
 export function updateDesignTransient(mutator) {
   if (!transient) beginDesignTransient();
   if (transient.epoch !== projectEpoch.value) return;
-  write(produce(transient.base, (d) => { mutator(d); }));
+  write(produce(transient.base, (d) => { mutator(d); fitChangedBadges(d,transient.base); }));
 }
 export function endDesignTransient(keep = true) {
   if (!transient) return;

@@ -2,7 +2,7 @@
 // flyttbart vindu over resten av appen, med innstillingene sine og en knapp som bruker det på valgt klipp.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { computed, signal } from '@preact/signals';
-import { FileUp, Puzzle, Settings2, Sparkles, X } from 'lucide-preact';
+import { Camera, ChevronDown, FileUp, Palette, Puzzle, Scissors, Settings2, Share, Sparkles, X } from 'lucide-preact';
 import { Button, IconButton, Modal, Row, Section, Select, Slider, Toggle, toast } from './ui.jsx';
 import TERMS from '../shared/pluginTerms.json';
 import { commit, getTime, importPaths, project, room, selectedClips } from './editor/store.js';
@@ -48,6 +48,7 @@ function saveDefaults(id, values) {
 export const settingsFocus = signal(null);
 export function openPluginSettings(id) {
   settingsFocus.value = id;
+  if (id === 'image-sources') sessionStorage.setItem('focus-image-sources', '1');
   localStorage.setItem('settingsPane', 'plugins');
   if (commands.prefsOpen.value) {
     commands.prefsOpen.value = false;
@@ -229,7 +230,7 @@ export function PluginsButton() {
             </p>
           )}
           {r === 'design' && <button class="plugin-item" onClick={() => {
-            sessionStorage.setItem('focus-image-sources','1');openPluginSettings('image-sources');setOpen(false);
+            openPluginSettings('image-sources');setOpen(false);
           }}><Puzzle size={22}/><span><b>Image Source Plugins</b><small>Add photo sources and connect your own API key.</small></span></button>}
           {list.map((p) => (
             <button
@@ -274,6 +275,8 @@ export function PluginsButton() {
             <button
               class="link"
               onClick={() => {
+                settingsFocus.value = null;
+                sessionStorage.removeItem('focus-image-sources');
                 localStorage.setItem('settingsPane', 'plugins');
                 commands.prefsOpen.value = true;
                 setOpen(false);
@@ -573,13 +576,40 @@ function GenerationSettings({ onSaved }) {
 }
 
 // Settings → Plugins: the built-in plugins, the installed ones, and installing new ones.
-export function PluginsPane() {
+const PLUGIN_WORKSPACES = [
+  { id: 'record', name: 'Record', icon: Camera, description: 'Tools for capturing your screen, camera and audio.' },
+  { id: 'edit', name: 'Edit', icon: Scissors, description: 'Generate video and process clips on your timeline.' },
+  { id: 'export', name: 'Export', icon: Share, description: 'Tools for preparing and delivering your finished videos.' },
+  { id: 'design', name: 'Design', icon: Palette, description: 'Connect photo libraries and reusable templates for your designs.' },
+];
+
+function PluginWorkspace({ workspace, active, focused, count, children }) {
+  const [expanded, setExpanded] = useState(active || focused);
+  useEffect(() => { if (active || focused) setExpanded(true); }, [active, focused]);
+  return (
+    <details id={`plugin-workspace-${workspace.id}`} class={`plugin-workspace${active ? ' current' : ''}`} open={expanded} onToggle={e => setExpanded(e.currentTarget.open)}>
+      <summary>
+        <workspace.icon size={21} aria-hidden="true" />
+        <span class="plugin-workspace-label"><strong>{workspace.name}</strong><span>{workspace.description}</span></span>
+        <span class="plugin-workspace-status">{active && <span class="plugin-current-badge">Current workspace</span>}<small>{workspace.id === 'design' ? 'Image sources & templates' : `${count} ${count === 1 ? 'plugin' : 'plugins'}`}</small></span>
+        <ChevronDown size={16} class="plugin-workspace-chevron" aria-hidden="true" />
+      </summary>
+      <div class="plugin-workspace-body">{children}</div>
+    </details>
+  );
+}
+
+export function PluginsPane({ designSettings }) {
   const [candidate, setCandidate] = useState(null);
   const open = settingsFocus.value;
   useEffect(() => {
     reload();
-    if (open) setTimeout(() => document.getElementById(`plugin-${open}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50);
   }, []);
+  useEffect(() => {
+    if (!open || open === 'image-sources') return;
+    const timer = setTimeout(() => document.getElementById(`plugin-${open}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50);
+    return () => clearTimeout(timer);
+  }, [open, allPlugins.value]);
   const loadManifest = async () => {
     const file = await api.openFileDialog({ title: 'Install Command-Line Processor', filters: [{ name: 'Reccut processor manifest', extensions: ['json'] }] });
     if (!file) return;
@@ -602,71 +632,69 @@ export function PluginsPane() {
       toast(e.message, { kind: 'error' });
     }
   };
-  return (
-    <>
-      <Section title="Plugins" collapsible={false}>
-        <p class="hint">
-          Plugins are tools you open from Plugins in the toolbar, each in its own small window. Ask the AI agent to make
-          one, install a .reccut-plugin file (or double-click it), or install a JSON manifest for a command-line tool.
-          Plugins run with your permissions, so install only plugins you trust.
-        </p>
-        {allPlugins.value.map((p) => (
-          <div key={p.id} id={`plugin-${p.id}`}>
-            <div class="processor-row">
-              <PluginIcon plugin={p} size={22} />
-              <div style="flex:1">
-                <b>{p.name}</b>
-                <small>
-                  {p.builtin ? 'Built in' : `Version ${p.version || 1}`}
-                  {p.author ? ` · by ${p.author}` : ''}
-                  {p.description ? ` · ${p.description}` : ''}
-                </small>
-              </div>
-              <div class="extension-actions">
-                <Button class="small" onClick={() => openPlugin(p.id)}>
-                  Open
-                </Button>
-                {hasSettings(p) && (
-                  <Button class={`small${open === p.id ? ' active' : ''}`} icon={Settings2} onClick={() => (settingsFocus.value = open === p.id ? null : p.id)} aria-expanded={open === p.id}>
-                    Settings
-                  </Button>
-                )}
-                {p.kind && (
-                  <Button class="small" onClick={() => (exportingPlugin.value = p.id)} title="Save it as a file others can install">
-                    Share…
-                  </Button>
-                )}
-                {!p.builtin && (
-                  <Button class="small" onClick={() => remove(p)}>
-                    Remove
-                  </Button>
-                )}
-              </div>
-            </div>
-            {open === p.id && <PluginSettings key={`${p.id}:${p.version || 1}`} plugin={p} />}
-          </div>
-        ))}
-        <div class="extension-actions">
-          <Button onClick={choosePluginFile}>Install plugin file…</Button>
-          <Button onClick={loadManifest}>Install processor manifest…</Button>
-          <Button
-            onClick={() => {
-              aiDraft.value = 'Make a plugin that ';
-              aiChatOpen.value = true;
-              commands.prefsOpen.value = false;
-            }}
-          >
-            Make a plugin with AI…
-          </Button>
+  const activeRoom = Object.hasOwn(ROOM_NAMES, room.value) ? room.value : 'edit';
+  const workspaces = [...PLUGIN_WORKSPACES].sort((a, b) => Number(b.id === activeRoom) - Number(a.id === activeRoom));
+  const focusedRoom = open === 'image-sources' ? 'design' : open && pluginRoom(allPlugins.value.find(p => p.id === open) || {});
+  const jump = id => {
+    const section = document.getElementById(`plugin-workspace-${id}`);
+    if (!section) return;
+    section.open = true;
+    section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    section.querySelector('summary')?.focus({ preventScroll: true });
+  };
+  const pluginCard = p => (
+    <div class="plugin-settings-card" key={p.id} id={`plugin-${p.id}`}>
+      <div class="processor-row">
+        <PluginIcon plugin={p} size={22} />
+        <div class="plugin-settings-description">
+          <b>{p.name}</b>
+          <small>{p.builtin ? 'Built in' : `Version ${p.version || 1}`}{p.author ? ` · by ${p.author}` : ''}</small>
+          {p.description && <p class="hint">{p.description}</p>}
         </div>
-        {candidate && <PluginReview review={{ manifest: candidate }} onDone={() => setCandidate(null)} />}
-      </Section>
-      <Section title="Other plugin formats" collapsible={false}>
-        <p class="hint">
-          Native OFX and Adobe plugins cannot be loaded. CorridorKey needs a command-line adapter (install it as a
-          processor manifest), or processing in its own app followed by importing the result.
-        </p>
-      </Section>
-    </>
+        <div class="extension-actions">
+          <Button class="small" onClick={() => { openPlugin(p.id); commands.prefsOpen.value = false; }}>Open</Button>
+          {hasSettings(p) && <Button class={`small${open === p.id ? ' active' : ''}`} icon={Settings2} onClick={() => (settingsFocus.value = open === p.id ? null : p.id)} aria-expanded={open === p.id}>Settings</Button>}
+          {p.kind && <Button class="small" onClick={() => (exportingPlugin.value = p.id)} title="Save it as a file others can install">Share…</Button>}
+          {!p.builtin && <Button class="small" onClick={() => remove(p)}>Remove</Button>}
+        </div>
+      </div>
+      {open === p.id && <PluginSettings key={`${p.id}:${p.version || 1}`} plugin={p} />}
+    </div>
+  );
+  return (
+    <div class="plugins-settings">
+      <div class="plugins-settings-intro">
+        <h2>Plugins by workspace</h2>
+        <p class="hint">Your current workspace, {ROOM_NAMES[activeRoom]}, is shown first. Open a section to manage its tools. Settings apply across your projects.</p>
+      </div>
+      <nav class="plugin-workspace-nav" aria-label="Plugin workspaces">
+        {workspaces.map(w => <button type="button" key={w.id} class={w.id === activeRoom ? 'current' : ''} aria-label={`${w.name}${w.id === activeRoom ? ' (current workspace)' : ''}`} onClick={() => jump(w.id)}><w.icon size={15} aria-hidden="true" />{w.name}</button>)}
+      </nav>
+      {workspaces.map(w => {
+        const list = allPlugins.value.filter(p => pluginRoom(p) === w.id);
+        return <PluginWorkspace key={w.id} workspace={w} active={w.id === activeRoom} focused={focusedRoom === w.id} count={list.length}>
+          {w.id === 'design' && <div class="plugin-workspace-guide"><b>Connect once, use in your designs</b><p>Openverse works without an account. Add more photo sources below using your own API key or sign-in. Find connected photos in Design → Add Content → Stock Photos. Set up online templates separately at the end of this section.</p></div>}
+          {w.id !== 'design' && list.length > 0 && <p class="hint">Open these tools from the Plugins button in {w.name}. Use Settings to choose their defaults.</p>}
+          {list.map(pluginCard)}
+          {w.id === 'design' && designSettings}
+          {!list.length && w.id !== 'design' && <p class="plugin-workspace-empty">No {w.name.toLowerCase()} plugins are installed. {w.id === 'record' ? 'Screen, camera and audio options are available in the Record workspace.' : w.id === 'export' ? 'Video format and quality options are available in the Export workspace.' : 'Install a plugin below to add a clip-processing tool.'}</p>}
+          {w.id === 'edit' && <>
+            <div class="plugin-install">
+              <h3>Add an Edit plugin</h3>
+              <p class="hint">Install a .reccut-plugin file, or ask the AI agent to create a tool. Plugins run with your permissions, so install only plugins you trust.</p>
+              <div class="extension-actions">
+                <Button icon={FileUp} onClick={choosePluginFile}>Install plugin file…</Button>
+                <Button icon={Sparkles} onClick={() => { aiDraft.value = 'Make a plugin that '; aiChatOpen.value = true; commands.prefsOpen.value = false; }}>Make a plugin with AI…</Button>
+              </div>
+              <Section title="Advanced: command-line tools and other formats" open={false}>
+                <p class="hint">Install a JSON processor manifest to connect a command-line tool. Native OFX and Adobe plugins cannot be loaded. CorridorKey requires a command-line adapter, or processing in its own app followed by importing the result.</p>
+                <Button onClick={loadManifest}>Install processor manifest…</Button>
+              </Section>
+            </div>
+            {candidate && <PluginReview review={{ manifest: candidate }} onDone={() => setCandidate(null)} />}
+          </>}
+        </PluginWorkspace>;
+      })}
+    </div>
   );
 }
