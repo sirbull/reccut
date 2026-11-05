@@ -1,7 +1,7 @@
 import {brandLayer,designBrand} from '../../shared/designBrand.js';
 import {prefs} from '../prefs.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { hitTest, layerBounds, layerPoint, selectionBounds, resizeLayer, rotatePoint, snapMove, snapRotation, newLayer, groupSelectionIds, rotateDesignLayers, scaleDesignLayers, designSafeZones, solidFill, cropDesignCanvas, MAX_DESIGN_SIDE } from '../../shared/design.js';
+import { hitTest, layerBounds, layerPoint, selectionBounds, resizeLayer, rotatePoint, snapMove, snapRotation, newLayer, groupSelectionIds, rotateDesignLayers, scaleDesignLayers, designSafeZones, designSafeFrame, solidFill, cropDesignCanvas, MAX_DESIGN_SIDE } from '../../shared/design.js';
 import { shapeNodes, shapeClosed, localNodes, fitPathLayer, toLocal, toWorld, tracePathNodes } from '../../shared/designPath.js';
 import { libraryDropTarget } from '../../shared/designLibrary.js';
 import { canvasCrop,showSafeZones } from './tools.js';
@@ -33,6 +33,14 @@ function drawGrid(ctx, d, scale) {
   for (let x = step; x < d.width; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, d.height); }
   for (let y = step; y < d.height; y += step) { ctx.moveTo(0, y); ctx.lineTo(d.width, y); }
   ctx.stroke(); ctx.restore();
+}
+// A dark line under the light one keeps the frame visible on any image.
+function drawSafeFrame(ctx, d, scale) {
+  ctx.save(); ctx.beginPath();
+  for (const [x1, y1, x2, y2] of designSafeFrame(d)) { ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); }
+  ctx.strokeStyle = '#00000080'; ctx.lineWidth = 3 / scale; ctx.stroke();
+  ctx.strokeStyle = '#ffffffcc'; ctx.lineWidth = 1 / scale; ctx.stroke();
+  ctx.restore();
 }
 // Rulers along the top and left of the stage, in design pixels with 0 at the canvas corner.
 const RULER = 18;
@@ -136,7 +144,7 @@ export function DesignCanvas({ active }) {
       ctx.scale(scale, scale);
       if (grid) drawGrid(ctx, d, scale);
       ctx.strokeStyle = '#0a84ff'; ctx.lineWidth = 1 / scale;
-      if(safe){ctx.save();ctx.fillStyle='#ffbf4730';ctx.strokeStyle='#ffbf47';ctx.lineWidth=1/scale;ctx.setLineDash([5/scale,4/scale]);for(const z of designSafeZones(d)){ctx.fillRect(z.x,z.y,z.w,z.h);ctx.strokeRect(z.x,z.y,z.w,z.h);ctx.font=`${12/scale}px sans-serif`;ctx.fillStyle='#ffbf47';ctx.fillText(z.label,z.x+4/scale,z.y+16/scale);ctx.fillStyle='#ffbf4730';}ctx.restore();}
+      if(safe){ctx.save();ctx.fillStyle='#ffbf4730';ctx.strokeStyle='#ffbf47';ctx.lineWidth=1/scale;ctx.setLineDash([5/scale,4/scale]);for(const z of designSafeZones(d)){ctx.fillRect(z.x,z.y,z.w,z.h);ctx.strokeRect(z.x,z.y,z.w,z.h);ctx.font=`${12/scale}px sans-serif`;ctx.fillStyle='#ffbf47';ctx.fillText(z.label,z.x+4/scale,z.y+16/scale);ctx.fillStyle='#ffbf4730';}ctx.restore();drawSafeFrame(ctx,d,scale);}
       if(canvasDraft){const b=cropViewport({x:0,y:0,w:d.width,h:d.height},canvasDraft.crop);ctx.save();ctx.fillStyle='#00000090';ctx.fillRect(0,0,d.width,d.height);ctx.save();ctx.scale(1/scale,1/scale);ctx.translate(Math.round(b.x)*scale,Math.round(b.y)*scale);drawDesign(ctx,cropDesignCanvas(d,b),libraryImage,{scale,fontAvailable,cacheLayers:false});ctx.restore();ctx.strokeStyle='#ffffff';ctx.lineWidth=1.5/scale;ctx.strokeRect(b.x,b.y,b.w,b.h);for(const [x,y]of POSITIONS){ctx.fillStyle='#ffffff';ctx.fillRect(b.x+x*b.w-4/scale,b.y+y*b.h-4/scale,8/scale,8/scale)}ctx.restore();}
       if (box && !pathTool && !editing && !crop && !refine && !maskId && !canvasDraft) {
         const corners = [[0, 0], [box.w, 0], [box.w, box.h], [0, box.h]].map(([x, y]) => layerPoint(box, x, y));

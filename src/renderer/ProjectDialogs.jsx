@@ -5,6 +5,7 @@ import { FilePlus2, FolderOpen, FolderSearch, MoreHorizontal } from 'lucide-prea
 import { PROJECT_TEMPLATES, formatDuration, sequenceList, timelines } from '../shared/model.js';
 import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, renameProject, restoreProject, saveNow, saveProjectAs, sequenceSettingsOpen } from './editor/store.js';
 import { ProjectSettings } from './editor/Inspector.jsx';
+import { SequenceFormatSettings } from './editor/SequenceFormatSettings.jsx';
 import { prefs, setPrefs } from './prefs.js';
 import { designFiles, mediaFiles, reduceProject, trimProject } from '../shared/package.js';
 import * as commands from './editor/commands.js';
@@ -286,6 +287,7 @@ export function ProjectsDialog() {
    første klipp legges i et tomt prosjekt, og da har sekvensen allerede fått klippets format. */
 
 export function SequenceSettingsDialog() {
+  if (sequenceSettingsOpen.value.create) return <NewSequenceDialog />;
   const { mediaId } = sequenceSettingsOpen.value;
   const m = project.value.media[mediaId];
   const close = () => (sequenceSettingsOpen.value = null);
@@ -311,6 +313,39 @@ export function SequenceSettingsDialog() {
       <Row label="Ask when adding the first clip">
         <Toggle checked={prefs.value.askSequenceSettings} onChange={(v) => setPrefs({ askSequenceSettings: v })} />
       </Row>
+    </Modal>
+  );
+}
+
+function NewSequenceDialog() {
+  const [settings, setSettings] = useState(() => {
+    const p = project.value;
+    return { name: `Sequence ${sequenceList(p).length + 1}`, width: p.width, height: p.height, fps: p.fps, customFormat: p.customFormat };
+  });
+  const [error, setError] = useState('');
+  const close = () => (sequenceSettingsOpen.value = null);
+  const change = (mutator) => setSettings((previous) => {
+    const next = { ...previous };
+    mutator(next);
+    return next;
+  });
+  const create = () => {
+    try { commands.confirmNewSequence(settings); }
+    catch (err) { setError(err.message); }
+  };
+  return (
+    <Modal title="New Sequence" width={440} onClose={close} footer={<>
+      <Button variant="secondary" onClick={close}>Cancel</Button>
+      <Button variant="primary" onClick={create}>Create Sequence</Button>
+    </>}>
+      <Row label="Name" stacked>
+        <input class="text-input" value={settings.name} autoFocus
+          onInput={(e) => { const name = e.currentTarget.value; change((q) => (q.name = name)); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') create(); }} />
+      </Row>
+      <SequenceFormatSettings settings={settings} onChange={change} />
+      <p class="hint">Choose the format for the new sequence. You can change it later with File › Sequence Settings.</p>
+      {error && <p class="hint" role="alert">{error}</p>}
     </Modal>
   );
 }

@@ -2,7 +2,7 @@
 // som i Final Cut Pro.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { memo } from 'preact/compat';
+import { createPortal, memo } from 'preact/compat';
 import {
   AudioLines,
   Captions,
@@ -57,7 +57,7 @@ import {
   valueAt,
   removeKeyframe,
 } from '../../shared/model.js';
-import { groupLead, moveClip, positionMove, positionTrim, recordingEditId, removeTransition, rollEdit, setTransition, slideClip, slipClip, splitClip, syncRecordingTracks, trimClip } from '../../shared/ops.js';
+import { groupLead, mediaClip, moveClip, positionMove, positionTrim, recordingEditId, removeTransition, rollEdit, setTransition, slideClip, slipClip, splitClip, syncRecordingTracks, trimClip } from '../../shared/ops.js';
 import {
   beginTransient,
   commitClipEdit as commit,
@@ -835,7 +835,7 @@ export function Timeline() {
         .map((clip) => ({ ...clip, row: rows.find((r) => r.lane === clip.lane) }))
         .filter((clip) => clip.row);
       e.dataTransfer.dropEffect = clips.length ? 'copy' : 'none';
-      setGhost(clips.length ? { kind: 'media', replace: replace.length > 0, clips } : null);
+      setGhost(clips.length ? { kind: 'media', replace: replace.length > 0, clips, pointer: { x: e.clientX, y: e.clientY } } : null);
     } else if (item && ['transition', 'effect', 'afx', 'apreset', 'frameFx', 'redact', 'adjustment'].includes(item.kind)) {
       skim.value = null;
       if (skimRef.current) skimRef.current.style.display = 'none';
@@ -919,6 +919,7 @@ export function Timeline() {
           }}
           onDrop={onDrop}
         >
+          {ghost?.kind === 'media' && dragItem && <MediaDragPreview item={dragItem} ghost={ghost} media={p.media} z={z} />}
           <Ruler width={width} />
           {rangeEl}
           {marquee && <div class="tl-marquee" style={{ left: marquee.left, top: marquee.top, width: marquee.right - marquee.left, height: marquee.bottom - marquee.top }} />}
@@ -1254,16 +1255,37 @@ const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0,
   );
 });
 
-function Filmstrip({ clip, stream, x, w, h, z, media }) {
-  const { left, width: vw } = view.value;
+// The native drag icon stays small; only the timeline shows a floating clip.
+// Keep it outside the scroller so it can follow the pointer above its target.
+function MediaDragPreview({ item, ghost, media, z }) {
+  const sources = item.clips || (item.ids || [item.id]).map((id) => ({ id }));
+  const source = sources[0];
+  const m = media[source?.id];
+  const clip = useMemo(() => m ? mediaClip(m, source.opts || {}) : null, [m, item]);
+  if (!clip || clip.type === 'audio') return null;
+  const stream = m.streams?.screen || m.streams?.main || m.streams?.camera;
+  const h = Math.max(54, Math.min(96, ghost.clips[0].row.h));
+  const w = Math.min(Math.max(48, clip.dur * z), Math.max(48, window.innerWidth - 24));
+  const left = Math.max(8, Math.min(window.innerWidth - w - 8, ghost.pointer.x - w + 12));
+  const top = Math.max(8, Math.min(window.innerHeight - h - 8, ghost.pointer.y - h - 18));
+  return createPortal(
+    <div class={`tl-clip t-${clip.type} media-drag-preview`} style={{ left, top, width: w, height: h }} aria-hidden="true">
+      <div class="clip-label"><span class="name">{m.name}</span>{sources.length > 1 && <span class="badge">+{sources.length - 1}</span>}</div>
+      <Filmstrip clip={clip} stream={stream} x={0} w={w} h={h - 18} z={w / clip.dur} media={m} viewport={{ left: 0, width: w }} />
+    </div>, document.body,
+  );
+}
+
+function Filmstrip({ clip, stream, x, w, h, z, media, viewport }) {
+  const { left, width: vw } = viewport || view.value;
   const tileW = Math.round((h * 16) / 9);
-  const files = stream.thumbs.files;
-  const interval = stream.thumbs.interval;
-  const offset = stream.offset || 0;
+  const files = media?.kind === 'image' ? [stream?.proxy || media.path].filter(Boolean) : stream?.thumbs?.files || [];
+  const interval = stream?.thumbs?.interval || 1;
+  const offset = stream?.offset || 0;
   const tiles = [];
   const from = Math.max(0, Math.floor((left - x) / tileW) - 1);
   const to = Math.min(Math.ceil(w / tileW), Math.ceil((left + vw - x) / tileW) + 1);
-  for (let i = from; i < to; i++) {
+  for (let i = from; files.length && i < to; i++) {
     const tSrc = sourceTime(clip, clip.start + ((i + 0.5) * tileW) / z) - offset;
     const idx = media?.kind === 'image' ? 0 : Math.max(0, Math.min(files.length - 1, Math.floor(tSrc / interval)));
     tiles.push(<img key={i} src={fileUrl(files[idx])} style={{ left: i * tileW, width: tileW, height: h }} draggable={false} />);

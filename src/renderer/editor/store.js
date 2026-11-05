@@ -33,7 +33,7 @@ export const projectEpoch = signal(0);
 // Hver versjon av prosjektet endres aldri etter at den er laget, så tidsindeksen kan gjenbrukes.
 effect(() => sealProject(project.value));
 export const projectPath = signal(null);
-// Sekvensinnstillinger: null, {} fra menyen, eller { mediaId } når første klipp nettopp satte formatet.
+// Sekvensinnstillinger: null, {} fra menyen, { mediaId } for første klipp, eller { create, projectId } for ny sekvens.
 export const sequenceSettingsOpen = signal(null);
 export const selection = signal([]);
 // Gruppen som er åpnet for redigering. Dette er visningstilstand, og lagres ikke i prosjektet.

@@ -78,7 +78,8 @@ export function Browser() {
 function dragData(e, item) {
   if (item.kind === 'media') {
     const ids = item.ids || [item.id];
-    item = { ...item, clips: ids.map((id) => ({ id, opts: commands.browserClipOpts(project.value.media[id], ids.length === 1) })) };
+    const media = project.value.media[item.id || ids[0]];
+    item = { ...item, label: media?.name, mediaKind: media?.kind, clips: ids.map((id) => ({ id, opts: commands.browserClipOpts(project.value.media[id], ids.length === 1) })) };
   }
   startLibraryDrag(e, item);
 }
@@ -145,7 +146,7 @@ function MediaTab() {
         if (e.defaultPrevented) return;
         e.preventDefault();
         const id = await api.popupMenu([
-          { id: 'sequence', label: 'New Sequence', accelerator: 'Alt+CmdOrCtrl+N' },
+          { id: 'sequence', label: 'New Sequence…', accelerator: 'Alt+CmdOrCtrl+N' },
           { id: 'import', label: 'Import Media…', accelerator: 'CmdOrCtrl+I' },
         ]);
         if (id === 'sequence') commands.newSequence();

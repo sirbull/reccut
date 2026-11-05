@@ -29,7 +29,7 @@ export const DESIGN_FONT_PAIRS=[
   {id:'avenir',name:'Avenir and Georgia',title:'Avenir Next',body:'Georgia'},
 ];
 const copy=(value)=>structuredClone(value);
-const styleFields={text:['font','weight','size','tracking','lineHeight','uppercase','fill','highlight','stroke','shadows','box','outline'],shape:['fill','stroke','shadows','radius','outline'],image:['adjust','shadows','outline']};
+const styleFields={text:['font','weight','size','tracking','lineHeight','uppercase','fill','highlight','stroke','shadows','box','outline','adjust'],shape:['fill','stroke','shadows','radius','outline','adjust'],image:['adjust','shadows','outline']};
 export function extractDesignStyle(layer,height){const style={};for(const key of styleFields[layer.type]||[])if(layer[key]!==undefined)style[key]=copy(layer[key]);if(layer.type==='text')style.size=layer.size/height;return style;}
 export function applyDesignStyle(layer,entry,height){
   if(entry.type!==layer.type)return layer;

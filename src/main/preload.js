@@ -43,6 +43,8 @@ contextBridge.exposeInMainWorld('api', {
   pathForFile: (file) => webUtils.getPathForFile(file),
 
   listScreens: invoke('screens:list'),
+  currentDisplay: invoke('screens:current'),
+  onDisplaysChanged: on('screens:changed'),
   saveProjectAs: invoke('projects:saveAs'),
   checkUpdates: invoke('updates:check'),
   downloadUpdate: invoke('updates:download'),

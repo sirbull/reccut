@@ -1,5 +1,6 @@
 import { PATTERN_SHAPES, PATTERN_DISTRIBUTIONS, patternClipProps } from '../../shared/designPattern.js';
 import { SIDE_LAYOUT, baseValueAt, isSide } from '../../shared/model.js';
+import { SequenceFormatSettings } from './SequenceFormatSettings.jsx';
 import { ExpressionControls } from './ExpressionControls.jsx';
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
 import { ProcessorEffects } from './ProcessorEffects.jsx';
@@ -10,7 +11,6 @@ import { signal } from '@preact/signals';
 import { ArrowDown, ArrowUp, Captions, ChevronLeft, ChevronRight, Circle, Diamond, EyeOff, Film, PenTool, RectangleHorizontal, SquareDashed, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
 import {
   audioComponents,
-  FRAME_RATES,
   CLIP_COLORS,
   componentVolumeProp,
   ANIMATION_PRESETS,
@@ -2163,22 +2163,8 @@ function TransitionInspector({ clip, edge = 'start' }) {
   );
 }
 
-export const FORMATS = [
-  { value: '7680x4320', label: '8K UHD (7680 × 4320)' },
-  { value: '3840x2160', label: '4K UHD (3840 × 2160)' },
-  { value: '2560x1440', label: '1440p (2560 × 1440)' },
-  { value: '1920x1080', label: '1080p HD (1920 × 1080)' },
-  { value: '1280x720', label: '720p HD (1280 × 720)' },
-  { value: '1080x1920', label: 'Vertical (1080 × 1920)' },
-  { value: '1080x1350', label: 'Portrait 4:5 (1080 × 1350)' },
-  { value: '1080x1080', label: 'Square (1080 × 1080)' },
-];
-
 export function ProjectSettings({ name = true }) {
   const p = project.value;
-  const current = `${p.width}x${p.height}`;
-  const fmt = !p.customFormat && FORMATS.some((f) => f.value === current) ? current : 'custom';
-  const fpsList = FRAME_RATES;
   return (
     <>
       {name && <Row label="Name" stacked>
@@ -2198,41 +2184,7 @@ export function ProjectSettings({ name = true }) {
           }}
         />
       </Row>}
-      <Row label="Format" stacked>
-        <Select
-          value={fmt}
-          options={[...FORMATS, { value: 'custom', label: fmt === 'custom' ? `Custom (${p.width} × ${p.height})` : 'Custom size' }]}
-          onChange={(v) => {
-            const [w, h] = v === 'custom' ? [p.width, p.height] : v.split('x').map(Number);
-            commit((q) => {
-              q.width = w;
-              q.height = h;
-              q.autoFormat = false;
-              if (v === 'custom') q.customFormat = true;
-              else delete q.customFormat;
-            });
-          }}
-        />
-      </Row>
-      {fmt === 'custom' && (
-        <div class="wh-row">
-          <NumberField value={p.width} min={16} max={8192} step={2} unit="W" width={84} onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.width = Math.max(16, Math.round(v / 2) * 2)))} onCommit={() => endTransient(true)} />
-          <span class="dim">×</span>
-          <NumberField value={p.height} min={16} max={8192} step={2} unit="H" width={84} onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.height = Math.max(16, Math.round(v / 2) * 2)))} onCommit={() => endTransient(true)} />
-        </div>
-      )}
-      <Row label="Frame rate">
-        <Select
-          value={fpsList.includes(p.fps) ? String(p.fps) : 'custom'}
-          options={[...fpsList.map((f) => ({ value: String(f), label: `${f} fps` })), { value: 'custom', label: fpsList.includes(p.fps) ? 'Custom' : `Custom (${p.fps})` }]}
-          onChange={(v) => commit((q) => (q.fps = v === 'custom' ? 15 : Number(v)))}
-        />
-      </Row>
-      {!fpsList.includes(p.fps) && (
-        <Row label="Custom frame rate">
-          <NumberField value={p.fps} min={1} max={120} precision={2} onChange={(v) => commit((q) => (q.fps = Math.round(v * 100) / 100))} />
-        </Row>
-      )}
+      <SequenceFormatSettings settings={p} onChange={commit} onStart={beginTransient} onPreview={updateTransient} onCommit={() => endTransient(true)} />
     </>
   );
 }

@@ -21,6 +21,7 @@ import { CROP_RATIOS } from '../../shared/designCrop.js';
 import { FillControls, StrokeControls, ShadowControls, StyleNumber } from './StyleControls.jsx';
 import { fontAvailable, fontVersion } from './fonts.js';
 import { imageMissing, imageVersion, locateImage } from './assets.js';
+import { ColorControls } from './ColorControls.jsx';
 
 export function Properties() {
   const d = currentDesign.value, ids = selection.value;
@@ -119,6 +120,7 @@ export function Properties() {
     </Section>}
     {hasFill&&!text&&!l.pattern && <Section title="Fill"><FillControls value={l.fill} aspect={l.w / l.h} onChange={(fill) => patch({ fill })} onInput={(fill) => live({ fill })} /></Section>}
     {image && <Section title="Image"><Button onClick={startCrop}>Crop…</Button><Row label="Fit"><Select value={l.fit} options={['cover','contain','stretch'].map((value) => ({ value, label: value }))} onChange={(fit) => patch({ fit })} /></Row><Button onClick={() => patch({ crop: { x: 0, y: 0, w: 1, h: 1 }, fit: 'contain' })}>Reset Crop</Button>{imageMissing(l) && <p class="warn">Missing image. <button class="link" onClick={() => locateImage(l)}>Relink…</button></p>}</Section>}
+    <ColorControls layers={layers}/>
     <Section title={layers.length > 1 ? `${layers.length} selected layers` : l.name} actions={!text&&<IconButton icon={BookmarkPlus} title="Save Style" onClick={openSaveStyle}/>}>
       {number('x', 'X')}{number('y', 'Y')}{number('w', 'Width', 1)}{number('h', 'Height', 1)}{number('rotation', 'Rotation', -36000, 36000, 1, 1)}
       <Row label="Flip"><IconButton icon={FlipHorizontal} title="Flip horizontally" active={l.flipX} onClick={() => grouped ? transform('flipX', true, false) : changeLayers((l) => { l.flipX = !l.flipX; })} /><IconButton icon={FlipVertical} title="Flip vertically" active={l.flipY} onClick={() => grouped ? transform('flipY', true, false) : changeLayers((l) => { l.flipY = !l.flipY; })} /></Row>
@@ -158,10 +160,6 @@ export function Properties() {
         <StyleNumber label="Edge Shift" value={l.cutout.shift} min={-20} max={20} onInput={shift=>live({cutout:{...l.cutout,shift}})} />
         <Button disabled={!l.cutout.enabled} onClick={startRefine}>Refine Mask…</Button>
       </>}
-    </Section>}
-    {image && <Section title="Adjustments">
-      {[['brightness','Brightness',-1,1,0.01],['contrast','Contrast',-1,1,0.01],['saturation','Saturation',-1,1,0.01],['hue','Hue',-180,180,1],['blur','Blur',0,500,1],['grayscale','Grayscale',0,1,0.01]].map(([key,label,min,max,step]) => <StyleNumber key={key} label={label} value={l.adjust[key]} min={min} max={max} step={step} precision={step < 1 ? 2 : 0} onInput={(value) => live({ adjust: { ...l.adjust, [key]: value } })} />)}
-      <Button onClick={() => patch({ adjust: { brightness: 0, contrast: 0, saturation: 0, hue: 0, blur: 0, grayscale: 0 } })}>Reset Adjustments</Button>
     </Section>}
   </>;
 }

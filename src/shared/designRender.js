@@ -6,6 +6,7 @@ import { shapePath } from './shapes.js';
 import { openShape, tracePathNodes } from './designPath.js';
 import { gradientParams } from './gradient.js';
 import { renderGradient, gradientCanvasStyle } from './gradientRender.js';
+import { applyDesignPixelAdjustments, hasPixelAdjustments } from './designAdjustments.js';
 
 const canvasFactory = (w, h) => new OffscreenCanvas(w, h);
 const cache = new Map();
@@ -63,6 +64,7 @@ function traceShape(ctx, l) {
   }
 }
 export function imageFilter(a = {}, pixelRatio = 1) {
+  if (a.enabled === false) return 'none';
   return `brightness(${1 + (a.brightness || 0)}) contrast(${1 + (a.contrast || 0)}) saturate(${1 + (a.saturation || 0)}) hue-rotate(${a.hue || 0}deg) blur(${(a.blur || 0) * pixelRatio}px) grayscale(${a.grayscale || 0})`;
 }
 function textGeometry(ctx, l) {
@@ -223,6 +225,16 @@ function bitmap(l, image, cutout, ratio, makeCanvas) {
     ctx.drawImage(sc, -margin, -margin, w, h);
   }
   drawContent(ctx, l.type === 'text' && l.box ? { ...l, box: null } : l, image, ratio);
+  // Images already use the legacy filters while drawing their cropped content.
+  // Isolate text and shapes so their fill, box and stroke are corrected together.
+  if (l.type !== 'image' && l.adjust?.enabled !== false && ['brightness','contrast','saturation','hue','blur','grayscale'].some(k => l.adjust?.[k])) {
+    const filtered = create(), f = filtered.getContext('2d');
+    f.filter = imageFilter(l.adjust, ratio); f.drawImage(cv, 0, 0); cv = filtered;
+  }
+  if (hasPixelAdjustments(l.adjust)) {
+    const c = cv.getContext('2d'), pixels = c.getImageData(0, 0, cv.width, cv.height);
+    applyDesignPixelAdjustments(pixels.data, l.adjust); c.putImageData(pixels, 0, 0);
+  }
   cv = applyMasks(cv,l,image,cutout,ratio,margin,w,h,create);
   if (!(l.shadows || []).length) return { canvas: cv, margin, w, h };
   const result = create(), r = result.getContext('2d'); setup(r);

@@ -117,7 +117,7 @@ Closing Suggestions cancels the analysis or pending frame capture. Switching pro
 
 Preview in the toolbar shows generic video-list layouts at 360, 246 and 168 pixels wide and in a phone layout. Switch light/dark backgrounds and the progress bar. The duration badge uses the current sequence duration. The whole design is fitted inside each preview.
 
-Safe Zones highlights generic overlay areas for the selected size on the editing canvas. These areas are guides, not platform requirements, and are never exported. Readability in the toolbar automatically checks for small text, low text-fill contrast and text overlapping an overlay area after edits. A warning dot appears when there are issues. Open it to review the warnings or run Check Readability again. Select jumps to the affected text layer. Checks use the layers behind the text and a white backdrop for transparency. Outlines and shadows may improve actual legibility.
+Safe Zones highlights generic overlay areas for the selected size on the editing canvas. It also draws a safe frame that follows the shape of the canvas: action safe at 90%, title safe at 80%, a center cross and lines for a 4:3 center crop on wide or tall designs. These areas are guides, not platform requirements, and are never exported. Readability in the toolbar automatically checks for small text, low text-fill contrast and text overlapping an overlay area after edits. A warning dot appears when there are issues. Open it to review the warnings or run Check Readability again. Select jumps to the affected text layer. Checks use the layers behind the text and a white backdrop for transparency. Outlines and shadows may improve actual legibility.
 
 ## Variants and sizes
 
@@ -259,10 +259,12 @@ The open project is shown at the top of the window. Click it to see facts about 
 
 A project can hold several sequences, which are separate timelines that share the same media. Use them for a long and a short cut, or a vertical version of the same video.
 
-- **New Sequence** ({{key:newSequence}}), the sequence button in the Media browser, or right click an empty spot in the browser. The new sequence gets the format of the open one.
+- **New Sequence** ({{key:newSequence}}), the sequence button in the Media browser, or right click an empty spot in the browser. Choose a name, format and frame rate, then click **Create Sequence**. The settings start with the format of the open sequence. Cancel closes the window without creating a sequence.
 - **Duplicate Sequence** copies the open sequence, or right click any sequence and choose Duplicate.
 
 When a project has more than one sequence, they are listed at the top of the Media browser. Double click one to open it in the timeline. Right click to rename, duplicate or delete it. Format, frame rate and captions style belong to each sequence, so changing them in the Inspector only changes the open one. Export exports the open sequence.
+
+Choose **Current Display** in the Format menu to match the pixel resolution of the screen containing the Reccut window, including Retina scaling. This is available when creating a sequence and when changing its format later. Moving Reccut to another screen updates the option; existing sequences keep their chosen size until you change it.
 
 In a project made with the Automatic template, the first video you add sets the size and frame rate of the sequence, and Sequence Settings opens so you can keep that or choose another format. Turn off **Ask when adding the first clip** to skip the window; turn it back on in Settings › General. Change the format at any time with File › Sequence Settings (Cmd J), or in the Inspector when no clip is selected. Clips with another size are scaled to fit, and clips with another frame rate or codec play at their normal speed. If a clip's frame rate does not divide evenly into the export frame rate (25 fps in 30, for example), motion stutters slightly; the export window warns about this and suggests a better frame rate. Speed counts: a 60 fps clip at 50% fits a 30 fps sequence and gives smooth slow motion.
 

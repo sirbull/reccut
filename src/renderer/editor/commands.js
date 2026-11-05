@@ -66,6 +66,7 @@ import {
   editingGroup,
   inEditingGroup,
   sourceMediaId,
+  sequenceSettingsOpen,
 } from './store.js';
 import { getViewerTime, openSource, pause, seek, seekViewer, sourceProject } from './playback.js';
 import { applyMediaDrop, frameEffectPlacement, libraryDropTarget } from '../../shared/libraryDrop.js';
@@ -130,10 +131,23 @@ export const renamingSequence = signal(null);
 /* Sekvenser: flere tidslinjer i samme prosjekt (se model.js) */
 
 export function newSequence() {
+  pause();
+  sequenceSettingsOpen.value = { create: true, projectId: project.value.id };
+}
+
+export function confirmNewSequence({ name, width, height, fps, customFormat }) {
+  const request = sequenceSettingsOpen.value;
+  if (!request?.create || request.projectId !== project.value.id) throw new Error('The project changed. Open New Sequence again.');
+  const id = commitSequence((p) => {
+    const id = addSequence(p, { name: name.trim() || undefined });
+    Object.assign(p, { width, height, fps });
+    if (customFormat) p.customFormat = true;
+    return id;
+  });
+  sequenceSettingsOpen.value = null;
   room.value = 'edit';
   browserTab.value = 'media';
-  const id = commitSequence((p) => addSequence(p));
-  renamingSequence.value = id;
+  return id;
 }
 
 export function duplicateSequence(id = currentSequence(project.value).id) {

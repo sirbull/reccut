@@ -3,6 +3,7 @@ export { dilateAlpha, erodeAlpha, designClipGroups, layerToSourcePoint, sourceTo
 import { normalizeTextStyles } from './designRichText.js';
 import { normalizeDesignPattern } from './designPattern.js';
 import { gradientParams } from './gradient.js';
+import { normalizeDesignAdjustments } from './designAdjustments.js';
 
 // Starting sizes, not upload requirements. YouTube's 2 MB is a conservative mobile limit.
 // https://support.google.com/youtube/answer/72431
@@ -118,6 +119,7 @@ export function normalizeLayer(input) {
     hidden: Boolean(l.hidden), locked: Boolean(l.locked), group: l.group || null,
     fill: fill(l.fill, l.fill === null ? null : solidFill()), stroke: normalizeStroke(l.stroke, l.type), shadows: Array.isArray(l.shadows) ? l.shadows.filter(Boolean).slice(0, 32).map(normalizeShadow) : [],
     mask: normalizeDesignMask(l.mask), clip: Boolean(l.clip), style: l.style || null,
+    adjust: normalizeDesignAdjustments(l.adjust),
     outline: l.outline ? { color: /^#[\da-f]{6}$/i.test(l.outline.color) ? l.outline.color : '#ffffff', width: number(l.outline.width, 0, 0, 500) } : null,
   };
   if (l.type === 'text') Object.assign(result, {
@@ -133,13 +135,12 @@ export function normalizeLayer(input) {
     } : null,
   });
   if (l.type === 'image') {
-    const c = object(l.crop), a = object(l.adjust);
+    const c = object(l.crop);
     const x = number(c.x, 0, 0, 0.9999), y = number(c.y, 0, 0, 0.9999);
     Object.assign(result, {
       asset: string(l.asset, null), media: l.asset ? null : string(l.media, null),
       crop: { x, y, w: number(c.w, 1 - x, 0.0001, 1 - x), h: number(c.h, 1 - y, 0.0001, 1 - y) },
       fit: ['cover', 'contain', 'stretch'].includes(l.fit) ? l.fit : 'cover',
-      adjust: { brightness: number(a.brightness, 0, -1, 1), contrast: number(a.contrast, 0, -1, 1), saturation: number(a.saturation, 0, -1, 1), hue: number(a.hue, 0, -180, 180), blur: number(a.blur, 0, 0, 500), grayscale: number(a.grayscale, 0, 0, 1) },
       cutout: l.cutout && typeof l.cutout.asset === 'string' ? { asset: l.cutout.asset, enabled: l.cutout.enabled !== false, feather: number(l.cutout.feather, 0, 0, 50), shift: number(l.cutout.shift, 0, -20, 20) } : null,
     });
   }
@@ -355,6 +356,21 @@ const badgeZone = { x: 0.8, y: 0.84, w: 0.2, h: 0.16, label: 'Duration badge' };
 for (const preset of DESIGN_SIZES) preset.safe = preset.group === 'Video' ? [badgeZone] : preset.id === 'reels' ? [{ x: 0.88, y: 0.12, w: 0.12, h: 0.76, label: 'Side controls' }, { x: 0, y: 0.82, w: 1, h: 0.18, label: 'Caption area' }] : [];
 export function designSafeZones(d) {
   return (DESIGN_SIZES.find(s => s.id === d.size)?.safe || []).map(z => ({ ...z, x: z.x*d.width, y: z.y*d.height, w: z.w*d.width, h: z.h*d.height }));
+}
+// Safe frame lines as [x1, y1, x2, y2]: action safe 90%, title safe 80%, center cross and edge ticks.
+// The cut lines repeat both margins for a 4:3 center crop (3:4 on tall designs), shown only when they fall inside title safe.
+export function designSafeFrame({ width: w, height: h }) {
+  const box = (f) => { const x = w * (1 - f) / 2, y = h * (1 - f) / 2, r = w - x, b = h - y; return [[x, y, r, y], [r, y, r, b], [r, b, x, b], [x, b, x, y]]; };
+  const cx = w / 2, cy = h / 2, ax = w * 0.05, ay = h * 0.05, tx = w * 0.027, ty = h * 0.027, arm = Math.min(w, h) * 0.025;
+  const lines = [...box(0.9), ...box(0.8), [cx - arm, cy, cx + arm, cy], [cx, cy - arm, cx, cy + arm], [cx, ay, cx, ay + ty], [cx, h - ay, cx, h - ay - ty], [ax, cy, ax + tx, cy], [w - ax, cy, w - ax - tx, cy]];
+  const cut = 4 / 3 * Math.min(w / h, h / w);
+  for (const f of [0.9, 0.8]) {
+    const span = f * cut;
+    if (span >= 0.8) continue;
+    if (w >= h) { const x = w * (1 - span) / 2; lines.push([x, h * 0.1, x, h * 0.9], [w - x, h * 0.1, w - x, h * 0.9]); }
+    else { const y = h * (1 - span) / 2; lines.push([w * 0.1, y, w * 0.9, y], [w * 0.1, h - y, w * 0.9, h - y]); }
+  }
+  return lines;
 }
 // https://www.w3.org/TR/WCAG22/#dfn-relative-luminance
 export function contrastRatio(a,b) {

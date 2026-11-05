@@ -4494,6 +4494,25 @@ kbd.keycap {
 }
 .library-drag-preview.transition { background: #39363f; border-color: #c6b5e8; }
 .library-drag-icon { font-size: 23px; flex-shrink: 0; }
+.library-media-drag-icon {
+  position: fixed;
+  z-index: 10000;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  filter: drop-shadow(0 1px 2px #000);
+  pointer-events: none;
+}
+.tl-clip.media-drag-preview {
+  position: fixed;
+  z-index: 10000;
+  border: 2px solid var(--yellow);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+}
 .tl-transition {
   z-index: 5;
   border-radius: 5px;
@@ -5214,6 +5233,26 @@ kbd.keycap {
 .dz-properties .row-control > .select { max-width: 170px; }
 .dz-properties input[type="color"] { width: 52px; height: 27px; border: 1px solid var(--bg-4); padding: 2px; background: var(--bg-2); border-radius: 4px; }
 .dz-properties textarea { width: 100%; resize: vertical; }
+.dz-color-section { border-bottom: 1px solid var(--line); }
+.dz-color-section > summary { cursor: pointer; padding: 9px 14px; color: var(--text-2); font-size: 11px; font-weight: 600; letter-spacing: .7px; text-transform: uppercase; }
+.dz-color-section > summary:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
+.dz-color-section:not([open]) > summary { color: var(--text-3); }
+.dz-color-status { float: right; font-size: 10px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--text-3); }
+.dz-color-body { padding: 2px 14px 12px; }
+.dz-color-body > .dz-color-section > summary { padding-left: 0; padding-right: 0; }
+.dz-color-body > .dz-color-section > .dz-color-body { padding: 2px 0 10px; }
+.dz-color-body > .dz-color-section:last-child { border-bottom: 0; }
+.dz-color-body .row-control { min-width: 0; }
+.dz-color-body .slider { min-width: 30px; }
+.dz-curve-graph { display: block; width: calc(100% - 12px); max-width: 280px; aspect-ratio: 1; margin: 8px auto 0; overflow: visible; cursor: crosshair; touch-action: none; border: 1px solid var(--line); outline-offset: 4px; }
+.dz-curve-graph[aria-disabled="true"] { opacity: .45; cursor: default; }
+.dz-curve-bg { fill: var(--bg-1); }
+.dz-curve-grid { stroke: var(--line); fill: none; stroke-width: 1; }
+.dz-curve-reference { stroke: var(--text-3); stroke-dasharray: 4 4; opacity: .4; fill: none; }
+.dz-curve-line { fill: none; stroke: var(--curve-color); stroke-width: 2; }
+.dz-curve-graph circle { fill: var(--bg-2); stroke: var(--curve-color); stroke-width: 2; }
+.dz-curve-graph circle.selected { fill: var(--curve-color); }
+.dz-curve-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-3); margin: 7px 5px; }
 .dz-layers { flex: 0 1 35%; min-height: 120px; overflow: auto; border-top: 1px solid var(--bg-4); }
 .dz-layer-list { position: relative; margin: -4px -8px; }
 .dz-layer-block { position: relative; }

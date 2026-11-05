@@ -209,6 +209,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, '..', '..', 'build', 'index.html')).catch((err) => failStartup(err.message));
   win.on('focus', () => { pipPreview.hide(); registerShortcuts(); });
   win.on('blur', registerShortcuts);
+  win.on('move', () => send('screens:changed'));
   const resetKeyboardScope = () => {
     pipPreview.hide(); shortcutsBlocked = true; backgroundShortcuts = false; registerShortcuts();
   };
@@ -335,6 +336,15 @@ app.on('browser-window-blur', () => setImmediate(registerShortcuts));
 input.listener = (event) => send('input', event);
 
 ipcMain.handle('screens:list', () => listScreens());
+// Use the display containing the app, independent of the selected recording source.
+ipcMain.handle('screens:current', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const display = window ? screen.getDisplayMatching(window.getBounds()) : screen.getPrimaryDisplay();
+  return {
+    width: Math.round(display.size.width * display.scaleFactor),
+    height: Math.round(display.size.height * display.scaleFactor),
+  };
+});
 ipcMain.handle('screens:select', (_e, { id, displayId, systemAudio, area: rect }) => {
   selectedScreenId = id;
   wantSystemAudio = Boolean(systemAudio);
@@ -1039,6 +1049,7 @@ ipcMain.handle('project:pendingOpen', () => {
 });
 
 app.whenReady().then(async () => {
+  for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(event, () => send('screens:changed'));
   splash = createSplashWindow({ BrowserWindow, version: app.getVersion() });
   try {
     await splash.ready;
