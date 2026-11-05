@@ -132,11 +132,15 @@ export function Properties() {
     </Section>}
     {text && <Section title="Text Effects">
       <FillControls label="Highlight" value={l.highlight} aspect={l.w / l.h} onChange={(highlight) => patch({ highlight })} onInput={(highlight) => live({ highlight })} />
-      <Row label="Background Box"><Toggle checked={Boolean(l.box)} onChange={(v) => patch({ box: v ? { fill: solidFill('#000000'), padding: 8, radius: 8 } : null })} /></Row>
+      <Row label="Background Box"><Toggle checked={Boolean(l.box)} onChange={(v) => patch({ box: v ? { fill: solidFill('#000000'), padding: 8, radius: 8 } : null, textX: 0, textY: 0 })} /></Row>
       {l.box && <>
         <FillControls label="Box Fill" value={l.box.fill} aspect={l.w / l.h} onChange={(fill) => patch({ box: { ...l.box, fill } })} onInput={(fill) => live({ box: { ...l.box, fill } })} />
         <StyleNumber label="Padding" value={l.box.padding} onInput={(padding) => live({ box: { ...l.box, padding } })} />
         <StyleNumber label="Corner Radius" value={l.box.radius} onInput={(radius) => live({ box: { ...l.box, radius } })} />
+        {l.box.block && <>
+          <StyleNumber label="Text Offset X" value={l.textX || 0} min={-500} onInput={(textX) => live({ textX })} />
+          <StyleNumber label="Text Offset Y" value={l.textY || 0} min={-500} onInput={(textY) => live({ textY })} />
+        </>}
       </>}
     </Section>}
     {image && <Section title="Background Removal">

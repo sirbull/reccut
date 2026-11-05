@@ -69,15 +69,16 @@ function textGeometry(ctx, l) {
   ctx.letterSpacing = '0px';
   const layout = layoutDesignText(l, (t, font) => { ctx.font = font; return ctx.measureText(t).width; });
   ctx.font = layout.font; ctx.textAlign = l.align; ctx.textBaseline = 'middle'; ctx.letterSpacing = `${l.tracking || 0}px`;
-  const x = l.align === 'left' ? 0 : l.align === 'right' ? l.w : l.w / 2;
-  const top = l.valign === 'top' ? 0 : l.valign === 'bottom' ? l.h - layout.height : (l.h - layout.height) / 2;
+  // textX/textY nudge the text inside a badge box; drawBadgeBox undoes them.
+  const x = (l.align === 'left' ? 0 : l.align === 'right' ? l.w : l.w / 2) + (l.textX || 0);
+  const top = (l.valign === 'top' ? 0 : l.valign === 'bottom' ? l.h - layout.height : (l.h - layout.height) / 2) + (l.textY || 0);
   return { ...layout, x, top };
 }
 function drawBadgeBox(ctx,l,g) {
   const p=l.box.padding, width=Math.max(l.size*.5,...g.widths);
   const left=g.x-(l.align==='center'?width/2:l.align==='right'?width:0);
   const extra=l.box.shape==='ellipse'?(Math.SQRT2-1)/2:0;
-  const x=left-p-width*extra,y=g.top-p-g.height*extra,w=width*(1+extra*2)+p*2,h=g.height*(1+extra*2)+p*2;
+  const x=left-p-width*extra-(l.textX||0),y=g.top-p-g.height*extra-(l.textY||0),w=width*(1+extra*2)+p*2,h=g.height*(1+extra*2)+p*2;
   const trace=()=>{
     ctx.beginPath();
     const cut=Math.min(p*.75,w/4,h/4);
@@ -98,7 +99,7 @@ function drawText(ctx, l, kind = 'fill', spread = 0) {
   if(l.box?.block){if(kind==='fill'||kind==='box')drawBadgeBox(ctx,l,g);if(kind==='box')return;}
   if(g.styled){drawStyledText(ctx,l,g,kind,spread);return;}
   // Clip overflow to the text box, allowing contours and line-box padding out.
-  ctx.save(); const pad = Math.max(spread, l.stroke?.width || 0, l.box?.padding || 0);
+  ctx.save(); const pad = Math.max(spread, l.stroke?.width || 0, l.box?.padding || 0) + Math.max(Math.abs(l.textX || 0), Math.abs(l.textY || 0));
   ctx.beginPath(); ctx.rect(-pad, -pad, l.w + 2 * pad, l.h + 2 * pad); ctx.clip();
   g.lines.forEach((line, i) => {
     const y = g.top + (i + 0.5) * g.lineHeight, width = g.widths[i];
@@ -130,7 +131,7 @@ function drawText(ctx, l, kind = 'fill', spread = 0) {
   }); ctx.restore();
 }
 function drawStyledText(ctx,l,g,kind,spread){
- const pad=Math.max(spread,l.stroke?.width||0,l.box?.padding||0),box={x:0,y:0,w:l.w,h:l.h};ctx.save();ctx.beginPath();ctx.rect(-pad,-pad,l.w+pad*2,l.h+pad*2);ctx.clip();let top=g.top;
+ const pad=Math.max(spread,l.stroke?.width||0,l.box?.padding||0)+Math.max(Math.abs(l.textX||0),Math.abs(l.textY||0)),box={x:0,y:0,w:l.w,h:l.h};ctx.save();ctx.beginPath();ctx.rect(-pad,-pad,l.w+pad*2,l.h+pad*2);ctx.clip();let top=g.top;
  g.lineRuns.forEach((runs,i)=>{const lineHeight=g.lineHeights[i],y=top+lineHeight/2,left=g.x-(l.align==='center'?g.widths[i]/2:l.align==='right'?g.widths[i]:0);top+=lineHeight;
   if(!l.box?.block&&(kind==='fill'||kind==='box')&&l.box?.fill&&g.lines[i]){const p=l.box.padding;paintFill(ctx,l.box.fill,box,()=>{ctx.beginPath();ctx.roundRect(left-p,y-lineHeight/2-p,g.widths[i]+p*2,lineHeight+p*2,Math.min(l.box.radius,(lineHeight+p*2)/2));ctx.fill();});}if(kind==='box')return;
   const rtl=/[\u0590-\u08ff]/u.test(g.lines[i]);ctx.direction=rtl?'rtl':'ltr';let x=rtl?left+g.widths[i]:left;for(const run of runs){const style=run.style||{},tracking=style.tracking??l.tracking??0;ctx.font=designFont({...l,...style},(style.size??l.size)*g.size/l.size);ctx.textAlign=rtl?'right':'left';ctx.letterSpacing='0px';const width=ctx.measureText(run.text).width+Math.max(0,[...textSegments.segment(run.text)].length-1)*tracking;ctx.letterSpacing=`${tracking}px`;

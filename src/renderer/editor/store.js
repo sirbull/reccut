@@ -308,7 +308,8 @@ export function undo() {
   if (!undoStack.length) return;
   const prevId = currentSequence(project.value).id;
   redoStack.push(project.value);
-  project.value = restoreEditHistory(undoStack.pop());
+  // Navnet følger prosjektfilen og angres ikke.
+  project.value = { ...restoreEditHistory(undoStack.pop()), name: project.value.name };
   historyVersion.value++;
   if (currentSequence(project.value).id !== prevId) afterSequenceChange(prevId);
   pruneSelection();
@@ -320,7 +321,8 @@ export function redo() {
   if (!redoStack.length) return;
   const prevId = currentSequence(project.value).id;
   undoStack.push(project.value);
-  project.value = restoreEditHistory(redoStack.pop());
+  // Navnet følger prosjektfilen og angres ikke.
+  project.value = { ...restoreEditHistory(redoStack.pop()), name: project.value.name };
   historyVersion.value++;
   if (currentSequence(project.value).id !== prevId) afterSequenceChange(prevId);
   pruneSelection();
@@ -484,6 +486,24 @@ export async function saveProjectAs(location, name) {
   setProject(p, r.file);
   undoStack.push(...keepUndo);
   return r;
+}
+
+// Nytt navn på prosjektet og prosjektfilen. Ikke i angrelisten, siden filen har fått nytt navn.
+// Gir false og en melding om det ikke gikk (for eksempel om navnet er tatt).
+export async function renameProject(name) {
+  await saveNow();
+  let file;
+  try {
+    file = await api.renameProject(projectPath.value, name);
+  } catch (err) {
+    const msg = err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+    import('../ui.jsx').then(({ toast }) => toast(`Could not rename the project: ${msg}`, { kind: 'error' }));
+    return false;
+  }
+  project.value = { ...project.value, name: file.split(/[\\/]/).pop().replace(/\.[^.]+$/, '') };
+  projectPath.value = file;
+  await saveNow();
+  return true;
 }
 
 // Nytt prosjekt: lager en egen mappe med navnet på valgt plassering.

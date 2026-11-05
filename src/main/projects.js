@@ -166,6 +166,28 @@ async function saveAs(project, location, name) {
   return { file: created.file, name: created.name };
 }
 
+// Gir prosjektfilen nytt navn. Kopiene i Auto-Save får samme navn, så historikken følger med.
+// ponytail: bare filen, ikke prosjektmappen (et opptak kan skrive dit mens vi endrer navn).
+async function rename(file, name) {
+  const ext = path.extname(file);
+  const base = path.basename(file, ext);
+  const next = path.join(path.dirname(file), safeName(name) + ext);
+  if (next === file) return file;
+  // Bare store/små bokstaver endret: macOS ser det som samme fil.
+  if (next.toLowerCase() !== file.toLowerCase() && fs.existsSync(next)) throw new Error(`A project named "${path.basename(next)}" already exists in this folder.`);
+  await fs.promises.rename(file, next);
+  const dir = history.historyDir(file);
+  const newBase = path.basename(next, ext);
+  for (const it of await history.list(file)) {
+    const rest = path.basename(it.file).slice(base.length);
+    // Bare kopier av dette prosjektet, ikke av «Test 2» når prosjektet heter «Test».
+    if (/^ \d{4}-/.test(rest)) await fs.promises.rename(it.file, path.join(dir, newBase + rest)).catch(() => {});
+  }
+  await writeRecent((await readRecent()).map((f) => (f === file ? next : f)));
+  if (lastFile === file) lastFile = next;
+  return next;
+}
+
 let lastFile = null;
 
 // Versjoner av prosjektet i Auto-Save-mappen.
@@ -192,4 +214,4 @@ async function trash(base, file) {
   await shell.trashItem(f.own ? f.root : file).catch(() => fs.promises.unlink(file).catch(() => {}));
 }
 
-module.exports = { historyList, historyLoad, historySnapshot, lastSaved: () => lastFile, list, load, save, saveAs, create, folders, forget, trash, touchRecent };
+module.exports = { historyList, historyLoad, historySnapshot, lastSaved: () => lastFile, list, load, save, saveAs, create, folders, forget, rename, trash, touchRecent };

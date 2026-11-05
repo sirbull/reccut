@@ -287,7 +287,7 @@ function ExportPane() {
 
 /* Hurtigtaster: kommandoeditor */
 
-const MENUS = ['All', 'File', 'Edit', 'Mark', 'Clip', 'Tools', 'Playback', 'View', 'Design', 'Help'];
+const MENUS = ['All', 'File', 'Edit', 'Mark', 'Clip', 'Tools', 'Playback', 'View', 'Window', 'Design', 'Help'];
 
 function KeyboardPane() {
   const [query, setQuery] = useState('');

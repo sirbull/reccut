@@ -1,6 +1,6 @@
 import {StockPanel,MoreTemplates} from './Online.jsx';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { Hand, MousePointer2, Plus, Square, Type, ZoomIn, ZoomOut, Palette, Crop, Eye, Scan, Frame, Circle, Pentagon, Star, Minus, MoveUpRight, LayoutTemplate, Clapperboard, SquareArrowUp, BadgeCheck, Minimize2, Maximize2, X, Scaling, ScanText, Search, Shapes, SplinePointer, PenTool, Spline, DiamondMinus } from 'lucide-preact';
+import { Plus, Type, ZoomIn, ZoomOut, Palette, Crop, Eye, Scan, Frame, MoveUpRight, LayoutTemplate, Clapperboard, SquareArrowUp, BadgeCheck, Minimize2, Maximize2, X, Scaling, ScanText, Search, Shapes } from 'lucide-preact';
 import { DESIGN_SIZES, DESIGN_SHAPES, designList } from '../../shared/design.js';
 import { project, projectEpoch } from '../editor/store.js';
 import { Button, IconButton, Modal, toast } from '../ui.jsx';
@@ -10,7 +10,7 @@ import { TemplatesPanel, DesignLibraryDialogs } from './LibraryPanel.jsx';
 import { refreshTemplates, libraryPreview, endLibraryDrag } from './library.js';
 import { loadBrandLogo } from './brand.js';
 import { ContentPanel, TextPanel, BrandPanel, ImportImageButton, importDesignFiles } from './ContentPanel.jsx';
-import { activeDesignPanel, wideDesignPanel, openDesignPanel, toggleDesignPanel, expandDesignPanel } from './panels.js';
+import { activeDesignPanel, wideDesignPanel, designPanelWidth, designSidebarWidth, openDesignPanel, toggleDesignPanel, expandDesignPanel } from './panels.js';
 import { SearchPanel, ElementsPanel, DesignStylesPanel, VideoPanel } from './OfflinePanels.jsx';
 import { DesignStrip } from './DesignStrip.jsx';
 import { SuggestionsDialog } from './SuggestionsDialog.jsx';
@@ -20,23 +20,23 @@ import { NewDesignDialog } from './NewDesignDialog.jsx';
 import { ExportDesignDialog } from './ExportDesignDialog.jsx';
 import { DesignCanvas } from './Canvas.jsx';
 import { FramePicker } from './FramePicker.jsx';
-import { DesignSidebar } from './DesignSidebar.jsx';
+import { DesignSidebar, PanelResizer } from './DesignSidebar.jsx';
 import { FeedPreview, CompareDialog } from './Preview.jsx';
 import { ReadabilityPanel, useReadability, readabilityStatus } from './Readability.jsx';
 import { DesignToolsDialogs } from './ToolsDialogs.jsx';
 import { feedPreview, showSafeZones, canFeedPreview, toggleFeedPreview, toggleSafeZones, compareOpen, resizeOpen, makeVariant, startCanvasCrop, transformCanvas } from './tools.js';
 import { refineSession } from './refine.js';
+import { TOOL_ICONS } from './toolArt.jsx';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
 
-const SHAPE_ICONS = { rect: Square, ellipse: Circle, polygon: Pentagon, star: Star, line: Minus, arrow: MoveUpRight };
 // One toolbar button per group. Click, hold or right-click it for the other tools in the group, as in modCut.
 const TOOL_GROUPS = [
-  [{ id: 'select', icon: MousePointer2, label: 'Move Tool', key: 'V' }, { id: 'direct', icon: SplinePointer, label: 'Direct Selection Tool', key: 'A' }],
-  [{ id: 'text', icon: Type, label: 'Type Tool', key: 'T' }],
-  DESIGN_SHAPES.map((s) => ({ id: 'shape', shape: s.value, icon: SHAPE_ICONS[s.value], label: `${s.label} Tool`, key: 'U' })),
-  [{ id: 'pen', icon: PenTool, label: 'Pen Tool', key: 'P' }, { id: 'anchor', icon: Spline, label: 'Anchor Point Tool', key: '⇧C' }, { id: 'deleteAnchor', icon: DiamondMinus, label: 'Delete Anchor Point Tool', key: '-' }],
-  [{ id: 'hand', icon: Hand, label: 'Hand Tool', key: 'H' }, { id: 'zoom', icon: ZoomIn, label: 'Zoom Tool', key: 'Z' }],
-];
+  [{ id: 'select', label: 'Move Tool', key: 'V' }, { id: 'direct', label: 'Direct Selection Tool', key: 'A' }],
+  [{ id: 'text', label: 'Type Tool', key: 'T' }],
+  DESIGN_SHAPES.map((s) => ({ id: 'shape', shape: s.value, icon: TOOL_ICONS[s.value] || MoveUpRight, label: `${s.label} Tool`, key: 'U' })),
+  [{ id: 'pen', label: 'Pen Tool', key: 'P' }, { id: 'anchor', label: 'Anchor Point Tool', key: '⇧C' }, { id: 'deleteAnchor', label: 'Delete Anchor Point Tool', key: '-' }],
+  [{ id: 'hand', label: 'Hand Tool', key: 'H' }, { id: 'zoom', label: 'Zoom Tool', key: 'Z' }],
+].map((group) => group.map((t) => ({ icon: TOOL_ICONS[t.id], ...t })));
 const isTool = (t) => tool.value === t.id && (!t.shape || shapeType.value === t.shape);
 function pickTool(t) { if (t.shape) shapeType.value = t.shape; tool.value = t.id; }
 function ToolGroup({ tools, disabled }) {
@@ -77,9 +77,10 @@ export function DesignRoom({ active }) {
   const importPaths=(paths,alternate)=>importDesignFiles(paths,alternate).catch(err=>toast(err.message,{kind:'error'}));
   const panels=[{id:'search',label:'Search',icon:Search},{id:'templates',label:'Templates',icon:LayoutTemplate},{id:'video',label:'Video',icon:Clapperboard},{id:'text',label:'Text',icon:Type},{id:'content',label:'Add Content',icon:SquareArrowUp},{id:'elements',label:'Elements',icon:Shapes},{id:'styles',label:'Styles',icon:Palette},{id:'brand',label:'Brand',icon:BadgeCheck}];
   const view=libraryPreview.value||d;
-  return <div class={`dz-room dz-redesign${panel?'':' dz-panel-closed'}${wide?' dz-panel-wide':''}`} onDragOver={(e) => { if (hasFiles(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} onDrop={(e) => { if (!hasFiles(e.dataTransfer)) return; e.preventDefault(); e.stopPropagation(); importPaths(droppedPaths(e.dataTransfer, window.api.pathForFile), e.altKey); }}>
+  return <div class={`dz-room dz-redesign${panel?'':' dz-panel-closed'}${wide?' dz-panel-wide':''}`} style={{'--dz-panel-w':`${designPanelWidth.value}px`,'--dz-sidebar-w':`${designSidebarWidth.value}px`}} onDragOver={(e) => { if (hasFiles(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} onDrop={(e) => { if (!hasFiles(e.dataTransfer)) return; e.preventDefault(); e.stopPropagation(); importPaths(droppedPaths(e.dataTransfer, window.api.pathForFile), e.altKey); }}>
     <nav class="dz-rail" aria-label="Design panels">{panels.map(({id,label,icon:Icon})=><button key={id} title={label} aria-label={label} aria-pressed={panel===id} onClick={()=>toggleDesignPanel(id)}><Icon size={21}/><span>{label}</span></button>)}</nav>
     {panel&&<aside class="dz-library-panel panel" aria-label={`${panels.find(p=>p.id===panel)?.label} library`}>
+      <PanelResizer edge="right" prefKey="designPanelWidth" width={designPanelWidth.value} min={220} label="Resize library panel"/>
       <header class="dz-library-panel-head"><b>{panels.find(p=>p.id===panel)?.label}</b><span class="spacer"/><IconButton icon={wide?Minimize2:Maximize2} title={wide?'Narrow panel':'Expand panel'} onClick={expandDesignPanel}/><IconButton icon={X} title="Close panel" onClick={()=>openDesignPanel(null)}/></header>
       {panel!=='video'&&<div class="dz-panel-search"><input type="search" class="text-input" placeholder={panel==='search'?'Search all content':`Search ${panels.find(p=>p.id===panel)?.label.toLowerCase()}`} aria-label={panel==='search'?'Search all content':'Search current library'} value={query} onInput={e=>setQuery(e.currentTarget.value)}/></div>}
       <div class="dz-library-panel-body">

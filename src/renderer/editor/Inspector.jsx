@@ -49,7 +49,7 @@ import { recordingChildren, setClipDuration, setSpeed, setTransition } from '../
 import { GRADE_PROPS, CAMERA_LOGS } from '../../shared/grade.js';
 import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { beginTransient, commit, endPreview, endTransient, enterGroup, getWave, mirror, previewEdit, motionVersion, project, selectedClips, selectedGroup, selectedTransition, selection, tasks, timeSig, updateTransient, waveVersion } from './store.js';
+import { beginTransient, commit, endPreview, projectPath, renameProject, endTransient, enterGroup, getWave, mirror, previewEdit, motionVersion, project, selectedClips, selectedGroup, selectedTransition, selection, tasks, timeSig, updateTransient, waveVersion } from './store.js';
 import { groupPositionClips, groupVisuals, setGroupOpacity, setGroupPosition } from '../../shared/groupSettings.js';
 import { seek } from './playback.js';
 import { setKeyframe } from './keyframes.js';
@@ -219,6 +219,12 @@ function ClipInspector({ clip, clips = [clip], group = false }) {
 
 /* Egenskaper med nøkkelbilder */
 
+// Mens Alt/Option holdes får navn og diamanter som støtter expressions en ƒx-peker (se .alt-held i app.css).
+const altHeld = (on) => document.documentElement.classList.toggle('alt-held', on);
+addEventListener('keydown', (e) => altHeld(e.altKey));
+addEventListener('keyup', (e) => altHeld(e.altKey));
+addEventListener('blur', () => altHeld(false));
+
 function setValue(c, prop, v, T) {
   if (c.kf?.[prop]?.length) setKeyframe(c, prop, kfTime(c, T), v);
   else c.props[prop] = v;
@@ -249,7 +255,7 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
   return (
     <>
       <div class="param" data-prop={prop}>
-        <span class="param-label" title={canExpress ? `${label} · Alt/Option-click for expressions` : label}
+        <span class={`param-label${canExpress ? ' can-express' : ''}`} title={canExpress ? `${label} · Alt/Option-click for expressions` : label}
           role={canExpress ? 'button' : undefined} tabIndex={canExpress ? 0 : undefined}
           onClick={e=>{if(canExpress && e.altKey){e.preventDefault();setExpressionOpen(v=>!v);}}}
           onKeyDown={e=>{if(canExpress && e.altKey && ['Enter',' '].includes(e.key)){e.preventDefault();setExpressionOpen(v=>!v);}}}>
@@ -265,7 +271,7 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
           <div class="kf-ctl">
             <IconButton icon={ChevronLeft} size={12} title="Previous keyframe" disabled={!prev} onClick={() => prev && goto(prev[0])} />
             <button
-              class={`kf-btn${atKf ? ' on' : list.length ? ' has' : ''}${expressionActive ? ' expression' : ''}`}
+              class={`kf-btn${atKf ? ' on' : list.length ? ' has' : ''}${expressionActive ? ' expression' : ''}${canExpress ? ' can-express' : ''}`}
               disabled={!inside}
               title={`${atKf ? 'Remove keyframe' : 'Add keyframe at the playhead'}${expressionActive ? ` · Active expression: ${expression.preset}` : ''} · Alt/Option-click for expressions`}
               onClick={e => {
@@ -2147,8 +2153,11 @@ export function ProjectSettings({ name = true }) {
             if (e.key === 'Enter') e.currentTarget.blur();
           }}
           onChange={(e) => {
-            const name = e.currentTarget.value.trim();
-            if (name) commit((q) => (q.name = name));
+            const input = e.currentTarget;
+            const name = input.value.trim();
+            if (!name || name === p.name) return void (input.value = p.name);
+            if (!projectPath.value) return void commit((q) => (q.name = name));
+            renameProject(name).then((ok) => ok || (input.value = p.name));
           }}
         />
       </Row>}

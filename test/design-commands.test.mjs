@@ -19,8 +19,22 @@ test('Design refuses Edit commands and menu accelerators without switching rooms
   }
   assert.equal(calls.length,0);
   const menu=r.menuTemplate().flatMap(m=>m.submenu||[]);
-  assert.equal(menu.find(i=>i.id==='export').enabled,false);
-  assert.equal(menu.find(i=>i.id==='sequenceSettings').enabled,false);
+  for(const id of ['export','sequenceSettings','blade'])assert.equal(menu.find(i=>i.id===id),undefined,id);
+  assert.ok(menu.some(i=>i.id==='save'));
+});
+test('menus follow the room: Window has grid, rulers and smart guides only in Design', async () => {
+  const {registry:r,editor:e}=setup();
+  const windowIds=()=>[...r.menuTemplate().find(m=>m.label==='Window').submenu.map(i=>i.id).filter(Boolean)];
+  e.room.value='design';
+  assert.deepEqual(windowIds(),['design:rulers','design:grid','design:smartGuides']);
+  assert.ok(r.menuTemplate().some(m=>m.label==='Design'));
+  assert.ok(!r.menuTemplate().some(m=>m.label==='Clip'));
+  r.runCommand('design:grid');await Promise.resolve();
+  assert.equal(r.menuTemplate().find(m=>m.label==='Window').submenu.find(i=>i.id==='design:grid').checked,true);
+  e.room.value='edit';
+  assert.deepEqual(windowIds(),[]);
+  assert.ok(!r.menuTemplate().some(m=>m.label==='Design'));
+  assert.ok(r.menuTemplate().some(m=>m.label==='Clip'));
 });
 test('shared Undo and Redo act on Design and keep timeline state intact', async () => {
   const {registry:r,editor:e,design:d}=setup();e.room.value='design';

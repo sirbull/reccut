@@ -206,6 +206,7 @@ export const COMMANDS = [
   ...[['x', 'Horizontal'], ['y', 'Vertical']].map(([axis, label]) => ({ id: `design:distribute:${axis}`, label: `Distribute ${label} Spacing`, run: () => design.distributeSelection(axis), enabled: () => design.selectedLayers().length >= 3, menu: 'Design', rooms: DESIGN, help: 'design' })),
   { id: 'design:feedPreview', label: 'Feed Preview', keys: 'F', run: toggleFeedPreview, enabled: canFeedPreview, checked: () => feedPreview.value, menu: 'Design', rooms: DESIGN, help: 'design' },
   { id: 'design:safeZones', label: 'Safe Zones', keys: 'G', run: toggleSafeZones, enabled: () => Boolean(design.currentDesign.value), checked: () => showSafeZones.value, menu: 'Design', rooms: DESIGN, help: 'design' },
+  ...[['rulers', 'Rulers', 'designRulers', 'CmdOrCtrl+R', 'ruler measure pixels coordinates'], ['grid', 'Grid', 'designGrid', "CmdOrCtrl+'", 'grid lines layout squares'], ['smartGuides', 'Smart Guides', 'designSmartGuides', 'CmdOrCtrl+U', 'snap snapping align guides magnetic']].map(([id, label, key, keys, keywords]) => ({ id: `design:${id}`, label, keys, keywords, menu: 'Window', group: 'show', run: () => setPrefs({ [key]: !prefs.value[key] }), checked: () => Boolean(prefs.value[key]), rooms: DESIGN, help: 'design' })),
   { id: 'design:hand', label: 'Hand Tool', keys: 'H', run: () => (design.tool.value = 'hand'), menu: 'Design', rooms: DESIGN, help: 'design' },
 
   { id: 'design:duplicate', label: 'Duplicate Layer', keys: 'CmdOrCtrl+J', run: design.duplicateSelection, menu: 'Design', rooms: DESIGN, help: 'design' },
@@ -496,14 +497,19 @@ export function runCommand(id) {
 
 /* Menylinjen */
 
-const MENU_ORDER = isMac ? ['App', 'File', 'Edit', 'Mark', 'Clip', 'Tools', 'Playback', 'Design', 'View', 'Window', 'Help'] : ['File', 'Edit', 'Mark', 'Clip', 'Tools', 'Playback', 'Design', 'View', 'Help'];
+const MENU_ORDER = isMac ? ['App', 'File', 'Edit', 'Mark', 'Clip', 'Tools', 'Playback', 'Design', 'View', 'Window', 'Help'] : ['File', 'Edit', 'Mark', 'Clip', 'Tools', 'Playback', 'Design', 'View', 'Window', 'Help'];
+
+// The menu bar follows the room: Design shows only design commands, the video rooms hide them.
+function inMenu(cmd) {
+  const rooms = cmd.rooms || EDIT;
+  return room.value === 'design' ? rooms.includes('design') : rooms.some((r) => r !== 'design');
+}
 
 function itemFor(cmd) {
   const accel = keysFor(cmd)[0];
   const it = { id: cmd.id, label: cmd.menuLabel || cmd.label, accelerator: accel, register: Boolean(cmd.register) && !recordingShortcut.value };
   if (cmd.checked) it.checked = Boolean(cmd.checked());
-  if (room.value === 'design' && !(cmd.rooms || EDIT).includes('design')) it.enabled = false;
-  else if (cmd.enabled) it.enabled = Boolean(cmd.enabled());
+  if (cmd.enabled) it.enabled = Boolean(cmd.enabled());
   return it;
 }
 
@@ -515,20 +521,11 @@ export function menuTemplate() {
       out.push({ label: 'Reccut', submenu: [{ role: 'about', label: 'About Reccut' }, { separator: true }, itemFor(byId.get('prefs')), { separator: true }, { role: 'hide', label: 'Hide Reccut' }, { role: 'hideOthers', label: 'Hide Others' }, { separator: true }, { role: 'quit', label: 'Quit Reccut' }] });
       continue;
     }
-    if (name === 'Window') {
-      out.push({ label: 'Window', role: 'windowMenu', submenu: [
-        { role: 'minimize', label: 'Minimize' },
-        { role: 'zoom', label: 'Zoom' },
-        { separator: true },
-        { role: 'front', label: 'Bring All to Front' },
-      ] });
-      continue;
-    }
     const items = [];
     let lastGroup;
     const subs = new Map();
     for (const cmd of COMMANDS) {
-      if (cmd.menu !== name || cmd.hidden) continue;
+      if (cmd.menu !== name || cmd.hidden || !inMenu(cmd)) continue;
       if (isMac && cmd.id === 'prefs') continue;
       if (cmd.submenu) {
         if (!subs.has(cmd.submenu)) {
@@ -555,8 +552,10 @@ export function menuTemplate() {
     }
     if (name === 'View') items.push({ separator: true }, { role: 'togglefullscreen', label: 'Enter Full Screen' });
     if (name === 'File' && !isMac) items.push({ separator: true }, { role: 'quit', label: 'Quit' });
+    if (name === 'Window' && isMac) items.push({ separator: true }, { role: 'minimize', label: 'Minimize' }, { role: 'zoom', label: 'Zoom' }, { separator: true }, { role: 'front', label: 'Bring All to Front' });
+    if (!items.length) continue;
     // På Mac gir rollen help et søkefelt i Hjelp-menyen som finner og åpner menyvalg.
-    out.push({ label: name, ...(name === 'Help' ? { role: 'help' } : {}), submenu: items.filter((x, i, a) => !(x.separator && (i === 0 || a[i - 1]?.separator))) });
+    out.push({ label: name, ...(name === 'Help' ? { role: 'help' } : name === 'Window' && isMac ? { role: 'windowMenu' } : {}), submenu: items.filter((x, i, a) => !(x.separator && (i === 0 || a[i - 1]?.separator))) });
   }
   return out;
 }

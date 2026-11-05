@@ -58,7 +58,7 @@ export function strokeMargin(l) {
   return !l.stroke || l.stroke.align === 'inside' ? 0 : l.stroke.width * (l.stroke.align === 'outside' ? 1 : 0.5);
 }
 export function effectMargin(l) {
-  const spread = Math.max(0, l.box?.padding || 0) + (l.box?.border?.width || 0) + (l.outline?.width || 0) + (l.box?.shape==='ellipse'?Math.max(l.w,l.h)*(Math.SQRT2-1)/2:0);
+  const spread = Math.max(0, l.box?.padding || 0) + (l.box?.border?.width || 0) + (l.outline?.width || 0) + (l.box?.shape==='ellipse'?Math.max(l.w,l.h)*(Math.SQRT2-1)/2:0) + Math.max(Math.abs(l.textX || 0), Math.abs(l.textY || 0));
   return Math.ceil(strokeMargin(l) + Math.max(spread, (l.adjust?.blur || 0) * 2,
     ...(l.shadows || []).map((s) => s.blur * 2 + Math.max(Math.abs(s.x), Math.abs(s.y)) + s.spread + spread)));
 }
@@ -121,7 +121,7 @@ export function normalizeLayer(input) {
   };
   if (l.type === 'text') Object.assign(result, {
     text: string(l.text, 'Title'), textStyles: normalizeTextStyles(l.textStyles,string(l.text,'Title')), font: string(l.font, 'sans'), weight: number(l.weight, 800, 100, 900), size: number(l.size, 96, 6, 4096),
-    tracking: number(l.tracking, 0, -100, 500), lineHeight: number(l.lineHeight, 1.1, 0.5, 5),
+    tracking: number(l.tracking, 0, -100, 500), textX: number(l.textX, 0, -500, 500), textY: number(l.textY, 0, -500, 500), lineHeight: number(l.lineHeight, 1.1, 0.5, 5),
     align: ['left', 'center', 'right'].includes(l.align) ? l.align : 'center', valign: ['top', 'middle', 'bottom'].includes(l.valign) ? l.valign : 'middle',
     uppercase: Boolean(l.uppercase), autofit: l.autofit !== false, highlight: fill(l.highlight, l.highlight === null ? null : solidFill('#ff453a')),
     box: l.box ? {
@@ -383,7 +383,7 @@ export function resizeDesignContent(d,width,height) {
   if(!validDesignSize(width,height))throw new Error('Width and height must be whole numbers from 1 to 8192 pixels.');
   const k=Math.min(width/d.width,height/d.height);
   const axis=(pos,len,total,target,anchor)=>anchor==='stretch'?{pos:pos*k,len:Math.max(1,target-(total-len)*k)}:{len:len*k,pos:anchor==='left'||anchor==='top'?pos*k:anchor==='right'||anchor==='bottom'?target-(total-pos)*k:(pos+len/2)/total*target-len*k/2};
-  const scaleAppearance=(l,s)=>({...l,...(l.type==='text'?{size:Math.max(6,l.size*s),tracking:l.tracking*s}:{}),radius:(l.radius||0)*s,stroke:l.stroke?{...l.stroke,width:l.stroke.width*s}:null,outline:l.outline?{...l.outline,width:l.outline.width*s}:null,box:l.box?{...l.box,padding:l.box.padding*s,radius:l.box.radius*s,...(l.box.border?{border:{...l.box.border,width:l.box.border.width*s}}:{})}:null,shadows:l.shadows.map(sh=>({...sh,x:sh.x*s,y:sh.y*s,blur:sh.blur*s,spread:sh.spread*s}))});
+  const scaleAppearance=(l,s)=>({...l,...(l.type==='text'?{size:Math.max(6,l.size*s),tracking:l.tracking*s,textX:(l.textX||0)*s,textY:(l.textY||0)*s}:{}),radius:(l.radius||0)*s,stroke:l.stroke?{...l.stroke,width:l.stroke.width*s}:null,outline:l.outline?{...l.outline,width:l.outline.width*s}:null,box:l.box?{...l.box,padding:l.box.padding*s,radius:l.box.radius*s,...(l.box.border?{border:{...l.box.border,width:l.box.border.width*s}}:{})}:null,shadows:l.shadows.map(sh=>({...sh,x:sh.x*s,y:sh.y*s,blur:sh.blur*s,spread:sh.spread*s}))});
   const layers=d.layers.map(original=>{
     const x=axis(original.x,original.w,d.width,width,original.anchor?.x),y=axis(original.y,original.h,d.height,height,original.anchor?.y);
     let l=scaleAppearance({...structuredClone(original),x:x.pos,y:y.pos,w:x.len,h:y.len},k),b=layerBounds(l),fit=Math.min(1,width/b.w,height/b.h);

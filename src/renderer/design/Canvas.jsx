@@ -18,6 +18,7 @@ import { maskEditing } from './masks.js';
 import { cropSession, startCrop, finishCrop } from './crop.js';
 import { cropViewport, moveCropImage, resizeCrop } from '../../shared/designCrop.js';
 import { toast } from '../ui.jsx';
+import { CURSORS, TOOL_CURSORS } from './toolArt.jsx';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
 import { libraryPreview, libraryImage, clearLibraryPreview, isLibraryDrag, dropLibraryItem } from './library.js';
 
@@ -25,13 +26,43 @@ import { libraryPreview, libraryImage, clearLibraryPreview, isLibraryDrag, dropL
 const PATH_TOOLS = ['direct', 'pen', 'anchor', 'deleteAnchor'];
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 const POSITIONS = [[0, 0], [0.5, 0], [1, 0], [1, 0.5], [1, 1], [0.5, 1], [0, 1], [0, 0.5]];
+// Grid lines every 40 design px, doubled until they are at least 12 screen px apart.
+function drawGrid(ctx, d, scale) {
+  let step = 40; while (step * scale < 12) step *= 2;
+  ctx.save(); ctx.strokeStyle = '#ffffff2e'; ctx.lineWidth = 1 / scale; ctx.beginPath();
+  for (let x = step; x < d.width; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, d.height); }
+  for (let y = step; y < d.height; y += step) { ctx.moveTo(0, y); ctx.lineTo(d.width, y); }
+  ctx.stroke(); ctx.restore();
+}
+// Rulers along the top and left of the stage, in design pixels with 0 at the canvas corner.
+const RULER = 18;
+function drawRulers(ctx, w, h, origin, scale) {
+  const step = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000].find((s) => s * scale >= 60) || 10000, minor = step / 5;
+  ctx.save();
+  ctx.fillStyle = '#1c1c1e'; ctx.fillRect(0, 0, w, RULER); ctx.fillRect(0, 0, RULER, h);
+  ctx.strokeStyle = '#5a5a5f'; ctx.fillStyle = '#a5a5aa'; ctx.lineWidth = 1; ctx.font = '9px -apple-system, system-ui, sans-serif';
+  ctx.beginPath();
+  for (const [axis, length, start] of [['x', w, origin.x], ['y', h, origin.y]]) {
+    for (let v = Math.floor(-start / scale / minor) * minor; v * scale + start < length; v += minor) {
+      const at = Math.round(v * scale + start) + 0.5;
+      if (at < RULER) continue;
+      const major = Math.abs(v / step - Math.round(v / step)) < 1e-6, tick = major ? RULER : 5;
+      if (axis === 'x') { ctx.moveTo(at, RULER); ctx.lineTo(at, RULER - tick); if (major) ctx.fillText(Math.round(v), at + 3, 10); }
+      else { ctx.moveTo(RULER, at); ctx.lineTo(RULER - tick, at); if (major) { ctx.save(); ctx.translate(11, at + 3); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'right'; ctx.fillText(Math.round(v), 0, 0); ctx.restore(); } }
+    }
+  }
+  ctx.moveTo(0, RULER - 0.5); ctx.lineTo(w, RULER - 0.5); ctx.moveTo(RULER - 0.5, 0); ctx.lineTo(RULER - 0.5, h);
+  ctx.stroke();
+  ctx.fillStyle = '#1c1c1e'; ctx.fillRect(0, 0, RULER - 1, RULER - 1);
+  ctx.restore();
+}
 function handlesFor(box, scale) {
   const positions = POSITIONS.map(([x, y]) => layerPoint(box, x * box.w, y * box.h));
   return [...positions.map((p, i) => ({ ...p, handle: HANDLES[i] })), { ...layerPoint(box, box.w / 2, -28 / scale), handle: 'rotate' }];
 }
 export function DesignCanvas({ active }) {
-  const crop = cropSession.value, refine = refineSession.value, maskId = maskEditing.value, canvasDraft=canvasCrop.value, safe=showSafeZones.value;
-  const [brushHover,setBrushHover] = useState(null), [penHover,setPenHover] = useState(null), pen = useRef(null), pathTool = PATH_TOOLS.includes(tool.value);
+  const crop = cropSession.value, refine = refineSession.value, maskId = maskEditing.value, canvasDraft=canvasCrop.value, safe=showSafeZones.value, grid=prefs.value.designGrid, rulers=prefs.value.designRulers;
+  const [brushHover,setBrushHover] = useState(null), [penHover,setPenHover] = useState(null), [hoverCursor,setHoverCursor] = useState(null), pen = useRef(null), pathTool = PATH_TOOLS.includes(tool.value);
   const host = useRef(null), canvas = useRef(null), drag = useRef(null), textRef = useRef(null), space = useRef(false), latest = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 }), [guides, setGuides] = useState([]), [marquee, setMarquee] = useState(null), [editing, setEditing] = useState(null);
   const base=currentDesign.value, preview=!editing&&!crop&&!refine&&!canvasDraft?libraryPreview.value:null;
@@ -78,7 +109,7 @@ export function DesignCanvas({ active }) {
     setEditing(null); drag.current = null; setGuides([]); setMarquee(null);
     return () => { finishPen(); endDesignTransient(); };
   }, [base?.id]);
-  useEffect(() => { if (tool.value !== 'pen') finishPen(); }, [tool.value]);
+  useEffect(() => { setHoverCursor(null); if (tool.value !== 'pen') finishPen(); }, [tool.value]);
   useEffect(() => { if (active && d) loadDesignImages(d); }, [active, d]);
   useLayoutEffect(() => {
     if (!active || !d || !canvas.current) return;
@@ -93,6 +124,7 @@ export function DesignCanvas({ active }) {
       const liveBadge=d.layers.find(l=>l.id===editing)?.box;
       drawDesign(ctx, d, (l)=>refine&&l.asset===refine.asset?refine.canvas:libraryImage(l), { scale, fontAvailable, hideLayers: new Set([liveBadge?null:editing, crop?.layer.id].filter(Boolean)) });
       ctx.scale(scale, scale);
+      if (grid) drawGrid(ctx, d, scale);
       ctx.strokeStyle = '#0a84ff'; ctx.lineWidth = 1 / scale;
       if(safe){ctx.save();ctx.fillStyle='#ffbf4730';ctx.strokeStyle='#ffbf47';ctx.lineWidth=1/scale;ctx.setLineDash([5/scale,4/scale]);for(const z of designSafeZones(d)){ctx.fillRect(z.x,z.y,z.w,z.h);ctx.strokeRect(z.x,z.y,z.w,z.h);ctx.font=`${12/scale}px sans-serif`;ctx.fillStyle='#ffbf47';ctx.fillText(z.label,z.x+4/scale,z.y+16/scale);ctx.fillStyle='#ffbf4730';}ctx.restore();}
       if(canvasDraft){const b=cropViewport({x:0,y:0,w:d.width,h:d.height},canvasDraft.crop);ctx.save();ctx.fillStyle='#00000090';ctx.beginPath();ctx.rect(0,0,d.width,d.height);ctx.rect(b.x,b.y,b.w,b.h);ctx.fill('evenodd');ctx.strokeStyle='#ffffff';ctx.lineWidth=1.5/scale;ctx.strokeRect(b.x,b.y,b.w,b.h);for(const [x,y]of POSITIONS){ctx.fillStyle='#ffffff';ctx.fillRect(b.x+x*b.w-4/scale,b.y+y*b.h-4/scale,8/scale,8/scale)}ctx.restore();}
@@ -143,9 +175,10 @@ export function DesignCanvas({ active }) {
       for (const g of guides) { ctx.beginPath(); if (g.axis === 'x') { ctx.moveTo(g.value, 0); ctx.lineTo(g.value, d.height); } else { ctx.moveTo(0, g.value); ctx.lineTo(d.width, g.value); } ctx.stroke(); }
       if (marquee) { ctx.fillStyle = '#0a84ff22'; ctx.strokeStyle = '#0a84ff'; ctx.fillRect(marquee.x, marquee.y, marquee.w, marquee.h); ctx.strokeRect(marquee.x, marquee.y, marquee.w, marquee.h); }
       ctx.restore();
+      if (rulers) drawRulers(ctx, size.w, size.h, offset, scale);
     });
     return () => cancelAnimationFrame(frame);
-  }, [active, d, selected, z, p, size, version, guides, marquee, editing, crop, refine, maskId, brushHover, brushSettings.value,canvasDraft,safe,pathTool,penHover]);
+  }, [active, d, selected, z, p, size, version, guides, marquee, editing, crop, refine, maskId, brushHover, brushSettings.value,canvasDraft,safe,pathTool,penHover,grid,rulers]);
   useEffect(() => { if (editing) { textRef.current?.focus(); textRef.current?.select(); } }, [editing]);
   function startText(id) {
     const layer = d.layers.find((l) => l.id === id);
@@ -179,15 +212,24 @@ export function DesignCanvas({ active }) {
     endDesignTransient(s.nodes.length >= 2);
     selection.value = s.nodes.length >= 2 ? [s.layer.id] : [];
   }
+  const near = (n, pt) => n && Math.hypot(n.x - pt.x, n.y - pt.y) <= 6 / scale;
+  // modCut's cursor states: the pen shows a small circle over the first point when it will close the path.
+  function cursorAt(pt, e) {
+    const s = pen.current;
+    if (tool.value === 'pen') return !s ? 'pen-new' : s.nodes.length > 2 && near(s.nodes[0], pt) ? 'pen-close' : near(s.nodes.at(-1), pt) ? 'pen-convert' : 'pen-active';
+    if (tool.value === 'direct' && nodeAt(pt)) return 'direct-anchor';
+    if (tool.value === 'zoom' && e.altKey) return 'zoom-out';
+    return TOOL_CURSORS[tool.value];
+  }
   function penDown(pt, alt) {
     let s = pen.current;
     if (!s) {
       const layer = newLayer('shape', { name: 'Path', x: 0, y: 0, w: 1, h: 1, fill: null, stroke: { fill: solidFill(designBrand(prefs.value.designBrand).roles.fill), width: 6 } });
       s = pen.current = { layer, nodes: [] }; beginDesignTransient(); selection.value = [layer.id];
     }
-    const near = (n) => n && Math.hypot(n.x - pt.x, n.y - pt.y) <= 6 / scale, last = s.nodes.at(-1);
-    if (s.nodes.length > 2 && near(s.nodes[0])) { writePath(s.layer, s.nodes, true); finishPen(); return; }
-    if (near(last)) { Object.assign(last, { ox: last.x, oy: last.y }); drag.current = { type: 'pen', node: last, free: true }; }
+    const last = s.nodes.at(-1);
+    if (s.nodes.length > 2 && near(s.nodes[0], pt)) { writePath(s.layer, s.nodes, true); finishPen(); return; }
+    if (near(last, pt)) { Object.assign(last, { ox: last.x, oy: last.y }); drag.current = { type: 'pen', node: last, free: true }; }
     else { const n = { x: pt.x, y: pt.y, ix: pt.x, iy: pt.y, ox: pt.x, oy: pt.y }; s.nodes.push(n); drag.current = { type: 'pen', node: n, free: alt }; }
     writePath(s.layer, s.nodes, false);
   }
@@ -220,7 +262,7 @@ export function DesignCanvas({ active }) {
     e.preventDefault(); host.current.focus(); host.current.setPointerCapture(e.pointerId);
     const pt = point(e);
     if (space.current || tool.value === 'hand' || e.button === 1) {
-      drag.current = { type: 'pan', clientX: e.clientX, clientY: e.clientY, pan: pan.value }; return;
+      drag.current = { type: 'pan', clientX: e.clientX, clientY: e.clientY, pan: pan.value }; setHoverCursor('hand-active'); return;
     }
     if(canvasDraft){const full={x:0,y:0,w:d.width,h:d.height},b=cropViewport(full,canvasDraft.crop),index=POSITIONS.findIndex(([x,y])=>Math.hypot(pt.x-b.x-x*b.w,pt.y-b.y-y*b.h)<=10/scale);drag.current={type:'canvasCrop',start:pt,session:canvasDraft,handle:index>=0?HANDLES[index]:null};return;}
     if (crop) {
@@ -234,7 +276,7 @@ export function DesignCanvas({ active }) {
       if(index>=0){beginDesignTransient();drag.current={type:'mask',layer:l,index};}return;
     }
     if (tool.value === 'zoom') { zoomAt(e.clientX, e.clientY, scale * (e.altKey ? 0.8 : 1.25)); return; }
-    if (tool.value === 'pen') { penDown(pt, e.altKey); return; }
+    if (tool.value === 'pen') { penDown(pt, e.altKey); setHoverCursor(cursorAt(pt, e)); return; }
     const node = pathTool && nodeAt(pt);
     if (node) { nodeDown(node); return; }
     const handle = !pathTool && box && handlesFor(box, scale).find((h) => Math.hypot(pt.x - h.x, pt.y - h.y) <= 8 / scale);
@@ -258,7 +300,7 @@ export function DesignCanvas({ active }) {
   function move(e) {
     const state = drag.current;
     if(refine)setBrushHover(point(e));
-    if (pen.current && !state) setPenHover(point(e));
+    if (!state) { const p = point(e); if (pen.current) setPenHover(p); setHoverCursor(cursorAt(p, e)); }
     if (!state || !d) return;
     if(state.type==='refine'){const p=point(e);paintRefine(p,state.previous);state.previous=p;return;}
     if(state.type==='mask'){const p=cropPoint(point(e),state.layer),x=Math.max(0,Math.min(1,p.x/state.layer.w)),y=Math.max(0,Math.min(1,p.y/state.layer.h));const points=state.layer.mask.points.map(p=>[...p]);if(state.layer.mask.shape==='polygon'||points.length!==4)points[state.index]=[x,y];else{const i=state.index;for(const n of i===0||i===3?[0,3]:[1,2])points[n][0]=x;for(const n of i<2?[0,1]:[2,3])points[n][1]=y;}updateDesignTransient(p=>{const l=p.designs[d.id].layers.find(l=>l.id===state.layer.id);if(l?.mask)l.mask.points=points;});return;}
@@ -302,7 +344,8 @@ export function DesignCanvas({ active }) {
     }
     let layers;
     if (state.type === 'move') {
-      if (!e.metaKey && !e.ctrlKey) {
+      // Smart Guides snap to the canvas and other layers. Cmd/Ctrl turns them off while dragging.
+      if (prefs.value.designSmartGuides !== false && !e.metaKey && !e.ctrlKey) {
         const others = d.layers.filter((l) => !state.layers.some((s) => s.id === l.id) && !l.hidden).map(layerBounds);
         const candidates = { x: [0, d.width / 2, d.width], y: [0, d.height / 2, d.height] };
         for (const b of others) { candidates.x.push(b.x, b.x + b.w / 2, b.x + b.w); candidates.y.push(b.y, b.y + b.h / 2, b.y + b.h); }
@@ -329,6 +372,7 @@ export function DesignCanvas({ active }) {
     if (!drag.current) return;
     const state = drag.current;
     drag.current = null; setGuides([]); setMarquee(null);
+    if (state.type === 'pan') setHoverCursor(null);
     if(state.type==='refine'){if(keep)saveRefineStroke();else{stopRefine();startRefine();}}
     if(state.type==='canvasCrop'&&!keep)canvasCrop.value=state.session;
     if (state.type === 'crop' && !keep) cropSession.value = state.session;
@@ -340,7 +384,7 @@ export function DesignCanvas({ active }) {
   let textLayout;
   if (text) { const ctx = canvas.current?.getContext('2d'); if (ctx) textLayout = layoutDesignText(text, (t, font) => { ctx.font = font; return ctx.measureText(t).width; }); }
   return (
-    <div class={`dz-stage dz-tool-${tool.value}${crop ? ' dz-crop-mode' : ''}${refine ? ' dz-refine-mode' : ''}${canvasDraft?' dz-canvas-crop-mode':''}`} ref={host} tabIndex={0} aria-label="Design canvas" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={(e) => up(e, false)} onLostPointerCapture={up}
+    <div class={`dz-stage dz-tool-${tool.value}${crop ? ' dz-crop-mode' : ''}${refine ? ' dz-refine-mode' : ''}${canvasDraft?' dz-canvas-crop-mode':''}`} ref={host} tabIndex={0} aria-label="Design canvas" style={{ cursor: crop || refine || maskId || canvasDraft ? undefined : CURSORS[hoverCursor || TOOL_CURSORS[tool.value]] }} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={(e) => up(e, false)} onLostPointerCapture={up}
       onKeyDown={(e) => { if (pen.current && (e.key === 'Enter' || e.key === 'Escape')) { e.preventDefault(); e.stopPropagation(); finishPen(); return; } if(refineSession.value||maskEditing.value){e.stopPropagation();if(refineSession.value&&(e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();navigateRefineHistory(e.shiftKey);return;}if(e.key==='Escape'){e.preventDefault();if(drag.current?.type==='mask')endDesignTransient(false);drag.current=null;stopRefine();maskEditing.value=null;}return;} if (cropSession.value) { e.stopPropagation(); if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); drag.current = null; finishCrop(e.key === 'Enter'); } return; } if (e.key === 'Escape' && drag.current) { e.stopPropagation(); up(e, false); } }}
       onDblClick={(e) => { if(canvasCrop.value||libraryPreview.value||['pen','anchor','deleteAnchor','zoom'].includes(tool.value))return; const hit = d && hitTest(d, point(e).x, point(e).y); if (hit) selectLayer(hit.id, { single: true }); if (hit?.type === 'text') startText(hit.id); else if (hit?.type === 'image') startCrop(); }}
       onDragOver={(e) => { if (hasFiles(e.dataTransfer) || isLibraryDrag(e)) { e.preventDefault(); e.stopPropagation(); } }}
@@ -348,7 +392,7 @@ export function DesignCanvas({ active }) {
       {d && <div class="dz-checker" style={{ left: offset.x, top: offset.y, width: d.width * scale, height: d.height * scale }} />}
       <canvas class="dz-canvas" ref={canvas} style={{ width: size.w, height: size.h }} />
       {text && <textarea ref={textRef} class="dz-text-edit" aria-label="Edit text" value={text.text} spellcheck={false}
-        style={{ left: offset.x + text.x * scale, top: offset.y + text.y * scale, width: text.w, height: text.h, transformOrigin: '0 0', transform: `scale(${scale}) translate(${text.w / 2}px, ${text.h / 2}px) rotate(${text.rotation}deg) scale(${text.flipX ? -1 : 1}, ${text.flipY ? -1 : 1}) translate(${-text.w / 2}px, ${-text.h / 2}px)`, font: designFont(text, textLayout?.size), lineHeight: text.lineHeight, letterSpacing: text.tracking, textAlign: text.align, color: text.box?'transparent':text.fill?.color || '#ffffff', caretColor: text.fill?.color || '#ffffff', textTransform: text.uppercase ? 'uppercase' : 'none', paddingTop: text.valign === 'top' ? 0 : Math.max(0, (text.h - (textLayout?.height || 0)) / (text.valign === 'middle' ? 2 : 1)) }}
+        style={{ left: offset.x + text.x * scale, top: offset.y + text.y * scale, width: text.w, height: text.h, transformOrigin: '0 0', transform: `scale(${scale}) translate(${text.w / 2}px, ${text.h / 2}px) rotate(${text.rotation}deg) scale(${text.flipX ? -1 : 1}, ${text.flipY ? -1 : 1}) translate(${-text.w / 2 + (text.textX || 0)}px, ${-text.h / 2 + (text.textY || 0)}px)`, font: designFont(text, textLayout?.size), lineHeight: text.lineHeight, letterSpacing: text.tracking, textAlign: text.align, color: text.box?'transparent':text.fill?.color || '#ffffff', caretColor: text.fill?.color || '#ffffff', textTransform: text.uppercase ? 'uppercase' : 'none', paddingTop: text.valign === 'top' ? 0 : Math.max(0, (text.h - (textLayout?.height || 0)) / (text.valign === 'middle' ? 2 : 1)) }}
         onPointerDown={(e) => e.stopPropagation()} onInput={(e) => { const value = e.currentTarget.value; updateDesignTransient((p) => { const l = p.designs[d.id]?.layers.find((l) => l.id === editing); if (l) Object.assign(l,replaceStyledText(l,value)); }); }} onBlur={finishText} onSelect={e=>rememberTextSelection(text,e.currentTarget)}
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') { e.preventDefault(); finishText(); host.current.focus(); } }} />}
     </div>

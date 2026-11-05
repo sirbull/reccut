@@ -9,6 +9,17 @@ import { prefs, previewResolutionScale } from './prefs.js';
 const PRELOAD = 1.5;
 const KEEP = 6;
 
+function lastFrameTime(p, end = p.duration) {
+  const fps = Number.isFinite(p.fps) && p.fps > 0 ? p.fps : 30;
+  return Math.max(0, Math.ceil(end * fps - 1e-7) - 1) / fps;
+}
+
+// Klipp har en eksklusiv sluttgrense. Ved selve tidslinjeslutten viser
+// forhåndsvisningen siste bilde, som ved eksport av et stillbilde.
+function viewerFrameTime(p, T) {
+  return p.duration > 0 && T === p.duration ? lastFrameTime(p) : T;
+}
+
 export const fileUrl = (p) => `media://file/${encodeURIComponent(p)}`;
 
 const audioCtx = new AudioContext({ latencyHint: 'interactive' });
@@ -248,7 +259,8 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
   // Hvilke strømmer som trengs ved tid T, med kildetid for hver.
   function neededAt(p, T) {
     const out = new Map();
-    const frame = computeFrame(p, T, { captions: false });
+    const visualT = viewerFrameTime(p, T);
+    const frame = computeFrame(p, visualT, { captions: false });
     const addVisual = (clip, t) => {
       const m = p.media[clip.mediaId];
       if (!m || m.kind === 'image' || m.offline) return;
@@ -260,9 +272,9 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
     };
     for (const l of frame.layers) {
       if (l.transition) {
-        if (l.a) addVisual(l.a.clip, T);
-        if (l.b) addVisual(l.b.clip, T);
-      } else addVisual(l.clip, T);
+        if (l.a) addVisual(l.a.clip, visualT);
+        if (l.b) addVisual(l.b.clip, visualT);
+      } else addVisual(l.clip, visualT);
     }
     for (const a of computeAudio(p, T)) {
       const id = `${a.clip.id}:${a.stream}`;
@@ -393,7 +405,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       canvasProjectId = p.id;
     }
-    const frame = computeFrame(p, T);
+    const frame = computeFrame(p, viewerFrameTime(p, T));
     staging ||= document.createElement('canvas');
     if (staging.width !== canvas.width || staging.height !== canvas.height) {
       staging.width = canvas.width;
@@ -442,7 +454,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
             clockBase = T;
             clockStart = now;
           } else {
-            T = end;
+            T = lastFrameTime(p, end);
             pause();
           }
         }
@@ -451,7 +463,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
         pause();
       }
       setTime(T);
-      sync(T, true);
+      sync(T, playing.value);
       dirty = !draw(T);
       return;
     }
@@ -532,7 +544,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
   function snapshot({ fresh = false } = {}) {
     if (dirty || !canvas) return null;
     if (fresh) {
-      const p = getProject(), frame = computeFrame(p, getTime());
+      const p = getProject(), frame = computeFrame(p, viewerFrameTime(p, getTime()));
       const sides = frame.layers.flatMap(l => l.clip ? [l] : [l.a, l.b].filter(Boolean));
       for (const side of sides) for (const clip of [side.clip, ...(side.companions || [])]) {
         const media = p.media[clip.mediaId];

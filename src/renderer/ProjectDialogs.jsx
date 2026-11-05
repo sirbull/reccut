@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { FilePlus2, FolderOpen, FolderSearch, MoreHorizontal } from 'lucide-preact';
 import { PROJECT_TEMPLATES, formatDuration, sequenceList, timelines } from '../shared/model.js';
-import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, restoreProject, saveNow, saveProjectAs, sequenceSettingsOpen } from './editor/store.js';
+import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, renameProject, restoreProject, saveNow, saveProjectAs, sequenceSettingsOpen } from './editor/store.js';
 import { ProjectSettings } from './editor/Inspector.jsx';
 import { prefs, setPrefs } from './prefs.js';
 import { designFiles, mediaFiles, reduceProject, trimProject } from '../shared/package.js';
@@ -120,7 +120,7 @@ export function NewProjectDialog() {
 }
 
 // Fakta om det åpne prosjektet, øverst i prosjektlisten.
-function ProjectInfo() {
+function ProjectInfo({ onRenamed }) {
   const p = project.value;
   const seqs = sequenceList(p);
   const media = Object.values(p.media);
@@ -134,7 +134,31 @@ function ProjectInfo() {
   return (
     <div class="project-info">
       <div class="project-info-head">
-        <b>{p.name}</b>
+        {projectPath.value ? (
+          <input
+            class="project-name-input"
+            value={p.name}
+            title="Rename the project and its project file"
+            aria-label="Project name"
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') {
+                e.currentTarget.value = p.name;
+                e.currentTarget.blur();
+              }
+            }}
+            onChange={async (e) => {
+              const input = e.currentTarget;
+              const name = input.value.trim();
+              if (!name || name === p.name) return void (input.value = p.name);
+              if (await renameProject(name)) onRenamed();
+              else input.value = p.name;
+            }}
+          />
+        ) : (
+          <b>{p.name}</b>
+        )}
         {projectPath.value && (
           <Button variant="ghost" icon={FolderOpen} onClick={() => api.reveal(projectPath.value)}>
             {isMac ? 'Reveal in Finder' : 'Show in Explorer'}
@@ -227,7 +251,7 @@ export function ProjectsDialog() {
         </>
       }
     >
-      {!needsProject.value && <ProjectInfo />}
+      {!needsProject.value && <ProjectInfo onRenamed={load} />}
       <div class="project-list">
         {list === null && <p class="dim">Loading</p>}
         {list?.length === 0 && <p class="dim">No projects yet.</p>}

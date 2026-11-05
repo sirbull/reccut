@@ -115,7 +115,7 @@ function setup(p = project(), initialTime = 0, { quality = 'quality', dpr = 1 } 
   const canvas = new Canvas();
   player.attachCanvas(canvas);
   player.start();
-  return { player, canvas, videos, canvases, playing, setQuality: quality => module.exports.setPrefs({ viewerQuality: quality }), getTime: () => time, switchProject(next) { p = next; player.invalidate(); }, tick(ms = 16) {
+  return { player, canvas, videos, canvases, playing, setQuality: quality => module.exports.setPrefs({ viewerQuality: quality }), setLoop: loopPlayback => module.exports.setPrefs({ loopPlayback }), getTime: () => time, switchProject(next) { p = next; player.invalidate(); }, tick(ms = 16) {
     now += ms;
     for (const el of videos) if (!el.paused && !el.seeking) el._time += ms / 1000 * el.playbackRate;
     nextFrame();
@@ -208,6 +208,67 @@ test('en faktisk tom del av tidslinjen vises fortsatt som svart', () => {
   s.player.seek(gap.start + 1);
   s.tick();
   assert.equal(s.canvas.pixel, 'black');
+});
+
+test('avspillingen stopper på siste faktiske bilde og beholder det etterpå', () => {
+  const p = project([{ dur: 2, in: 4 }]);
+  const s = setup(p, 1);
+  s.tick(); s.videos[0].finish(); s.tick();
+  s.player.play(); s.tick(1100);
+  assert.equal(s.playing.value, false);
+  const last = (Math.ceil(p.duration * p.fps - 1e-7) - 1) / p.fps;
+  assert.equal(s.getTime(), last);
+  assert.equal(s.videos[0].paused, true);
+  s.videos[0].finish(); s.tick();
+  assert.equal(s.canvas.pixel, `${s.videos[0].src}@${(4 + last).toFixed(3)}`);
+  assert.equal(s.player.snapshot({ fresh: true }), s.canvas);
+  const final = s.canvas.pixel;
+  s.player.invalidate(); s.tick(1000);
+  assert.equal(s.canvas.pixel, final);
+  s.player.play();
+  assert.equal(s.getTime(), 0, 'ny avspilling begynner på starten');
+});
+
+test('søk til slutt viser siste bilde også for brøkdels-fps og korte sekvenser', () => {
+  for (const [fps, duration] of [[30, 2], [29.97, 7 / 29.97], [30, 1.01], [30, 0.01]]) {
+    const p = project([{ dur: duration, in: 4 }]); p.fps = fps;
+    const s = setup(p, duration);
+    s.tick();
+    assert.ok(s.videos.length > 0, 'sluttposisjonen må fortsatt be om videobildet');
+    s.videos[0].finish(); s.tick();
+    const last = Math.max(0, Math.ceil(duration * fps - 1e-7) - 1) / fps;
+    assert.equal(s.canvas.pixel, `${s.videos[0].src}@${(4 + last).toFixed(3)}`);
+    assert.equal(s.player.snapshot({ fresh: true }), s.canvas);
+    s.player.seek(duration + 1); s.tick();
+    assert.equal(s.canvas.pixel, 'black', 'området etter tidslinjen er fortsatt tomt');
+  }
+});
+
+test('et avspillingsområde slutter på bildet før utpunktet, også ved et kutt', () => {
+  const p = project([{ dur: 2, in: 4 }, { dur: 2, in: 10 }]);
+  p.range = { in: 1, out: 2 };
+  const s = setup(p, 1.5);
+  s.tick(); s.videos.forEach(v => v.finish()); s.tick();
+  s.player.play(); s.tick(600);
+  s.videos.forEach(v => v.finish()); s.tick();
+  assert.equal(s.playing.value, false);
+  assert.match(s.canvas.pixel, /media0/);
+  assert.equal(s.getTime(), 59 / 30);
+  assert.ok(s.videos.every(v => v.paused));
+});
+
+test('slutt med et bevisst tomt område forblir svart og løkke starter på nytt', () => {
+  const p = project([{ dur: 2 }]);
+  const gap = makeClip('gap', { start: 2, dur: 1 });
+  p.clips[gap.id] = gap; p.primary.push(gap.id); p.duration = 3;
+  const s = setup(p, p.duration); s.tick();
+  assert.equal(s.canvas.pixel, 'black');
+  const loop = setup(project([{ dur: 2 }]), 1.5);
+  loop.setQuality('quality');
+  // The preference is shared with the actual player through its public setter.
+  loop.setLoop(true); loop.player.play(); loop.tick(600);
+  assert.equal(loop.playing.value, true);
+  assert.equal(loop.getTime(), 0);
 });
 
 test('en overgang erstatter ikke bildet før begge videolagene er klare', () => {
