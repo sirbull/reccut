@@ -1,5 +1,5 @@
 // Innstillinger for hele appen (Preferences, Cmd ,).
-import { signal } from '@preact/signals';
+import { computed, signal } from '@preact/signals';
 
 export const PREVIEW_RESOLUTIONS = [
   { value: 'quality', label: 'Full', scale: 1 },
@@ -15,6 +15,8 @@ const DEFAULTS = {
   transitionDur: 1,
   transitionAudio: true,
   audioCrossfadeDur: 1,
+  // Tom streng følger systemets lydutgang.
+  audioOutputId: '',
   stillDur: 4,
   titleDur: 4,
   freezeDur: 2,
@@ -73,6 +75,13 @@ function load() {
 }
 
 export const prefs = signal(load());
+
+// Utgangene som er koblet til nå. Er den valgte borte, spilles lyden i systemets utgang til den er tilbake.
+export const audioOutputs = signal([]);
+export const audioSink = computed(() => {
+  const id = prefs.value.audioOutputId;
+  return audioOutputs.value.some((o) => o.id === id) ? id : '';
+});
 
 export function setPrefs(patch) {
   prefs.value = { ...prefs.value, ...patch };

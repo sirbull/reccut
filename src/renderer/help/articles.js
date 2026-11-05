@@ -346,6 +346,17 @@ Under the microphone meter, Reccut tells you if the microphone is silent, very q
 
 Choose **Flat**, **Clear speech**, **Warm voice** or **Bright voice** as a starting point. Changes apply to both Test and new recordings, and are saved automatically when the mixer closes and between app launches. **Reset to Flat** restores 0 dB gain and neutral processing. Processing is baked into the recorded microphone audio; system audio stays separate.
 
+## Use an audio interface or an external camera
+
+Audio interfaces, USB microphones and HDMI capture devices such as Elgato Cam Link appear in the **Camera** and **Microphone** menus as soon as they are connected. If you unplug the one you chose, Reccut uses another device and goes back to yours when it returns.
+
+Open **Settings → Audio & Video** for more:
+
+- **Input channel**: a microphone in input 1 of an audio interface is recorded on the left side only. Choose **Left only (input 1)** or **Right only (input 2)** to hear it on both sides. **Mono** mixes both inputs into one signal.
+- **Output**: where Reccut plays sound. **System default** follows your computer.
+- **Resolution** and **Frame rate**: what Reccut asks the camera for. The line below shows what it really sends. Over HDMI the format is set on the camera.
+- **Delay microphone**: an HDMI camera shows the picture slightly after the sound. If your lips are out of sync in the recording, increase this in small steps.
+
 ## If Reccut or the computer crashes
 
 The recording is written to disk while you record. If Reccut is closed by a crash or a power cut, it offers to **recover** the recording the next time it starts, with layouts, keystrokes and cursor movements up to the last few seconds.
@@ -949,13 +960,15 @@ How it works: Reccut finds corners inside the area, follows them from frame to f
     section: 'Editing',
     title: 'Transitions',
     summary: 'Dissolves, wipes, pushes and audio crossfades.',
-    keywords: 'transition dissolve crossfade wipe push fade',
+    keywords: 'transition dissolve crossfade wipe push fade motion blur',
     body: `
 Add Cross Dissolve ({{key:addTransition}}) adds a dissolve at the selected edit. More transitions are in the Transitions browser ({{key:browser:transitions}}); hold the pointer over one to preview it, and drag it to an edit.
 
 Clips above the storyline can have a transition at the start and the end, and so can effects like Pixelate and Blur. Drag a transition to the start of an effect to fade, wipe or slide the effect in.
 
 A transition covers only the picture part of the clips, so you can still drag the audio fade handles below it. By default it also crossfades the audio. Turn that off for one transition in the inspector (Crossfade audio), or for new transitions in Preferences > Editing; the audio then cuts at the edit.
+
+Push, Wipe, Circle Reveal and Zoom can have motion blur. Turn on Motion blur in the inspector to soften moving edges. The faster the transition, the stronger the blur. Effects like Pixelate and Blur do not have this option.
 
 Select two audio clips that touch and press {{key:addTransition}} to add an audio crossfade. The default length is set in Preferences.
 `,
@@ -1425,6 +1438,7 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
 - Drag the fade handles at the top corners of the audio to fade in and out.
 - **Expand Audio** ({{key:expandAudio}}) shows the audio below the video. Drag its edges past the video for J and L cuts.
 - The **Levels** at the top of the Audio tab show the waveform of the clip with its peak and average level. Red means the audio clips (goes over 0 dBFS). Audio Format shows the codec, sample rate and channels of the file.
+- **Stereo or mono**: in the Audio tab, **Channels** sets each audio source in a clip to Stereo or Mono. Mono mixes all channels in the source and plays them equally on both sides, also in the export.
 - **Audio components**: a clip can have several audio tracks, for example the camera microphone and synchronized audio from a recorder. Switch them on and off in the Audio tab, in the right click menu, or by clicking one in the expanded audio and pressing {{key:toggleEnabled}}. A track that is off is kept, greyed out.
 - **Detach Audio** ({{key:detachAudio}}) turns the audio into separate clips.
 - **Solo** ({{key:solo}}) plays only the selected clips.

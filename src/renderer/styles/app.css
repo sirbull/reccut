@@ -3858,7 +3858,7 @@ kbd.keycap {
   display: flex;
   justify-content: center;
   gap: 4px;
-  padding: 10px 44px 8px;
+  padding: 0 10px 8px;
   background: var(--bg-2);
   border-bottom: 1px solid var(--line-2);
 }
@@ -3867,7 +3867,7 @@ kbd.keycap {
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  min-width: 66px;
+  min-width: 60px;
   padding: 6px 8px 5px;
   border: 0;
   border-radius: 7px;
@@ -3883,10 +3883,11 @@ kbd.keycap {
   background: rgba(10, 132, 255, 0.16);
   color: var(--accent-2);
 }
-.settings-close {
-  position: absolute;
-  right: 10px;
-  top: 10px;
+.settings-topbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 8px 2px;
+  background: var(--bg-2);
 }
 .settings-body {
   flex: 1;

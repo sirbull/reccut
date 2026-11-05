@@ -17,12 +17,12 @@ export const TRANSITIONS = [
   { id: 'dissolve', label: 'Cross Dissolve' },
   { id: 'dip', label: 'Fade to Black' },
   { id: 'dipWhite', label: 'Fade to White' },
-  { id: 'slideLeft', label: 'Push Left' },
-  { id: 'slideRight', label: 'Push Right' },
-  { id: 'slideUp', label: 'Push Up' },
-  { id: 'wipe', label: 'Wipe' },
-  { id: 'circle', label: 'Circle Reveal' },
-  { id: 'zoom', label: 'Zoom' },
+  { id: 'slideLeft', label: 'Push Left', motion: true },
+  { id: 'slideRight', label: 'Push Right', motion: true },
+  { id: 'slideUp', label: 'Push Up', motion: true },
+  { id: 'wipe', label: 'Wipe', motion: true },
+  { id: 'circle', label: 'Circle Reveal', motion: true },
+  { id: 'zoom', label: 'Zoom', motion: true },
   { id: 'blur', label: 'Blur' },
 ];
 
@@ -274,15 +274,16 @@ export function audioComponents(clip, media) {
   if (!media || !clip) return [];
   if (clip.recordingPart === 'camera') return [];
   const off = clip.props?.audioOff || {};
+  const mono = clip.props?.audioMono || {};
   if (clip.type === 'audio') {
     const key = clip.stream || 'main';
     const st = media.streams[key];
-    return st?.hasAudio ? [{ key, stream: st, label: componentLabel(media, key, st), off: Boolean(off[key]) }] : [];
+    return st?.hasAudio ? [{ key, stream: st, label: componentLabel(media, key, st), off: Boolean(off[key]), mono: Boolean(mono[key]) }] : [];
   }
   if (clip.type !== 'video' && clip.type !== 'recording') return [];
   return Object.entries(media.streams)
     .filter(([, st]) => st.hasAudio)
-    .map(([key, st]) => ({ key, stream: st, label: componentLabel(media, key, st), off: Boolean(off[key]) }));
+    .map(([key, st]) => ({ key, stream: st, label: componentLabel(media, key, st), off: Boolean(off[key]), mono: Boolean(mono[key]) }));
 }
 
 // Kamera og skjerm kan være egne klipp, men peker fortsatt på samme opptaksmedia.
@@ -849,6 +850,15 @@ export function transitionWindow(clip, hasPrev = true, prev = null, edge = 'star
   return hasPrev ? [clip.start - d / 2, clip.start + d / 2] : [clip.start, clip.start + d];
 }
 
+// Tilstanden til en overgang ved tid T, innenfor vinduet [a, b].
+const transitionState = (t, a, b, T) => ({ type: t.type, p: clamp((T - a) / (b - a), 0, 1), audio: t.audio !== false, motionBlur: Boolean(t.motionBlur), dur: b - a });
+
+// Bevegelsesuskarphet gjelder overganger som flytter bildet. Effektklipp leser bildet under
+// seg når de tegnes, så de kan ikke tegnes på forhånd og flyttes.
+export function canMotionBlur(type, clip) {
+  return Boolean(TRANSITIONS.find((t) => t.id === type)?.motion) && clip.type !== 'adjustment' && clip.type !== 'redact';
+}
+
 // Klipp over hovedsporet kan også ha overganger. De tones inn fra og ut til det som ligger under.
 // Effekter (Pixelate, Blur, sladding) også: effekten toner, tørker eller glir inn over bildet.
 export function hasFreeTransitions(clip) {
@@ -860,7 +870,7 @@ export function freeTransitionAt(clip, T) {
     const t = clip[edge === 'end' ? 'transitionOut' : 'transition'];
     if (!t) continue;
     const [a, b] = transitionWindow(clip, false, null, edge);
-    if (T >= a && T < b) return { type: t.type, p: clamp((T - a) / (b - a), 0, 1), audio: t.audio !== false, edge };
+    if (T >= a && T < b) return { ...transitionState(t, a, b, T), edge };
   }
   return null;
 }
@@ -964,14 +974,11 @@ export function primaryAt(project, T) {
     if (c.transition) {
       const prev = i > 0 ? project.clips[list[i - 1]] : null;
       const [a, b] = transitionWindow(c, Boolean(prev), prev);
-      if (T >= a && T < b) {
-        const p = clamp((T - a) / (b - a), 0, 1);
-        return { transition: { type: c.transition.type, p, audio: c.transition.audio !== false }, a: prev, b: c };
-      }
+      if (T >= a && T < b) return { transition: transitionState(c.transition, a, b, T), a: prev, b: c };
     }
     if (c.transitionOut) {
       const [a, b] = transitionWindow(c, false, null, 'end');
-      if (T >= a && T < b) return { transition: { type: c.transitionOut.type, p: clamp((T - a) / (b - a), 0, 1), audio: c.transitionOut.audio !== false }, a: c, b: null };
+      if (T >= a && T < b) return { transition: transitionState(c.transitionOut, a, b, T), a: c, b: null };
     }
   }
   for (let i = Math.max(0, lo - 1); i <= Math.min(list.length - 1, lo + 1); i++) {

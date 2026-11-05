@@ -65,3 +65,14 @@ test('saved audio-only format survives loading with a video container that canno
     assert.equal(settings.value.audioFormat, 'pcm');
   }
 ));
+
+test('an unplugged device stands aside and comes back, but never interrupts a recording', () => withSettings(undefined, ({ pickDevice }) => {
+  const builtIn = { id: 'built-in' }, camLink = { id: 'cam-link' };
+  assert.deepEqual(pickDevice(null, null, [builtIn]), { id: 'built-in', wanted: '' }, 'first launch');
+  const gone = pickDevice('cam-link', 'cam-link', [builtIn]);
+  assert.deepEqual(gone, { id: 'built-in', wanted: 'cam-link' });
+  assert.deepEqual(pickDevice(gone.id, gone.wanted, [builtIn, camLink]), { id: 'cam-link', wanted: 'cam-link' });
+  assert.equal(pickDevice(gone.id, gone.wanted, [builtIn, camLink], true).id, 'built-in', 'busy');
+  assert.deepEqual(pickDevice('cam-link', null, [builtIn]), { id: 'built-in', wanted: 'cam-link' }, 'choice saved by an older version');
+  assert.equal(pickDevice('', '', [builtIn, camLink]).id, '', 'No camera stays off');
+}));

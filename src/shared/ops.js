@@ -516,9 +516,16 @@ export function mediaClip(media, opts = {}) {
   return clip;
 }
 
+// Lyd ligger under hovedsporet og bilde over. Media hører aldri hjemme i CC-sporet.
+export function mediaLane(media, lane) {
+  if (media.kind === 'audio') return lane < 0 ? lane : -1;
+  return lane < 0 || lane === CAPTION_LANE ? 1 : lane;
+}
+
 export function addMediaClip(project, media, mode, T, laneHint, opts = {}) {
   const clip = mediaClip(media, opts);
   const audioOnly = clip.type === 'audio';
+  laneHint = mediaLane(media, laneHint);
   if (mode === 'overwrite' && !audioOnly) {
     overwritePrimary(project, clip, T ?? 0);
   } else if (audioOnly || mode === 'connect') {
@@ -537,7 +544,7 @@ export function addMediaClip(project, media, mode, T, laneHint, opts = {}) {
 // Bilde erstatter bilde og lyd erstatter lyd, ellers skjer ingenting.
 export function replaceClip(project, targetId, clip) {
   const old = project.clips[targetId];
-  if (!old || old.type === 'gap' || project.lanes?.[old.lane]?.locked || isVisual(old) !== isVisual(clip)) return false;
+  if (!old || old.type === 'gap' || old.type === 'caption' || project.lanes?.[old.lane]?.locked || isVisual(old) !== isVisual(clip)) return false;
   if (old.lane === 0) {
     withSync(project, () => {
       clip.lane = 0;
@@ -881,6 +888,7 @@ export function detachAudio(project, id) {
     a.props.aLead = c.props.aLead || 0;
     a.props.aTail = c.props.aTail || 0;
     a.props.preservePitch = c.props.preservePitch;
+    if (c.props.audioMono?.[stream]) a.props.audioMono = { [stream]: true };
     if (c.kf[volumeProp]) a.kf.volume = deepClone(c.kf[volumeProp]);
     placeFree(project, a, c.start, -1);
     ids.push(a.id);

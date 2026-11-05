@@ -26,7 +26,7 @@ function setup({ getUserMedia, active = true, savedSettings = {}, apiOverrides =
   ];
   let deviceChange;
   const stream = (kinds) => {
-    const tracks = kinds.map((kind) => ({ kind, readyState: 'live', stop() { this.readyState = 'ended'; } }));
+    const tracks = kinds.map((kind) => ({ kind, readyState: 'live', getSettings: () => ({ width: 1920, height: 1080, frameRate: 30 }), stop() { this.readyState = 'ended'; } }));
     const result = { getTracks: () => tracks, getVideoTracks: () => tracks.filter((t) => t.kind === 'video'), getAudioTracks: () => tracks.filter((t) => t.kind === 'audio') };
     streams.push(result);
     return result;
@@ -83,6 +83,8 @@ function setup({ getUserMedia, active = true, savedSettings = {}, apiOverrides =
       createBiquadFilter() { return node(); }
       createDynamicsCompressor() { return node(); }
       createMediaStreamSource() { return node(); }
+      createChannelSplitter() { return node(); }
+      createDelay() { return Object.assign(node(), { delayTime: {} }); }
       createMediaStreamDestination() { return Object.assign(node(), { stream: stream(['audio']) }); }
     },
     requestAnimationFrame: (fn) => { frames.set(++nextId, fn); return nextId; },

@@ -27,6 +27,7 @@ import {
   redactLabel,
   TITLE_STYLES,
   TRANSITIONS,
+  canMotionBlur,
   parseTransitionSelection,
   applyAnimationPreset,
   clipHasAudio,
@@ -53,7 +54,7 @@ import { beginTransient, commit, endPreview, projectPath, renameProject, endTran
 import { groupPositionClips, groupVisuals, setGroupOpacity, setGroupPosition } from '../../shared/groupSettings.js';
 import { seek } from './playback.js';
 import { setKeyframe } from './keyframes.js';
-import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
+import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, setComponentMono, toggleComponent } from './commands.js';
 import { prefs } from '../prefs.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { attachToTrack, deleteTrack, detach, removeTrackingKeyframes, trackArea, trackForward, trackRedaction, tracksFor } from './track.js';
@@ -1021,6 +1022,21 @@ function AudioComponentsSection({ clip }) {
   );
 }
 
+// Stereo eller mono for hver lydkilde i klippet, i avspilling og eksport.
+function AudioChannelsSection({ clip, comps }) {
+  if (!comps.length) return null;
+  return (
+    <Section title="Channels">
+      {comps.map((c) => (
+        <Row key={c.key} label={comps.length > 1 ? c.label : 'Output'}>
+          <Segmented value={c.mono ? 'mono' : 'stereo'} options={[{ value: 'stereo', label: 'Stereo' }, { value: 'mono', label: 'Mono' }]} onChange={(v) => setComponentMono(clip.id, c.key, v === 'mono')} />
+        </Row>
+      ))}
+      <p class="hint">Mono mixes all channels in the source and plays them equally on both sides.</p>
+    </Section>
+  );
+}
+
 // Nivåer fra lydbølgen innenfor klippet: topp og gjennomsnitt i dBFS, etter volumet på klippet.
 function clipLevels(clip, comp, wave) {
   if (!wave || !comp) return null;
@@ -1099,6 +1115,7 @@ function AudioTab({ clip }) {
         <LevelMeter clip={clip} comp={main} />
       </Section>
       <AudioComponentsSection clip={clip} />
+      <AudioChannelsSection clip={clip} comps={comps} />
       <Section title="Volume">
         {props.length <= 1 ? (
           <Param clip={clip} prop={props[0] || 'volume'} label="Volume" min={-60} max={12} step={0.5} precision={1} unit="dB" center={0} />
@@ -2134,6 +2151,11 @@ function TransitionInspector({ clip, edge = 'start' }) {
           <Row label="Crossfade audio">
             <Toggle checked={t.audio !== false} onChange={(v) => commit((q) => (q.clips[clip.id][edge === 'end' ? 'transitionOut' : 'transition'].audio = v))} />
           </Row>
+          {canMotionBlur(t.type, clip) && (
+            <Row label="Motion blur">
+              <Toggle checked={Boolean(t.motionBlur)} onChange={(v) => commit((q) => (q.clips[clip.id][edge === 'end' ? 'transitionOut' : 'transition'].motionBlur = v))} />
+            </Row>
+          )}
           <p class="hint">Drag the transition handles on the timeline to change its duration. Press Delete to remove it. Transitions at a cut use extra frames before and after when available.</p>
         </Section>
       </div>

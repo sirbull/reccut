@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newProject, computeAudio, CAPTION_LANE } from '../src/shared/model.js';
+import { newProject, computeAudio, makeClip, CAPTION_LANE } from '../src/shared/model.js';
 import { addMediaClip } from '../src/shared/ops.js';
 import { applyMediaDrop, mediaDropPreview } from '../src/shared/libraryDrop.js';
 
@@ -56,6 +56,27 @@ test('connected clips preview the free lane and audio uses an audio lane', () =>
   const v = setup();
   addMediaClip(v, v.media.source, 'append');
   assert.equal(compareDrop(v, { id: 'source' }, CAPTION_LANE, 0)[0].lane, 1);
+});
+
+test('files dropped on a track never put media in the caption lane or audio on a video lane', () => {
+  for (const lane of [CAPTION_LANE, 1, undefined]) {
+    const a = setup('audio');
+    assert.equal(a.clips[addMediaClip(a, a.media.source, 'connect', 0, lane)].lane, -1);
+  }
+  const low = setup('audio');
+  assert.equal(low.clips[addMediaClip(low, low.media.source, 'connect', 0, -2)].lane, -2, 'a chosen audio lane is kept');
+  const v = setup();
+  addMediaClip(v, v.media.source, 'append');
+  assert.equal(v.clips[addMediaClip(v, v.media.source, 'connect', 0, CAPTION_LANE)].lane, 1);
+  assert.equal(v.clips[addMediaClip(v, v.media.source, 'connect', 0, -1)].lane, 2, 'video on an audio lane goes above the storyline');
+});
+
+test('media held over a caption does not replace it', () => {
+  const p = setup('audio');
+  const caption = makeClip('caption', { start: 0, dur: 3, lane: CAPTION_LANE, props: { text: 'Hei' } });
+  p.clips[caption.id] = caption;
+  assert.deepEqual(applyMediaDrop(p, { id: 'source' }, CAPTION_LANE, 1, caption.id), []);
+  assert.ok(p.clips[caption.id]);
 });
 
 test('connected clips fall to the lowest free lane, and go into the storyline with nothing under them', () => {

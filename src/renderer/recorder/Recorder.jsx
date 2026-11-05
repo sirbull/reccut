@@ -150,7 +150,7 @@ export function Recorder({ active }) {
               value={s.cameraId}
               disabled={recording}
               options={[{ value: '', label: 'No camera' }, ...engine.cameras.value.map((c) => ({ value: c.id, label: c.label }))]}
-              onChange={(v) => set({ cameraId: v }, engine.useCamera)}
+              onChange={engine.chooseCamera}
             />
           </Row>
           <Row label={<><Mic size={14} /> Microphone</>} stacked>
@@ -158,7 +158,7 @@ export function Recorder({ active }) {
               value={s.micId}
               disabled={recording || engine.finishing.value || Boolean(engine.micTest.value)}
               options={[{ value: '', label: 'No microphone' }, ...engine.mics.value.map((m) => ({ value: m.id, label: m.label }))]}
-              onChange={(v) => set({ micId: v }, engine.useMic)}
+              onChange={engine.chooseMic}
             />
             <div class="meter">
               <div style={{ width: `${engine.level.value * 100}%` }} />

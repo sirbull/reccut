@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AUDIO_EFFECTS, AUDIO_PRESETS, biquadResponse, createChain, eqCoefs, makeEffect, presetEffects } from '../src/shared/audiofx.js';
+import { AUDIO_EFFECTS, AUDIO_PRESETS, biquadResponse, componentEffects, createChain, eqCoefs, makeEffect, presetEffects } from '../src/shared/audiofx.js';
 
 const SR = 48000;
 const sine = (f, n, a = 0.5) => Float32Array.from({ length: n }, (_, i) => a * Math.sin((2 * Math.PI * f * i) / SR));
@@ -107,4 +107,17 @@ test('Paste Attributes limer inn valgte grupper og strekker nøkkelbilder', () =
   removeAttributes(dst, ['effects', 'afx']);
   assert.equal(dst.props.blur, 0);
   assert.equal(dst.props.afx.length, 0);
+});
+
+test('mono applies to the chosen component only, averages both channels and runs before other effects', () => {
+  const gain = { id: 'g', type: Object.keys(AUDIO_EFFECTS)[0] };
+  const clip = { props: { afx: [gain], audioMono: { camera: true } } };
+  assert.deepEqual(componentEffects(clip, 'screen'), [gain]);
+  assert.equal(componentEffects(clip, 'camera').length, 2);
+  assert.equal(componentEffects(clip, 'camera')[1], gain);
+  const L = sine(440, 1024), R = new Float32Array(1024);
+  const expected = L.map((v) => v / 2);
+  run(componentEffects({ props: { audioMono: { main: true } } }, 'main'), L, R);
+  assert.deepEqual([...L], [...expected]);
+  assert.deepEqual([...R], [...expected]);
 });

@@ -417,6 +417,14 @@ export function toggleComponent(clipId, key, on = null) {
   });
 }
 
+export function setComponentMono(clipId, key, mono) {
+  commit((p) => {
+    const q = p.clips[clipId];
+    q.props.audioMono = { ...q.props.audioMono, [key]: mono };
+    if (!mono) delete q.props.audioMono[key];
+  });
+}
+
 export function addTransition(type = 'dissolve') {
   const p = project.value;
   const dur = prefs.value.transitionDur;

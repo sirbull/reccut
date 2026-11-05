@@ -8,7 +8,7 @@ import { drawFrame } from '../shared/render.js';
 import { AUDIO_FORMATS, QUALITIES, audioKbps, outputGeometry, videoBitrate, videoFormat } from '../shared/formats.js';
 import { FRAME_FORMATS, frameExportSettings, frameGeometry } from '../shared/frameExport.js';
 import { captionItems, toSrt, toVtt } from '../shared/srt.js';
-import { activeEffects, createChain } from '../shared/audiofx.js';
+import { componentEffects, createChain } from '../shared/audiofx.js';
 
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
@@ -213,7 +213,7 @@ async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
       const from = Math.max(0, Math.min(s0, s1) - info.offset);
       const to = Math.max(s0, s1) - info.offset;
       if (to <= from) continue;
-      pairs.set(`${c.id}:${key}`, { path: info.path, from, to, speed: generic ? 1 : speed, generic, tempo: generic ? null : tempoFilter(speed, c.props.preservePitch), afx: activeEffects(c), file: path.join(tmp, `a_${pairs.size}.f32`) });
+      pairs.set(`${c.id}:${key}`, { path: info.path, from, to, speed: generic ? 1 : speed, generic, tempo: generic ? null : tempoFilter(speed, c.props.preservePitch), afx: componentEffects(c, key), file: path.join(tmp, `a_${pairs.size}.f32`) });
     }
   }
 

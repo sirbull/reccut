@@ -3,8 +3,9 @@
 // Redigeringen og eksportfanen har hver sin spiller.
 import { audioWindow, computeAudio, computeFrame, instSpeed, sourceTime, transitionWindow, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
-import { activeEffects } from '../shared/audiofx.js';
-import { prefs, previewResolutionScale } from './prefs.js';
+import { componentEffects } from '../shared/audiofx.js';
+import { effect } from '@preact/signals';
+import { audioSink, prefs, previewResolutionScale } from './prefs.js';
 
 const PRELOAD = 1.5;
 const KEEP = 6;
@@ -23,6 +24,9 @@ function viewerFrameTime(p, T) {
 export const fileUrl = (p) => `media://file/${encodeURIComponent(p)}`;
 
 const audioCtx = new AudioContext({ latencyHint: 'interactive' });
+effect(() => {
+  audioCtx.setSinkId?.(audioSink.value).catch((err) => console.warn('Could not switch audio output', err));
+});
 
 // Lydeffektene lastes én gang. Til de er klare, spilles lyden uten effekter.
 let fxReady = false;
@@ -32,14 +36,14 @@ audioCtx.audioWorklet
   .catch((err) => console.warn('Could not load audio effects', err));
 
 // Kobler effektkjeden til klippet inn mellom kilden og volumet, og sender nye innstillinger.
-function applyFx(entry, clip) {
+function applyFx(entry, clip, stream) {
   if (!entry.srcNode) return;
-  const list = activeEffects(clip);
+  const list = componentEffects(clip, stream);
   const key = JSON.stringify(list);
   if (key === entry.fxKey) return;
   if (list.length && !entry.fx) {
     if (!fxReady) return;
-    entry.fx = new AudioWorkletNode(audioCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
+    entry.fx = new AudioWorkletNode(audioCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
     entry.srcNode.disconnect();
     entry.srcNode.connect(entry.fx).connect(entry.gain);
   }
@@ -295,7 +299,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
       seen.add(id);
       const entry = getEl(n.clip, n.key);
       if (!entry) continue;
-      if (entry.gain) applyFx(entry, n.clip);
+      if (entry.gain) applyFx(entry, n.clip, n.key);
       const el = entry.el;
       const dur = el.duration || Infinity;
       // I en baklengs kopi er tiden speilet.

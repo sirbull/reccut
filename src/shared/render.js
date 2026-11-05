@@ -13,6 +13,7 @@ import { clipMatrix, maskList, paintMask, shapeAt, shapeCorners, shapePath } fro
 import {
   DEFAULT_CAPTION_STYLE,
   FONTS,
+  canMotionBlur,
   cameraRectAt,
   screenAreaAt,
   clamp,
@@ -93,20 +94,72 @@ function drawVisualSide(ctx, project, side, getSource, alpha = 1) {
 function drawTransition(ctx, project, layer, getSource, transparent = false) {
   const W = project.width;
   const H = project.height;
-  const { p } = layer.transition;
+  const { p, motionBlur, dur } = layer.transition;
   // ponytail: over andre spor blir dip en vanlig toning, ellers ville svart/hvitt dekke sporene under.
   const type = layer.overlay && layer.transition.type.startsWith('dip') ? 'dissolve' : layer.transition.type;
-  const drawSide = (side, alpha) => {
-    if (side) return drawVisualSide(ctx, project, side, getSource, alpha);
+  const drawSide = (g, side, alpha = 1) => {
+    if (side) return drawVisualSide(g, project, side, getSource, alpha);
     if (layer.overlay || transparent) return;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
-    ctx.restore();
+    g.save();
+    g.globalAlpha = alpha;
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, W, H);
+    g.restore();
   };
-  const A = (alpha = 1) => drawSide(layer.a, alpha);
-  const B = (alpha = 1) => drawSide(layer.b, alpha);
+  if (motionBlur && [layer.a, layer.b].every((side) => !side || canMotionBlur(type, side.clip))) {
+    return drawMotionBlur(ctx, W, H, type, p, SHUTTER / (project.fps * dur), (g, key) => drawSide(g, layer[key]));
+  }
+  paintTransition(ctx, W, H, type, p, (alpha) => drawSide(ctx, layer.a, alpha), (alpha) => drawSide(ctx, layer.b, alpha));
+}
+
+// Andel av et bilde lukkeren står åpen: 180 grader, som på et filmkamera.
+const SHUTTER = 0.5;
+
+// Punktene i overgangen som snittes for ett bilde, midt rundt p. span er lukkertiden
+// som andel av overgangen, og size lengste kant i piksler. Antallet følger hvor langt bildet
+// flytter seg, så trege overganger og liten forhåndsvisning koster lite.
+export function shutterSamples(p, span, size) {
+  const n = clamp(Math.ceil((span * 2 * size) / 3), 2, 32);
+  return Array.from({ length: n }, (_, i) => clamp(p + span * ((i + 0.5) / n - 0.5), 0, 1));
+}
+
+// Kildene står stille innenfor ett bilde, så hver side tegnes bare én gang.
+function drawMotionBlur(ctx, W, H, type, p, span, drawSide) {
+  const m = ctx.getTransform();
+  const w = Math.max(1, Math.round(W * m.a));
+  const h = Math.max(1, Math.round(H * m.d));
+  const side = (i, key) => {
+    const { c, g } = scratchCanvas(i, w, h);
+    g.setTransform(w / W, 0, 0, h / H, 0, 0);
+    drawSide(g, key);
+    return c;
+  };
+  const a = side(11, 'a');
+  const b = side(12, 'b');
+  const { c: sample, g: sg } = scratchCanvas(13, w, h);
+  const { c: mean, g: mg } = scratchCanvas(14, w, h);
+  const image = (c) => (alpha = 1) => {
+    sg.globalAlpha = alpha;
+    sg.drawImage(c, 0, 0, W, H);
+    sg.globalAlpha = 1;
+  };
+  shutterSamples(p, span, Math.max(w, h)).forEach((t, i) => {
+    sg.setTransform(1, 0, 0, 1, 0, 0);
+    sg.clearRect(0, 0, w, h);
+    sg.setTransform(w / W, 0, 0, h / H, 0, 0);
+    paintTransition(sg, W, H, type, t, image(a), image(b));
+    // Løpende snitt av premultipliserte piksler, så gjennomsiktige områder stemmer. Å legge
+    // sammen bilder med 1/n styrke ville gitt synlige bånd i myke gradienter.
+    mg.globalAlpha = 1 / (i + 1);
+    mg.globalCompositeOperation = 'destination-out';
+    mg.fillRect(0, 0, w, h);
+    mg.globalCompositeOperation = 'lighter';
+    mg.drawImage(sample, 0, 0);
+  });
+  ctx.drawImage(mean, 0, 0, W, H);
+}
+
+function paintTransition(ctx, W, H, type, p, A, B) {
   const e = easeInOut(p);
   switch (type) {
     case 'dip':

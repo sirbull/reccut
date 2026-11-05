@@ -5,11 +5,12 @@ import { ExtensionsPane } from './Extensions.jsx';
 import { PluginsPane } from './Plugins.jsx';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { AudioLines, Download, FolderOpen, Keyboard, Play, Puzzle, RotateCcw, Scissors, Search, Settings2, Share, Sparkles, Upload, X } from 'lucide-preact';
-import { PREVIEW_RESOLUTIONS, prefs, setPrefs } from './prefs.js';
-import { settings as recordingSettings, saveSettings } from './recorder/settings.js';
+import { PREVIEW_RESOLUTIONS, audioOutputs, prefs, setPrefs } from './prefs.js';
+import { CAMERA_FPS, CAMERA_HEIGHTS, MIC_CHANNELS, settings as recordingSettings, saveSettings } from './recorder/settings.js';
+import * as engine from './recorder/engine.js';
 import { audioSkimming, skimming, snapping } from './editor/store.js';
 import * as commands from './editor/commands.js';
-import { Button, NumberField, Row, Section, Segmented, Toggle, toast } from './ui.jsx';
+import { Button, NumberField, Row, Section, Segmented, Select, Toggle, toast } from './ui.jsx';
 import {
   COMMANDS,
   accelFromEvent,
@@ -33,7 +34,7 @@ const PANES = [
   { id: 'editing', label: 'Editing', icon: Scissors },
   { id: 'playback', label: 'Playback', icon: Play },
   { id: 'import', label: 'Import', icon: Download },
-  { id: 'audio', label: 'Audio', icon: AudioLines },
+  { id: 'audio', label: 'Audio & Video', icon: AudioLines },
   { id: 'export', label: 'Export', icon: Share },
   { id:'design',label:'Design',icon:Settings2 },
   { id: 'extensions', label: 'AI', icon: Sparkles },
@@ -238,8 +239,40 @@ function ImportPane() {
 }
 
 function AudioPane() {
+  const s = recordingSettings.value;
+  const busy = engine.recording.value || engine.countdown.value > 0 || engine.finishing.value || Boolean(engine.micTest.value);
+  const setCamera = (patch) => { saveSettings(patch); engine.useCamera(); };
+  const setMic = (patch) => { saveSettings(patch); engine.useMic(); };
   return (
     <>
+      <Section title="Audio Devices" collapsible={false}>
+        <Row label="Input">
+          <Select value={s.micId} disabled={busy} options={[{ value: '', label: 'No microphone' }, ...engine.mics.value.map((m) => ({ value: m.id, label: m.label }))]} onChange={engine.chooseMic} />
+        </Row>
+        <Row label="Input channel">
+          <Select value={s.micChannel} disabled={busy || !s.micId} options={MIC_CHANNELS} onChange={(micChannel) => setMic({ micChannel })} />
+        </Row>
+        <p class="hint">With a microphone in only one input of an audio interface, choose that input to hear it on both sides at full level. Mono mixes both inputs.</p>
+        <Row label="Output">
+          <Select value={prefs.value.audioOutputId} options={[{ value: '', label: 'System default' }, ...audioOutputs.value.map((o) => ({ value: o.id, label: o.label }))]} onChange={(audioOutputId) => setPrefs({ audioOutputId })} />
+        </Row>
+      </Section>
+      <Section title="Camera" collapsible={false}>
+        <Row label="Video input">
+          <Select value={s.cameraId} disabled={busy} options={[{ value: '', label: 'No camera' }, ...engine.cameras.value.map((c) => ({ value: c.id, label: c.label }))]} onChange={engine.chooseCamera} />
+        </Row>
+        <Row label="Resolution">
+          <Select value={s.cameraHeight} disabled={busy || !s.cameraId} options={CAMERA_HEIGHTS} onChange={(v) => setCamera({ cameraHeight: Number(v) })} />
+        </Row>
+        <Row label="Frame rate">
+          <Select value={s.cameraFps} disabled={busy || !s.cameraId} options={CAMERA_FPS} onChange={(v) => setCamera({ cameraFps: Number(v) })} />
+        </Row>
+        <p class="hint">{engine.cameraInfo.value ? `Receiving ${engine.cameraInfo.value}. ` : ''}A camera connected over HDMI sends the format set on the camera, so set it there too.</p>
+        <Row label="Delay microphone">
+          <NumberField value={s.micDelay} min={0} max={1000} step={10} unit="ms" width={84} disabled={busy} onChange={(micDelay) => setMic({ micDelay })} />
+        </Row>
+        <p class="hint">An HDMI camera shows the picture slightly after the sound. If your lips are out of sync in the recording, increase this.</p>
+      </Section>
       <Section title="Auto Sync Audio" collapsible={false}>
         {toggle('syncGroup', 'Group synced audio with the video')}
         {toggle('syncMuteCamera', 'Switch off the camera audio after syncing')}
@@ -472,6 +505,11 @@ export function SettingsWindow() {
   return (
     <div class="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
       <div class={`settings-window pane-${current.id}`} ref={ref} onKeyDown={(e) => e.stopPropagation()}>
+        <div class="settings-topbar">
+          <button class="icon-btn" title="Close" onClick={close}>
+            <X size={16} />
+          </button>
+        </div>
         <header class="settings-toolbar">
           {PANES.map((p) => (
             <button key={p.id} data-pane={p.id} class={pane === p.id ? 'active' : ''} onClick={() => show(p.id)}>
@@ -479,9 +517,6 @@ export function SettingsWindow() {
               <span>{p.label}</span>
             </button>
           ))}
-          <button class="icon-btn settings-close" title="Close" onClick={close}>
-            <X size={16} />
-          </button>
         </header>
         <div class="settings-body">
           {current.id === 'general' && <GeneralPane />}

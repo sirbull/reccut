@@ -880,6 +880,14 @@ export function activeEffects(clip) {
   return (clip?.props?.afx || []).filter((e) => e.on !== false && AUDIO_EFFECTS[e.type]);
 }
 
+// Mono is Pan and Width at zero width, first in the chain, so playback and export
+// share the same code and later effects see the mono signal.
+const MONO = { id: 'mono', type: 'stereo', p: { pan: 0, width: 0 } };
+export function componentEffects(clip, key) {
+  const list = activeEffects(clip);
+  return clip?.props?.audioMono?.[key] ? [MONO, ...list] : list;
+}
+
 /**
  * En kjede av effekter som kan behandle lyd i blokker. update() tar ny liste og beholder
  * tilstanden til effekter som fortsatt er der (bare parametrene byttes), så det ikke klikker.

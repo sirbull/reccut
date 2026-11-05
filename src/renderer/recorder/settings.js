@@ -16,6 +16,30 @@ export const MODIFIERS = isMac
       { value: 'Control+Alt', label: 'Ctrl + Alt + 1 to 6', short: 'Ctrl+Alt+' },
     ];
 
+export const CAMERA_HEIGHTS = [
+  { value: 720, label: '720p' },
+  { value: 1080, label: '1080p' },
+  { value: 1440, label: '1440p' },
+  { value: 2160, label: '4K' },
+];
+export const CAMERA_FPS = [24, 25, 30, 50, 60].map((fps) => ({ value: fps, label: `${fps} fps` }));
+export const MIC_CHANNELS = [
+  { value: 'stereo', label: 'Stereo' },
+  { value: 'mono', label: 'Mono (both inputs mixed)' },
+  { value: 'left', label: 'Left only (input 1)' },
+  { value: 'right', label: 'Right only (input 2)' },
+];
+
+// Keeps the user's choice through unplugging: another device stands in while it
+// is gone, and it comes back when it returns, except during a recording.
+// ponytail: matches on deviceId, which can change on another USB port. Match on label too if that bites.
+export function pickDevice(id, wanted, devices, busy = false) {
+  const connected = (x) => devices.some((d) => d.id === x);
+  if (!busy && wanted && connected(wanted)) return { id: wanted, wanted };
+  if (id === null || (id && !connected(id))) return { id: devices[0]?.id ?? '', wanted: wanted || id || '' };
+  return { id, wanted };
+}
+
 export const LAYOUTS = [
   { n: 1, label: 'Camera', cls: 'full-cam' },
   { n: 2, label: 'Screen', cls: 'screen' },
@@ -32,6 +56,15 @@ const DEFAULTS = {
   screenId: null,
   cameraId: null,
   micId: null,
+  // Siste valg brukeren gjorde. Enheten tas i bruk igjen når den kobles til på nytt.
+  cameraWanted: null,
+  micWanted: null,
+  cameraHeight: 1080,
+  cameraFps: 30,
+  // Et lydkort legger inngang 1 på venstre kanal og inngang 2 på høyre.
+  micChannel: 'stereo',
+  // Millisekunder. Et HDMI-kamera ligger etter mikrofonen.
+  micDelay: 0,
   systemAudio: false,
   noiseSuppression: true,
   micMixer: { ...FLAT_MIX },
