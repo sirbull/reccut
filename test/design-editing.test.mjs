@@ -67,6 +67,22 @@ test('canvas crop handles grow past the canvas up to the size limit',()=>{
   assert.equal(resizeCrop(full,crop,'se',9000,9000,null,max).w,2);
   const ratio=resizeCrop(full,crop,'se',9000,9000,1,max);near(ratio.w*400,ratio.h*300);assert.ok(ratio.w<=2&&ratio.h<=2);
 });
+test('crop handles keep the shape with Shift and scale from the center with Alt, also in free mode',()=>{
+  const full={x:0,y:0,w:400,h:300},crop={x:0.2,y:0.2,w:0.6,h:0.4},aspect=c=>c.w*400/(c.h*300),mid=c=>[c.x+c.w/2,c.y+c.h/2];
+  const corner=resizeCrop(full,crop,'se',-40,-5,null,null,{keepAspect:true});near(aspect(corner),2);near(corner.x,0.2);near(corner.y,0.2);
+  const edge=resizeCrop(full,crop,'e',-40,0,null,null,{keepAspect:true});near(aspect(edge),2);near(edge.x,0.2);near(mid(edge)[1],0.4);
+  const center=resizeCrop(full,crop,'e',-40,0,null,null,{fromCenter:true});near(center.w,0.4);near(center.h,0.4);near(mid(center)[0],0.5);
+  const both=resizeCrop(full,crop,'nw',40,0,null,null,{keepAspect:true,fromCenter:true});near(aspect(both),2);near(both.w,0.4);near(mid(both)[0],0.5);near(mid(both)[1],0.4);
+  const preset=resizeCrop(full,crop,'se',-40,-40,1,null,{fromCenter:true});near(aspect(preset),1);near(mid(preset)[0],0.5);near(mid(preset)[1],0.4);
+  // Growing from the center stops at the nearest source edge instead of drifting off center.
+  const grow=resizeCrop(full,crop,'e',9000,0,null,null,{fromCenter:true});near(grow.x,0);near(grow.w,1);
+  const edgeCrop={x:0,y:0,w:0.5,h:0.5},stuck=resizeCrop(full,edgeCrop,'e',100,0,null,null,{fromCenter:true});near(stuck.x,0);near(stuck.w,0.5);
+  // A proportional edge drag on a crop touching the top still grows, pushed back inside the source.
+  const top=resizeCrop(full,edgeCrop,'e',100,0,null,null,{keepAspect:true});near(top.y,0);near(aspect(top),4/3);assert.ok(top.w>0.5);
+  // Shrinking a wide crop proportionally never collapses a side below one pixel.
+  const thin=resizeCrop(full,{x:0,y:0.4,w:1,h:0.01},'e',-9000,0,null,null,{keepAspect:true});assert.ok(thin.h*300>=0.999&&thin.w*400>=0.999);
+  const canvas=resizeCrop(full,{x:0,y:0,w:1,h:1},'e',100,0,null,{w:2,h:2},{keepAspect:true,fromCenter:true});near(canvas.w,1.5);near(canvas.h,1.5);near(canvas.x,-0.25);near(canvas.y,-0.25);
+});
 test('applying a crop on rotated and flipped layers keeps the source at the same world position',()=>{
   for(const rotation of [0,30,90])for(const flipX of [false,true])for(const flipY of [false,true]){
     const l=newLayer('image',{x:100,y:80,w:400,h:300,rotation,flipX,flipY}),full={x:0,y:0,w:400,h:300},crop={x:0.25,y:0.2,w:0.5,h:0.6};

@@ -65,6 +65,8 @@ const cursor = (svg, x, y, fallback, badge = '') => {
 };
 const anchorBadge = "<rect x='18' y='18' width='6' height='6' fill='#111' stroke='#fff' stroke-width='1.4'/>";
 export const CURSORS = {
+  'ew-resize': 'ew-resize',
+  'ns-resize': 'ns-resize',
   select: cursor(curSelect, 1, 1, 'default'),
   direct: cursor(curDirect, 1, 1, 'default'),
   'direct-anchor': cursor(curDirect, 1, 1, 'default', anchorBadge),

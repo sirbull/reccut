@@ -167,6 +167,7 @@ export function normalizeDesign(input) {
     ...d, id: string(d.id, uid()), name: string(d.name, 'Thumbnail'), created: number(d.created, Date.now(), 0, Number.MAX_SAFE_INTEGER),
     width: Math.round(number(d.width, 1280, 1, 8192)), height: Math.round(number(d.height, 720, 1, 8192)),
     size: string(d.size, 'custom'), background: fill(d.background, d.background === null ? null : solidFill('#18181b')), layers,
+    guides: (Array.isArray(d.guides) ? d.guides : []).filter((g) => ['x', 'y'].includes(g?.axis) && Number.isFinite(g.value)),
   };
 }
 export function normalizeDesignProject(p) {

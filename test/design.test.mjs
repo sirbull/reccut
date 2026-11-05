@@ -66,6 +66,7 @@ test('move snapping chooses the nearest edge or center inside the threshold', ()
   const s = snapMove(b, 79, 45, { x: [101, 100], y: [100] }, 3);
   assert.equal(s.dx, 80); assert.equal(s.dy, 45); assert.deepEqual(s.guides, [{ axis: 'x', value: 100 }]);
   assert.deepEqual(snapMove(b, 50, 0, { x: [100] }, 2).guides, []);
+  assert.deepEqual(normalizeDesign({ guides: [{ axis: 'x', value: 40 }, { axis: 'z', value: 1 }, { axis: 'y', value: 'a' }, null] }).guides, [{ axis: 'x', value: 40 }]);
 });
 test('reordering preserves the order inside a selection; resizing keeps centers relative', () => {
   const layers = ['a','b','c','d'].map((id) => newLayer('shape', { id }));

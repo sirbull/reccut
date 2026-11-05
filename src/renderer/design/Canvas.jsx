@@ -56,6 +56,15 @@ function drawRulers(ctx, w, h, origin, scale) {
   ctx.fillStyle = '#1c1c1e'; ctx.fillRect(0, 0, RULER - 1, RULER - 1);
   ctx.restore();
 }
+// Guides belong to the editing canvas only: drawDesign never sees them, so they stay out of exports.
+function drawRulerGuides(ctx, guides, w, h, origin, scale) {
+  ctx.save(); ctx.strokeStyle = '#00d2ff'; ctx.lineWidth = 1; ctx.beginPath();
+  for (const g of guides) {
+    const at = Math.round(g.value * scale + origin[g.axis]) + 0.5;
+    if (g.axis === 'x') { ctx.moveTo(at, 0); ctx.lineTo(at, h); } else { ctx.moveTo(0, at); ctx.lineTo(w, at); }
+  }
+  ctx.stroke(); ctx.restore();
+}
 function handlesFor(box, scale) {
   const positions = POSITIONS.map(([x, y]) => layerPoint(box, x * box.w, y * box.h));
   return [...positions.map((p, i) => ({ ...p, handle: HANDLES[i] })), { ...layerPoint(box, box.w / 2, -28 / scale), handle: 'rotate' }];
@@ -70,6 +79,7 @@ export function DesignCanvas({ active }) {
   const scale = d ? (preview || z === 'fit' ? Math.max(0.001, Math.min((size.w - 100) / d.width, (size.h - 100) / d.height)) : z) : 1;
   const offset = { x: (size.w - (d?.width || 0) * scale) / 2 + p.x, y: (size.h - (d?.height || 0) * scale) / 2 + p.y };
   latest.current = { scale, offset, d, z };
+  const rulerGuides = rulers && d?.guides || [], guideable = d && rulers && !crop && !refine && !maskId && !canvasDraft;
   useEffect(() => { if (active) viewScale.value = scale; }, [active, scale]);
   useEffect(()=>{if(libraryPreview.value&&(editing||crop||refine||canvasDraft))clearLibraryPreview();},[libraryPreview.value,editing,crop,refine,canvasDraft]);
   const picked = !preview&&d?.layers.filter((l) => selected.includes(l.id) && !l.locked && !l.hidden) || [];
@@ -175,7 +185,7 @@ export function DesignCanvas({ active }) {
       for (const g of guides) { ctx.beginPath(); if (g.axis === 'x') { ctx.moveTo(g.value, 0); ctx.lineTo(g.value, d.height); } else { ctx.moveTo(0, g.value); ctx.lineTo(d.width, g.value); } ctx.stroke(); }
       if (marquee) { ctx.fillStyle = '#0a84ff22'; ctx.strokeStyle = '#0a84ff'; ctx.fillRect(marquee.x, marquee.y, marquee.w, marquee.h); ctx.strokeRect(marquee.x, marquee.y, marquee.w, marquee.h); }
       ctx.restore();
-      if (rulers) drawRulers(ctx, size.w, size.h, offset, scale);
+      if (rulers) { drawRulerGuides(ctx, rulerGuides, size.w, size.h, offset, scale); drawRulers(ctx, size.w, size.h, offset, scale); }
     });
     return () => cancelAnimationFrame(frame);
   }, [active, d, selected, z, p, size, version, guides, marquee, editing, crop, refine, maskId, brushHover, brushSettings.value,canvasDraft,safe,pathTool,penHover,grid,rulers]);
@@ -213,8 +223,18 @@ export function DesignCanvas({ active }) {
     selection.value = s.nodes.length >= 2 ? [s.layer.id] : [];
   }
   const near = (n, pt) => n && Math.hypot(n.x - pt.x, n.y - pt.y) <= 6 / scale;
+  // The axis a guide pulled from the ruler under the pointer runs on: the top ruler gives horizontal guides.
+  function rulerAt(e) {
+    if (!guideable) return null;
+    const rect = host.current.getBoundingClientRect();
+    return e.clientY - rect.top < RULER ? 'y' : e.clientX - rect.left < RULER ? 'x' : null;
+  }
+  const guideAt = (pt) => guideable && tool.value === 'select' && rulerGuides.find((g) => Math.abs(pt[g.axis] - g.value) <= 4 / scale);
+  function startGuide(axis, guide) { beginDesignTransient(); drag.current = { type: 'guide', axis, others: rulerGuides.filter((g) => g !== guide) }; }
   // modCut's cursor states: the pen shows a small circle over the first point when it will close the path.
   function cursorAt(pt, e) {
+    const axis = rulerAt(e) || guideAt(pt)?.axis;
+    if (axis) return axis === 'x' ? 'ew-resize' : 'ns-resize';
     const s = pen.current;
     if (tool.value === 'pen') return !s ? 'pen-new' : s.nodes.length > 2 && near(s.nodes[0], pt) ? 'pen-close' : near(s.nodes.at(-1), pt) ? 'pen-convert' : 'pen-active';
     if (tool.value === 'direct' && nodeAt(pt)) return 'direct-anchor';
@@ -260,7 +280,8 @@ export function DesignCanvas({ active }) {
     if (!d || (e.button !== 0 && e.button !== 1) || e.target.tagName === 'TEXTAREA') return;
     if (editing) { finishText(); return; }
     e.preventDefault(); host.current.focus(); host.current.setPointerCapture(e.pointerId);
-    const pt = point(e);
+    const pt = point(e), pull = e.button === 0 && !space.current && rulerAt(e);
+    if (pull) { finishPen(); startGuide(pull); return; }
     if (space.current || tool.value === 'hand' || e.button === 1) {
       drag.current = { type: 'pan', clientX: e.clientX, clientY: e.clientY, pan: pan.value }; setHoverCursor('hand-active'); return;
     }
@@ -283,6 +304,8 @@ export function DesignCanvas({ active }) {
     if (handle) {
       beginDesignTransient(); drag.current = { type: handle.handle, start: pt, box: { ...box }, layers: picked, angle: Math.atan2(pt.y - box.y - box.h / 2, pt.x - box.x - box.w / 2) }; return;
     }
+    const guide = guideAt(pt);
+    if (guide) { startGuide(guide.axis, guide); return; }
     if (tool.value === 'text') { const l = addText(pt.x, pt.y); if (l) { beginDesignTransient(); setEditing(l.id); } return; }
     if (tool.value === 'shape') {
       const l = brandLayer(newLayer('shape', { shape: shapeType.value, name: shapeType.value[0].toUpperCase() + shapeType.value.slice(1), x: pt.x, y: pt.y, w: 1, h: 1 }),prefs.value.designBrand,prefs.value.designBrandFonts);
@@ -306,6 +329,11 @@ export function DesignCanvas({ active }) {
     if(state.type==='mask'){const p=cropPoint(point(e),state.layer),x=Math.max(0,Math.min(1,p.x/state.layer.w)),y=Math.max(0,Math.min(1,p.y/state.layer.h));const points=state.layer.mask.points.map(p=>[...p]);if(state.layer.mask.shape==='polygon'||points.length!==4)points[state.index]=[x,y];else{const i=state.index;for(const n of i===0||i===3?[0,3]:[1,2])points[n][0]=x;for(const n of i<2?[0,1]:[2,3])points[n][1]=y;}updateDesignTransient(p=>{const l=p.designs[d.id].layers.find(l=>l.id===state.layer.id);if(l?.mask)l.mask.points=points;});return;}
     if (state.type === 'pan') { pan.value = { x: state.pan.x + e.clientX - state.clientX, y: state.pan.y + e.clientY - state.clientY }; return; }
     const pt = point(e);
+    if (state.type === 'guide') {
+      // Over either ruler the guide is gone; letting go there removes it.
+      const next = rulerAt(e) ? state.others : [...state.others, { axis: state.axis, value: Math.round(pt[state.axis]) }];
+      updateDesignTransient((p) => { p.designs[d.id].guides = next; }); return;
+    }
     if (state.type === 'pen') {
       const n = state.node;
       if (Math.hypot(pt.x - n.x, pt.y - n.y) < 2 / scale) return;
@@ -325,11 +353,11 @@ export function DesignCanvas({ active }) {
       writePath(state.layer, nodes, state.closed); return;
     }
     let dx = pt.x - state.start.x, dy = pt.y - state.start.y;
-    if(state.type==='canvasCrop'){const s=state.session,full={x:0,y:0,w:d.width,h:d.height},c=s.crop,ratio=s.ratio==='free'?null:Number(s.ratio);canvasCrop.value={...s,crop:state.handle?resizeCrop(full,c,state.handle,dx,dy,ratio,{w:MAX_DESIGN_SIDE/d.width,h:MAX_DESIGN_SIDE/d.height}):{...c,x:c.x+dx/d.width,y:c.y+dy/d.height}};return;}
+    if(state.type==='canvasCrop'){const s=state.session,full={x:0,y:0,w:d.width,h:d.height},c=s.crop,ratio=s.ratio==='free'?null:Number(s.ratio);canvasCrop.value={...s,crop:state.handle?resizeCrop(full,c,state.handle,dx,dy,ratio,{w:MAX_DESIGN_SIDE/d.width,h:MAX_DESIGN_SIDE/d.height},{keepAspect:e.shiftKey,fromCenter:e.altKey}):{...c,x:c.x+dx/d.width,y:c.y+dy/d.height}};return;}
     if (state.type === 'crop') {
       const s=state.session,local=cropPoint(pt,s.layer),cx=local.x-state.start.x,cy=local.y-state.start.y;
       const ratio=s.ratio==='design'?d.width/d.height:s.ratio==='free'?null:Number(s.ratio);
-      cropSession.value=state.handle?{...s,crop:resizeCrop(s.full,s.crop,state.handle,cx,cy,ratio)}:{...s,...moveCropImage(s.full,s.crop,cx,cy)};
+      cropSession.value=state.handle?{...s,crop:resizeCrop(s.full,s.crop,state.handle,cx,cy,ratio,null,{keepAspect:e.shiftKey,fromCenter:e.altKey})}:{...s,...moveCropImage(s.full,s.crop,cx,cy)};
       return;
     }
     if (state.type === 'marquee') {
@@ -349,6 +377,7 @@ export function DesignCanvas({ active }) {
         const others = d.layers.filter((l) => !state.layers.some((s) => s.id === l.id) && !l.hidden).map(layerBounds);
         const candidates = { x: [0, d.width / 2, d.width], y: [0, d.height / 2, d.height] };
         for (const b of others) { candidates.x.push(b.x, b.x + b.w / 2, b.x + b.w); candidates.y.push(b.y, b.y + b.h / 2, b.y + b.h); }
+        for (const g of rulerGuides) candidates[g.axis].push(g.value);
         const snapped = snapMove(state.box, dx, dy, candidates, 6 / scale); dx = snapped.dx; dy = snapped.dy; setGuides(snapped.guides);
       } else setGuides([]);
       layers = state.layers.map((l) => ({ ...l, x: l.x + dx, y: l.y + dy }));

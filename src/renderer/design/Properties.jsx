@@ -27,11 +27,11 @@ export function Properties() {
   imageVersion.value; fontVersion.value;
   if (!d) return null;
   const canvasDraft=canvasCrop.value;
-  if(canvasDraft)return <Section title="Crop Canvas" collapsible={false}><Row label="Aspect Ratio"><Select value={canvasDraft.ratio} options={CROP_RATIOS.filter(r=>r.value!=='design')} onChange={canvasCropRatio}/></Row><p class="hint">Drag handles to crop the canvas, or past its edge to make it wider or taller. Drag inside to move the crop. All layers stay intact, locked or not. Enter applies; Escape cancels.</p><Row><Button onClick={()=>finishCanvasCrop(false)}>Cancel</Button><Button variant="primary" onClick={()=>finishCanvasCrop()}>Apply Canvas Crop</Button></Row></Section>;
+  if(canvasDraft)return <Section title="Crop Canvas" collapsible={false}><Row label="Aspect Ratio"><Select value={canvasDraft.ratio} options={CROP_RATIOS.filter(r=>r.value!=='design')} onChange={canvasCropRatio}/></Row><p class="hint">Drag handles to crop the canvas, or past its edge to make it wider or taller. Hold Shift to keep the shape, Alt to scale from the center. Drag inside to move the crop. All layers stay intact, locked or not. Enter applies; Escape cancels.</p><Row><Button onClick={()=>finishCanvasCrop(false)}>Cancel</Button><Button variant="primary" onClick={()=>finishCanvasCrop()}>Apply Canvas Crop</Button></Row></Section>;
   const crop = cropSession.value;
   if (crop) return <Section title="Crop" collapsible={false}>
     <Row label="Aspect Ratio"><Select value={crop.ratio} options={CROP_RATIOS} onChange={setCropRatio} /></Row>
-    <p class="hint">Drag the image to reposition it. Drag the handles to crop. Enter applies and Escape cancels.</p>
+    <p class="hint">Drag the image to reposition it. Drag the handles to crop. Hold Shift to keep the shape, Alt to scale from the center. Enter applies and Escape cancels.</p>
     <Row><Button onClick={() => finishCrop(false)}>Cancel</Button><Button variant="primary" onClick={() => finishCrop()}>Apply Crop</Button></Row>
   </Section>;
   const refine = refineSession.value;

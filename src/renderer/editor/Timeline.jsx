@@ -899,6 +899,7 @@ export function Timeline() {
               const clip = project.value.clips[el.dataset.clip];
               if (clip?.group && inEditingGroup(clip)) enterGroup(clip.id);
             } else if (!el && editingGroup.value) exitGroup();
+            else if (!el && rowAt(e.clientY).kind === 'caption' && !project.value.lanes?.[CAPTION_LANE]?.locked) commands.addCaption(timeAt(e.clientX));
           }}
           onPointerMove={onPointerMove}
           onPointerLeave={() => {

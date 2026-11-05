@@ -13,19 +13,26 @@ export function moveCropImage(full, crop, dx, dy) {
   return { crop: { ...crop,x,y }, full: { ...full,x:full.x+(crop.x-x)*full.w,y:full.y+(crop.y-y)*full.h } };
 }
 // `max` (fractions of full) drops the source bounds, so a canvas crop can grow past the canvas up to that size.
-export function resizeCrop(full, crop, handle, dx, dy, ratio = null, max = null) {
+// Like resizeLayer: keepAspect holds the crop's current shape and fromCenter scales around its middle.
+export function resizeCrop(full, crop, handle, dx, dy, ratio = null, max = null, { keepAspect = false, fromCenter = false } = {}) {
   const hx = handle.includes('w')?-1:handle.includes('e')?1:0, hy=handle.includes('n')?-1:handle.includes('s')?1:0;
-  const anchorX = crop.x+(hx<0?crop.w:0), anchorY = crop.y+(hy<0?crop.h:0);
-  const roomX=max?max.w:hx<0?anchorX:1-anchorX, roomY=max?max.h:hy<0?anchorY:1-anchorY;
-  let w=clamp(crop.w+hx*dx/full.w,1/full.w,roomX), h=clamp(crop.h+hy*dy/full.h,1/full.h,roomY);
+  // Where the anchor sits along the crop: 0 low edge, 1 high edge, .5 middle. An
+  // edge handle has no side on the other axis, so that axis scales around its middle.
+  const pivot=side=>fromCenter||!side?.5:side<0?1:0, px=pivot(hx), py=pivot(hy);
+  const anchorX=crop.x+crop.w*px, anchorY=crop.y+crop.h*py, k=fromCenter?2:1;
+  const room=(side,anchor)=>fromCenter?2*Math.min(anchor,1-anchor):!side?1:side<0?anchor:1-anchor;
+  const roomX=max?max.w:room(hx,anchorX), roomY=max?max.h:room(hy,anchorY);
+  let w=clamp(crop.w+hx*k*dx/full.w,1/full.w,roomX), h=clamp(crop.h+hy*k*dy/full.h,1/full.h,roomY);
+  if (keepAspect&&!ratio) ratio=crop.w*full.w/(crop.h*full.h);
   if (ratio) {
     const fractionalRatio=ratio*full.h/full.w;
     if (!hy || (hx && Math.abs(w/crop.w-1)>=Math.abs(h/crop.h-1))) h=w/fractionalRatio;
     else w=h*fractionalRatio;
-    const limit=Math.min(1,roomX/w,roomY/h);
-    w*=limit;h*=limit;
+    // Keep both sides at least 1 px, then fit the room, which wins.
+    const scale=Math.min(Math.max(1,1/(w*full.w),1/(h*full.h)),roomX/w,roomY/h);
+    w*=scale;h*=scale;
   }
-  const x=hx<0?anchorX-w:crop.x, y=hy<0?anchorY-h:crop.y;
+  const x=anchorX-w*px, y=anchorY-h*py;
   return max?{x,y,w,h}:{ x:clamp(x,0,1-w), y:clamp(y,0,1-h), w,h };
 }
 export function presetCrop(full, crop, ratio) {
