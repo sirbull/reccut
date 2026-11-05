@@ -71,6 +71,10 @@ Export As saves PNG, JPEG or WebP using the same drawing as the canvas. PNG and 
 
 Package Project includes design assets and image media used by designs, even when Remove unused media is enabled. Fonts are listed in the package report and must be installed on the destination computer.
 
+## Color correction
+
+Select images, text, shapes or a mixture of layers and expand Color Correction in Properties. Light offers Exposure in stops, Brightness, Contrast, Highlights and Shadows. Color offers Hue, Saturation, Temperature and Tint. Curves has RGB, Red, Green and Blue channels: click to add points, drag to adjust, use arrow keys to fine-tune and Delete to remove a selected interior point. Effects has Blur and Grayscale. These panels collapse independently. Enable compares with the original appearance; Reset All clears the corrections. Multi-selection changes only the setting being edited, preserving each layer's other corrections. Edits can be undone, stay editable after saving, and use the same rendering for the canvas and export. Saved layer styles include color corrections.
+
 ## Cutouts and masks
 
 Select an image and choose Remove Background in Properties. The model runs locally with the app, including without internet. Tasks shows progress and Cancel. The original image stays intact; the result is a separate mask. Feather softens the edge and Shift Edge expands or contracts it. Edit Layer Mask opens Erase and Restore brushes with Size and Hardness. Each stroke can be undone and redone. Done leaves brush mode. Sticker Outline follows the final visible edge; shadows follow it too.

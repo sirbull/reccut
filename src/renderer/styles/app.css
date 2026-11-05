@@ -5243,7 +5243,8 @@ kbd.keycap {
 .dz-color-body > .dz-color-section > .dz-color-body { padding: 2px 0 10px; }
 .dz-color-body > .dz-color-section:last-child { border-bottom: 0; }
 .dz-color-body .row-control { min-width: 0; }
-.dz-color-body .slider { min-width: 30px; }
+.dz-color-body .row:has(> .row-control > .slider) { display: grid; grid-template-columns: 80px minmax(0,1fr); gap: 8px; }
+.dz-color-body .slider { min-width: 30px; width: 0; }
 .dz-curve-graph { display: block; width: calc(100% - 12px); max-width: 280px; aspect-ratio: 1; margin: 8px auto 0; overflow: visible; cursor: crosshair; touch-action: none; border: 1px solid var(--line); outline-offset: 4px; }
 .dz-curve-graph[aria-disabled="true"] { opacity: .45; cursor: default; }
 .dz-curve-bg { fill: var(--bg-1); }

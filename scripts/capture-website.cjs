@@ -1,5 +1,5 @@
 // Photograph the real app in an isolated profile. Never opens the source project.
-// Usage: node scripts/capture-website.cjs [source.reccut] [demo-directory] [--resume]
+// Usage: node scripts/capture-website.cjs [source.reccut] [demo-directory] [--resume] [--looks-only]
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -60,7 +60,7 @@ if (!electron.app) {
     fs.writeFileSync(path.join(temporary, 'capture.html'), fs.readFileSync(path.join(root, 'src/renderer/index.html'), 'utf8').replace('app.css', 'capture.css').replace('app.js', 'capture.js'));
     fs.writeFileSync(path.join(destination, 'README.txt'), `Website demo projects, photographed with Reccut ${require('../package.json').version}.\nSource copied from ${source}. The source project is unchanged.\nInto the Wild contains its own media and cache. Portrait and Square reference that copy.\nScreenshots are generated from the current renderer, with real media and real export jobs.\n`);
     const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
-    const child = require('node:child_process').spawn(electron, [__filename, temporary, projectFile], { env, stdio: 'inherit', cwd: root });
+    const child = require('node:child_process').spawn(electron, [__filename, temporary, projectFile, ...process.argv.filter(arg=>arg==='--looks-only')], { env, stdio: 'inherit', cwd: root });
     process.exitCode = await new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', code => resolve(code ?? 1)); });
     console.log(`Demo projects: ${destination}`);
   })().catch(error => { console.error(error); process.exitCode = 1; });
@@ -113,6 +113,7 @@ if (!electron.app) {
         for (let i = 0; i < 100 && !(await js('Boolean(window.photography)')); i++) await wait(100);
         await wait(3500);
         await js(`photography.store.openProjectFile(${JSON.stringify(projectFile)})`);
+        if(!process.argv.includes('--looks-only')) {
         await js(`photography.store.room.value='edit';photography.store.selection.value=['shot-mountain-lake'];photography.commands.inspectorTab.value='video';photography.playback.seek(3)`);
         await wait(2000);
         await js('photography.commands.zoomFit()');
@@ -130,11 +131,17 @@ if (!electron.app) {
         await frame('still-lowerthird', 14.5);
         await frame('ba-before', 26);
         await frame('ba-after', 26, `(()=>{const p=structuredClone(photography.store.project.value);p.clips['shot-coastal-ridge'].props.film='technicolor';p.clips['shot-coastal-ridge'].props.filmMix=1;return p})()`);
+        }
         for (const [name, shot, time, film] of [
           ['look-velvia50','falling-water',14,'velvia50'], ['look-vision500t','forest-light',8,'vision500t'],
           ['look-goldenhour','blossoms-and-bees',32,'goldenhour'], ['look-portra400','coastal-ridge',26,'portra400'],
           ['look-bleachbypass','river-gorge',39,'bleachbypass'], ['look-trix400','quiet-coast',21,'trix400'],
-        ]) await frame(name, time, `(()=>{const p=structuredClone(photography.store.project.value);for(const c of Object.values(p.clips))if(c.type==='title')c.enabled=false;const c=p.clips[${JSON.stringify('shot-')}+${JSON.stringify(shot)}];c.props.film=${JSON.stringify(film)};c.props.filmMix=1;return p})()`);
+        ]) {
+          const original=`(()=>{const p=structuredClone(photography.store.project.value);for(const c of Object.values(p.clips)){if(c.type==='title')c.enabled=false;delete c.props.film;c.props.filmMix=0;}return p})()`;
+          await frame(`${name}-before`,time,original);
+          await frame(name, time, `(()=>{const p=${original};const c=p.clips[${JSON.stringify('shot-')}+${JSON.stringify(shot)}];c.props.film=${JSON.stringify(film)};c.props.filmMix=1;return p})()`);
+        }
+        if(process.argv.includes('--looks-only')) { clearTimeout(timeout);app.exit(0);return; }
         await frame('fmt-169', 14, `(()=>{const p=structuredClone(photography.store.project.value);for(const c of Object.values(p.clips))if(c.type==='title')c.enabled=false;return p})()`);
         for (const [format, name] of [['Portrait','fmt-916'],['Square','fmt-11']]) {
           const file = path.join(path.dirname(path.dirname(projectFile)), format, `${format}.reccut`);

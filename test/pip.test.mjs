@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { cameraRectAt, defaultProps, pipRect, screenArea, screenAreaAt } from '../src/shared/model.js';
 
 // Test native vindustyring uten å starte Electron eller be om kameratilgang.
-function setup() {
+function setup(platform = 'darwin') {
   const windows = [];
   let focused = false;
   let finishLoading;
@@ -22,8 +22,8 @@ function setup() {
       this.webContents = { on() {}, send: (...args) => this.messages.push(args) };
       windows.push(this);
     }
-    setAlwaysOnTop(v) { this.onTop = v; }
-    setVisibleOnAllWorkspaces(v) { this.allSpaces = v; }
+    setAlwaysOnTop(v, level) { this.onTop = v; this.level = level; }
+    setVisibleOnAllWorkspaces(v, options) { this.allSpaces = v; this.workspaceOptions = options; }
     setIgnoreMouseEvents(v) { this.passThrough = v; }
     setContentProtection(v) { this.protected = v; }
     isDestroyed() { return this.dead; }
@@ -38,7 +38,7 @@ function setup() {
   const require = createRequire(import.meta.url);
   const module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(new URL('../src/main/pip.js', import.meta.url), 'utf8'), {
-    module, console, __dirname: '/app/src/main',
+    module, console, process: { platform }, __dirname: '/app/src/main',
     require: (name) => name === 'electron' ? { BrowserWindow: Window, screen: { getAllDisplays: () => [display] } } : require(name),
   });
   const preview = module.exports.createPipPreview({ getMainWindow: () => ({ isDestroyed: () => false, isFocused: () => focused }) });
@@ -92,6 +92,34 @@ test('PiP lar klikk gå gjennom og åpnes uten fokus; bare nyeste bilde vises et
   assert.equal(w.visible, false);
   s.preview.destroy();
   assert.equal(w.dead, true);
+});
+
+test('macOS PiP bruker et ikke-aktiverende panel over Spaces og fullskjermsapper', async () => {
+  const s = setup('darwin');
+  s.preview.update(s.frame);
+  await s.loaded();
+  const [w] = s.windows;
+  assert.equal(w.options.type, 'panel');
+  assert.equal(w.options.fullscreenable, false);
+  assert.equal(w.options.focusable, false);
+  assert.equal(w.level, 'screen-saver');
+  assert.equal(w.allSpaces, true);
+  assert.equal(w.workspaceOptions.visibleOnFullScreen, true);
+  assert.equal(w.passThrough, true);
+  assert.equal(w.visible, true);
+});
+
+test('Windows og Linux beholder vanlig PiP-vindustype', async () => {
+  for (const platform of ['win32', 'linux']) {
+    const s = setup(platform);
+    s.preview.update(s.frame);
+    await s.loaded();
+    const [w] = s.windows;
+    assert.equal(w.options.type, undefined);
+    assert.equal(w.onTop, true);
+    assert.equal(w.passThrough, true);
+    assert.equal(w.visible, true);
+  }
 });
 
 test('flytting bruker et fast vindu og fortsetter mellom kamerabilder', async () => {

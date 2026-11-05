@@ -60,7 +60,7 @@ export function strokeMargin(l) {
 }
 export function effectMargin(l) {
   const spread = Math.max(0, l.box?.padding || 0) + (l.box?.border?.width || 0) + (l.outline?.width || 0) + (l.box?.shape==='ellipse'?Math.max(l.w,l.h)*(Math.SQRT2-1)/2:0) + Math.max(Math.abs(l.textX || 0), Math.abs(l.textY || 0));
-  return Math.ceil(strokeMargin(l) + Math.max(spread, (l.adjust?.blur || 0) * 2,
+  return Math.ceil(strokeMargin(l) + Math.max(spread, (l.adjust?.enabled === false ? 0 : l.adjust?.blur || 0) * 2,
     ...(l.shadows || []).map((s) => s.blur * 2 + Math.max(Math.abs(s.x), Math.abs(s.y)) + s.spread + spread)));
 }
 // Geometry remains separate from effect bounds so transform handles do not move

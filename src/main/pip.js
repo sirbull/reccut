@@ -77,6 +77,9 @@ function createPipPreview({ getMainWindow }) {
     if (!window || window.isDestroyed()) {
       window = new BrowserWindow({
         ...display.bounds,
+        // Et ikke-aktiverende macOS-panel følger Spaces og andre appers fullskjerm.
+        // Always-on-top alene styrer bare rekkefølgen innenfor samme Space.
+        ...(process.platform === 'darwin' ? { type: 'panel' } : {}),
         enableLargerThanScreen: true,
         frame: false,
         transparent: true,
