@@ -20,6 +20,8 @@ dialog that explains what it does.
   with Ctrl, Cmd or Alt (not Option alone on macOS, not AltGr), plus Esc and
   F1 to F24. Normal typing, Shift combinations and key repeats are dropped.
 
+For an agent working on a Mac, see [MAC-AGENT.md](MAC-AGENT.md).
+
 Reccut saves the shortcuts it receives in the recording file
 (`recording.json`, `keys`), so they can be shown, hidden or cut in Edit.
 

@@ -80,7 +80,8 @@ test('install downloads from the release for this version and checks the checksu
   assert.equal(status.permission, 'granted');
   const exe = path.join(s.dir, 'reccut-keystrokes-linux-x64');
   assert.deepEqual(fs.readFileSync(exe), helper);
-  assert.ok(fs.statSync(exe).mode & 0o100, 'the helper is executable');
+  // Windows has no executable bit; there the .exe extension is what matters.
+  if (process.platform !== 'win32') assert.ok(fs.statSync(exe).mode & 0o100, 'the helper is executable');
   assert.ok(JSON.parse(fs.readFileSync(path.join(s.dir, 'addon.json'), 'utf8')).consentAt);
 });
 
