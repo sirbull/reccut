@@ -20,7 +20,7 @@ export function normalizeDesignAdjustments(value = {}) {
     contrast: bounded(a.contrast, -1, 1), highlights: bounded(a.highlights, -1, 1), shadows: bounded(a.shadows, -1, 1),
     saturation: bounded(a.saturation, -1, 2), hue: bounded(a.hue, -180, 180),
     temperature: bounded(a.temperature, -1, 1), tint: bounded(a.tint, -1, 1),
-    blur: bounded(a.blur, 0, 500), grayscale: bounded(a.grayscale, 0, 1),
+    blur: bounded(a.blur, 0, 500), repeatEdges: a.repeatEdges === true, grayscale: bounded(a.grayscale, 0, 1),
     curves: Object.fromEntries(CURVE_CHANNELS.map(c => [c, normalizeDesignCurve(a.curves?.[c])])),
   };
 }

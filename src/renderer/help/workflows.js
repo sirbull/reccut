@@ -104,7 +104,7 @@ For an alternative gateway, choose **Other server or gateway**, select the API f
 
 Keys use the operating system's encrypted credential storage when available. Otherwise they are kept only in memory for the current session. **Remove key** deletes the key. Changing provider or base URL removes the old key, so enter a new one for the new connection.
 
-The agent can send your messages, attached images, clip names, timings, captions, locally generated transcripts, look measurements and rendered frames to the configured provider. Original video and audio files are not uploaded by the chat. Provider processing is external; read its terms before using private material. Local speech models are downloaded on first use.
+The agent can send your messages, attached images, clip names, timings, captions, locally generated transcripts, look measurements and rendered frames to the configured provider. Original video and audio files are not uploaded by the chat. Provider processing is external; read its terms before using private material. Whisper Base is included. Additional local speech models are optional downloads in Settings → AI.
 `, see: ['ai-local', 'ai-recipes', 'ai-troubleshooting', 'ai-plugins'],
   },
   {
@@ -112,7 +112,7 @@ The agent can send your messages, attached images, clip names, timings, captions
     summary: 'Connect Reccut to Ollama, LM Studio, llama.cpp or a compatible local server.',
     keywords: 'local offline ai agent localhost ollama lm studio lmstudio llama.cpp server port model tools privacy connection',
     body: `
-Install and start a model server separately, then load a model that supports tool calling. Reccut does not install or host the language model. Downloading a model needs internet access; a running model on this computer can then handle the chat locally. Reccut's speech model is a separate download.
+Install and start a model server separately, then load a model that supports tool calling. Reccut does not install or host the language model. Downloading a model needs internet access; a running model on this computer can then handle the chat locally. Reccut's subtitle models are managed separately in Settings → AI; Whisper Base is included.
 
 ## Connect automatically
 
@@ -213,7 +213,7 @@ Turn off **Model can see images**, save settings and retry without image attachm
 
 ## A request is slow or fails partway through
 
-Look at the chat's tool steps and Background tasks. Initial speech-model downloads and long transcriptions can take time. Check that a local server is still running and has enough memory. A provider may impose rate or quota limits. Use **Stop**, review changes already made, and retry a smaller task. Use **Undo this request** if you want to discard its timeline changes.
+Look at the chat's tool steps and Background tasks. Optional speech-model downloads and long transcriptions can take time. Check that a local server is still running and has enough memory. A provider may impose rate or quota limits. Use **Stop**, review changes already made, and retry a smaller task. Use **Undo this request** if you want to discard its timeline changes.
 `, see: ['ai-setup', 'ai-local', 'background-tasks'],
   },
   {
@@ -414,12 +414,12 @@ Animation presets are another starting point in the Video inspector. Applying a 
     summary: 'From speech recognition to readable subtitles and the right export mode.',
     keywords: 'captions subtitles whisper speech model automatic transcribe language generate srt vtt timing import export burn embedded',
     body: `
-Make sure the timeline contains audible speech. Automatic captions use a local speech model, separate from the chat model. The model is downloaded on first use; after downloading, recognition runs on your computer.
+Make sure the timeline contains audible speech. Automatic captions use a local speech model, separate from the chat model. Whisper Base is included. Download optional models in Settings → AI → Manage Models; recognition runs entirely on your computer.
 
 ## Generate captions
 
 1. Open the **Captions** browser ({{key:browser:captions}}).
-2. Choose the speech language and the model. Larger models can take longer and use more resources.
+2. Choose the speech language and an installed model. Use Manage Models to install optional models or switch the active selection. Larger models can take longer and use more resources.
 3. Choose **Generate captions**. Watch the background task, then inspect the caption track.
 4. Play through the result. Correct names, punctuation, speaker changes and timing in the inspector and timeline.
 

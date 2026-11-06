@@ -1,4 +1,4 @@
-import { FlipHorizontal, FlipVertical, AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal, AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, AlignLeft, AlignCenter, AlignRight, BookmarkPlus } from 'lucide-preact';
+import { FlipHorizontal, FlipVertical, AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal, AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, AlignLeft, AlignCenter, AlignRight, BookmarkPlus, Crop, RotateCcw, Shrink, Expand } from 'lucide-preact';
 import { DesignFontSelect } from './FontSelect.jsx';
 import { textSelection,selectedTextRange,rememberTextSelection,patchTextSelection } from './textSelection.js';
 import { textStyleAt,replaceStyledText,TEXT_STYLE_FIELDS } from '../../shared/designRichText.js';
@@ -16,7 +16,7 @@ import { refineSession, brushSettings, startRefine, stopRefine, navigateRefineHi
 import { maskEditing, fillTextWithImage } from './masks.js';
 import { defaultDesignMask } from '../../shared/designMasks.js';
 import { canvasCrop,canvasCropRatio,finishCanvasCrop } from './tools.js';
-import { cropSession, setCropRatio, finishCrop, startCrop } from './crop.js';
+import { cropSession, setCropRatio, finishCrop, startCrop, resetCrop, fitImages } from './crop.js';
 import { CROP_RATIOS } from '../../shared/designCrop.js';
 import { FillControls, StrokeControls, ShadowControls, StyleNumber } from './StyleControls.jsx';
 import { fontAvailable, fontVersion } from './fonts.js';
@@ -32,7 +32,7 @@ export function Properties() {
   const crop = cropSession.value;
   if (crop) return <Section title="Crop" collapsible={false}>
     <Row label="Aspect Ratio"><Select value={crop.ratio} options={CROP_RATIOS} onChange={setCropRatio} /></Row>
-    <p class="hint">Drag the image to reposition it. Drag the handles to crop. Hold Shift to keep the shape, Alt to scale from the center. Enter applies and Escape cancels.</p>
+    <p class="hint">Drag the image to reposition it. Drag the handles to crop. Hold Shift to keep the shape, Alt to scale from the center. The crop hides parts of the original image; you can adjust or reset it later. Enter applies and Escape cancels.</p>
     <Row><Button onClick={() => finishCrop(false)}>Cancel</Button><Button variant="primary" onClick={() => finishCrop()}>Apply Crop</Button></Row>
   </Section>;
   const refine = refineSession.value;
@@ -119,7 +119,17 @@ export function Properties() {
       {l.shape === 'arrow' && number('head', 'Arrowhead', 0.1, 10, 0.1, 1)}
     </Section>}
     {hasFill&&!text&&!l.pattern && <Section title="Fill"><FillControls value={l.fill} aspect={l.w / l.h} onChange={(fill) => patch({ fill })} onInput={(fill) => live({ fill })} /></Section>}
-    {image && <Section title="Image"><Button onClick={startCrop}>Crop…</Button><Row label="Fit"><Select value={l.fit} options={['cover','contain','stretch'].map((value) => ({ value, label: value }))} onChange={(fit) => patch({ fit })} /></Row><Button onClick={() => patch({ crop: { x: 0, y: 0, w: 1, h: 1 }, fit: 'contain' })}>Reset Crop</Button>{imageMissing(l) && <p class="warn">Missing image. <button class="link" onClick={() => locateImage(l)}>Relink…</button></p>}</Section>}
+    {image && <Section title="Image">
+      <div class="dz-image-actions" role="group" aria-label="Image tools">
+        <IconButton icon={Crop} title="Crop image (C)" disabled={layers.length!==1||imageMissing(l)} onClick={startCrop}/>
+        <IconButton icon={RotateCcw} title="Reset crop — reveal full image" disabled={layers.every(imageMissing)} onClick={resetCrop}/>
+        <span class="dz-image-divider"/>
+        <IconButton icon={Shrink} title="Fit image to canvas — show entire crop" onClick={()=>fitImages('contain')}/>
+        <IconButton icon={Expand} title="Fill canvas — crop overflow" onClick={()=>fitImages('cover')}/>
+      </div>
+      <p class="hint">Crop hides parts of the image and stays editable. Shift-drag a resize handle to stretch.</p>
+      {imageMissing(l) && <p class="warn">Missing image. <button class="link" onClick={() => locateImage(l)}>Relink…</button></p>}
+    </Section>}
     <ColorControls layers={layers}/>
     <Section title={layers.length > 1 ? `${layers.length} selected layers` : l.name} actions={!text&&<IconButton icon={BookmarkPlus} title="Save Style" onClick={openSaveStyle}/>}>
       {number('x', 'X')}{number('y', 'Y')}{number('w', 'Width', 1)}{number('h', 'Height', 1)}{number('rotation', 'Rotation', -36000, 36000, 1, 1)}

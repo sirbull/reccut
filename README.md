@@ -219,9 +219,12 @@ To publish a new version, bump the version in `package.json`, tag it (for exampl
 - **In the app:** Help → Reccut Help (F1) opens the handbook, with search and pictures. It works offline.
 - [Full feature list, shortcuts and settings](docs/FEATURES.md)
 - [AI, keying and plugins](docs/KEYING-AND-AI.md)
+- [Third-party software, licenses and distribution requirements](docs/THIRD-PARTY-LICENSES.md)
 
 ## Licence
 
 Reccut is released under the MIT licence.
 
-It is built on Electron, Preact, Mediabunny, FFmpeg, uiohook-napi, Lucide and Transformers.js (Whisper). The bundled FFmpeg binaries are GPL-licensed, built without `--enable-nonfree`, and ship with the app together with `LICENSE-FFmpeg.txt`.
+Reccut includes separately licensed software, model weights and artwork. Open **About Reccut → Third-party licenses** for an offline component list, license texts and upstream links. You can also open the local license files and documentation from that window.
+
+The bundled FFmpeg binaries are GPLv3-or-later; Mediabunny is MPL 2.0. The MIT-licensed uiohook-napi wrapper includes LGPLv3-or-later libuiohook. These licenses have source-code and distribution requirements in addition to attribution. See [third-party licenses and distribution requirements](docs/THIRD-PARTY-LICENSES.md) for details, including the work still required before a commercial distribution.

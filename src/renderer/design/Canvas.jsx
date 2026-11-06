@@ -16,7 +16,7 @@ import { refineSession, brushSettings, paintRefine, saveRefineStroke, stopRefine
 import { shapePath } from '../../shared/shapes.js';
 import { maskEditing } from './masks.js';
 import { cropSession, startCrop, finishCrop } from './crop.js';
-import { cropViewport, moveCropImage, resizeCrop } from '../../shared/designCrop.js';
+import { cropViewport, cropSourceGeometry, moveCropImage, resizeCrop } from '../../shared/designCrop.js';
 import { toast } from '../ui.jsx';
 import { CURSORS, TOOL_CURSORS } from './toolArt.jsx';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
@@ -397,7 +397,12 @@ export function DesignCanvas({ active }) {
     } else {
       const keepAspect = state.layers.length === 1 && state.layers[0].type === 'image' ? !e.shiftKey : e.shiftKey;
       const b = resizeLayer(state.box, state.type, dx, dy, { keepAspect, fromCenter: e.altKey });
-      if (state.layers.length === 1) layers = [b];
+      if (state.layers.length === 1) {
+        const original = state.layers[0], image = original.type === 'image' && !keepAspect && libraryImage(original);
+        // A free resize stretches the visible image, including its current
+        // crop, instead of only resizing a contain/cover frame around it.
+        layers = [image ? { ...b, fit: 'stretch', crop: cropSourceGeometry(original, image.naturalWidth || image.width, image.naturalHeight || image.height).crop } : b];
+      }
       else layers = scaleDesignLayers(state.layers, state.box, b);
     }
     updateDesignTransient((p) => {

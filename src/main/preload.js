@@ -158,6 +158,12 @@ contextBridge.exposeInMainWorld('api', {
   clearTasks: invoke('tasks:clear'),
   startExport: invoke('export:start'),
   startTranscribe: invoke('transcribe:start'),
+  subtitleModels: invoke('subtitle-models:list'),
+  downloadSubtitleModel: invoke('subtitle-models:download'),
+  cancelSubtitleModel: invoke('subtitle-models:cancel'),
+  selectSubtitleModel: invoke('subtitle-models:select'),
+  removeSubtitleModel: invoke('subtitle-models:remove'),
+  onSubtitleModelsChanged: on('subtitle-models:changed'),
 
   flushed: invoke('app:flushed'),
   onFlush: on('app:flush'),

@@ -48,3 +48,12 @@ export function applyCropGeometry(layer, full, crop) {
   const flipCenter=layerPoint(layer,layer.flipX?layer.w-b.x-b.w/2:b.x+b.w/2,layer.flipY?layer.h-b.y-b.h/2:b.y+b.h/2);
   return { ...layer, crop, x:(layer.flipX||layer.flipY?flipCenter:center).x-b.w/2, y:(layer.flipX||layer.flipY?flipCenter:center).y-b.h/2, w:b.w,h:b.h,fit:'stretch' };
 }
+export function resetImageCrop(layer, sw, sh) {
+  const { full } = cropSourceGeometry(layer, sw, sh);
+  return applyCropGeometry(layer, full, { x: 0, y: 0, w: 1, h: 1 });
+}
+// Fit actions use the design canvas as their frame, making the action useful
+// even when a newly placed image has the same aspect ratio as its own box.
+export function fitImageToCanvas(layer, width, height, mode = 'contain') {
+  return { ...layer, x: 0, y: 0, w: width, h: height, rotation: 0, fit: mode };
+}

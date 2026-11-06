@@ -39,6 +39,7 @@
     ],
     "files": [
       "build/**/*",
+      "!build/licenses/**/*",
       "src/main/**/*",
       "assets/reccut-wordmark.svg",
       "src/shared/pluginTerms.json",
@@ -96,6 +97,14 @@
       "category": "AudioVideo"
     },
     "extraResources": [
+      {
+        "from": "build/licenses",
+        "to": "licenses"
+      },
+      {
+        "from": "vendor/subtitle-models/whisper-base",
+        "to": "subtitle-models/whisper-base"
+      },
       {
         "from": "vendor/ffmpeg/${os}-${arch}",
         "to": "ffmpeg"

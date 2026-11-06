@@ -26,6 +26,15 @@ if (developmentMode) app.setPath('userData', path.join(app.getPath('appData'), '
 const ff = require('./ffmpeg');
 const { finalizeRecordingStream } = require('./recording');
 const jobs = require('./jobs');
+const { SubtitleModelManager } = require('./subtitleModels');
+const subtitleModels = new SubtitleModelManager({
+  dir: path.join(app.getPath('userData'), 'subtitle-models'),
+  legacyDir: path.join(app.getPath('userData'), 'models'),
+  bundleDir: app.isPackaged ? path.join(process.resourcesPath, 'subtitle-models') : path.join(__dirname, '../../vendor/subtitle-models'),
+  onChange: state => send('subtitle-models:changed', state),
+  unload: () => jobs.unloadTranscription(),
+});
+subtitleModels.ready.catch(error => console.error('Subtitle model registry:', error));
 const about = require('./about');
 const { createSplashWindow } = require('./splash');
 const media = require('./media');
@@ -959,7 +968,8 @@ ipcMain.handle('export:start', (_e, payload) => {
   return id;
 });
 
-ipcMain.handle('transcribe:start', (_e, payload) => {
+ipcMain.handle('transcribe:start', async (_e, payload) => {
+  const lease = await subtitleModels.acquireActiveModel();
   const { id, done } = jobs.add({
     kind: 'transcribe',
     title: 'Generating captions',
@@ -967,10 +977,13 @@ ipcMain.handle('transcribe:start', (_e, payload) => {
     run: async (ctx) => {
       ctx.progress(0, 'Reading audio');
       const audio = await mixForTranscription(payload, ctx);
-      return jobs.runInWorker('transcribe', { ...payload, audio }, ctx);
+      if (ctx.isCanceled()) throw new Error('Canceled');
+      const result = await jobs.runInWorker('transcribe', { ...payload, model: lease.model, audio }, ctx);
+      if (ctx.isCanceled()) throw new Error('Canceled');
+      return result;
     },
   });
-  done.then((result) => send('transcribe:done', { id, ...result, payload }), (err) => send('transcribe:error', { id, error: String(err.message || err), payload: { agent: payload.agent } }));
+  done.then((result) => send('transcribe:done', { id, ...result, payload }), (err) => send('transcribe:error', { id, error: String(err.message || err), payload: { agent: payload.agent } })).finally(lease.release);
   return id;
 });
 
@@ -979,13 +992,15 @@ async function mixForTranscription({ sources, duration }, ctx) {
   const rate = 16000;
   const out = new Float32Array(Math.ceil(duration * rate));
   for (const [i, s] of sources.entries()) {
+    if (ctx.isCanceled()) throw new Error('Canceled');
     const job = ff.decodePcm(s.path, { start: s.in, duration: s.dur, rate, channels: 1 });
     ctx.setCancel(job.kill);
     const buf = await job.promise;
     const pcm = new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 4));
-    const offset = Math.round(s.start * rate);
     const gain = s.gain ?? 1;
-    for (let j = 0; j < pcm.length && offset + j < out.length; j++) out[offset + j] += pcm[j] * gain;
+    // Audio is mapped into timeline time before inference, including trims and speed ramps.
+    const { mixSpeechSource } = require('../../build/subtitleAudio.cjs');
+    mixSpeechSource(out, pcm, s, rate, gain);
     ctx.progress(((i + 1) / sources.length) * 0.1, 'Reading audio');
   }
   return out;
@@ -997,6 +1012,8 @@ function modelCachePath(key) {
   return path.join(app.getPath('userData'), 'models', hash);
 }
 ipcMain.handle('modelcache:get', async (_e, key) => {
+  const subtitleFile = await subtitleModels.readModelFile(key);
+  if (subtitleFile) return subtitleFile;
   const file = modelCachePath(key);
   return fs.existsSync(file) ? new Uint8Array(await fs.promises.readFile(file)) : null;
 });
@@ -1092,14 +1109,25 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on('will-quit', () => {
-  splash?.destroy();
-  area.closeFrame();
-  pipPreview.destroy();
-  recordUI.destroy();
-  globalShortcut.unregisterAll();
-  input.stop();
-  jobs.destroyWorkers();
+let subtitleShutdown = false;
+app.on('will-quit', event => {
+  // At this point every window has accepted closing. A recording's "Keep
+  // Recording" action must not permanently shut down the model manager.
+  event.preventDefault();
+  if (subtitleShutdown) return;
+  subtitleShutdown = true;
+  subtitleModels.shutdown().catch(error => console.error(error)).finally(() => {
+    splash?.destroy();
+    area.closeFrame();
+    pipPreview.destroy();
+    recordUI.destroy();
+    globalShortcut.unregisterAll();
+    input.stop();
+    jobs.destroyWorkers();
+    // All windows have already closed. Re-entering app.quit() from will-quit
+    // can leave Electron alive after an asynchronous prevented quit.
+    app.exit(0);
+  });
 });
 
 // A failed splash may be destroyed before the workspace window is created.
@@ -1113,6 +1141,16 @@ function extensionHandler(channel, handler) {
   });
 }
 extensionHandler('ai:config', () => extensions.aiConfig());
+extensionHandler('subtitle-models:list', () => subtitleModels.listAvailableModels());
+extensionHandler('subtitle-models:download', id => subtitleModels.downloadModel(id));
+extensionHandler('subtitle-models:cancel', id => subtitleModels.cancelDownload(id));
+extensionHandler('subtitle-models:select', id => subtitleModels.setActiveModel(id));
+extensionHandler('subtitle-models:remove', async id => {
+  const state = await subtitleModels.listAvailableModels(), model = state.models.find(m => m.id === id);
+  if (!model?.installed || !model.removable) throw new Error('This model cannot be deleted.');
+  const { response } = await dialog.showMessageBox(win, { type: 'question', title: 'Delete this subtitle model?', message: 'Delete this subtitle model?', detail: `${model.name} — ${(model.installedSizeBytes / 1e6).toFixed(1)} MB\nThe model can be downloaded again later.`, buttons: ['Cancel', 'Delete'], defaultId: 0, cancelId: 0, noLink: true });
+  return response === 1 ? subtitleModels.removeModel(id) : subtitleModels.listAvailableModels();
+});
 extensionHandler('ai:save', (config) => extensions.saveAI(config));
 extensionHandler('ai:complete', (request) => extensions.complete(request));
 extensionHandler('ai:models', (config) => extensions.listModels(config));

@@ -1,4 +1,5 @@
 import {OnlineSettings} from './design/Online.jsx';
+import { LocalSubtitleModels } from './SubtitleModels.jsx';
 // Innstillinger (Cmd ,), bygd som i Final Cut Pro: faner med ikoner øverst, og en kommandoeditor
 // for hurtigtaster. Alle valg lagres med en gang og gjelder hele appen.
 import { ExtensionsPane } from './Extensions.jsx';
@@ -493,6 +494,7 @@ export function SettingsWindow() {
   };
   useEffect(() => {
     const onKey = (e) => {
+      if (document.querySelector('.subtitle-model-manager')) return;
       if (e.key === 'Escape' && !document.querySelector('.kb-key.recording')) {
         e.stopPropagation();
         close();
@@ -527,7 +529,7 @@ export function SettingsWindow() {
           {current.id === 'export' && <ExportPane />}
           {current.id === 'design' && <OnlineSettings/>}
           {current.id === 'keyboard' && <KeyboardPane />}
-          {current.id === 'extensions' && <><ExtensionsPane/><OnlineSettings/></>}
+          {current.id === 'extensions' && <><LocalSubtitleModels/><ExtensionsPane/><OnlineSettings/></>}
           {current.id === 'plugins' && <PluginsPane designSettings={<OnlineSettings/>}/>}
         </div>
       </div>

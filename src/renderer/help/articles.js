@@ -6,6 +6,29 @@ export const SECTIONS = ['Getting Started', 'Recording', 'Media', 'Editing', 'Au
 
 export const ARTICLES = [
   {
+    id: 'third-party-licenses', section: 'Reference', title: 'Third-party Software and Licenses',
+    summary: 'Find offline license texts, component credits and information about source-code and artwork rights.',
+    keywords: 'about copyright attribution license licence open source GPL LGPL MPL ffmpeg mediabunny uiohook openmoji commercial credits',
+    body: `Open **About Reccut → Third-party licenses** to read the local component list and license texts. On macOS, About Reccut is in the Reccut menu. On Windows and Linux, use the Help menu. The license reader works offline; project links open upstream websites in your browser.
+
+Choose **Open license files and documentation** in the reader to open the local notices directory. DISTRIBUTION.md contains more detail about source-code and distribution requirements. The directory also contains original license texts and a component manifest with the versions recorded at build time.
+
+## Separate component licenses
+
+Reccut uses Electron, Preact, Signals, Immer, Lucide, Tabler, PDF.js, Mediabunny, FFmpeg, uiohook-napi, Transformers.js and ONNX Runtime, along with model weights and artwork. Each component retains its own license and copyright notices. The application license does not replace those terms.
+
+FFmpeg is used as a separate command-line program under GPLv3 or later. Mediabunny is MPL 2.0. The MIT-licensed uiohook-napi wrapper contains the LGPL-licensed libuiohook native library. These licenses include source-code and distribution rights, beyond the notices shown in About.
+
+Whisper and the bundled BiRefNet models declare MIT licenses. OpenMoji graphics use CC BY-SA 4.0, and Unicode emoji data has its own license. When included, Blackmagic RAW libraries have separate proprietary SDK terms.
+
+## Your recordings and artwork
+
+Processing a recording with FFmpeg does not by itself make the recording GPL-licensed. Imported footage, fonts, stock images and artwork still have their own terms. Preserve attribution and license information for assets such as OpenMoji graphics and downloaded stock images. Copy Credits in Design's export options can help collect the source information stored with supported assets.
+
+For complete terms, use the original texts in the license reader. For build-specific source delivery and native-library requirements, read DISTRIBUTION.md in the local license folder.`,
+    see: ['welcome', 'design', 'export'],
+  },
+  {
     id: 'design', section: 'Design', title: 'Design Thumbnails and Images',
     summary: 'Make layered images from video frames, photos, text and shapes, then export or package them.',
     keywords: 'thumbnail image design canvas text layers picture photo png jpeg webp',
@@ -1242,7 +1265,7 @@ Scripts from **Typeloom**: export the project as a Typeloom project file (.typel
 
 Each change is an undo step, and **Undo this request** reverts everything the agent did in its last request. **Stop** ends a request between steps.
 
-The agent cannot yet create voice-over or music, or export. What is sent to the provider: your messages and attached images, what the agent reads from the project (clip names, timings, captions, the transcript and look measurements) and, if the model can see images, rendered frames. Media files, audio and local paths are not uploaded. The speech model runs on your computer and is downloaded the first time.
+The agent cannot yet create voice-over or music, or export. What is sent to the provider: your messages and attached images, what the agent reads from the project (clip names, timings, captions, the transcript and look measurements) and, if the model can see images, rendered frames. Media files, audio and local paths are not uploaded. The speech model runs on your computer. Manage installed subtitle models in Settings → AI; Whisper Base is included, and additional models are optional downloads.
 
 **External video processors** install from a Reccut JSON manifest pointing to a trusted local executable. On a video clip, open Effects → External processing to process the full source and apply the result to that clip. The source timing must be preserved; original audio and media remain available. Cancel through Background tasks.
 

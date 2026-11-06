@@ -7,7 +7,7 @@ import { extractDesignStyle, applyDesignStyle } from '../src/shared/designTempla
 
 const correct = (rgba, adjust) => [...applyDesignPixelAdjustments(new Uint8ClampedArray(rgba), adjust)];
 test('corrections on images, text and shapes survive save/load with independent curve arrays', () => {
-  const adjust = { exposure: 1.25, hue: -40, saturation: 1.5, curves: { red: [[0,0],[.5,.7],[1,1]] } };
+  const adjust = { exposure: 1.25, hue: -40, saturation: 1.5, repeatEdges: true, curves: { red: [[0,0],[.5,.7],[1,1]] } };
   const layers = ['image','text','shape'].map(type => newLayer(type, { adjust }));
   const loaded = normalizeDesign(JSON.parse(JSON.stringify({ layers })));
   for (const l of loaded.layers) assert.deepEqual(l.adjust, normalizeDesignAdjustments(adjust));
@@ -19,7 +19,7 @@ test('legacy image adjustments retain their values and neutral extended defaults
   const legacy = {brightness:-.3,contrast:.4,saturation:-1,hue:40,blur:10,grayscale:1};
   const a = newLayer('image', {adjust:legacy}).adjust;
   for (const [key, value] of Object.entries(legacy)) assert.equal(a[key], value);
-  assert.equal(a.exposure, 0); assert.equal(a.enabled, true);
+  assert.equal(a.exposure, 0); assert.equal(a.enabled, true); assert.equal(a.repeatEdges, false);
   assert.equal(imageFilter(a), 'brightness(0.7) contrast(1.4) saturate(0) hue-rotate(40deg) blur(10px) grayscale(1)');
 });
 test('malformed corrections and curve points normalize to finite, bounded values', () => {
@@ -69,7 +69,7 @@ test('RGB and individual channel curves combine without changing other channels 
 });
 test('reusable styles retain corrections for every layer type without sharing state', () => {
   for (const type of ['image','text','shape']) {
-    const source = newLayer(type,{adjust:{exposure:.75,curves:{blue:[[0,0],[.5,.6],[1,1]]}}});
+    const source = newLayer(type,{adjust:{exposure:.75,repeatEdges:true,curves:{blue:[[0,0],[.5,.6],[1,1]]}}});
     const entry = {id:'corrected',type,style:extractDesignStyle(source,720)};
     const target = newLayer(type,{x:77,fill:solidFill('#ff0000')});
     const applied = applyDesignStyle(target,entry,720);

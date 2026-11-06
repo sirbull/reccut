@@ -22,3 +22,4 @@ for (const item of model.models) for (const file of item.files) {
   finally { await fs.unlink(temporary).catch(() => {}); }
 }
 console.log(`Background models verified locally (MIT).`);
+await import('./fetch-subtitle-model.mjs');

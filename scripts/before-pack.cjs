@@ -2,7 +2,7 @@ const path=require('path');
 
 // ONNX weights are data, not executable code. The signer's protobuf detector
 // can allocate an invalid array while examining these large, valid models.
-function modelResource(file){return typeof file==='string'&&/[\\/]Contents[\\/]Resources[\\/]models[\\/].*\.onnx$/i.test(file);}
+function modelResource(file){return typeof file==='string'&&/[\\/]Contents[\\/]Resources[\\/](?:models|subtitle-models)[\\/].*\.onnx$/i.test(file);}
 module.exports=async(context)=>{
   if(context.electronPlatformName!=='darwin')return;
   const signer=path.dirname(require.resolve('@electron/osx-sign'));

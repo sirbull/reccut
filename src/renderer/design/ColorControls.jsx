@@ -107,6 +107,10 @@ export function ColorControls({ layers }) {
         onInput={points=>update({curves:{[channel]:points}},true)} onChange={points=>update({curves:{[channel]:points}})}/>
       <Button class="small" disabled={disabled} onClick={()=>update({curves:normalizeDesignAdjustments().curves})}>Reset All Curves</Button>
     </ColorSection>
-    <ColorSection title="Effects">{control('blur','Blur',0,500,1,' px')}{control('grayscale','Grayscale',0,1)}</ColorSection>
+    <ColorSection title="Effects">
+      {control('blur','Blur',0,500,1,' px')}
+      {layers.every(l=>l.type==='image') && <Row label="Repeat edges"><Toggle checked={a.repeatEdges} disabled={disabled} onChange={repeatEdges=>update({repeatEdges})}/></Row>}
+      {control('grayscale','Grayscale',0,1)}
+    </ColorSection>
   </ColorSection>;
 }

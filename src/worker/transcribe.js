@@ -1,9 +1,10 @@
 // Automatisk teksting med Whisper (Transformers.js). Kjører lokalt i et skjult vindu.
-// Modellen lastes ned første gang og ligger deretter i hurtigbufferen.
-import { env, pipeline } from '@huggingface/transformers';
+// Installed models only. All network downloads belong to the explicit model manager.
+import { env, AutoTokenizer, AutoProcessor, WhisperForConditionalGeneration, AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers';
 import { alignWords, findPauses, groupWords } from '../shared/speech.js';
 
-env.allowLocalModels = false;
+env.allowLocalModels = true;
+env.allowRemoteModels = false;
 env.backends.onnx.wasm.wasmPaths = new URL('./ort/', location.href).href;
 env.backends.onnx.wasm.numThreads = 1;
 // Modellfilene lagres på disk via hovedprosessen.
@@ -22,18 +23,20 @@ env.customCache = {
   },
 };
 
-// Variantene med ordtider (cross-attention), så tekst og klipp kan legges presist.
-const MODELS = { base: 'onnx-community/whisper-base_timestamped', small: 'onnx-community/whisper-small_timestamped' };
 const RATE = 16000;
 const WINDOW = 30;
 let cached = { key: null, pipe: null };
 const canceled = new Set();
 
 async function getPipe(model, onProgress) {
-  const id = MODELS[model] || MODELS.base;
-  const useGpu = Boolean(navigator.gpu) && (await navigator.gpu.requestAdapter().catch(() => null));
-  const key = `${id}:${useGpu ? 'gpu' : 'cpu'}`;
+  if (!model?.repository || !model.version) throw new Error('Select an installed subtitle model in Settings → AI.');
+  const id = model.repository;
+  const adapter = (model.legacyGpu || model.profile === 'gpu') && navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null);
+  const useGpu = Boolean(adapter);
+  if (!adapter && model.profile === 'gpu') throw new Error('This older model installation needs WebGPU. Install the CPU-compatible model in Settings → AI.');
+  const key = `${id}:${model.version}:${useGpu ? 'gpu' : 'cpu'}`;
   if (cached.key === key) return cached.pipe;
+  if (cached.pipe) { await cached.pipe.dispose(); cached = { key: null, pipe: null }; }
   const files = {};
   const progress_callback = (e) => {
     if (e.status === 'progress' && e.file) {
@@ -45,12 +48,22 @@ async function getPipe(model, onProgress) {
   const opts = useGpu
     ? { device: 'webgpu', dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' }, progress_callback }
     : { device: 'wasm', dtype: 'q8', progress_callback };
+  // The v4 pipeline factory probes unpinned `main` metadata before forwarding
+  // revision options. Build the same Whisper pipeline from pinned components.
+  const load = async settings => {
+    const options = { ...settings, revision: model.version, local_files_only: true };
+    const [tokenizer, processor, loaded] = await Promise.all([
+      AutoTokenizer.from_pretrained(id, options),
+      AutoProcessor.from_pretrained(id, options),
+      WhisperForConditionalGeneration.from_pretrained(id, options),
+    ]);
+    return new AutomaticSpeechRecognitionPipeline({ task: 'automatic-speech-recognition', model: loaded, tokenizer, processor });
+  };
   let pipe;
-  try {
-    pipe = await pipeline('automatic-speech-recognition', id, opts);
-  } catch (err) {
-    if (!useGpu) throw err;
-    pipe = await pipeline('automatic-speech-recognition', id, { device: 'wasm', dtype: 'q8', progress_callback });
+  try { pipe = await load(opts); }
+  catch (error) {
+    if (!useGpu || !model.cpuAvailable) throw error;
+    pipe = await load({ device: 'wasm', dtype: 'q8', progress_callback });
   }
   cached = { key, pipe };
   return pipe;
@@ -69,7 +82,7 @@ window.worker.onJob(async ({ jobId, payload }) => {
   const report = (p, stage) => window.worker.progress(jobId, p, stage);
   try {
     report(0.1, 'Loading speech model');
-    const asr = await getPipe(model, (p) => report(0.1 + p * 0.2, 'Downloading speech model'));
+    const asr = await getPipe(model, (p) => report(0.1 + p * 0.2, 'Loading speech model'));
     const words = [];
     const windows = Math.ceil(audio.length / (RATE * WINDOW));
     const length = audio.length / RATE;
@@ -96,7 +109,7 @@ window.worker.onJob(async ({ jobId, payload }) => {
   } catch (err) {
     console.error(err);
     const msg = String(err?.message || err);
-    window.worker.error(jobId, /fetch|network/i.test(msg) ? 'Could not download the speech model. Check your internet connection and try again.' : msg);
+    window.worker.error(jobId, msg);
   } finally {
     canceled.delete(jobId);
   }

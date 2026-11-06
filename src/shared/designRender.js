@@ -140,7 +140,29 @@ function drawStyledText(ctx,l,g,kind,spread){
   }
  });ctx.restore();
 }
-function drawContent(ctx, l, image, pixelRatio = 1) {
+// Extend the visible crop's outermost pixels before filtering. Blurring this
+// padded bitmap and clipping back to its footprint keeps opaque edges opaque,
+// including contained images and crops that hide part of the original source.
+function drawRepeatedEdgeImage(ctx, l, image, box, sw, sh, pixelRatio, makeCanvas) {
+  const x = Math.max(0, box.x), y = Math.max(0, box.y);
+  const w = Math.min(l.w, box.x + box.w) - x, h = Math.min(l.h, box.y + box.h) - y;
+  const blur = l.adjust.blur, fullW = w + blur * 6, fullH = h + blur * 6;
+  const ratio = Math.min(pixelRatio, 8188 / fullW, 8188 / fullH, Math.sqrt(16_700_000 / (fullW * fullH)));
+  const iw = Math.max(1, Math.ceil(w * ratio)), ih = Math.max(1, Math.ceil(h * ratio)), pad = Math.ceil(blur * ratio * 3) + 1;
+  const padded = makeCanvas(iw + pad * 2, ih + pad * 2), p = padded.getContext('2d'), c = l.crop;
+  p.drawImage(image, sw * (c.x + (x - box.x) / box.w * c.w), sh * (c.y + (y - box.y) / box.h * c.h),
+    sw * c.w * w / box.w, sh * c.h * h / box.h, pad, pad, iw, ih);
+  p.imageSmoothingEnabled = false;
+  for (const [sx, swidth, dx, dwidth] of [[pad, 1, 0, pad], [pad, iw, pad, iw], [pad + iw - 1, 1, pad + iw, pad]]) {
+    for (const [sy, sheight, dy, dheight] of [[pad, 1, 0, pad], [pad, ih, pad, ih], [pad + ih - 1, 1, pad + ih, pad]]) {
+      if (dx === pad && dy === pad) continue;
+      p.drawImage(padded, sx, sy, swidth, sheight, dx, dy, dwidth, dheight);
+    }
+  }
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.drawImage(padded, x - pad * w / iw, y - pad * h / ih, padded.width * w / iw, padded.height * h / ih);
+}
+function drawContent(ctx, l, image, pixelRatio = 1, makeCanvas = null) {
   if (l.type === 'shape') { traceShape(ctx, l); paintFill(ctx, l.fill, { x: 0, y: 0, w: l.w, h: l.h }, () => ctx.fill());if(l.pattern){ctx.save();traceShape(ctx,l);ctx.clip();paintPattern(ctx,l.pattern,l.w,l.h,canvasFactory);ctx.restore();} }
   else if (l.type === 'text') drawText(ctx, l);
   else {
@@ -149,7 +171,9 @@ function drawContent(ctx, l, image, pixelRatio = 1) {
       const sw = image.naturalWidth || image.width, sh = image.naturalHeight || image.height;
       const c = l.crop, box = fitBox(sw * c.w, sh * c.h, l.w, l.h, l.fit);
       ctx.filter = imageFilter(l.adjust, pixelRatio);
-      ctx.drawImage(image, sw * c.x, sh * c.y, sw * c.w, sh * c.h, box.x, box.y, box.w, box.h);
+      if (l.adjust?.enabled !== false && l.adjust?.repeatEdges && l.adjust?.blur > 0 && makeCanvas) {
+        drawRepeatedEdgeImage(ctx, l, image, box, sw, sh, pixelRatio, makeCanvas);
+      } else ctx.drawImage(image, sw * c.x, sh * c.y, sw * c.w, sh * c.h, box.x, box.y, box.w, box.h);
     } else {
       ctx.fillStyle = '#3f3f46'; ctx.fillRect(0, 0, l.w, l.h);
       const cell = Math.max(8, Math.max(l.w, l.h) / 32); ctx.fillStyle = '#52525b';
@@ -224,7 +248,7 @@ function bitmap(l, image, cutout, ratio, makeCanvas) {
     paintFill(s, l.stroke.fill, box, () => s.fillRect(-margin, -margin, w, h));
     ctx.drawImage(sc, -margin, -margin, w, h);
   }
-  drawContent(ctx, l.type === 'text' && l.box ? { ...l, box: null } : l, image, ratio);
+  drawContent(ctx, l.type === 'text' && l.box ? { ...l, box: null } : l, image, ratio, makeCanvas);
   // Images already use the legacy filters while drawing their cropped content.
   // Isolate text and shapes so their fill, box and stroke are corrected together.
   if (l.type !== 'image' && l.adjust?.enabled !== false && ['brightness','contrast','saturation','hue','blur','grayscale'].some(k => l.adjust?.[k])) {

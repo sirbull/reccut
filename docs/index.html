@@ -39,6 +39,8 @@ body {
 }
 img, video { display: block; max-width: 100%; height: auto; }
 a { color: inherit; }
+html:not([data-keyboard-focus]) :focus { outline: none; }
+html[data-keyboard-focus] :focus-visible { outline: 2px solid #c3c5cc; outline-offset: 3px; }
 .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
 .serif { font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-weight: 400; }
 
@@ -139,7 +141,7 @@ h3 { font-size: 22px; letter-spacing: -.01em; margin: 0 0 8px; }
 /* Before/after */
 .compare { position: relative; margin-top: 56px; border-radius: 22px; overflow: hidden; aspect-ratio: 16/9; box-shadow: 0 60px 120px -40px rgba(0,0,0,.9); user-select: none; }
 .compare.square { max-width: 720px; margin: 32px auto 0; aspect-ratio: 1; }
-.compare:focus-within { outline: 2px solid var(--accent); outline-offset: 4px; }
+html[data-keyboard-focus] .compare:focus-within { outline: 2px solid #c3c5cc; outline-offset: 4px; }
 .compare img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .compare .after { clip-path: inset(0 0 0 var(--pos, 50%)); }
 .compare .bar { position: absolute; top: 0; bottom: 0; left: var(--pos, 50%); width: 2px; background: #fff; transform: translateX(-1px); pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,.4); }
@@ -154,7 +156,7 @@ h3 { font-size: 22px; letter-spacing: -.01em; margin: 0 0 8px; }
 .look img { width: 100%; aspect-ratio: 16/9; object-fit: cover; transition: transform 1s cubic-bezier(.2,.7,.2,1); }
 .look:hover img { transform: scale(1.04); }
 .look-open { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
-.look:focus-within { outline: 2px solid var(--accent); outline-offset: 4px; }
+html[data-keyboard-focus] .look:focus-within { outline: 2px solid #c3c5cc; outline-offset: 4px; }
 .look figcaption { position: absolute; inset: auto 0 0; padding: 30px 16px 14px; font-size: 14px; font-weight: 600; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
 .look figcaption { pointer-events: none; }
 .look figcaption small { display: block; font-weight: 400; color: #c9cad0; font-size: 12px; }
@@ -213,15 +215,17 @@ pre .c { color: #6b6e78; }
 pre .p { color: var(--accent2); user-select: none; }
 
 footer { padding: 60px 0 70px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
-footer .wrap { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+footer .wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 20px; }
+footer .credit { text-align: center; }
+footer .wrap > :last-child { justify-self: end; }
 
 /* Lightbox */
 dialog { padding: 0; border: 0; background: transparent; max-width: 96vw; max-height: 94vh; }
 dialog::backdrop { background: rgba(0,0,0,.88); backdrop-filter: blur(6px); }
 dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoom-out; }
 .lightbox-image[hidden], .lightbox-look[hidden] { display: none; }
-.lightbox-close { position: absolute; top: 8px; right: 8px; z-index: 2; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid #ffffff40; border-radius: 50%; background: #111215d9; color: #fff; font: 28px/1 system-ui, sans-serif; cursor: pointer; }
-.lightbox-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.lightbox-close { position: absolute; top: 8px; right: 8px; z-index: 2; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid #ffffff40; border-radius: 50%; background: #111215d9; color: #fff; appearance: none; line-height: 0; cursor: pointer; }
+.lightbox-close svg { display: block; width: 18px; height: 18px; pointer-events: none; }
 .lightbox-look { width: min(92vw, 1280px, calc((100dvh - 160px) * 1.777778)); color: var(--text); }
 .lightbox-look > figcaption { padding: 12px 60px 18px 4px; font-size: 18px; font-weight: 600; }
 .lightbox-compare { margin: 0; border-radius: 12px; box-shadow: none; }
@@ -242,6 +246,8 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 @media (max-width: 900px) {
   nav .links { display: none; }
   nav .btn { margin-left: auto; }
+  footer .wrap { grid-template-columns: 1fr; text-align: center; }
+  footer .wrap > :last-child { justify-self: center; }
   section { padding: 40px 0; }
   .rooms, .stills, .oss, .record-details, .import-formats { grid-template-columns: 1fr; }
   .looks { grid-template-columns: 1fr 1fr; }
@@ -538,6 +544,20 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   </div>
 </section>
 
+<section id="subtitles" style="padding-top:0" aria-labelledby="subtitles-title">
+  <div class="wrap">
+    <div class="format-card reveal">
+      <div class="kicker">Free local AI</div>
+      <h2 id="subtitles-title" style="font-size:clamp(28px,4vw,40px)">Closed captions, <span class="serif">on your computer</span></h2>
+      <p>Generate closed captions (subtitles) with free AI models that run locally. Choose a model to balance speed and accuracy, then review and edit the captions on the timeline.</p>
+      <p class="providers">Whisper Base is included. Download additional models in Settings → AI → Manage Models and use them offline, with no account or API key. Export SRT/WebVTT files or embed a subtitle track.</p>
+      <div class="chips">
+        <span class="chip">Whisper Tiny</span><span class="chip">Whisper Base</span><span class="chip">Whisper Small</span><span class="chip">Whisper Medium</span><span class="chip">Whisper Large V3 Turbo</span>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="ai" style="padding-top:0">
   <div class="wrap">
     <div class="ai reveal">
@@ -619,12 +639,13 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 <footer>
   <div class="wrap">
     <span>© Reccut contributors · MIT licence</span>
+    <span class="credit">Developed by <a href="https://bullfolio.no">Bullfolio.no</a></span>
     <span><a href="https://github.com/sirbull/reccut/issues">Report an issue</a></span>
   </div>
 </footer>
 
 <dialog id="lightbox" aria-label="Image preview">
-  <button type="button" class="lightbox-close" aria-label="Close image preview">×</button>
+  <button type="button" class="lightbox-close" aria-label="Close image preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
   <img class="lightbox-image" alt="">
   <figure class="lightbox-look" hidden>
     <figcaption id="lightbox-look-title"></figcaption>
@@ -639,6 +660,17 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   </figure>
 </dialog>
 <script>
+  // Programmatic dialog/slider focus must not leave rings after mouse or touch
+  // interaction. Show a neutral focus indicator during keyboard navigation.
+  document.addEventListener('pointerdown', () => {
+    document.documentElement.removeAttribute('data-keyboard-focus');
+  }, { capture: true });
+  document.addEventListener('keydown', (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (['Tab', 'Enter', ' ', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key) || event.key.startsWith('Arrow')) {
+      document.documentElement.setAttribute('data-keyboard-focus', '');
+    }
+  }, { capture: true });
   const recordDemo = document.getElementById('record-demo');
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     recordDemo.autoplay = false;

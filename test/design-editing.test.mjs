@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newLayer, layerBounds, layerPoint, selectionBounds, groupDesignLayers, ungroupDesignLayers, groupSelectionIds, rotateDesignLayers, scaleDesignLayers, alignDesignLayers, distributeDesignLayers } from '../src/shared/design.js';
-import { cropSourceGeometry, cropViewport, moveCropImage, resizeCrop, presetCrop, applyCropGeometry } from '../src/shared/designCrop.js';
+import { cropSourceGeometry, cropViewport, moveCropImage, resizeCrop, presetCrop, applyCropGeometry, resetImageCrop, fitImageToCanvas } from '../src/shared/designCrop.js';
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-7,`${a} != ${b}`);
 
 test('groups become contiguous at the topmost selected position and keep relative z-order',()=>{
@@ -99,4 +99,32 @@ test('group property transforms share a center and preserve member rotation diff
   const rotated=transformDesignLayers(layers,'rotation',110);assert.deepEqual(rotated.map(l=>l.rotation),[110,80]);
   const mirrored=transformDesignLayers(layers,'flipX',true),bounds=selectionBounds(layers),cx=bounds.x+bounds.w/2;
   for(let i=0;i<layers.length;i++){near(mirrored[i].x+mirrored[i].w/2,2*cx-layers[i].x-layers[i].w/2);assert.equal(mirrored[i].rotation,-layers[i].rotation);assert.equal(mirrored[i].flipX,true);}
+});
+
+test('reset crop reveals original pixels at the same world position after resizing, rotation and flips',()=>{
+  for(const rotation of [0,37,90])for(const flipX of [false,true])for(const flipY of [false,true]) {
+    const layer=newLayer('image',{asset:'original',x:100,y:80,w:400,h:300,rotation,flipX,flipY,mask:{shape:'ellipse'},cutout:{asset:'alpha',enabled:true}});
+    const cropped=applyCropGeometry(layer,{x:0,y:0,w:400,h:300},{x:.25,y:.2,w:.5,h:.6});
+    const resized={...cropped,w:cropped.w*1.4,h:cropped.h*.8};
+    const before=cropSourceGeometry(resized,1600,1200).full, reset=resetImageCrop(resized,1600,1200);
+    const after=cropSourceGeometry(reset,1600,1200).full;
+    for(const [sx,sy]of [[0,0],[.25,.2],[.5,.5],[1,1]]) {
+      const position=(l,full)=>{const x=full.x+sx*full.w,y=full.y+sy*full.h;return layerPoint(l,l.flipX?l.w-x:x,l.flipY?l.h-y:y);};
+      const a=position(resized,before),b=position(reset,after);near(a.x,b.x);near(a.y,b.y);
+    }
+    assert.deepEqual(reset.crop,{x:0,y:0,w:1,h:1});assert.equal(reset.asset,'original');assert.equal(reset.mask,resized.mask);assert.equal(reset.cutout,resized.cutout);
+  }
+});
+
+test('fit and fill use the canvas frame and preserve editable source crop and masks',()=>{
+  const layer=newLayer('image',{asset:'original',x:200,y:100,w:200,h:100,rotation:20,crop:{x:.2,y:.1,w:.5,h:.5},mask:{shape:'ellipse'},cutout:{asset:'alpha',enabled:true}});
+  const original=JSON.stringify(layer);
+  for(const mode of ['contain','cover']) {
+    const fitted=fitImageToCanvas(layer,800,600,mode),geometry=cropSourceGeometry(fitted,2000,1000);
+    assert.equal(fitted.x,0);assert.equal(fitted.y,0);assert.equal(fitted.w,800);assert.equal(fitted.h,600);assert.equal(fitted.rotation,0);assert.equal(fitted.fit,mode);
+    assert.equal(fitted.crop,layer.crop);assert.equal(fitted.mask,layer.mask);assert.equal(fitted.cutout,layer.cutout);assert.equal(fitted.asset,layer.asset);
+    if(mode==='contain'){near(geometry.crop.w,layer.crop.w);near(geometry.crop.h,layer.crop.h);}
+    else assert.ok(geometry.crop.w<layer.crop.w||geometry.crop.h<layer.crop.h);
+  }
+  assert.equal(JSON.stringify(layer),original);
 });

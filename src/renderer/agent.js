@@ -70,7 +70,6 @@ const RUNTIME_TOOLS = [
       properties: {
         mediaId: { type: 'string' },
         language: { type: 'string', description: 'Spoken language in English, lowercase, for example "norwegian", or "auto".' },
-        accurate: { type: 'boolean', description: 'Slower, better model. Default true.' },
         words: { type: 'boolean', description: 'Include every word with its time. Use for the part you are cutting.' },
         from: { type: 'number' },
         to: { type: 'number' },
@@ -92,11 +91,11 @@ const RUNTIME_TOOLS = [
         if (!sources.length) throw new Error('There is no audio on the timeline.');
       }
       const language = /^[a-z]{2,20}$/.test(a.language || '') ? a.language : 'auto',
-        model = a.accurate === false ? 'base' : 'small';
+        model = (await api.subtitleModels()).active;
       const key = JSON.stringify([sources, language, model]);
       if (!transcripts.has(key)) {
         let off = [];
-        const job = api.startTranscribe({ sources, duration, language, model, projectId: p.id, agent: true });
+        const job = api.startTranscribe({ sources, duration, language, projectId: p.id, agent: true });
         const result = await new Promise((resolve, reject) => {
           job.catch(reject);
           const abort = () => job.then((id) => api.cancelTask(id));

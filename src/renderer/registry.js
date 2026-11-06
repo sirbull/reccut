@@ -571,6 +571,7 @@ export function menuTemplate() {
     }
     if (name === 'View') items.push({ separator: true }, { role: 'togglefullscreen', label: 'Enter Full Screen' });
     if (name === 'File' && !isMac) items.push({ separator: true }, { role: 'quit', label: 'Quit' });
+    if (name === 'Help' && !isMac) items.push({ separator: true }, { role: 'about', label: 'About Reccut' });
     if (name === 'Window' && isMac) items.push({ separator: true }, { role: 'minimize', label: 'Minimize' }, { role: 'zoom', label: 'Zoom' }, { separator: true }, { role: 'front', label: 'Bring All to Front' });
     if (!items.length) continue;
     // På Mac gir rollen help et søkefelt i Hjelp-menyen som finner og åpner menyvalg.

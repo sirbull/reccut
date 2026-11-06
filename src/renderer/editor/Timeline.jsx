@@ -826,7 +826,8 @@ export function Timeline() {
       if (skimRef.current) skimRef.current.style.display = 'none';
       const T = timeAt(e.clientX);
       const over = Object.values(project.value.clips).find((c) => c.lane === row.lane && c.type !== 'gap' && T >= c.start && T < c.start + c.dur)?.id;
-      if (hoverRef.current?.id !== over) hoverRef.current = { id: over, since: performance.now() };
+      // The first dragover may be over empty space, where both IDs are undefined.
+      if (!hoverRef.current || hoverRef.current.id !== over) hoverRef.current = { id: over, since: performance.now() };
       // dragover kommer hele tiden mens pekeren står stille, så ingen egen timer trengs.
       const held = over && performance.now() - hoverRef.current.since > REPLACE_HOLD_MS;
       const replace = held ? mediaDropPreview(project.value, item, row.lane, T, over) : [];

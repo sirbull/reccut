@@ -170,7 +170,7 @@ test('crop drafts cancel safely when another action edits the layer or switches 
   q.design.designUndo();assert.equal(q.design.currentDesign.value.layers[0].name,original.name);
   q.crop.startCrop();q.crop.setCropRatio('0.8');q.crop.finishCrop();assert.ok(Math.abs(q.design.currentDesign.value.layers[0].w/q.design.currentDesign.value.layers[0].h-0.8)<1e-8);
   q.design.designUndo();assert.deepEqual(JSON.parse(JSON.stringify(q.design.currentDesign.value.layers[0])),JSON.parse(JSON.stringify(original)));
-  q.design.changeLayers(l=>{l.locked=true});q.crop.startCrop();assert.ok(q.crop.cropSession.value);q.crop.finishCrop(false);
+  q.design.changeLayers(l=>{l.locked=true});q.crop.startCrop();assert.equal(q.crop.cropSession.value,null);q.design.designUndo();
   q.crop.startCrop();q.editor.setProject({...structuredClone(q.editor.project.value),id:'new-project'});assert.equal(q.crop.cropSession.value,null);
 });
 
@@ -198,3 +198,28 @@ test('Video frame capture can create a complete design from an empty room in one
 });
 
 test('library imports keep the friendly name instead of exposing a global logo cache filename',async()=>{const q=setup();await q.assets.placeFiles(['/brand/logo-uuid.png'],{copy:true,label:'My Logo.png'});const a=Object.values(q.editor.project.value.designAssets)[0];assert.equal(a.name,'My Logo.png');assert.equal(q.design.currentDesign.value.layers[0].name,'My Logo.png')});
+
+test('image fit, editable crop and reset retain the original asset and each undo in one step',async()=>{
+  const q=setup({width:1600,height:1200});await q.assets.placeFiles(['/original.png'],{copy:false});
+  q.editor.room.value='design';
+  const layer=()=>q.design.currentDesign.value.layers[0],snapshot=()=>JSON.stringify(layer());
+  const placed=snapshot(),asset=layer().asset,source=q.editor.project.value.designAssets[asset];
+  q.crop.fitImages('cover');const filled=snapshot();
+  assert.equal(layer().fit,'cover');assert.equal(layer().w,q.design.currentDesign.value.width);assert.equal(layer().h,q.design.currentDesign.value.height);
+  q.design.designUndo();assert.equal(snapshot(),placed);q.design.designRedo();assert.equal(snapshot(),filled);
+  q.crop.startCrop();assert.ok(q.crop.cropSession.value);q.crop.setCropRatio('1');
+  assert.equal(snapshot(),filled,'crop draft leaves project untouched');q.crop.finishCrop();const cropped=snapshot();
+  assert.notEqual(cropped,filled);assert.equal(layer().asset,asset);assert.ok(layer().crop.w<1||layer().crop.h<1);
+  q.crop.resetCrop();const reset=snapshot();
+  assert.equal(JSON.stringify(layer().crop),JSON.stringify({x:0,y:0,w:1,h:1}));assert.equal(layer().asset,asset);
+  assert.equal(q.editor.project.value.designAssets[asset],source,'original file and source metadata remain unchanged');
+  q.design.designUndo();assert.equal(snapshot(),cropped);q.design.designUndo();assert.equal(snapshot(),filled);
+  q.design.designRedo();assert.equal(snapshot(),cropped);q.design.designRedo();assert.equal(snapshot(),reset);
+});
+
+test('fit actions apply to selected images independently and cannot crop or change a locked image',async()=>{
+  const q=setup();await q.assets.placeFiles(['/a.png','/b.png'],{copy:false});
+  q.design.changeDesign(d=>{d.layers[1].locked=true;});const locked=q.design.currentDesign.value.layers[1];
+  q.crop.fitImages('contain');assert.equal(q.design.currentDesign.value.layers[0].w,q.design.currentDesign.value.width);assert.equal(q.design.currentDesign.value.layers[1],locked);
+  q.design.selection.value=[locked.id];q.crop.startCrop();assert.equal(q.crop.cropSession.value,null);
+});

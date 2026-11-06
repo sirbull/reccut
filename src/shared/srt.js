@@ -1,5 +1,5 @@
 // Lese og skrive SRT-undertekster.
-import { CAPTION_LANE, workPath } from './model.js';
+import { CAPTION_LANE, workPath, srcLen, laneMuted } from './model.js';
 
 function ts(t) {
   const ms = Math.max(0, Math.round(t * 1000));
@@ -57,15 +57,18 @@ export function parseSrt(text) {
 // Lyden på tidslinjen som skal transkriberes, med tider på tidslinjen.
 export function speechSources(p) {
   const sources = [];
+  const solo = Object.values(p.clips).some(c => c.solo);
   for (const c of Object.values(p.clips)) {
-    if (!c.enabled || c.lane === CAPTION_LANE || !c.mediaId || c.recordingPart === 'camera') continue;
+    if (!c.enabled || laneMuted(p, c.lane) || (solo && !c.solo) || c.lane === CAPTION_LANE || !c.mediaId || c.recordingPart === 'camera' || c.props?.audioDetached || (c.speed === 0 && !c.ramp)) continue;
     const m = p.media[c.mediaId];
     let stream = null;
     if (c.type === 'recording') stream = m.streams.camera?.hasAudio ? m.streams.camera : m.streams.screen?.hasAudio ? m.streams.screen : null;
     else if (m.streams.main?.hasAudio) stream = m.streams.main;
     if (!stream) continue;
     const off = stream.offset || 0;
-    sources.push({ path: workPath(stream), in: Math.max(0, c.in - off), dur: c.dur, start: c.start + Math.max(0, off - c.in) });
+    const length = srcLen(c), sourceIn = Math.max(0, c.in - off), sourceEnd = Math.max(0, c.in + length - off);
+    if (sourceEnd <= sourceIn) continue;
+    sources.push({ path: workPath(stream), in: sourceIn, dur: sourceEnd - sourceIn, start: c.start, streamOffset: off, timing: { in: c.in, dur: c.dur, speed: c.speed ?? 1, ramp: c.ramp, reverse: c.reverse } });
   }
   return sources;
 }
