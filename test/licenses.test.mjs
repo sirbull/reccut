@@ -91,7 +91,7 @@ test('installed license reader uses external resources and rejects unlisted URLs
   const s = setup(true);
   s.about.showLicenses();
   const reader = s.windows[0];
-  assert.equal(reader.file, '/installed/Resources/licenses/index.html');
+  assert.equal(reader.file, path.join('/installed/Resources', 'licenses', 'index.html'));
   for (const url of ['https://example.com/', 'https://github.com.evil.test/Vanilagy/mediabunny', 'file:///etc/passwd', 'javascript:alert(1)', 'reccut-licenses://folder/../../', 'https://user:password@github.com/Vanilagy/mediabunny']) {
     assert.equal(reader.popup({ url }).action, 'deny');
   }
@@ -102,5 +102,5 @@ test('installed license reader uses external resources and rejects unlisted URLs
   let prevented = false;
   reader.listeners['will-navigate']({ preventDefault() { prevented = true; } }, 'reccut-licenses://folder');
   assert.equal(prevented, true);
-  assert.deepEqual(s.folders, ['/installed/Resources/licenses']);
+  assert.deepEqual(s.folders, [path.join('/installed/Resources', 'licenses')]);
 });
