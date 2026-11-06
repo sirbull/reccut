@@ -1,7 +1,7 @@
 // Opptaksmotor: kilder, live forhåndsvisning og opptak til separate filer.
 import { signal } from '@preact/signals';
-import { drawCamera, drawCursor, drawKeys } from '../../shared/render.js';
-import { KEY_LIFE, LAYOUT_ANIM, easeOutCubic, isCorner, lerpRect, pipRect, screenArea, ZOOM_RAMP, clamp } from '../../shared/model.js';
+import { drawCamera, drawCursor, drawInputOverlay, drawKeys } from '../../shared/render.js';
+import { KEY_LIFE, LAYOUT_ANIM, PAD_BUTTONS, easeOutCubic, isCorner, lerpRect, pipRect, pressLabel, screenArea, ZOOM_RAMP, clamp } from '../../shared/model.js';
 import { containRect } from '../../shared/follow.js';
 import { pickDevice, settings, saveSettings } from './settings.js';
 import { audioOutputs, audioSink } from '../prefs.js';
@@ -474,7 +474,11 @@ function currentMeta() {
     ...(isWindowSource() ? { source: 'window' } : {}),
     pip: { size: s.pipSize, shape: s.pipShape, mirror: s.mirror, sideSize: s.sideSize, sideShape: s.sideShape },
     // Pekerzoom og klikk følger skjermen, så de er av når bare et vindu tas opp.
-    overlays: { keys: Boolean(s.showKeys && keystrokesRunning.value), cursorZoom: s.cursorZoom && !isWindowSource() },
+    overlays: {
+      keys: Boolean(s.showKeys && s.inputPills && (keystrokesRunning.value || s.inputPad)),
+      cursorZoom: s.cursorZoom && !isWindowSource(),
+      ...(s.showKeys ? { inputs: { on: s.inputOverlay, keyboard: s.inputGame, mouse: s.inputMouse, pad: s.inputPad, x: s.inputX, y: s.inputY } } : {}),
+    },
   };
   for (const r of recorders) {
     const isCam = r.name === 'camera';
@@ -563,11 +567,13 @@ function draw() {
     drawCamera(ctx, cameraVideo, cameraVideo.videoWidth, cameraVideo.videoHeight, cam, s.mirror, cam.h < H * 0.9);
     ctx.restore();
   }
-  if (keystrokesRunning.value) {
+  if (s.showKeys && s.inputPills) {
     const nowS = now / 1000;
     liveKeys = liveKeys.filter((k) => nowS - k.t < KEY_LIFE);
     drawKeys(ctx, liveKeys.slice(-3).map((k) => ({ label: k.label, age: nowS - k.t })), W, H);
   }
+  // Vises også før opptaket, så det kan plasseres.
+  if (s.showKeys && s.inputOverlay) drawInputOverlay(ctx, { keyboard: s.inputGame, mouse: s.inputMouse, pad: s.inputPad, held: liveHeld, stick: padStick, x: s.inputX, y: s.inputY }, W, H);
   if (!hasScreen && !hasCamera) {
     ctx.fillStyle = '#1c1c1e';
     ctx.fillRect(0, 0, W, H);
@@ -591,6 +597,7 @@ let lastCheckpoint = 0;
 ticker.onmessage = () => {
   draw();
   const now = performance.now();
+  pollPad(now);
   syncPipPreview(now);
   if (micMixer) {
     const levels = micMixer.read(now);
@@ -655,6 +662,7 @@ export async function refreshKeystrokes() {
 }
 api.onKeystrokesRunning((on) => {
   keystrokesRunning.value = Boolean(on);
+  if (!on) liveHeld.clear();
   if (!on) liveKeys = [];
   sendState();
 });
@@ -674,8 +682,40 @@ api.onInput((e) => {
     liveZoom = e.on ? { on: true, at: now, off: 0 } : { on: false, at: liveZoom.at, off: now };
   } else if (e.type === 'cursor') liveCursor = [e.x, e.y];
   else if (e.type === 'key') liveKeys.push({ label: e.label, t: now / 1000 });
+  else if (e.type === 'press') livePress(e.name, e.down, now);
   scheduleInputDraw();
 });
+
+// Det som er nede akkurat nå, for forhåndsvisningen. Tastatur og mus kommer fra tillegget.
+const liveHeld = new Set();
+function livePress(name, down, now) {
+  const label = down ? pressLabel(name, liveHeld) : null;
+  if (label) liveKeys.push({ label, t: now / 1000 });
+  if (down) liveHeld.add(name);
+  else liveHeld.delete(name);
+}
+
+// Kontrolleren leses med Gamepad API, som ikke trenger tillegget.
+// Chromium viser en kontroller først når en knapp er trykket.
+export const padName = signal('');
+let padStick = [0, 0, 0, 0];
+function pollPad(now) {
+  const s = settings.value;
+  const pad = s.showKeys && s.inputPad ? [...navigator.getGamepads()].find((p) => p?.mapping === 'standard') : null;
+  padName.value = pad?.id || '';
+  if (!pad) return;
+  const presses = [];
+  PAD_BUTTONS.forEach((name, i) => {
+    const down = Boolean(pad.buttons[i]?.pressed);
+    if (down === liveHeld.has(name)) return;
+    livePress(name, down, now);
+    presses.push([name, down]);
+  });
+  const stick = pad.axes.slice(0, 4).map((v) => (Math.abs(v) < 0.08 ? 0 : Math.round(v * 50) / 50));
+  const moved = stick.length === 4 && stick.some((v, i) => v !== padStick[i]);
+  if (moved) padStick = stick;
+  if (recording.value && (presses.length || moved)) api.recPad(presses, moved ? stick : null);
+}
 
 /* Opptak */
 
@@ -836,7 +876,8 @@ async function beginRecording() {
   layouts = [[0, effectiveLayout()]];
   // Opptaket lagres i opptaksmappen til det åpne prosjektet.
   // The Keystroke Add-on runs only for this recording, and only when the user turned it on.
-  await api.recBegin({ t0, base: projectFolders.value?.recordings || null, keys: Boolean(s.showKeys && keystrokes.value?.installed && !keystrokes.value?.damaged) });
+  const addonReady = s.showKeys && keystrokes.value?.installed && !keystrokes.value?.damaged;
+  await api.recBegin({ t0, base: projectFolders.value?.recordings || null, keys: addonReady ? { shortcuts: s.inputShortcuts, game: s.inputGame, mouse: s.inputMouse, pad: s.inputPad } : null });
   recorders = [];
   const { w, h } = canvasSize.value;
   if (screenStream) {

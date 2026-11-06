@@ -1,5 +1,5 @@
 // Reccut Keystroke Add-on for Linux (X11). See README.md.
-// Reads key presses with the XRecord extension and writes shortcuts to stdout only.
+// Reads key presses with the XRecord extension and writes what filter.h allows to stdout only.
 // Wayland sessions do not allow this; the program then reports "E unavailable".
 #include <X11/XKBlib.h>
 #include <X11/Xlib.h>
@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "filter.h"
 
 static Display *ctrlDpy;
 static int ctrl, alt, shift, super, altgr;
@@ -68,18 +69,33 @@ static int modifier(KeySym s, int pressed) {
   return 0;
 }
 
+static const char *modifierName(KeySym s) {
+  switch (s) {
+    case XK_Control_L: case XK_Control_R: return "Control";
+    case XK_Alt_L: case XK_Meta_L: return "Alt";
+    case XK_Shift_L: case XK_Shift_R: return "Shift";
+    case XK_Super_L: case XK_Super_R: return "Meta";
+  }
+  return NULL;
+}
+
 static void onData(XPointer closure, XRecordInterceptData *d) {
   (void)closure;
   if (d->category == XRecordFromServer && d->data) {
     const unsigned char *raw = d->data;
     int type = raw[0] & 0x7f;
     KeyCode code = raw[1];
-    if (type == KeyPress || type == KeyRelease) {
+    if (type == ButtonPress || type == ButtonRelease) {
+      const char *button = code == 1 ? "MouseLeft" : code == 2 ? "MouseMiddle" : code == 3 ? "MouseRight" : NULL;
+      if (button && optMouse) press(button, type == ButtonPress);
+    } else if (type == KeyPress || type == KeyRelease) {
       KeySym s = XkbKeycodeToKeysym(ctrlDpy, code, 0, 0);
       int pressed = type == KeyPress;
-      if (!modifier(s, pressed) && pressed && !altgr) {
-        char buf[16];
-        const char *name = keyName(s, buf);
+      int isMod = modifier(s, pressed);
+      char buf[16];
+      const char *name = isMod ? modifierName(s) : keyName(s, buf);
+      if (optGame && name && gameKey(name) && !(pressed && altgr)) press(name, pressed);
+      if (optShortcuts && !isMod && pressed && !altgr) {
         int standalone = s == XK_Escape || (s >= XK_F1 && s <= XK_F24);
         // Only shortcuts leave this program. Normal typing is dropped here.
         if (name && (ctrl || alt || super || standalone)) {
@@ -102,6 +118,7 @@ static void *watchStdin(void *arg) {
 }
 
 int main(int argc, char **argv) {
+  readOptions(argc, argv);
   ctrlDpy = XOpenDisplay(NULL);
   Display *dataDpy = ctrlDpy ? XOpenDisplay(NULL) : NULL;
   int major, minor;
@@ -116,8 +133,9 @@ int main(int argc, char **argv) {
     return 2;
   }
   XRecordRange *range = XRecordAllocRange();
-  range->device_events.first = KeyPress;
-  range->device_events.last = KeyRelease;
+  // Only the events this recording uses. With mouse alone no key event is recorded.
+  range->device_events.first = optShortcuts || optGame ? KeyPress : ButtonPress;
+  range->device_events.last = optMouse ? ButtonRelease : KeyRelease;
   XRecordClientSpec clients = XRecordAllClients;
   XRecordContext ctx = XRecordCreateContext(ctrlDpy, 0, &clients, 1, &range, 1);
   XSync(ctrlDpy, False);

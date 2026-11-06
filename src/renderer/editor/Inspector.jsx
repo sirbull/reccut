@@ -1,5 +1,5 @@
 import { PATTERN_SHAPES, PATTERN_DISTRIBUTIONS, patternClipProps } from '../../shared/designPattern.js';
-import { SIDE_LAYOUT, baseValueAt } from '../../shared/model.js';
+import { INPUT_POSITION, SIDE_LAYOUT, baseValueAt } from '../../shared/model.js';
 import { SequenceFormatSettings } from './SequenceFormatSettings.jsx';
 import { ExpressionControls } from './ExpressionControls.jsx';
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
@@ -377,8 +377,22 @@ function AnimationPresets({ clip }) {
   );
 }
 
-function VideoTab({ clip }) {
+function TransformSection({ clip }) {
   const p = project.value;
+  return (
+    <Section title="Transform">
+      <Param clip={clip} prop="x" label="Position X" min={-p.width} max={p.width} unit="px" slider={false} />
+      <Param clip={clip} prop="y" label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} />
+      <Param clip={clip} prop="scale" label="Scale" min={10} max={400} scale={100} unit="%" />
+      <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
+      <Param clip={clip} prop="anchorX" label="Anchor X" min={-p.width} max={p.width} unit="px" slider={false} />
+      <Param clip={clip} prop="anchorY" label="Anchor Y" min={-p.height} max={p.height} unit="px" slider={false} />
+      <p class="hint">While this tab is open, drag in the viewer to move the clip, drag the corners to scale, the round handle to rotate and the crosshair to move the anchor point. Scale and rotation pivot around the anchor point, which is measured from the center of {clip.props.pipAnchor ? 'the PiP' : 'the clip'}. Alt/Option-click a property name or diamond to choose an expression.</p>
+    </Section>
+  );
+}
+
+function VideoTab({ clip }) {
   return (
     <>
       {clip.props.patternKind && <PatternSection clip={clip}/>}
@@ -399,15 +413,7 @@ function VideoTab({ clip }) {
         <Param clip={clip} prop="opacity" label={clip.type === 'adjustment' ? 'Layer strength' : 'Opacity'} min={0} max={100} scale={100} unit="%" />
         {clip.type === 'adjustment' && <p class="hint">Processes the combined picture on lower video tracks during this layer’s duration. Clips above it and captions stay unchanged. Use Color, Effects and Masks to build the look.</p>}
       </Section>
-      {clip.type !== 'adjustment' && <Section title="Transform">
-        <Param clip={clip} prop="x" label="Position X" min={-p.width} max={p.width} unit="px" slider={false} />
-        <Param clip={clip} prop="y" label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} />
-        <Param clip={clip} prop="scale" label="Scale" min={10} max={400} scale={100} unit="%" />
-        <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
-        <Param clip={clip} prop="anchorX" label="Anchor X" min={-p.width} max={p.width} unit="px" slider={false} />
-        <Param clip={clip} prop="anchorY" label="Anchor Y" min={-p.height} max={p.height} unit="px" slider={false} />
-        <p class="hint">While this tab is open, drag in the viewer to move the clip, drag the corners to scale, the round handle to rotate and the crosshair to move the anchor point. Scale and rotation pivot around the anchor point, which is measured from the center of {clip.props.pipAnchor ? 'the PiP' : 'the clip'}. Alt/Option-click a property name or diamond to choose an expression.</p>
-      </Section>}
+      {clip.type !== 'adjustment' && <TransformSection clip={clip} />}
       {(clip.type === 'video' || clip.type === 'recording') && <TrackSection clip={clip} />}
       {clip.type !== 'adjustment' && clip.lane > 0 && <FollowSection clip={clip} />}
       {clip.type === 'video' && <StabilizeSection clip={clip} />}
@@ -1529,7 +1535,7 @@ function RecordingTab({ clip, media }) {
       )}
       {clip.recordingPart === 'screen' && (
         <Section title="PiP Track">
-          <p class="hint">{camera ? 'The camera is on the video track above this clip. Select PiP to adjust its color, shape and effects.' : 'The camera has been detached or removed from this screen clip.'}</p>
+          <p class="hint">{camera ? 'The camera is on the video track above this clip. Select PiP to adjust its position, color, shape and effects.' : 'The camera has been detached or removed from this screen clip.'}</p>
           {camera && <><Button onClick={() => { selection.value = [camera.id]; inspectorTab.value = 'color'; }}>Adjust PiP</Button><Button onClick={() => detachPip(clip.id)}>Detach PiP</Button></>}
         </Section>
       )}
@@ -1595,14 +1601,27 @@ function RecordingTab({ clip, media }) {
           <Row label="Mirror">
             <Toggle checked={clip.props.mirror} onChange={(v) => setProp(clip, { mirror: v })} />
           </Row>
+          <Param clip={clip} prop="cameraOffsetX" label="Offset X" min={-100} max={100} scale={100} unit="%" center={0} />
+          <Param clip={clip} prop="cameraOffsetY" label="Offset Y" min={-100} max={100} scale={100} unit="%" center={0} />
+          <p class="hint">Moves the camera picture inside its frame. Offset only works where the frame crops the picture, so a 9:16 frame on a 16:9 camera moves sideways. 100% reaches the edge of the picture.</p>
         </Section>
       )}
+      {clip.recordingPart === 'camera' && <TransformSection clip={clip} />}
       {usesSide && <SideBySideSection clip={clip} />}
       {hasCam && <CameraColorSection clip={clip} />}
       {clip.recordingPart !== 'camera' && <Section title="Overlays">
-        {rec.keys?.length > 0 && <Row label={`Keystrokes (${rec.keys.length})`}>
+        {(rec.keys?.length > 0 || rec.inputs?.length > 0) && <Row label={`Keystrokes (${(rec.keys?.length || 0) + (rec.inputs?.filter((e) => e[2]).length || 0)})`}>
           <Toggle checked={clip.props.showKeys} onChange={(v) => setProp(clip, { showKeys: v })} />
         </Row>}
+        {rec.overlays?.inputs && (rec.inputs?.length > 0 || rec.sticks?.length > 0) && <>
+          <Row label="Input overlay">
+            <Toggle checked={Boolean(clip.props.showInputs)} onChange={(v) => setProp(clip, { showInputs: v })} />
+          </Row>
+          {clip.props.showInputs && <>
+            <Param clip={clip} prop="inputX" label="Overlay X" min={0} max={100} scale={100} unit="%" def={INPUT_POSITION.x} />
+            <Param clip={clip} prop="inputY" label="Overlay Y" min={0} max={100} scale={100} unit="%" def={INPUT_POSITION.y} />
+          </>}
+        </>}
         <Row label={`Cursor zoom (${rec.zooms?.length || 0})`}>
           <Toggle checked={clip.props.cursorZoom} onChange={(v) => setProp(clip, { cursorZoom: v })} />
         </Row>

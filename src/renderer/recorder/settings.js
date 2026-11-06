@@ -1,7 +1,7 @@
 import { computed, effect, signal } from '@preact/signals';
 import { FLAT_MIX, normalizeMix } from './mixer.js';
 import { RECORDING_AUDIO_FORMATS, recordingVideoFormat } from '../../shared/recordingFormats.cjs';
-import { SIDE_LAYOUT } from '../../shared/model.js';
+import { INPUT_POSITION, SIDE_LAYOUT } from '../../shared/model.js';
 
 const isMac = window.api.platform === 'darwin';
 
@@ -84,6 +84,15 @@ const DEFAULTS = {
   backgroundShortcuts: false,
   // Needs the Keystroke Add-on, which the user installs separately.
   showKeys: false,
+  // Hva tillegget leser, og hvordan det vises. Alt unntatt snarveier er av til brukeren slår det på.
+  inputShortcuts: true,
+  inputGame: false,
+  inputMouse: false,
+  inputPad: false,
+  inputPills: true,
+  inputOverlay: false,
+  inputX: INPUT_POSITION.x,
+  inputY: INPUT_POSITION.y,
   cursorZoom: true,
   autoRender: true,
   // Opptaksområde: hele skjermen eller et område (andeler av skjermen).

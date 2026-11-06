@@ -346,7 +346,7 @@ Recovery can lose the final unwritten portion; it cannot recreate data the disk 
 Import the original Reccut recording, rather than only its flattened MP4. The original contains the separate sources and events needed for these controls.
 
 1. Select the recording clip in Edit and open its recording properties in the inspector.
-2. Under **Camera**, turn the camera on or off, choose **Layout at playhead**, and set shape, size and mirroring. Layout changes are tied to the source time at the playhead.
+2. Under **Camera**, turn the camera on or off, choose **Layout at playhead**, and set shape, size, mirroring and the offset of the picture inside the frame. Layout changes are tied to the source time at the playhead.
 3. Under **Overlays**, enable or disable Cursor zoom, Keystrokes for recordings made with the Keystroke Add-on, and Click highlights for older recordings that have them. The counts show how many events the recording contains.
 4. Open **Audio** to enable and balance the microphone and system-audio components independently.
 

@@ -1,9 +1,10 @@
 // Reccut Keystroke Add-on for Windows. See README.md.
-// Reads the keyboard with a low-level hook and writes shortcuts to stdout only.
+// Reads the keyboard with a low-level hook and writes what filter.h allows to stdout only.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
+#include "filter.h"
 
 static DWORD mainThread;
 static BYTE down[256];
@@ -69,7 +70,25 @@ static const char *keyName(DWORD vk, char *buf) {
   return NULL;
 }
 
+static const char *modifierName(DWORD vk) {
+  switch (vk) {
+    case VK_LSHIFT: case VK_RSHIFT: return "Shift";
+    case VK_LCONTROL: case VK_RCONTROL: return "Control";
+    case VK_LMENU: return "Alt";
+    case VK_LWIN: case VK_RWIN: return "Meta";
+  }
+  return NULL;
+}
+
+static void gamePress(DWORD vk, int pressed) {
+  if (!optGame || (pressed && down[VK_RMENU])) return;
+  char buf[16];
+  const char *name = isModifier(vk) ? modifierName(vk) : keyName(vk, buf);
+  if (name && gameKey(name)) press(name, pressed);
+}
+
 static void emit(DWORD vk) {
+  if (!optShortcuts) return;
   // AltGr types characters such as @ { } on many keyboards. It is typing, not a shortcut.
   if (down[VK_RMENU]) return;
   int ctrl = down[VK_LCONTROL] || down[VK_RCONTROL];
@@ -92,10 +111,27 @@ static LRESULT CALLBACK onKey(int code, WPARAM wp, LPARAM lp) {
     const KBDLLHOOKSTRUCT *k = (const KBDLLHOOKSTRUCT *)lp;
     DWORD vk = k->vkCode & 0xff;
     int pressed = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
-    if (!pressed) down[vk] = 0;
-    else if (!down[vk]) {
+    if (!pressed) {
+      if (down[vk]) gamePress(vk, 0);
+      down[vk] = 0;
+    } else if (!down[vk]) {
       down[vk] = 1;
+      gamePress(vk, 1);
       if (!isModifier(vk)) emit(vk);
+    }
+  }
+  return CallNextHookEx(NULL, code, wp, lp);
+}
+
+static LRESULT CALLBACK onMouse(int code, WPARAM wp, LPARAM lp) {
+  if (code == HC_ACTION) {
+    switch (wp) {
+      case WM_LBUTTONDOWN: press("MouseLeft", 1); break;
+      case WM_LBUTTONUP: press("MouseLeft", 0); break;
+      case WM_RBUTTONDOWN: press("MouseRight", 1); break;
+      case WM_RBUTTONUP: press("MouseRight", 0); break;
+      case WM_MBUTTONDOWN: press("MouseMiddle", 1); break;
+      case WM_MBUTTONUP: press("MouseMiddle", 0); break;
     }
   }
   return CallNextHookEx(NULL, code, wp, lp);
@@ -120,8 +156,12 @@ int main(int argc, char **argv) {
   mainThread = GetCurrentThreadId();
   MSG msg;
   PeekMessage(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
-  HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, onKey, GetModuleHandleW(NULL), 0);
-  if (!hook) {
+  readOptions(argc, argv);
+  // Only the hooks this recording uses. With mouse alone no keyboard hook is installed.
+  int keyboard = optShortcuts || optGame;
+  HHOOK hook = keyboard ? SetWindowsHookExW(WH_KEYBOARD_LL, onKey, GetModuleHandleW(NULL), 0) : NULL;
+  HHOOK mouse = optMouse ? SetWindowsHookExW(WH_MOUSE_LL, onMouse, GetModuleHandleW(NULL), 0) : NULL;
+  if ((keyboard && !hook) || (optMouse && !mouse)) {
     puts("E unavailable");
     fflush(stdout);
     return 2;
@@ -134,6 +174,7 @@ int main(int argc, char **argv) {
     TranslateMessage(&msg);
     DispatchMessage(&msg);
   }
-  UnhookWindowsHookEx(hook);
+  if (hook) UnhookWindowsHookEx(hook);
+  if (mouse) UnhookWindowsHookEx(mouse);
   return 0;
 }

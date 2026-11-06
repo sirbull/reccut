@@ -393,7 +393,8 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
       model: c.model || '',
       vision: c.vision !== false,
       hasKey: Boolean(sessionKey || c.secret),
-      encryptedStorage: encrypted(),
+      // On macOS the check itself can open a keychain dialog, so it waits until there is a key to protect.
+      encryptedStorage: Boolean(c.secret) || (!sessionKey && (process.platform === 'darwin' || encrypted())),
     };
   }
   function saveAI(raw) {
@@ -569,7 +570,6 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
       imageModel: c.imageModel || 'kling-video/v3.0/std/image-to-video',
       confirm: c.confirm !== false,
       hasKey: Boolean(hfSession || c.secret),
-      encryptedStorage: encrypted(),
     };
   }
   function saveGen(raw) {

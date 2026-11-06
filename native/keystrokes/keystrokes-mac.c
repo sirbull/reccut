@@ -1,11 +1,12 @@
 // Reccut Keystroke Add-on for macOS. See README.md.
-// Reads key presses with a listen-only event tap and writes shortcuts to stdout only.
+// Reads key presses with a listen-only event tap and writes what filter.h allows to stdout only.
 // macOS turns the tap off by itself in password fields (Secure Input).
 #include <ApplicationServices/ApplicationServices.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "filter.h"
 
 static CFMachPortRef tap;
 
@@ -32,16 +33,54 @@ static const char *keyName(CGKeyCode k) {
   return k < 128 ? names[k] : NULL;
 }
 
+static const char *modifierName(CGKeyCode k, CGEventFlags *mask) {
+  switch (k) {
+    case 56: case 60: *mask = kCGEventFlagMaskShift; return "Shift";
+    case 59: case 62: *mask = kCGEventFlagMaskControl; return "Control";
+    case 58: case 61: *mask = kCGEventFlagMaskAlternate; return "Alt";
+    case 54: case 55: *mask = kCGEventFlagMaskCommand; return "Meta";
+  }
+  return NULL;
+}
+
+static const char *mouseName(CGEventType type, CGEventRef e) {
+  switch (type) {
+    case kCGEventLeftMouseDown: case kCGEventLeftMouseUp: return "MouseLeft";
+    case kCGEventRightMouseDown: case kCGEventRightMouseUp: return "MouseRight";
+    case kCGEventOtherMouseDown: case kCGEventOtherMouseUp:
+      return CGEventGetIntegerValueField(e, kCGMouseEventButtonNumber) == 2 ? "MouseMiddle" : NULL;
+    default: return NULL;
+  }
+}
+
 static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef e, void *ref) {
   (void)proxy; (void)ref;
   if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
     CGEventTapEnable(tap, true);
     return e;
   }
-  if (type != kCGEventKeyDown || CGEventGetIntegerValueField(e, kCGKeyboardEventAutorepeat)) return e;
-  const char *name = keyName((CGKeyCode)CGEventGetIntegerValueField(e, kCGKeyboardEventKeycode));
-  if (!name) return e;
+  const char *button = mouseName(type, e);
+  if (button) {
+    if (optMouse) press(button, type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown || type == kCGEventOtherMouseDown);
+    return e;
+  }
+  CGKeyCode code = (CGKeyCode)CGEventGetIntegerValueField(e, kCGKeyboardEventKeycode);
   CGEventFlags f = CGEventGetFlags(e);
+  if (type == kCGEventFlagsChanged) {
+    CGEventFlags mask = 0;
+    const char *modifier = modifierName(code, &mask);
+    if (modifier && optGame) press(modifier, (f & mask) != 0);
+    return e;
+  }
+  const char *name = keyName(code);
+  if (!name) return e;
+  if (type == kCGEventKeyUp) {
+    if (optGame && gameKey(name)) press(name, 0);
+    return e;
+  }
+  if (type != kCGEventKeyDown || CGEventGetIntegerValueField(e, kCGKeyboardEventAutorepeat)) return e;
+  if (optGame && gameKey(name)) press(name, 1);
+  if (!optShortcuts) return e;
   int ctrl = (f & kCGEventFlagMaskControl) != 0;
   int alt = (f & kCGEventFlagMaskAlternate) != 0;
   int shift = (f & kCGEventFlagMaskShift) != 0;
@@ -72,8 +111,18 @@ int main(int argc, char **argv) {
     puts(CGRequestListenEventAccess() ? "granted" : "denied");
     return 0;
   }
+  readOptions(argc, argv);
+  // The tap only asks for what this recording uses. With mouse alone it never sees a key.
+  CGEventMask events = 0;
+  if (optShortcuts || optGame) events |= CGEventMaskBit(kCGEventKeyDown);
+  if (optGame) events |= CGEventMaskBit(kCGEventKeyUp) | CGEventMaskBit(kCGEventFlagsChanged);
+  if (optMouse) {
+    events |= CGEventMaskBit(kCGEventLeftMouseDown) | CGEventMaskBit(kCGEventLeftMouseUp) |
+              CGEventMaskBit(kCGEventRightMouseDown) | CGEventMaskBit(kCGEventRightMouseUp) |
+              CGEventMaskBit(kCGEventOtherMouseDown) | CGEventMaskBit(kCGEventOtherMouseUp);
+  }
   tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionListenOnly,
-                         CGEventMaskBit(kCGEventKeyDown), onEvent, NULL);
+                         events, onEvent, NULL);
   if (!tap) {
     puts("E permission");
     fflush(stdout);

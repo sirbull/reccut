@@ -45,6 +45,8 @@ function comboLabel(name, mods, isMac = process.platform === 'darwin') {
 function parseLine(line) {
   const m = /^K ([A-Za-z0-9]{1,20}) (\d{1,2})$/.exec(line.trim());
   if (m) return { type: 'key', name: m[1], mods: Number(m[2]) & 15 };
+  const p = /^([DU]) ([A-Za-z0-9]{1,20})$/.exec(line.trim());
+  if (p) return { type: 'press', name: p[2], down: p[1] === 'D' };
   if (line.trim() === 'READY') return { type: 'ready' };
   const e = /^E (\w+)$/.exec(line.trim());
   if (e) return { type: 'error', reason: e[1] };
@@ -58,6 +60,30 @@ function appShortcut(modifier, name, mods) {
   const want = (parts.includes('Control') ? MODS.ctrl : 0) | (parts.includes('Alt') ? MODS.alt : 0) |
     (parts.includes('Shift') ? MODS.shift : 0) | (parts.includes('Command') ? MODS.meta : 0);
   return mods === want;
+}
+
+// X11 reports a held key as release and press at the same moment. Nobody presses that fast.
+function pushPress(list, t, name, down) {
+  const last = list.at(-1);
+  if (down && last && last[1] === name && !last[2] && t - last[0] < 0.005) list.pop();
+  else list.push([t, name, down ? 1 : 0]);
+}
+
+// Presses in a pause are dropped like other events. A key held into the pause is released at
+// the pause, so it does not stay lit, and the keys pressed during the pause leave no trace.
+function pausedPresses(list, shift) {
+  const held = new Set();
+  const out = [];
+  for (const [t, name, down] of list || []) {
+    const s = shift(t);
+    if (s.inside) {
+      if (!down && held.delete(name)) out.push([s.t, name, 0]);
+    } else if (down) {
+      held.add(name);
+      out.push([s.t, name, 1]);
+    } else if (held.delete(name)) out.push([s.t, name, 0]);
+  }
+  return out;
 }
 
 function sha256(buf) {
@@ -109,6 +135,7 @@ function createKeystrokes({ dir, version, repo, fetchImpl, platform = process.pl
       outdated: Boolean(ok && i.version !== version),
       permission: ok ? permission() : null,
       running: Boolean(child),
+      game: Boolean(i?.gameConsentAt),
     };
   }
 
@@ -134,7 +161,18 @@ function createKeystrokes({ dir, version, repo, fetchImpl, platform = process.pl
     await fs.promises.writeFile(tmp, buf, { mode: 0o755 });
     await fs.promises.rename(tmp, exe);
     if (platform !== 'win32') await fs.promises.chmod(exe, 0o755);
-    await fs.promises.writeFile(infoFile, JSON.stringify({ version, sha256: sum, asset, installedAt: new Date().toISOString(), consentAt: new Date().toISOString() }, null, 1));
+    const gameConsentAt = info()?.gameConsentAt;
+    await fs.promises.writeFile(infoFile, JSON.stringify({ version, sha256: sum, asset, installedAt: new Date().toISOString(), consentAt: new Date().toISOString(), ...(gameConsentAt ? { gameConsentAt } : {}) }, null, 1));
+    return status();
+  }
+
+  // The left keyboard half lets letters out of the helper, so it has its own consent.
+  // It lives here and not in the renderer, and goes away with the add-on.
+  async function allowGame({ consent } = {}) {
+    if (consent !== true) throw new Error('The left keyboard half is only turned on after you accept what it does.');
+    const i = info();
+    if (!i) throw new Error('The Keystroke Add-on is not installed.');
+    await fs.promises.writeFile(infoFile, JSON.stringify({ ...i, gameConsentAt: new Date().toISOString() }, null, 1));
     return status();
   }
 
@@ -150,11 +188,16 @@ function createKeystrokes({ dir, version, repo, fetchImpl, platform = process.pl
     return String(r.stdout || '').trim() || 'unavailable';
   }
 
-  // Starts the helper for one recording. onEvent gets { type: 'key', name, mods } and errors.
-  function start(onEvent) {
+  // Starts the helper for one recording. onEvent gets { type: 'key', name, mods },
+  // { type: 'press', name, down } and errors.
+  function start(onEvent, { shortcuts = true, game = false, mouse = false } = {}) {
     if (child) return true;
     if (!intact()) return false;
-    const proc = spawnImpl(exe, [], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+    const i = info();
+    // A helper from an older release ignores these flags and would send shortcuts anyway.
+    const sources = i.version === version ? [game && i.gameConsentAt && '--game', mouse && '--mouse'].filter(Boolean) : [];
+    if (!shortcuts && !sources.length) return false;
+    const proc = spawnImpl(exe, [...(shortcuts ? [] : ['--no-shortcuts']), ...sources], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
     child = proc;
     let rest = '';
     proc.stdout.setEncoding?.('utf8');
@@ -193,7 +236,7 @@ function createKeystrokes({ dir, version, repo, fetchImpl, platform = process.pl
     timer.unref?.();
   }
 
-  return { status, install, remove, request, start, stop, running: () => Boolean(child) };
+  return { status, install, allowGame, remove, request, start, stop, running: () => Boolean(child) };
 }
 
-module.exports = { createKeystrokes, assetName, comboLabel, parseLine, appShortcut };
+module.exports = { createKeystrokes, assetName, comboLabel, parseLine, appShortcut, pushPress, pausedPresses };

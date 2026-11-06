@@ -19,13 +19,17 @@ import {
   cursorAt,
   easeInOut,
   easeOutCubic,
-  keysAt,
+  heldAt,
+  INPUT_POSITION,
+  KEYBOARD_ROWS,
   layoutClipFor,
+  pillsAt,
   recordingRectsAt,
   redactStrength,
   sideBackgroundMedia,
   sideProps,
   sourceTime,
+  stickAt,
   valueAt,
   visualOpacity,
   zoomAmountAt,
@@ -749,13 +753,24 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
       ctx.globalAlpha *= rect.a;
       drawWithEffects(ctx, clip, T, rect, H, (ctx) => {
         ctx.filter = colorFilter(clip, T, H, 'camera');
-        drawCamera(ctx, src.img, src.w, src.h, rect, clip.props.mirror, rect.h < H * 0.9 && !(valueAt(clip, 'shadow', T) > 0));
+        drawCamera(ctx, src.img, src.w, src.h, rect, clip.props.mirror, rect.h < H * 0.9 && !(valueAt(clip, 'shadow', T) > 0), clamp(valueAt(clip, 'cameraOffsetX', T) || 0, -1, 1), clamp(valueAt(clip, 'cameraOffsetY', T) || 0, -1, 1));
       });
       if (side > 0.001) drawSideFrame(ctx, sp, rect, side, H);
       ctx.restore();
     }
   }
-  if (clip.recordingPart !== 'camera' && clip.props.showKeys) drawKeys(ctx, keysAt(media.rec?.keys, s), W, H);
+  if (clip.recordingPart !== 'camera') {
+    if (clip.props.showKeys) drawKeys(ctx, pillsAt(media.rec, s), W, H);
+    if (clip.props.showInputs) {
+      drawInputOverlay(ctx, {
+        ...media.rec?.overlays?.inputs,
+        held: heldAt(media.rec?.inputs, s),
+        stick: stickAt(media.rec?.sticks, s),
+        x: valueAt(clip, 'inputX', T) ?? INPUT_POSITION.x,
+        y: valueAt(clip, 'inputY', T) ?? INPUT_POSITION.y,
+      }, W, H);
+    }
+  }
 }
 
 // Bakgrunnen bak side om side: et bilde fra biblioteket (fyller bildet), en gradient eller en farge.
@@ -816,7 +831,8 @@ function drawSideFrame(ctx, p, r, alpha, H) {
 }
 
 // Kamerabildet beskjæres slik at det fyller rammen, med skygge når det er bilde i bilde.
-export function drawCamera(ctx, img, vw, vh, cam, mirror, shadow) {
+// ox og oy flytter bildet inni rammen: 1 er helt til høyre og ned, -1 helt til venstre og opp.
+export function drawCamera(ctx, img, vw, vh, cam, mirror, shadow, ox = 0, oy = 0) {
   const output = ctx;
   const w = ctx.canvas.width, h = ctx.canvas.height;
   const layer = shadow ? scratchCanvas(5, w, h) : null;
@@ -832,8 +848,8 @@ export function drawCamera(ctx, img, vw, vh, cam, mirror, shadow) {
   const scale = Math.max(cam.w / vw, cam.h / vh);
   const sw = cam.w / scale;
   const sh = cam.h / scale;
-  const sx = (vw - sw) / 2;
-  const sy = (vh - sh) / 2;
+  const sx = ((vw - sw) / 2) * (1 + (mirror ? ox : -ox));
+  const sy = ((vh - sh) / 2) * (1 - oy);
   if (mirror) {
     ctx.translate(cam.x + cam.w, cam.y);
     ctx.scale(-1, 1);
@@ -896,6 +912,113 @@ export function drawClicks(ctx, clicks, rect) {
 }
 
 // Tastetrykk vises som avrundede merker nederst på midten.
+// Overlegget med tastatur, mus og kontroller. x og y er 0..1 av plassen som er igjen rundt
+// overlegget, så det alltid ligger helt inne i bildet.
+export function drawInputOverlay(ctx, { keyboard, mouse, pad, held, stick, x = 0, y = 1 }, W, H) {
+  const parts = [keyboard && [drawKeyboardPart, 7.25], mouse && [drawMousePart, 2.6], pad && [drawPadPart, 7.5]].filter(Boolean);
+  if (!parts.length) return;
+  const u = H * 0.026;
+  const inset = u * 0.4;
+  const gap = u * 0.6;
+  const w = parts.reduce((sum, [, width]) => sum + width * u, 0) + gap * (parts.length - 1) + inset * 2;
+  const h = u * 5 + inset * 2;
+  const left = clamp(x, 0, 1) * (W - w);
+  const top = clamp(y, 0, 1) * (H - h);
+  ctx.save();
+  ctx.filter = 'none';
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(28, 28, 30, 0.78)';
+  ctx.beginPath();
+  ctx.roundRect(left, top, w, h, u * 0.5);
+  ctx.fill();
+  let px = left + inset;
+  for (const [draw, width] of parts) {
+    draw(ctx, px, top + inset, u, held, stick);
+    px += width * u + gap;
+  }
+  ctx.restore();
+}
+
+const inputFill = (on) => (on ? '#0a84ff' : 'rgba(255, 255, 255, 0.12)');
+
+function inputKey(ctx, x, y, w, h, u, label, on, radius = u * 0.16) {
+  ctx.fillStyle = inputFill(on);
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, radius);
+  ctx.fill();
+  if (!label) return;
+  ctx.font = `600 ${u * (label.length > 2 ? 0.32 : 0.4)}px ${FONTS.sans}`;
+  ctx.fillStyle = on ? '#fff' : 'rgba(255, 255, 255, 0.75)';
+  ctx.fillText(label, x + w / 2, y + h / 2);
+}
+
+function drawKeyboardPart(ctx, x, y, u, held) {
+  const gap = u * 0.12;
+  const mac = globalThis.window?.api?.platform === 'darwin';
+  KEYBOARD_ROWS.forEach((row, i) => {
+    let kx = x + (row.indent || 0) * u;
+    for (const [name, label, width = 1] of row.keys) {
+      inputKey(ctx, kx, y + i * u, width * u - gap, u - gap, u, name === 'Meta' && !mac ? 'Win' : label, held?.has(name));
+      kx += width * u;
+    }
+  });
+}
+
+function drawMousePart(ctx, x, y, u, held) {
+  const w = u * 2.6;
+  const h = u * 5;
+  const gap = u * 0.12;
+  const top = h * 0.42;
+  const button = (name, bx, corners) => {
+    ctx.fillStyle = inputFill(held?.has(name));
+    ctx.beginPath();
+    ctx.roundRect(bx, y, w / 2 - gap / 2, top - gap, corners);
+    ctx.fill();
+  };
+  button('MouseLeft', x, [w / 2, 0, 0, 0]);
+  button('MouseRight', x + w / 2 + gap / 2, [0, w / 2, 0, 0]);
+  ctx.fillStyle = inputFill(false);
+  ctx.beginPath();
+  ctx.roundRect(x, y + top, w, h - top, [0, 0, w / 2, w / 2]);
+  ctx.fill();
+  // Hjulet ligger over skillet mellom knappene.
+  ctx.fillStyle = held?.has('MouseMiddle') ? '#0a84ff' : '#48484a';
+  ctx.beginPath();
+  ctx.roundRect(x + w / 2 - u * 0.2, y + top * 0.3, u * 0.4, top * 0.5, u * 0.2);
+  ctx.fill();
+}
+
+function drawPadPart(ctx, x, y, u, held, stick = [0, 0, 0, 0]) {
+  const small = u * 0.8;
+  const button = (name, label, cx, cy, w = small, h = small, r = small / 2) => inputKey(ctx, x + cx * u - w / 2, y + cy * u - h / 2, w, h, u, label, held?.has(name), r);
+  const thumb = (name, cx, cy, sx, sy) => {
+    ctx.fillStyle = inputFill(false);
+    ctx.beginPath();
+    ctx.arc(x + cx * u, y + cy * u, u * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = held?.has(name) ? '#0a84ff' : 'rgba(255, 255, 255, 0.75)';
+    ctx.beginPath();
+    ctx.arc(x + (cx + sx * 0.42) * u, y + (cy + sy * 0.42) * u, u * 0.38, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  const r = u * 0.16;
+  button('PadLT', 'LT', 0.8, 0.3, u * 1.5, u * 0.6, r);
+  button('PadLB', 'LB', 2.4, 0.3, u * 1.5, u * 0.6, r);
+  button('PadRB', 'RB', 5.1, 0.3, u * 1.5, u * 0.6, r);
+  button('PadRT', 'RT', 6.7, 0.3, u * 1.5, u * 0.6, r);
+  thumb('PadLS', 1.1, 1.9, stick[0], stick[1]);
+  thumb('PadRS', 4.8, 3.9, stick[2], stick[3]);
+  button('PadBack', '', 3.1, 1.6, u * 0.7, u * 0.4, r);
+  button('PadStart', '', 4.4, 1.6, u * 0.7, u * 0.4, r);
+  for (const [name, dx, dy] of [['PadUp', 0, -0.62], ['PadDown', 0, 0.62], ['PadLeft', -0.62, 0], ['PadRight', 0.62, 0]]) button(name, '', 2.7 + dx, 3.9 + dy, u * 0.56, u * 0.56, r);
+  button('PadY', 'Y', 6.3, 1.1);
+  button('PadX', 'X', 5.5, 1.9);
+  button('PadB', 'B', 7.1, 1.9);
+  button('PadA', 'A', 6.3, 2.7);
+}
+
 export function drawKeys(ctx, items, W, H) {
   if (!items.length) return;
   const size = H * 0.034;

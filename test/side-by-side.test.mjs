@@ -113,3 +113,20 @@ test('width-based recordings keep the live camera geometry and source aspect in 
     assert.deepEqual(recordingRectsAt(camera, 1, W, H, 16 / 10).cam, sideRects(layout, W, H, 16 / 10, shape, 'medium').cam);
   }
 });
+
+test('camera offset moves the picture inside the frame, also when mirrored', async () => {
+  const { drawCamera } = await import('../src/shared/render.js');
+  const sourceX = (mirror, ox, oy = 0) => {
+    let args;
+    const noop = () => {};
+    const ctx = { canvas: { width: W, height: H }, save: noop, restore: noop, beginPath: noop, roundRect: noop, clip: noop, translate: noop, scale: noop, drawImage: (...a) => { args = a; } };
+    drawCamera(ctx, {}, 1600, 900, { x: 0, y: 0, w: 90, h: 160, r: 0 }, mirror, false, ox, oy);
+    return args.slice(1, 3);
+  };
+  const slack = 1600 - (900 * 9) / 16;
+  assert.deepEqual(sourceX(false, 0), [slack / 2, 0]);
+  assert.deepEqual(sourceX(false, 1), [0, 0], 'the picture moves right, so the left edge shows');
+  assert.deepEqual(sourceX(false, -1), [slack, 0]);
+  assert.deepEqual(sourceX(true, 1), [slack, 0], 'mirrored, the same offset moves the picture right on screen');
+  assert.deepEqual(sourceX(false, 0, 1), [slack / 2, 0], 'nothing is cropped vertically, so Y has no room to move');
+});

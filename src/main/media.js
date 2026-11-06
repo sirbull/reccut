@@ -447,6 +447,8 @@ async function recordingMedia(target, notify) {
       zooms: rec.zooms || [],
       clicks: rec.clicks || [],
       keys: rec.keys || [],
+      inputs: rec.inputs || [],
+      sticks: rec.sticks || [],
       overlays: rec.overlays || { keys: true, cursorZoom: true, clicks: false },
     },
   });

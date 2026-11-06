@@ -71,6 +71,8 @@ const PARAMS = [
   ['video', 'rotation', 'Rotation', 'rotate angle'],
   ['video', 'anchorX', 'Anchor X', 'anchor point pivot origin center'],
   ['video', 'anchorY', 'Anchor Y', 'anchor point pivot origin center'],
+  ['recording', 'cameraOffsetX', 'Camera Offset X', 'pip face reframe position inside frame'],
+  ['recording', 'cameraOffsetY', 'Camera Offset Y', 'pip face reframe position inside frame'],
   ['color', 'exposure', 'Exposure', 'brightness light'],
   ['color', 'contrast', 'Contrast', ''],
   ['color', 'highlights', 'Highlights', 'bright areas'],

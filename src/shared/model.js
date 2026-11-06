@@ -443,9 +443,14 @@ export function defaultProps(type, media) {
         pipSize: rec.pip?.size || 'medium',
         pipShape: rec.pip?.shape || 'rect',
         mirror: Boolean(rec.pip?.mirror),
+        cameraOffsetX: 0,
+        cameraOffsetY: 0,
         ...SIDE_DEFAULTS,
         ...(typeof rec.pip?.sideSize === 'number' ? { sideSize: rec.pip.sideSize, sideShape: rec.pip.sideShape || SIDE_LAYOUT.shape, sideBg: 'color', sideBgColor: '#000000', sideFrame: 'none' } : {}),
         showKeys: rec.overlays?.keys ?? true,
+        showInputs: Boolean(rec.overlays?.inputs?.on),
+        inputX: rec.overlays?.inputs?.x ?? INPUT_POSITION.x,
+        inputY: rec.overlays?.inputs?.y ?? INPUT_POSITION.y,
         cursorZoom: rec.overlays?.cursorZoom ?? true,
         showClicks: rec.overlays?.clicks ?? false,
       };
@@ -916,6 +921,70 @@ export function keysAt(keys, s) {
     if (s - t < KEY_LIFE) out.push({ label, age: s - t });
   }
   return out.slice(-3);
+}
+
+// Tastene i overlegget: [navn, etikett, bredde]. Hjelpeprogrammet slipper bare disse ut
+// (native/keystrokes/filter.h), og test/keystrokes.test.mjs holder de to listene like.
+export const KEYBOARD_ROWS = [
+  { indent: 1.25, keys: [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5']] },
+  { keys: [['Tab', 'Tab', 1.5], ['Q', 'Q'], ['W', 'W'], ['E', 'E'], ['R', 'R'], ['T', 'T']] },
+  { indent: 1.75, keys: [['A', 'A'], ['S', 'S'], ['D', 'D'], ['F', 'F'], ['G', 'G']] },
+  { keys: [['Shift', 'Shift', 2.25], ['Z', 'Z'], ['X', 'X'], ['C', 'C'], ['V', 'V'], ['B', 'B']] },
+  { keys: [['Control', 'Ctrl', 1.25], ['Meta', 'Cmd', 1.25], ['Alt', 'Alt', 1.25], ['Space', 'Space', 3.5]] },
+];
+// Rekkefølgen er knappene i standardoppsettet til Gamepad API.
+export const PAD_BUTTONS = ['PadA', 'PadB', 'PadX', 'PadY', 'PadLB', 'PadRB', 'PadLT', 'PadRT', 'PadBack', 'PadStart', 'PadLS', 'PadRS', 'PadUp', 'PadDown', 'PadLeft', 'PadRight'];
+export const INPUT_POSITION = { x: 0.02, y: 0.96 };
+
+const PRESS_LABELS = {
+  ...Object.fromEntries(KEYBOARD_ROWS.flatMap((r) => r.keys.map(([name, label]) => [name, label]))),
+  ...Object.fromEntries(PAD_BUTTONS.map((name) => [name, name.slice(3)])),
+  MouseLeft: 'Left click', MouseRight: 'Right click', MouseMiddle: 'Middle click',
+};
+const MODIFIER_KEYS = ['Shift', 'Control', 'Alt', 'Meta'];
+
+// Teksten for ett trykk, eller null. Med Ctrl, Alt eller Cmd nede er det en snarvei, og den vises fra keys.
+export function pressLabel(name, held) {
+  if (MODIFIER_KEYS.includes(name)) return null;
+  if (!/^(Mouse|Pad)/.test(name) && MODIFIER_KEYS.some((m) => m !== 'Shift' && held.has(m))) return null;
+  return PRESS_LABELS[name] ?? null;
+}
+
+// Hvilke taster og knapper som er nede ved tid s.
+export function heldAt(inputs, s) {
+  const held = new Set();
+  for (const [t, name, down] of inputs || []) {
+    if (t > s) break;
+    if (down) held.add(name);
+    else held.delete(name);
+  }
+  return held;
+}
+
+export function stickAt(sticks, s) {
+  let out = null;
+  for (const row of sticks || []) {
+    if (row[0] > s) break;
+    out = row;
+  }
+  return out ? out.slice(1) : [0, 0, 0, 0];
+}
+
+// Snarveier og vanlige trykk sammen, de nyeste sist.
+export function pillsAt(rec, s) {
+  const out = keysAt(rec?.keys, s);
+  const held = new Set();
+  for (const [t, name, down] of rec?.inputs || []) {
+    if (t > s) break;
+    if (!down) {
+      held.delete(name);
+      continue;
+    }
+    const label = s - t < KEY_LIFE ? pressLabel(name, held) : null;
+    held.add(name);
+    if (label) out.push({ label, age: s - t });
+  }
+  return out.sort((a, b) => b.age - a.age).slice(-3);
 }
 
 export function clicksAt(clicks, s) {

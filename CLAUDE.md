@@ -15,3 +15,5 @@ Når vi lager en ny versjon av Reccut, må About-vinduet også vise det nye vers
 - Reccut selv skal aldri lese tastaturet globalt. Ingen tastaturkrok, `uiohook`, `GetAsyncKeyState` eller lignende i `src/` eller i `dependencies`. Testen `test/keystrokes.test.mjs` sjekker dette.
 - All global tastaturlesing ligger i [native/keystrokes](native/keystrokes), som bygges for seg og aldri pakkes inn i installasjonsfilen.
 - Filteret (bare snarveier, aldri vanlig skriving) ligger i selve hjelpeprogrammet, slik at vanlige tegn aldri når Reccut.
+- Eneste unntak er venstre tastaturhalvdel for spill (`--game`, `GAME_KEYS` i [native/keystrokes/filter.h](native/keystrokes/filter.h)). Den krever et eget samtykke som lagres i hovedprosessen. Ikke utvid listen, og ikke lag et valg for hele tastaturet.
+- Tastetrykk (`inputs` i `recording.json`) skal aldri sendes til AI-verktøyene.

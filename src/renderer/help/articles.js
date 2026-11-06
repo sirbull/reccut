@@ -343,7 +343,7 @@ On a Mac the Help menu also has a search field. Type a word and macOS points to 
     section: 'Recording',
     title: 'Recording Screen and Camera',
     summary: 'Screen, camera and microphone are recorded separately, so everything can be changed afterwards.',
-    keywords: 'record capture webcam pip layout keystrokes keystroke add-on cursor zoom system audio area region crop part of screen countdown shortcut hotkey global pause resume window tray menu bar control bar crash recover microphone test level',
+    keywords: 'record capture webcam pip layout keystrokes keystroke add-on gaming wasd mouse clicks controller gamepad input overlay cursor zoom system audio area region crop part of screen countdown shortcut hotkey global pause resume window tray menu bar control bar crash recover microphone test level',
     body: `
 Choose a screen, a camera and a microphone in the Record room. Turn on system audio to record the sound from your computer.
 
@@ -353,7 +353,7 @@ Recordings are written to disk continuously for crash recovery, then finalized i
 
 ## Start recording from any app
 
-Press the record shortcut to start and stop recording: by default **Control Option 0** on a Mac and **Ctrl Shift 0** on Windows (the keys can be changed under Shortcuts in the Record room). The same keys with **9** pause and resume. By default these shortcuts work only while Reccut has focus, outside input fields and dialogs. To control recording from another app, enable **Allow shortcuts in other apps** under **Record → Shortcuts**. This explicitly enables global keys, which can override those combinations in other apps. The floating recording controls and tray menu always let you pause and stop without global keys.
+Press the record shortcut to start and stop recording: by default **Control Option 0** on a Mac and **Ctrl Shift 0** on Windows (the keys can be changed under Shortcuts in the Record room). The same keys with **9** pause and resume. By default these shortcuts work only while Reccut has focus, outside input fields and dialogs. The exception is a running recording: then stop and pause also work from other apps, so the same keys that started the recording can stop it. To start recording and use the other shortcuts from another app, enable **Allow shortcuts in other apps** under **Record → Shortcuts**. This explicitly enables global keys, which can override those combinations in other apps. The floating recording controls and tray menu also let you pause and stop.
 
 While you record, you can always see that the screen is being recorded, without it ending up in the video:
 
@@ -408,6 +408,7 @@ Choose a countdown of 3, 5 or 10 seconds under Recording. The numbers are shown 
 - Choose the camera shape (circle, square or 16:9), size and mirroring.
 - Turn on **Show PiP on screen** under Camera to see the camera over the app you are demonstrating. It follows the recording's position, size and shape, including when recording a screen area. Clicks pass through to the app underneath. It appears while Reccut is in the background and hides when you return. Use the layout shortcuts with **3–6** to switch corners. This is available for display and area capture. On macOS and Linux, the on-screen camera can also appear in the screen file; leave it off if you need a clean screen file for later editing.
 - **Show keystrokes** needs the optional **Keystroke Add-on**. Reccut itself never reads the keyboard outside its own window. Click **Get Add-on**, or choose it under **Plugins** in Record, to read what the add-on does before it is downloaded: it reads the keyboard for the whole computer while you record, only shortcuts with Cmd, Ctrl, Alt or Win (plus Esc and the F keys) leave it, and they are saved in the recording so you can change them in Edit. It runs only while you record, and **Keys** in the recording controls shows when it is active. Reccut's own shortcuts are never shown. Remove the add-on under Overlays.
+- With the add-on installed and **Show keystrokes** on, choose what to read: **Shortcuts**, **Left keyboard half (games)**, **Mouse buttons** and **Controller**. Then choose how to show it: **Keys as you press them**, a **Live overlay** of the keyboard, mouse and controller, or both. **Overlay X** and **Overlay Y** place the overlay, and you can move it per clip in Edit. The left keyboard half asks first, because it saves those keys in the recording, also when you type. Turn it off before you record normal work. A controller shows up after you press a button on it.
 - **Cursor zoom** zooms in on the mouse pointer. Press the recording shortcut with **M** to turn it on and off.
 - The recording is saved in the Recordings folder of the open project and added to its media. If the timeline is empty, it is also placed on the timeline.
 
@@ -415,7 +416,9 @@ Everything is saved as separate files, so in the editor you can still change the
 
 Screen recordings with a camera are added as two clips: the screen on **V1** and **PiP** on **V2** (or the next available video track). They are linked, so moving, trimming, cutting or changing the speed keeps them in sync. Click PiP to select only the camera. Microphone and system audio stay on the screen clip.
 
-To place the camera freely, select **PiP** and open **Video**. Drag it in the viewer, or use the handles to scale and rotate it. The anchor point starts in the middle of the PiP, and follows it when the layout changes.
+To place the camera freely, select **PiP** and open **Recording** or **Video**. Drag it in the viewer, use the handles to scale and rotate it, or type values under **Transform**. The anchor point starts in the middle of the PiP, and follows it when the layout changes.
+
+To move yourself inside the frame, use **Offset X** and **Offset Y** under **Camera**. Offset works where the frame crops the picture, so a 9:16 frame on a 16:9 camera moves sideways. Both can be keyframed.
 
 Every recording file carries its own recording data: which part it is, how the two files line up, the layout, size and cursor events. Importing either file brings in the whole recording, with screen and camera in sync and placed as you recorded them, even if the files were moved or renamed. Keep both files in the same folder. WAV and Ogg files cannot carry this data, so keep their names if you move them.
 

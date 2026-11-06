@@ -50,7 +50,7 @@ const { createRecordUI } = require('./recordui');
 const { createPipPreview } = require('./pip');
 const updates = require('./updates');
 const { InputTracker } = require('./input');
-const { createKeystrokes, comboLabel, appShortcut } = require('./keystrokes');
+const { createKeystrokes, comboLabel, appShortcut, pushPress, pausedPresses } = require('./keystrokes');
 
 const { createExtensionHost, readDocument } = require('./extensions');
 const { renderGraphic } = require('./graphics');
@@ -131,6 +131,7 @@ let shortcutModifier = null;
 let shortcutsActive = true;
 let shortcutsBlocked = true;
 let backgroundShortcuts = false;
+let recordingKeys = false;
 const input = new InputTracker();
 const openFiles = new Map();
 let fileSeq = 1;
@@ -223,7 +224,7 @@ function createWindow() {
   win.on('blur', registerShortcuts);
   win.on('move', () => send('screens:changed'));
   const resetKeyboardScope = () => {
-    pipPreview.hide(); shortcutsBlocked = true; backgroundShortcuts = false; registerShortcuts();
+    pipPreview.hide(); shortcutsBlocked = true; backgroundShortcuts = false; recordingKeys = false; registerShortcuts();
   };
   win.webContents.on('render-process-gone', resetKeyboardScope);
   win.webContents.on('did-start-loading', resetKeyboardScope);
@@ -334,7 +335,7 @@ const recordingShortcuts = require('./shortcuts').createRecordingShortcuts({
   globalShortcut,
   context: () => ({
     modifier: shortcutModifier, active: shortcutsActive, blocked: shortcutsBlocked,
-    background: backgroundShortcuts,
+    background: backgroundShortcuts, recording: recordingKeys,
     focused: Boolean(win?.isFocused()),
     otherWindowFocused: Boolean(BrowserWindow.getFocusedWindow() && BrowserWindow.getFocusedWindow() !== win),
   }),
@@ -377,7 +378,12 @@ ipcMain.on('rec:pipPreview', (e, frame) => {
   if (frame && (frame.screenId !== selectedScreenId || !String(selectedScreenId).startsWith('screen:'))) return pipPreview.hide();
   pipPreview.update(frame);
 });
-ipcMain.handle('rec:state', (_e, s) => recordUI.setState(s));
+ipcMain.handle('rec:state', (_e, s) => {
+  recordUI.setState(s);
+  if ((s.state !== 'idle') === recordingKeys) return;
+  recordingKeys = !recordingKeys;
+  registerShortcuts();
+});
 ipcMain.handle('rec:showControls', (_e, v) => recordUI.setShowControls(Boolean(v)));
 ipcMain.on('control:cmd', (_e, cmd) => recordUI.command(cmd));
 ipcMain.handle('window:minimize', () => win?.minimize());
@@ -408,14 +414,21 @@ const keystrokes = createKeystrokes({
   fetchImpl: (url) => net.fetch(url, { headers: { 'User-Agent': `Reccut/${app.getVersion()}` } }),
 });
 let keySession = null;
+const sessionTime = () => Math.round(Date.now() - keySession.t0) / 1000;
 function onKeystroke(e) {
+  if (e.type === 'press') {
+    if (!keySession) return;
+    pushPress(keySession.inputs, sessionTime(), e.name, e.down);
+    send('input', { type: 'press', name: e.name, down: e.down });
+    return;
+  }
   if (e.type !== 'key') {
     if (e.type === 'error') send('keystrokes:error', e.reason);
     return;
   }
   if (!keySession || appShortcut(shortcutModifier, e.name, e.mods)) return;
   const label = comboLabel(e.name, e.mods);
-  keySession.keys.push([Math.round((Date.now() - keySession.t0)) / 1000, label]);
+  keySession.keys.push([sessionTime(), label]);
   send('input', { type: 'key', label });
 }
 function stopKeystrokes() {
@@ -445,6 +458,19 @@ ipcMain.handle('keystrokes:status', () => keystrokes.status());
 ipcMain.handle('keystrokes:install', (e, opts) => {
   if (!fromMain(e)) throw new Error('Not allowed.');
   return keystrokes.install({ consent: opts?.consent === true });
+});
+ipcMain.handle('keystrokes:allowGame', (e, opts) => {
+  if (!fromMain(e)) throw new Error('Not allowed.');
+  return keystrokes.allowGame({ consent: opts?.consent === true });
+});
+// Controller state comes from the Gamepad API in the renderer. It needs no add-on process.
+ipcMain.handle('rec:pad', (e, presses, stick) => {
+  if (!fromMain(e) || !keySession) return;
+  const t = sessionTime();
+  for (const [name, down] of presses || []) {
+    if (/^Pad[A-Za-z]{1,8}$/.test(name)) pushPress(keySession.inputs, t, name, down);
+  }
+  if (stick?.length === 4 && stick.every(Number.isFinite)) keySession.sticks.push([t, ...stick]);
 });
 ipcMain.handle('keystrokes:remove', (e) => {
   if (!fromMain(e)) throw new Error('Not allowed.');
@@ -531,11 +557,11 @@ ipcMain.handle('rec:begin', async (_e, { t0, base, keys }) => {
   input.startPolling();
   stopKeystrokes();
   if (keys) {
-    keySession = { t0, keys: [] };
-    if (keystrokes.start(onKeystroke)) {
+    keySession = { t0, keys: [], inputs: [], sticks: [] };
+    if (keystrokes.start(onKeystroke, keys)) {
       watchKeystrokes();
       send('keystrokes:running', true);
-    } else keySession = null;
+    } else if (!keys.pad) keySession = null;
   }
   return dir;
 });
@@ -580,6 +606,8 @@ function removePauses(out, pauses) {
   const points = (list) => (list || []).map((e) => [shift(e[0]), ...e.slice(1)]).filter(([s]) => !s.inside).map(([s, ...rest]) => [s.t, ...rest]);
   out.cursor = points(out.cursor);
   if (out.keys) out.keys = points(out.keys);
+  if (out.inputs) out.inputs = pausedPresses(out.inputs, shift);
+  if (out.sticks) out.sticks = points(out.sticks);
   out.layouts = (out.layouts || []).map(([t, v]) => [shift(t).t, v]);
   out.zooms = (out.zooms || []).map(([a, b]) => [shift(a).t, shift(b).t]).filter(([a, b]) => b > a);
   delete out.pauses;
@@ -590,7 +618,7 @@ function removePauses(out, pauses) {
 ipcMain.handle('rec:checkpoint', async (_e, meta) => {
   lastCheckpoint = Date.now();
   if (!recordingDir) return;
-  const events = input.session ? { cursor: input.session.cursor, zooms: input.session.zooms, ...(keySession ? { keys: keySession.keys } : {}) } : {};
+  const events = input.session ? { cursor: input.session.cursor, zooms: input.session.zooms, ...(keySession ? { keys: keySession.keys, inputs: keySession.inputs, sticks: keySession.sticks } : {}) } : {};
   await fs.promises.writeFile(path.join(recordingDir, 'recording.partial.json'), JSON.stringify({ ...meta, ...events, savedAt: Date.now() })).catch(() => {});
 });
 
@@ -651,7 +679,7 @@ ipcMain.handle('rec:finish', async (_e, meta) => {
   const dir = recordingDir;
   recordingDir = null;
   const events = input.endSession() || { cursor: [], zooms: [] };
-  if (keySession) events.keys = keySession.keys;
+  if (keySession) Object.assign(events, { keys: keySession.keys, inputs: keySession.inputs, sticks: keySession.sticks });
   stopKeystrokes();
   const out = removePauses({ version: 1, id: crypto.randomUUID(), name: path.basename(dir), createdAt: new Date().toISOString(), ...meta, ...events }, meta.pauses);
   const sources = [];

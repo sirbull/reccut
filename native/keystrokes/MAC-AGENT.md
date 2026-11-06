@@ -13,7 +13,7 @@ Reccut kan vise snarveier (for eksempel ⌘ S) i opptak. For å se taster mens a
 
 | Del | Fil | Oppgave |
 | --- | --- | --- |
-| Hjelpeprogram | `native/keystrokes/keystrokes-mac.c` | Leser tastetrykk med en lytt-bare event tap (`kCGEventTapOptionListenOnly`), filtrerer og skriver snarveier til stdout |
+| Hjelpeprogram | `native/keystrokes/keystrokes-mac.c`, `filter.h` | Leser tastetrykk med en lytt-bare event tap (`kCGEventTapOptionListenOnly`), filtrerer og skriver det som er valgt til stdout |
 | Styring i Reccut | `src/main/keystrokes.js` | Nedlasting, SHA-256-sjekk, start og stopp, tolking av linjer |
 | Kobling til opptak | `src/main/main.js` (`rec:begin`, `rec:stopping`, `rec:finish`, `keystrokes:*`) | Starter tillegget ved opptaksstart, stopper ved stopp, lagrer snarveiene i `recording.json` under `keys` |
 | Brukerflate | `src/renderer/recorder/KeystrokesAddon.jsx` | Samtykkevindu, av/på, fjerning, knapp for Input Monitoring |
@@ -22,7 +22,7 @@ Reccut kan vise snarveier (for eksempel ⌘ S) i opptak. For å se taster mens a
 ## Protokollen
 
 ```
-reccut-keystrokes-mac            kjører til stdin lukkes
+reccut-keystrokes-mac [--no-shortcuts] [--game] [--mouse]    kjører til stdin lukkes
 reccut-keystrokes-mac --check    skriver granted eller denied
 reccut-keystrokes-mac --request  ber macOS om Input Monitoring, skriver granted eller denied
 ```
@@ -32,12 +32,14 @@ Mens det kjører, skriver det én linje per hendelse:
 ```
 READY                 lytter
 K <navn> <mods>       en snarvei; mods: 1 Ctrl, 2 Option, 4 Shift, 8 Cmd
+D <navn>              trykket ned (--game eller --mouse)
+U <navn>              sluppet (--game eller --mouse)
 E permission          Input Monitoring er ikke tillatt
 ```
 
 ## Regler som ikke skal brytes
 
-1. **Filteret ligger i hjelpeprogrammet.** Bare taster sammen med Cmd eller Ctrl, pluss Esc og F-tastene, slipper ut. Option alene skriver tegn (for eksempel | [ ] på norsk tastatur) og skal ikke slippe ut. Shift alene skal ikke slippe ut. Gjentatte tastetrykk (autorepeat) slippes ikke ut. Ikke flytt filteret til Reccut, og ikke gjør det løsere.
+1. **Filteret ligger i hjelpeprogrammet.** Bare taster sammen med Cmd eller Ctrl, pluss Esc og F-tastene, slipper ut. Option alene skriver tegn (for eksempel | [ ] på norsk tastatur) og skal ikke slippe ut. Shift alene skal ikke slippe ut. Gjentatte tastetrykk (autorepeat) slippes ikke ut. Eneste unntak er `--game`, som slipper ut `GAME_KEYS` i `filter.h` (venstre tastaturhalvdel) etter et eget samtykke. Ikke flytt filteret til Reccut, ikke utvid listen, og ikke lag et valg for hele tastaturet.
 2. **Ingen lagring og ikke noe nett i hjelpeprogrammet.** Det skriver bare til stdout. Ingen filer, ingen logger, ingen nettverkskall.
 3. **Tillegget lever bare under et opptak.** Det avslutter når stdin lukkes. Ikke la det kjøre i bakgrunnen.
 4. **Hold det utenfor installasjonsfilen.** `native/` skal ikke inn i `build.files` i `package.json`.
@@ -87,6 +89,8 @@ Forventet: `READY`. Bytt til en annen app og prøv:
 | F5 | `K F5 0` |
 | ⌘ ← | `K ArrowLeft 8` |
 | Hold ⌘ J inne | bare én `K J 8` |
+
+Med `--game --no-shortcuts`: W gir `D W` og `U W`, Shift gir `D Shift` og `U Shift`, og J gir ingenting. Med `--mouse --no-shortcuts`: venstreklikk gir `D MouseLeft` og `U MouseLeft`, og ingen taster gir noe.
 
 Skriv i et passordfelt: ingenting skal komme ut, fordi macOS slår av event taps under Secure Input.
 

@@ -6,6 +6,8 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { createExtensionHost, validatePlugin, validateAI, toAnthropic, toCompatible, fromCompatible, readDocument } = require('../src/main/extensions.js');
+const { createStockHost } = require('../src/main/stock');
+const { secrets } = require('../src/main/stock/secrets.js');
 const zlib = require('zlib');
 const storage = {
   isEncryptionAvailable: () => true,
@@ -39,6 +41,30 @@ test('without encryption keys remain in memory for one session only', (t) => {
   assert.equal(host.aiConfig().hasKey, true);
   assert.ok(!fs.readFileSync(path.join(dir, 'ai.json'), 'utf8').includes('secret'));
   assert.equal(createExtensionHost({ dir, safeStorage }).aiConfig().hasKey, false);
+});
+test('settings leave the macOS keychain alone until a key is stored', (t) => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { ...platform, value: 'darwin' });
+  t.after(() => Object.defineProperty(process, 'platform', platform));
+  let checks = 0,
+    allowed = true;
+  const safeStorage = { ...storage, isEncryptionAvailable: () => (checks++, allowed) },
+    { host, dir } = setup(t, { safeStorage }),
+    stock = createStockHost({ dir: path.join(dir, 'stock'), cacheDir: path.join(dir, 'cache'), safeStorage, fetchImpl: async () => new Response('{}') });
+  assert.equal(host.aiConfig().encryptedStorage, true);
+  host.genConfig();
+  stock.settings();
+  assert.equal(secrets(dir, safeStorage).get('missing'), null);
+  assert.equal(checks, 0);
+  host.saveAI(config);
+  assert.ok(checks > 0);
+  const after = checks;
+  assert.equal(host.aiConfig().encryptedStorage, true);
+  assert.equal(checks, after);
+  allowed = false; // Deny in the dialog: the hint must not claim the key was encrypted.
+  const denied = setup(t, { safeStorage }).host;
+  denied.saveAI(config);
+  assert.equal(denied.aiConfig().encryptedStorage, false);
 });
 test('AI endpoints reject insecure remote connections and embedded credentials', () => {
   for (const endpoint of [
