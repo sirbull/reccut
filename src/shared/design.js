@@ -345,7 +345,7 @@ export function transformDesignLayers(layers, key, value) {
 // A private export snapshot isolates the native camera frame without changing
 // the sequence, camera layout, recording media or the video export settings.
 export function cameraFrameProject(project, time) {
-  const clip = Object.values(project.clips || {}).filter(c=>c.enabled!==false&&c.type==='recording'&&c.recordingPart!=='screen'&&c.start<=time&&c.start+c.dur>time&&project.media?.[c.mediaId]?.streams?.camera?.hasVideo).sort((a,b)=>(b.lane||0)-(a.lane||0))[0];
+  const clip = Object.values(project.clips || {}).filter(c=>c.enabled!==false&&c.type==='recording'&&c.recordingPart!=='screen'&&c.recordingPart!=='keys'&&c.start<=time&&c.start+c.dur>time&&project.media?.[c.mediaId]?.streams?.camera?.hasVideo).sort((a,b)=>(b.lane||0)-(a.lane||0))[0];
   if (!clip) return null;
   const media=project.media[clip.mediaId],camera=media.streams.camera,k=Math.min(1,8192/Math.max(camera.width||1920,camera.height||1080));
   return {...project,width:Math.max(1,Math.round((camera.width||1920)*k)),height:Math.max(1,Math.round((camera.height||1080)*k)),clips:{[clip.id]:{...clip,recordingPart:'camera',props:{...clip.props,showCamera:true,showKeys:false}}},primary:[clip.id],media:{[media.id]:{...media,streams:{camera}}}};

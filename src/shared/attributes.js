@@ -29,7 +29,7 @@ const VISUAL = ['video', 'image', 'recording', 'title', 'adjustment'];
 const AUDIBLE = ['video', 'recording', 'audio'];
 
 function groupApplies(group, clip) {
-  if (group.id === 'cameraColor') return clip.type === 'recording' && clip.recordingPart !== 'screen';
+  if (group.id === 'cameraColor') return clip.type === 'recording' && clip.recordingPart !== 'screen' && clip.recordingPart !== 'keys';
   if (group.kind === 'video') return VISUAL.includes(clip.type) && (group.id !== 'stabilization' || clip.type === 'video');
   return AUDIBLE.includes(clip.type);
 }

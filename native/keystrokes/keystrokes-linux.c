@@ -98,7 +98,8 @@ static void onData(XPointer closure, XRecordInterceptData *d) {
       if (optShortcuts && !isMod && pressed && !altgr) {
         int standalone = s == XK_Escape || (s >= XK_F1 && s <= XK_F24);
         // Only shortcuts leave this program. Normal typing is dropped here.
-        if (name && (ctrl || alt || super || standalone)) {
+        // A key already sent as a press is not sent again as a shortcut of its own.
+        if (name && (ctrl || alt || super || (standalone && !(optGame && gameKey(name))))) {
           printf("K %s %d\n", name, (ctrl ? 1 : 0) | (alt ? 2 : 0) | (shift ? 4 : 0) | (super ? 8 : 0));
           fflush(stdout);
         }

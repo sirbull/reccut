@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { audioComponents, clipHasAudio, computeAudio, computeFrame, makeClip, newProject, sourceTime, visualStreams } from '../src/shared/model.js';
 import { addMediaClip, attachRecordingCamera, bladeAt, copyClips, deleteClips, detachRecordingCamera, freezeFrame, insertGap, moveClip, pasteClips, recordingChildren, separateRecordingCamera, setRamp, setReverse, setSpeed, setTransition, slipClip, splitClip, trimClip } from '../src/shared/ops.js';
 import { gradeParams } from '../src/shared/grade.js';
+import { drawClip } from '../src/shared/render.js';
 import { speechSources } from '../src/shared/srt.js';
 
 function setup() {
@@ -12,6 +13,70 @@ function setup() {
   const id = addMediaClip(p, p.media.rec, 'append', 0, undefined, { in: 2, dur: 12 });
   return { p, screen: p.clips[id], camera: recordingChildren(p, id)[0] };
 }
+
+function keysSetup() {
+  const p = newProject('Keys');
+  const stream = (key) => ({ path: `/tmp/${key}.webm`, hasVideo: true, hasAudio: true, width: 1280, height: 720, duration: 20, offset: 0 });
+  p.media.rec = { id: 'rec', name: 'Recording', kind: 'recording', duration: 20, streams: { screen: stream('screen'), camera: stream('camera') }, rec: { layouts: [[0, 6]], overlays: { keys: true, cursorZoom: true }, keys: [[1, '⌘ S']] } };
+  const id = addMediaClip(p, p.media.rec, 'append', 0, undefined, { in: 2, dur: 12 });
+  const part = (name) => Object.values(p.clips).find((c) => c.recordingPart === name);
+  return { p, id, part };
+}
+
+test('a recording with keystrokes gets three video layers, keys on top', () => {
+  const { p, part } = keysSetup();
+  const screen = part('screen'), camera = part('camera'), keys = part('keys');
+  assert.ok(screen.lane < camera.lane && camera.lane < keys.lane);
+  assert.equal(keys.linkedTo, screen.id);
+  assert.equal(screen.props.showKeys, false);
+  assert.equal(keys.props.showKeys, true);
+  assert.equal(recordingChildren(p, screen.id)[0], camera);
+  assert.equal(clipHasAudio(keys, p.media.rec), false);
+  assert.deepEqual(audioComponents(keys, p.media.rec), []);
+  assert.deepEqual(visualStreams(keys, p.media.rec), []);
+});
+
+test('the keystroke layer follows the screen through cuts and can be removed alone', () => {
+  const { p, part } = keysSetup();
+  const screen = part('screen');
+  bladeAt(p, 5);
+  const layers = Object.values(p.clips).filter((c) => c.recordingPart === 'keys');
+  assert.equal(layers.length, 2);
+  for (const k of layers) {
+    const parent = p.clips[k.linkedTo];
+    assert.equal(parent.recordingPart, 'screen');
+    assert.deepEqual([k.start, k.in, k.dur], [parent.start, parent.in, parent.dur]);
+  }
+  deleteClips(p, [layers[0].id]);
+  assert.ok(p.clips[screen.id]);
+  deleteClips(p, [screen.id]);
+  assert.ok(!Object.values(p.clips).some((c) => c.linkedTo === screen.id));
+});
+
+test('the keystroke layer draws the keys and never the recording', () => {
+  const { p, part } = keysSetup();
+  p.media.rec.rec.keys = [[3, '⌘ S']];
+  const drawn = [];
+  const paint = () => new Proxy({}, {
+    get: (t, k) => k in t ? t[k] : k === 'measureText' ? () => ({ width: 40 }) : k === 'fillText' ? (text) => drawn.push(text) : k === 'getTransform' ? () => ({ multiply: () => ({}) }) : () => paint(),
+    set: (t, k, v) => (t[k] = v, true),
+  });
+  const sources = [];
+  const source = (clip, key) => (sources.push(key), null);
+  drawClip(paint(), p, part('keys'), 1.2, source);
+  assert.ok(drawn.includes('⌘ S'));
+  assert.deepEqual(sources, []);
+  drawn.length = 0;
+  drawClip(paint(), p, part('screen'), 1.2, source);
+  assert.ok(!drawn.includes('⌘ S'));
+  assert.ok(sources.includes('screen'));
+});
+
+test('recordings without keystrokes stay on two layers', () => {
+  const { p, screen } = setup();
+  assert.ok(!Object.values(p.clips).some((c) => c.recordingPart === 'keys'));
+  assert.equal(p.clips[screen.id].props.showKeys, true);
+});
 
 function synchronized(p, screen, camera) {
   for (const k of ['start', 'in', 'dur', 'speed', 'ramp', 'reverse']) assert.deepEqual(camera[k], screen[k], k);

@@ -18,7 +18,7 @@ const api = window.api;
 // Klippet som viser sporingsområdet i bildet. Sladding bruker sin egen form som område.
 export const trackArea = signal(null);
 
-const isSource = (p, c) => c.type === 'video' || (c.type === 'recording' && c.recordingPart !== 'camera' && Boolean(p.media[c.mediaId]?.streams?.screen));
+const isSource = (p, c) => c.type === 'video' || (c.type === 'recording' && c.recordingPart !== 'camera' && c.recordingPart !== 'keys' && Boolean(p.media[c.mediaId]?.streams?.screen));
 
 // Det øverste video- eller skjermopptaksklippet under klippet ved tid T.
 function baseClip(p, clip, T) {

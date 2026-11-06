@@ -78,7 +78,7 @@ contextBridge.exposeInMainWorld('api', {
   setPolling: invoke('input:polling'),
   keystrokesStatus: invoke('keystrokes:status'),
   installKeystrokes: invoke('keystrokes:install'),
-  allowGameKeys: invoke('keystrokes:allowGame'),
+  allowKeyboard: invoke('keystrokes:allowKeyboard'),
   removeKeystrokes: invoke('keystrokes:remove'),
   requestKeystrokes: invoke('keystrokes:request'),
   recStopping: invoke('rec:stopping'),

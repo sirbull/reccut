@@ -24,7 +24,10 @@ dialog that explains what it does.
 - With `--game` it also sends press and release of the left keyboard half
   (`GAME_KEYS` in [filter.h](filter.h)). This lets letters out, so Reccut only
   passes the flag after a separate consent, stored in `addon.json`. The right
-  half stays behind the shortcut filter. There is no flag for the whole keyboard.
+  half stays behind the shortcut filter.
+- With `--full-keyboard` it sends the rest of the keyboard as well (`FULL_KEYS`).
+  This is nearly all typing, so it has a consent of its own. The numeric keypad,
+  Home, End, Page Up, Page Down, Insert and F13 to F24 stay behind the shortcut filter.
 - With `--mouse` it sends press and release of the mouse buttons, never the position.
 - It only asks the system for what the flags need. With `--mouse --no-shortcuts`
   it does not read the keyboard at all.
@@ -38,7 +41,7 @@ Controllers do not use this program. Reccut reads them with the Gamepad API.
 ## Protocol
 
 ```
-reccut-keystrokes [--no-shortcuts] [--game] [--mouse]    run until stdin closes
+reccut-keystrokes [--no-shortcuts] [--game | --full-keyboard] [--mouse]    run until stdin closes
 reccut-keystrokes --check    prints granted, denied or unavailable
 reccut-keystrokes --request  macOS: asks for Input Monitoring, then prints the state
 ```
@@ -48,15 +51,16 @@ While running, each line on stdout is one of:
 ```
 READY                 listening
 K <name> <mods>       a shortcut; mods: 1 Ctrl, 2 Alt/Option, 4 Shift, 8 Cmd/Win
-D <name>              pressed (--game or --mouse)
-U <name>              released (--game or --mouse)
+D <name>              pressed (--game, --full-keyboard or --mouse)
+U <name>              released (--game, --full-keyboard or --mouse)
 E permission          macOS: Input Monitoring is not allowed
 E unavailable         no keyboard source (for example Wayland without X11)
 ```
 
 Key names follow physical US key names: `A` to `Z`, `0` to `9`, `F1` to `F24`,
 `Enter`, `Escape`, `Backspace`, `Delete`, `Tab`, `Space`, `ArrowLeft`,
-`Semicolon`, `Numpad1` and so on. `--game` adds `Shift`, `Control`, `Alt` and
+`Semicolon`, `Numpad1` and so on. Esc and the F keys sent as `D` are not sent as
+`K` too, unless a modifier is held. `--game` adds `Shift`, `Control`, `Alt` and
 `Meta`. Mouse buttons are `MouseLeft`, `MouseRight` and `MouseMiddle`.
 
 ## Building

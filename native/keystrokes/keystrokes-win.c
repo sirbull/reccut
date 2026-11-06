@@ -100,7 +100,8 @@ static void emit(DWORD vk) {
   if (!name) return;
   int standalone = vk == VK_ESCAPE || (vk >= VK_F1 && vk <= VK_F24);
   // Only shortcuts leave this program. Normal typing is dropped here.
-  if (!ctrl && !alt && !win && !standalone) return;
+  // A key already sent as a press is not sent again as a shortcut of its own.
+  if (!ctrl && !alt && !win && (!standalone || (optGame && gameKey(name)))) return;
   int mods = (ctrl ? 1 : 0) | (alt ? 2 : 0) | (shift ? 4 : 0) | (win ? 8 : 0);
   printf("K %s %d\n", name, mods);
   fflush(stdout);

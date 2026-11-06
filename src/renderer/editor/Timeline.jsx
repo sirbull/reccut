@@ -949,7 +949,7 @@ export function Timeline() {
               const row = rows.find((r) => r.lane === c.lane);
               const parentRow = rows.find((r) => r.lane === parent.lane);
               if (!row || !parentRow) return null;
-              return <div key={`pip-link-${c.id}`} class="pip-connection" title="PiP linked to screen recording" style={{ left: tx(c.start) + 8, top: row.y + row.h, height: Math.max(2, parentRow.y - row.y - row.h) }} />;
+              return <div key={`pip-link-${c.id}`} class="pip-connection" title={c.recordingPart === 'keys' ? 'Keystrokes linked to screen recording' : 'PiP linked to screen recording'} style={{ left: tx(c.start) + 8, top: row.y + row.h, height: Math.max(2, parentRow.y - row.y - row.h) }} />;
             })}
             {transitions.map(({ id, edge, transition, a, b, prev }) => {
               const row = rows.find((r) => r.lane === p.clips[id].lane);
@@ -1211,7 +1211,7 @@ const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0,
   const cls = ['tl-clip', `t-${clip.type}`, !inEditingGroup(clip) && 'group-outside', busy && 'busy', colorTag && 'labeled', selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped', media?.offline && 'offline', audioComponents(clip, media).length > 0 && audioComponents(clip, media).every((c) => c.off) && 'audio-off'].filter(Boolean).join(' ');
   const label = clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? `${redactLabel(clip)} (redact)` : clip.type === 'caption' ? clip.props.text || 'Caption' : clip.name || media?.name || clip.type;
   const narrow = w < 24;
-  const thumbStream = clip.recordingPart === 'camera' ? media?.streams?.camera : media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
+  const thumbStream = clip.recordingPart === 'keys' ? null : clip.recordingPart === 'camera' ? media?.streams?.camera : media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
   const audioComp = primaryComponent(clip, media);
   const audioStream = audioComp?.stream;
   const bandH = expanded ? bandHeight(row, clip, media) : Math.round(row.h * 0.34);
@@ -1224,9 +1224,9 @@ const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0,
     <div class={cls} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y, height: boxH, ...(colorTag ? { '--label': colorTag.color } : {}) }} title={busy ? `${busy.title}${busy.queued ? ' (waiting)' : ` ${Math.round(busy.progress * 100)} %`}` : undefined}>
       {!narrow && (
         <div class="clip-label" data-hit="clip" data-clip={clip.id} style={{ marginLeft: labelStart, marginRight: labelEnd }}>
-          {clip.type === 'recording' && <span class="badge">{clip.recordingPart === 'camera' ? 'PiP' : 'REC'}</span>}
+          {clip.type === 'recording' && <span class="badge">{clip.recordingPart === 'camera' ? 'PiP' : clip.recordingPart === 'keys' ? 'KEYS' : 'REC'}</span>}
           {clip.type === 'adjustment' && <span class="badge">ADJ</span>}
-          {clip.linkedTo && <span class="badge group" title="PiP linked to screen. Select to adjust PiP only; detach to edit its timing independently."><Link2 size={9} strokeWidth={2.6} /></span>}
+          {clip.linkedTo && <span class="badge group" title={clip.recordingPart === 'keys' ? 'Keystrokes follow the screen when you move, trim or cut it.' : 'PiP linked to screen. Select to adjust PiP only; detach to edit its timing independently.'}><Link2 size={9} strokeWidth={2.6} /></span>}
           {clip.reverse && <span class="badge speed" title="Reversed">Reverse</span>}
           {clip.ramp ? <span class="badge speed" title="Speed ramp">Ramp</span> : speed !== 1 && <span class="badge speed">{speed === 0 ? 'Freeze' : `${Math.round(speed * 100)}%`}</span>}
           {clip.solo && <span class="badge solo">S</span>}
@@ -1300,7 +1300,7 @@ function Filmstrip({ clip, stream, x, w, h, z, media, viewport }) {
 
 // Tynne bånd som viser når kamera og forstørret peker er i bruk i et opptak.
 function RecBands({ clip, media }) {
-  const cam = clip.recordingPart !== 'screen' && media.streams.camera?.hasVideo && clip.props.showCamera !== false;
+  const cam = clip.recordingPart !== 'screen' && clip.recordingPart !== 'keys' && media.streams.camera?.hasVideo && clip.props.showCamera !== false;
   return (
     <div class="rec-bands">
       {cam && <span class="band cam" title="Camera" />}

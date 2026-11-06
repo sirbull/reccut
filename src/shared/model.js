@@ -254,7 +254,7 @@ export function redactStrength(amount, H) {
 }
 
 export function clipHasAudio(clip, media) {
-  if (clip.recordingPart === 'camera') return false;
+  if (clip.recordingPart === 'camera' || clip.recordingPart === 'keys') return false;
   if (clip.props?.audioDetached || (clip.speed === 0 && !clip.ramp)) return false;
   if (clip.type === 'audio') return true;
   if (clip.type === 'video' || clip.type === 'recording') return Object.values(media?.streams || {}).some((s) => s.hasAudio);
@@ -272,7 +272,7 @@ export function componentLabel(media, key, stream) {
 
 export function audioComponents(clip, media) {
   if (!media || !clip) return [];
-  if (clip.recordingPart === 'camera') return [];
+  if (clip.recordingPart === 'camera' || clip.recordingPart === 'keys') return [];
   const off = clip.props?.audioOff || {};
   const mono = clip.props?.audioMono || {};
   if (clip.type === 'audio') {
@@ -932,12 +932,21 @@ export const KEYBOARD_ROWS = [
   { keys: [['Shift', 'Shift', 2.25], ['Z', 'Z'], ['X', 'X'], ['C', 'C'], ['V', 'V'], ['B', 'B']] },
   { keys: [['Control', 'Ctrl', 1.25], ['Meta', 'Cmd', 1.25], ['Alt', 'Alt', 1.25], ['Space', 'Space', 3.5]] },
 ];
+const letterKeys = (s) => [...s].map((k) => [k, k]);
+export const FULL_KEYBOARD_ROWS = [
+  { keys: [['Escape', 'Esc'], ...Array.from({ length: 12 }, (_, i) => [`F${i + 1}`, `F${i + 1}`]), ['Delete', 'Del', 2]] },
+  { keys: [['Backquote', '`'], ...letterKeys('1234567890'), ['Minus', '-'], ['Equal', '='], ['Backspace', 'Backspace', 2]] },
+  { keys: [['Tab', 'Tab', 1.5], ...letterKeys('QWERTYUIOP'), ['BracketLeft', '['], ['BracketRight', ']'], ['Backslash', '\\', 1.5]] },
+  { indent: 1.75, keys: [...letterKeys('ASDFGHJKL'), ['Semicolon', ';'], ['Quote', "'"], ['Enter', 'Enter', 2.25]] },
+  { keys: [['Shift', 'Shift', 2.25], ...letterKeys('ZXCVBNM'), ['Comma', ','], ['Period', '.'], ['Slash', '/'], ['Shift', 'Shift', 2.75]] },
+  { keys: [['Control', 'Ctrl', 1.25], ['Meta', 'Cmd', 1.25], ['Alt', 'Alt', 1.25], ['Space', 'Space', 7.25], ['ArrowLeft', '←'], ['ArrowUp', '↑'], ['ArrowDown', '↓'], ['ArrowRight', '→']] },
+];
 // Rekkefølgen er knappene i standardoppsettet til Gamepad API.
 export const PAD_BUTTONS = ['PadA', 'PadB', 'PadX', 'PadY', 'PadLB', 'PadRB', 'PadLT', 'PadRT', 'PadBack', 'PadStart', 'PadLS', 'PadRS', 'PadUp', 'PadDown', 'PadLeft', 'PadRight'];
 export const INPUT_POSITION = { x: 0.02, y: 0.96 };
 
 const PRESS_LABELS = {
-  ...Object.fromEntries(KEYBOARD_ROWS.flatMap((r) => r.keys.map(([name, label]) => [name, label]))),
+  ...Object.fromEntries(FULL_KEYBOARD_ROWS.flatMap((r) => r.keys.map(([name, label]) => [name, label]))),
   ...Object.fromEntries(PAD_BUTTONS.map((name) => [name, name.slice(3)])),
   MouseLeft: 'Left click', MouseRight: 'Right click', MouseMiddle: 'Middle click',
 };
@@ -1222,7 +1231,7 @@ export function computeFrame(project, T, { captions = true } = {}) {
   if (primary?.transition) {
     const byLane = new Map();
     for (const c of Object.values(project.clips)) {
-      if (c.recordingPart !== 'camera' || !c.linkedTo || !c.enabled || laneHidden(project, c.lane) || c.transition || c.transitionOut) continue;
+      if (!c.linkedTo || !c.enabled || laneHidden(project, c.lane) || c.transition || c.transitionOut) continue;
       const side = c.linkedTo === primary.a?.id ? 'a' : c.linkedTo === primary.b?.id ? 'b' : null;
       if (!side) continue;
       let layer = byLane.get(c.lane);

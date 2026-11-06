@@ -1,7 +1,7 @@
 {
   "name": "reccut",
   "productName": "Reccut",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Record, edit and export tutorial videos",
   "main": "src/main/main.js",
   "author": "sirbull",

@@ -135,7 +135,8 @@ function createKeystrokes({ dir, version, repo, fetchImpl, platform = process.pl
       outdated: Boolean(ok && i.version !== version),
       permission: ok ? permission() : null,
       running: Boolean(child),
-      game: Boolean(i?.gameConsentAt),
+      game: Boolean(i?.gameConsentAt || i?.fullConsentAt),
+      full: Boolean(i?.fullConsentAt),
     };
   }
 
@@ -161,18 +162,20 @@ function createKeystrokes({ dir, version, repo, fetchImpl, platform = process.pl
     await fs.promises.writeFile(tmp, buf, { mode: 0o755 });
     await fs.promises.rename(tmp, exe);
     if (platform !== 'win32') await fs.promises.chmod(exe, 0o755);
-    const gameConsentAt = info()?.gameConsentAt;
-    await fs.promises.writeFile(infoFile, JSON.stringify({ version, sha256: sum, asset, installedAt: new Date().toISOString(), consentAt: new Date().toISOString(), ...(gameConsentAt ? { gameConsentAt } : {}) }, null, 1));
+    const { gameConsentAt, fullConsentAt } = info() || {};
+    await fs.promises.writeFile(infoFile, JSON.stringify({ version, sha256: sum, asset, installedAt: new Date().toISOString(), consentAt: new Date().toISOString(), gameConsentAt, fullConsentAt }, null, 1));
     return status();
   }
 
-  // The left keyboard half lets letters out of the helper, so it has its own consent.
-  // It lives here and not in the renderer, and goes away with the add-on.
-  async function allowGame({ consent } = {}) {
-    if (consent !== true) throw new Error('The left keyboard half is only turned on after you accept what it does.');
+  // These modes let letters out of the helper, so each has its own consent. Accepting the
+  // half does not cover the whole keyboard. It lives here and not in the renderer, and goes
+  // away with the add-on.
+  async function allowKeyboard({ consent, mode } = {}) {
+    if (consent !== true) throw new Error('This keyboard mode is only turned on after you accept what it does.');
+    if (mode !== 'half' && mode !== 'full') throw new Error('Unknown keyboard mode.');
     const i = info();
     if (!i) throw new Error('The Keystroke Add-on is not installed.');
-    await fs.promises.writeFile(infoFile, JSON.stringify({ ...i, gameConsentAt: new Date().toISOString() }, null, 1));
+    await fs.promises.writeFile(infoFile, JSON.stringify({ ...i, [mode === 'full' ? 'fullConsentAt' : 'gameConsentAt']: new Date().toISOString() }, null, 1));
     return status();
   }
 
@@ -190,12 +193,13 @@ function createKeystrokes({ dir, version, repo, fetchImpl, platform = process.pl
 
   // Starts the helper for one recording. onEvent gets { type: 'key', name, mods },
   // { type: 'press', name, down } and errors.
-  function start(onEvent, { shortcuts = true, game = false, mouse = false } = {}) {
+  function start(onEvent, { shortcuts = true, keyboard = 'off', mouse = false } = {}) {
     if (child) return true;
     if (!intact()) return false;
     const i = info();
     // A helper from an older release ignores these flags and would send shortcuts anyway.
-    const sources = i.version === version ? [game && i.gameConsentAt && '--game', mouse && '--mouse'].filter(Boolean) : [];
+    const letters = keyboard === 'full' ? i.fullConsentAt && '--full-keyboard' : keyboard === 'half' && (i.gameConsentAt || i.fullConsentAt) && '--game';
+    const sources = i.version === version ? [letters, mouse && '--mouse'].filter(Boolean) : [];
     if (!shortcuts && !sources.length) return false;
     const proc = spawnImpl(exe, [...(shortcuts ? [] : ['--no-shortcuts']), ...sources], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
     child = proc;
@@ -236,7 +240,7 @@ function createKeystrokes({ dir, version, repo, fetchImpl, platform = process.pl
     timer.unref?.();
   }
 
-  return { status, install, allowGame, remove, request, start, stop, running: () => Boolean(child) };
+  return { status, install, allowKeyboard, remove, request, start, stop, running: () => Boolean(child) };
 }
 
 module.exports = { createKeystrokes, assetName, comboLabel, parseLine, appShortcut, pushPress, pausedPresses };

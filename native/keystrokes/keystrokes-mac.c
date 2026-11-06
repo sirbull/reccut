@@ -87,7 +87,8 @@ static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef e,
   int cmd = (f & kCGEventFlagMaskCommand) != 0;
   int standalone = !strcmp(name, "Escape") || (name[0] == 'F' && name[1] >= '1' && name[1] <= '9');
   // Option alone types characters (for example | [ ] on Nordic keyboards). Only shortcuts leave this program.
-  if (!ctrl && !cmd && !standalone) return e;
+  // A key already sent as a press is not sent again as a shortcut of its own.
+  if (!ctrl && !cmd && (!standalone || (optGame && gameKey(name)))) return e;
   printf("K %s %d\n", name, (ctrl ? 1 : 0) | (alt ? 2 : 0) | (shift ? 4 : 0) | (cmd ? 8 : 0));
   fflush(stdout);
   return e;

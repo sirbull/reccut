@@ -477,7 +477,7 @@ function currentMeta() {
     overlays: {
       keys: Boolean(s.showKeys && s.inputPills && (keystrokesRunning.value || s.inputPad)),
       cursorZoom: s.cursorZoom && !isWindowSource(),
-      ...(s.showKeys ? { inputs: { on: s.inputOverlay, keyboard: s.inputGame, mouse: s.inputMouse, pad: s.inputPad, x: s.inputX, y: s.inputY } } : {}),
+      ...(s.showKeys ? { inputs: { on: s.inputOverlay, keyboard: s.inputKeyboard, mouse: s.inputMouse, pad: s.inputPad, x: s.inputX, y: s.inputY } } : {}),
     },
   };
   for (const r of recorders) {
@@ -573,7 +573,7 @@ function draw() {
     drawKeys(ctx, liveKeys.slice(-3).map((k) => ({ label: k.label, age: nowS - k.t })), W, H);
   }
   // Vises også før opptaket, så det kan plasseres.
-  if (s.showKeys && s.inputOverlay) drawInputOverlay(ctx, { keyboard: s.inputGame, mouse: s.inputMouse, pad: s.inputPad, held: liveHeld, stick: padStick, x: s.inputX, y: s.inputY }, W, H);
+  if (s.showKeys && s.inputOverlay) drawInputOverlay(ctx, { keyboard: s.inputKeyboard, mouse: s.inputMouse, pad: s.inputPad, held: liveHeld, stick: padStick, x: s.inputX, y: s.inputY }, W, H);
   if (!hasScreen && !hasCamera) {
     ctx.fillStyle = '#1c1c1e';
     ctx.fillRect(0, 0, W, H);
@@ -877,7 +877,7 @@ async function beginRecording() {
   // Opptaket lagres i opptaksmappen til det åpne prosjektet.
   // The Keystroke Add-on runs only for this recording, and only when the user turned it on.
   const addonReady = s.showKeys && keystrokes.value?.installed && !keystrokes.value?.damaged;
-  await api.recBegin({ t0, base: projectFolders.value?.recordings || null, keys: addonReady ? { shortcuts: s.inputShortcuts, game: s.inputGame, mouse: s.inputMouse, pad: s.inputPad } : null });
+  await api.recBegin({ t0, base: projectFolders.value?.recordings || null, keys: addonReady ? { shortcuts: s.inputShortcuts, keyboard: s.inputKeyboard, mouse: s.inputMouse, pad: s.inputPad } : null });
   recorders = [];
   const { w, h } = canvasSize.value;
   if (screenStream) {

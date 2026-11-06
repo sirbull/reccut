@@ -10,7 +10,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { createKeystrokes, assetName, comboLabel, parseLine, appShortcut, pushPress, pausedPresses } = require('../src/main/keystrokes.js');
-const { KEYBOARD_ROWS, PAD_BUTTONS, defaultProps, heldAt, pillsAt, pressLabel, stickAt } = await import('../src/shared/model.js');
+const { FULL_KEYBOARD_ROWS, KEYBOARD_ROWS, PAD_BUTTONS, defaultProps, heldAt, pillsAt, pressLabel, stickAt } = await import('../src/shared/model.js');
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
 function release(files) {
@@ -60,7 +60,7 @@ test('the add-on has one helper file per platform', () => {
 
 test('nothing is downloaded or started before the user consents', async () => {
   const s = setup(files);
-  assert.deepEqual({ ...s.ks.status(), permission: undefined }, { supported: true, installed: false, damaged: false, version: null, installedAt: null, outdated: false, permission: undefined, running: false, game: false });
+  assert.deepEqual({ ...s.ks.status(), permission: undefined }, { supported: true, installed: false, damaged: false, version: null, installedAt: null, outdated: false, permission: undefined, running: false, game: false, full: false });
   await assert.rejects(s.ks.install(), /accept/);
   await assert.rejects(s.ks.install({ consent: 'yes' }), /accept/);
   assert.equal(s.urls.length, 0);
@@ -140,28 +140,35 @@ test('the helper gets only the sources that were chosen, and letters need their 
   };
   assert.deepEqual(args({ mouse: true }), ['--mouse']);
   assert.deepEqual(args({ shortcuts: false, mouse: true }), ['--no-shortcuts', '--mouse']);
-  assert.deepEqual(args({ game: true }), [], 'no consent, no letters');
-  assert.equal(args({ shortcuts: false, game: true }), null, 'nothing left to read, so nothing starts');
-  await assert.rejects(s.ks.allowGame(), /accept/);
-  await assert.rejects(s.ks.allowGame({ consent: 'yes' }), /accept/);
+  assert.deepEqual(args({ keyboard: 'half' }), [], 'no consent, no letters');
+  assert.equal(args({ shortcuts: false, keyboard: 'half' }), null, 'nothing left to read, so nothing starts');
+  await assert.rejects(s.ks.allowKeyboard(), /accept/);
+  await assert.rejects(s.ks.allowKeyboard({ consent: 'yes', mode: 'half' }), /accept/);
   assert.equal(s.ks.status().game, false);
-  assert.equal((await s.ks.allowGame({ consent: true })).game, true);
-  assert.deepEqual(args({ shortcuts: false, game: true, mouse: true }), ['--no-shortcuts', '--game', '--mouse']);
+  assert.equal((await s.ks.allowKeyboard({ consent: true, mode: 'half' })).game, true);
+  assert.equal(s.ks.status().full, false, 'the half does not cover the whole keyboard');
+  assert.equal(args({ shortcuts: false, keyboard: 'full' }), null);
+  await assert.rejects(s.ks.allowKeyboard({ consent: true, mode: 'everything' }), /Unknown/);
+  assert.deepEqual(args({ shortcuts: false, keyboard: 'half', mouse: true }), ['--no-shortcuts', '--game', '--mouse']);
+  assert.equal((await s.ks.allowKeyboard({ consent: true, mode: 'full' })).full, true);
+  assert.deepEqual(args({ keyboard: 'full' }), ['--full-keyboard']);
   await s.ks.install({ consent: true });
   assert.equal(s.ks.status().game, true, 'updating the add-on keeps the choice');
+  assert.equal(s.ks.status().full, true);
   await s.ks.remove();
   await s.ks.install({ consent: true });
   assert.equal(s.ks.status().game, false, 'removing the add-on removes the consent');
+  assert.equal(s.ks.status().full, false);
 });
 
 test('a helper from an older release is never trusted with the new flags', async () => {
   const s = setup(files);
   await s.ks.install({ consent: true });
-  await s.ks.allowGame({ consent: true });
+  await s.ks.allowKeyboard({ consent: true, mode: 'full' });
   const file = path.join(s.dir, 'addon.json');
   fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), version: '1.2.2' }));
-  assert.equal(s.ks.start(() => {}, { shortcuts: false, game: true }), false, 'it would send shortcuts that were turned off');
-  assert.equal(s.ks.start(() => {}, { game: true, mouse: true }), true);
+  assert.equal(s.ks.start(() => {}, { shortcuts: false, keyboard: 'full' }), false, 'it would send shortcuts that were turned off');
+  assert.equal(s.ks.start(() => {}, { keyboard: 'full', mouse: true }), true);
   assert.deepEqual(s.started[0].args, []);
 });
 
@@ -205,7 +212,7 @@ test('the overlay reads held keys, sticks and pills from the recording', () => {
   assert.equal(pressLabel('Shift', new Set()), null);
   assert.equal(pressLabel('W', new Set(['Shift'])), 'W');
   assert.equal(pressLabel('MouseLeft', new Set(['Control'])), 'Left click');
-  assert.equal(pressLabel('J', new Set()), null);
+  assert.equal(pressLabel('Numpad1', new Set()), null);
 });
 
 test('a clip starts with the overlay and position chosen when recording', () => {
@@ -218,7 +225,12 @@ test('a clip starts with the overlay and position chosen when recording', () => 
 test('the helper lets out exactly the keys the overlay shows, and nothing from the right half', () => {
   const header = fs.readFileSync('native/keystrokes/filter.h', 'utf8');
   const list = /GAME_KEYS\[\] = \{([^}]*)\}/.exec(header)[1].match(/"[^"]+"/g).map((k) => k.slice(1, -1));
-  assert.deepEqual(list.toSorted(), KEYBOARD_ROWS.flatMap((r) => r.keys.map(([name]) => name)).toSorted());
+  const names = (rows) => [...new Set(rows.flatMap((r) => r.keys.map(([name]) => name)))].toSorted();
+  assert.deepEqual(list.toSorted(), names(KEYBOARD_ROWS));
+  const rest = /FULL_KEYS\[\] = \{([^}]*)\}/.exec(header)[1].match(/"[^"]+"/g).map((k) => k.slice(1, -1));
+  assert.deepEqual([...list, ...rest].toSorted(), names(FULL_KEYBOARD_ROWS));
+  for (const k of ['Numpad1', 'Home', 'End', 'PageUp', 'PageDown', 'Insert', 'F13']) assert.ok(!rest.includes(k), k);
+  for (const row of FULL_KEYBOARD_ROWS) assert.equal((row.indent || 0) + row.keys.reduce((sum, [, , w = 1]) => sum + w, 0), 15);
   for (const k of 'YUIOPHJKLNM67890') assert.ok(!list.includes(k), k);
   assert.ok(!list.includes('Enter') && !list.includes('Backspace'));
   assert.equal(new Set(PAD_BUTTONS).size, 16);
@@ -281,7 +293,7 @@ test('the add-on is listed in Record and only the warning dialog can install it'
     if (!/\.(js|jsx)$/.test(file)) continue;
     const calls = fs.readFileSync(path.join('src/renderer', file), 'utf8').match(/installKeystrokes/g)?.length || 0;
     assert.equal(calls, file.endsWith('KeystrokesAddon.jsx') ? 1 : 0, file);
-    const allows = fs.readFileSync(path.join('src/renderer', file), 'utf8').match(/allowGameKeys/g)?.length || 0;
+    const allows = fs.readFileSync(path.join('src/renderer', file), 'utf8').match(/allowKeyboard/g)?.length || 0;
     assert.equal(allows, file.endsWith('KeystrokesAddon.jsx') ? 1 : 0, file);
   }
 });

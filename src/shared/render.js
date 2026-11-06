@@ -19,6 +19,7 @@ import {
   cursorAt,
   easeInOut,
   easeOutCubic,
+  FULL_KEYBOARD_ROWS,
   heldAt,
   INPUT_POSITION,
   KEYBOARD_ROWS,
@@ -698,9 +699,23 @@ function drawMasked(ctx, project, clip, T, getSource, alphaMul) {
   ctx.restore();
 }
 
+function drawRecordingInputs(ctx, clip, media, T, s, W, H) {
+  if (clip.props.showKeys) drawKeys(ctx, pillsAt(media.rec, s), W, H);
+  if (clip.props.showInputs) {
+    drawInputOverlay(ctx, {
+      ...media.rec?.overlays?.inputs,
+      held: heldAt(media.rec?.inputs, s),
+      stick: stickAt(media.rec?.sticks, s),
+      x: valueAt(clip, 'inputX', T) ?? INPUT_POSITION.x,
+      y: valueAt(clip, 'inputY', T) ?? INPUT_POSITION.y,
+    }, W, H);
+  }
+}
+
 function drawRecording(ctx, project, clip, media, T, s, getSource) {
   const W = project.width;
   const H = project.height;
+  if (clip.recordingPart === 'keys') return drawRecordingInputs(ctx, clip, media, T, s, W, H);
   const filter = colorFilter(clip, T, H);
   let screenRect = { x: 0, y: 0, w: W, h: H };
   const screen = media.streams.screen;
@@ -759,18 +774,7 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
       ctx.restore();
     }
   }
-  if (clip.recordingPart !== 'camera') {
-    if (clip.props.showKeys) drawKeys(ctx, pillsAt(media.rec, s), W, H);
-    if (clip.props.showInputs) {
-      drawInputOverlay(ctx, {
-        ...media.rec?.overlays?.inputs,
-        held: heldAt(media.rec?.inputs, s),
-        stick: stickAt(media.rec?.sticks, s),
-        x: valueAt(clip, 'inputX', T) ?? INPUT_POSITION.x,
-        y: valueAt(clip, 'inputY', T) ?? INPUT_POSITION.y,
-      }, W, H);
-    }
-  }
+  if (clip.recordingPart !== 'camera') drawRecordingInputs(ctx, clip, media, T, s, W, H);
 }
 
 // Bakgrunnen bak side om side: et bilde fra biblioteket (fyller bildet), en gradient eller en farge.
@@ -915,13 +919,14 @@ export function drawClicks(ctx, clicks, rect) {
 // Overlegget med tastatur, mus og kontroller. x og y er 0..1 av plassen som er igjen rundt
 // overlegget, så det alltid ligger helt inne i bildet.
 export function drawInputOverlay(ctx, { keyboard, mouse, pad, held, stick, x = 0, y = 1 }, W, H) {
-  const parts = [keyboard && [drawKeyboardPart, 7.25], mouse && [drawMousePart, 2.6], pad && [drawPadPart, 7.5]].filter(Boolean);
+  const full = keyboard === 'full';
+  const parts = [keyboard && keyboard !== 'off' && [drawKeyboardPart, full ? 15 : 7.25], mouse && [drawMousePart, 2.6], pad && [drawPadPart, 7.5]].filter(Boolean);
   if (!parts.length) return;
   const u = H * 0.026;
   const inset = u * 0.4;
   const gap = u * 0.6;
   const w = parts.reduce((sum, [, width]) => sum + width * u, 0) + gap * (parts.length - 1) + inset * 2;
-  const h = u * 5 + inset * 2;
+  const h = u * (full ? 6 : 5) + inset * 2;
   const left = clamp(x, 0, 1) * (W - w);
   const top = clamp(y, 0, 1) * (H - h);
   ctx.save();
@@ -935,7 +940,7 @@ export function drawInputOverlay(ctx, { keyboard, mouse, pad, held, stick, x = 0
   ctx.fill();
   let px = left + inset;
   for (const [draw, width] of parts) {
-    draw(ctx, px, top + inset, u, held, stick);
+    draw(ctx, px, top + inset, u, held, draw === drawKeyboardPart ? (full ? FULL_KEYBOARD_ROWS : KEYBOARD_ROWS) : stick);
     px += width * u + gap;
   }
   ctx.restore();
@@ -954,10 +959,10 @@ function inputKey(ctx, x, y, w, h, u, label, on, radius = u * 0.16) {
   ctx.fillText(label, x + w / 2, y + h / 2);
 }
 
-function drawKeyboardPart(ctx, x, y, u, held) {
+function drawKeyboardPart(ctx, x, y, u, held, rows) {
   const gap = u * 0.12;
   const mac = globalThis.window?.api?.platform === 'darwin';
-  KEYBOARD_ROWS.forEach((row, i) => {
+  rows.forEach((row, i) => {
     let kx = x + (row.indent || 0) * u;
     for (const [name, label, width = 1] of row.keys) {
       inputKey(ctx, kx, y + i * u, width * u - gap, u - gap, u, name === 'Meta' && !mac ? 'Win' : label, held?.has(name));

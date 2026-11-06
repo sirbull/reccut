@@ -34,14 +34,19 @@ export function recordingChildren(project, id) {
   return Object.values(project.clips).filter((c) => c.recordingPart === 'camera' && c.linkedTo === id);
 }
 
+// PiP og tastelaget. Begge følger skjermklippet i tid.
+function linkedParts(project, id) {
+  return Object.values(project.clips).filter((c) => c.linkedTo === id);
+}
+
 export function recordingEditId(project, id) {
   const c = project.clips[id];
   if (c?.slideshowParent && project.clips[c.slideshowParent]) return c.slideshowParent;
-  return c?.recordingPart === 'camera' && project.clips[c.linkedTo] ? c.linkedTo : id;
+  return project.clips[c?.linkedTo] ? c.linkedTo : id;
 }
 
 function timingChildren(project, id) {
-  return [...recordingChildren(project, id), ...Object.values(project.clips).filter((c) => c.slideshowParent === id)];
+  return [...linkedParts(project, id), ...Object.values(project.clips).filter((c) => c.slideshowParent === id)];
 }
 
 function recordingTimingLocked(project, id) {
@@ -52,7 +57,7 @@ function recordingTimingLocked(project, id) {
 // Bare tids- og kildeegenskapene følger skjermklippet. Farge, form og effekter er uavhengige.
 export function syncRecordingTracks(project) {
   for (const c of Object.values(project.clips)) {
-    if (!(c.recordingPart === 'camera' && c.linkedTo) && !c.slideshowParent) continue;
+    if (!c.linkedTo && !c.slideshowParent) continue;
     const parent = project.clips[c.slideshowParent || c.linkedTo];
     if (!parent) {
       delete project.clips[c.id];
@@ -66,7 +71,7 @@ export function syncRecordingTracks(project) {
   }
   // Oppdater alle tidene før sporene løses, så gammel plassering ikke lager falske kollisjoner.
   for (const c of Object.values(project.clips)) {
-    if (!(c.recordingPart === 'camera' && c.linkedTo) && !c.slideshowParent) continue;
+    if (!c.linkedTo && !c.slideshowParent) continue;
     while (lanesOverlap(project, c, c.lane)) c.lane++;
   }
 }
@@ -101,6 +106,35 @@ export function separateRecordingCamera(project, id) {
     while (lanesOverlap(project, camera, camera.lane)) camera.lane++;
   }
   return camera.id;
+}
+
+// Tastene får et eget lag øverst, så de kan flyttes, skjules eller slettes uten å røre opptaket.
+export function separateRecordingKeys(project, id) {
+  const c = project.clips[id];
+  const overlays = project.media[c?.mediaId]?.rec?.overlays;
+  if (c?.type !== 'recording' || !(overlays?.keys || overlays?.inputs?.on)) return null;
+  const keys = deepClone(c);
+  keys.id = uid();
+  keys.recordingPart = 'keys';
+  keys.linkedTo = c.id;
+  keys.name = `${c.name || project.media[c.mediaId].name || 'Recording'} · Keystrokes`;
+  delete keys.group;
+  delete keys.transition;
+  delete keys.transitionOut;
+  keys.expanded = false;
+  keys.props.showClicks = false;
+  keys.props.cursorZoom = false;
+  keys.props.audioDetached = true;
+  keys.props.vfx = [];
+  c.props.showKeys = false;
+  c.props.showInputs = false;
+  const above = Math.max(c.lane, ...recordingChildren(project, id).map((x) => x.lane)) + 1;
+  placeFree(project, keys, c.start, Math.max(1, above));
+  if (keys.lane < above) {
+    keys.lane = above;
+    while (lanesOverlap(project, keys, keys.lane)) keys.lane++;
+  }
+  return keys.id;
 }
 
 export function detachRecordingCamera(project, id) {
@@ -188,7 +222,7 @@ export function withSync(project, fn) {
   const anchors = [];
   for (const c of Object.values(project.clips)) {
     // PiP har en eksplisitt kobling. Frakoblet PiP beholder sin egen plassering.
-    if (c.recordingPart === 'camera' || c.slideshowParent) continue;
+    if (c.recordingPart === 'camera' || c.recordingPart === 'keys' || c.slideshowParent) continue;
     if (c.lane === 0 || project.lanes?.[c.lane]?.locked) continue;
     // Undertekster har egne tider. Bare eksplisitt gruppering kobler dem til hovedsporet.
     if (c.type === 'caption' && !(c.group && groupParent.has(c.group))) continue;
@@ -308,7 +342,7 @@ export function resolveLane(project, clip) {
 // Et klipp som starter etter slutten av hovedsporet har ingenting under seg å kobles til.
 // Da legges det i hovedsporet i stedet, som i Final Cut Pro. Sladding hører ikke hjemme der.
 function storylineIfAlone(project, clip) {
-  if (clip.recordingPart === 'camera') return;
+  if (clip.recordingPart === 'camera' || clip.recordingPart === 'keys') return;
   if (clip.lane <= 0 || clip.lane === CAPTION_LANE || !isVisual(clip) || ['redact', 'adjustment'].includes(clip.type)) return;
   const last = project.clips[project.primary.at(-1)];
   if (clip.start >= (last ? last.start + last.dur : 0) - 1e-6) moveClip(project, clip.id, { lane: 0 });
@@ -359,7 +393,7 @@ export function splitClip(project, id, T, independent = false) {
   c.props.aTail = 0;
   project.clips[right.id] = right;
   if (c.lane === 0) project.primary.splice(project.primary.indexOf(id) + 1, 0, right.id);
-  for (const camera of recordingChildren(project, id)) {
+  for (const camera of linkedParts(project, id)) {
     const cameraRight = splitClip(project, camera.id, T, true);
     if (cameraRight) project.clips[cameraRight].linkedTo = right.id;
   }
@@ -539,6 +573,7 @@ export function addMediaClip(project, media, mode, T, laneHint, opts = {}) {
     insertIntoPrimary(project, [clip], T ?? 0);
   }
   separateRecordingCamera(project, clip.id);
+  separateRecordingKeys(project, clip.id);
   return clip.id;
 }
 
@@ -826,7 +861,7 @@ export function setReverse(project, id, on) {
 // Frosset bilde ved spillhodet: klippet deles og et stillbilde settes inn.
 export function freezeFrame(project, T, dur = 2) {
   const p = Object.values(project.clips)
-    .filter((c) => (c.type === 'video' || c.type === 'recording') && c.speed !== 0 && c.enabled && T >= c.start && T < c.start + c.dur)
+    .filter((c) => (c.type === 'video' || c.type === 'recording') && c.recordingPart !== 'keys' && c.speed !== 0 && c.enabled && T >= c.start && T < c.start + c.dur)
     .sort((a, b) => (b.lane === 0) - (a.lane === 0) || b.lane - a.lane)[0];
   if (!p) return null;
   const camera = recordingChildren(project, p.id)[0];
@@ -956,7 +991,7 @@ export function slipClip(project, id, delta) {
   const move = delta * avgSpeed(c) * (c.reverse ? -1 : 1);
   const next = Math.max(0, Math.min(maxIn, c.in + move));
   shiftKeyframes(c, next - c.in);
-  for (const camera of recordingChildren(project, id)) shiftKeyframes(camera, next - c.in);
+  for (const camera of linkedParts(project, id)) shiftKeyframes(camera, next - c.in);
   c.in = round(next);
   syncRecordingTracks(project);
 }

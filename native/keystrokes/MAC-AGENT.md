@@ -22,7 +22,7 @@ Reccut kan vise snarveier (for eksempel ⌘ S) i opptak. For å se taster mens a
 ## Protokollen
 
 ```
-reccut-keystrokes-mac [--no-shortcuts] [--game] [--mouse]    kjører til stdin lukkes
+reccut-keystrokes-mac [--no-shortcuts] [--game | --full-keyboard] [--mouse]    kjører til stdin lukkes
 reccut-keystrokes-mac --check    skriver granted eller denied
 reccut-keystrokes-mac --request  ber macOS om Input Monitoring, skriver granted eller denied
 ```
@@ -32,14 +32,14 @@ Mens det kjører, skriver det én linje per hendelse:
 ```
 READY                 lytter
 K <navn> <mods>       en snarvei; mods: 1 Ctrl, 2 Option, 4 Shift, 8 Cmd
-D <navn>              trykket ned (--game eller --mouse)
-U <navn>              sluppet (--game eller --mouse)
+D <navn>              trykket ned (--game, --full-keyboard eller --mouse)
+U <navn>              sluppet (--game, --full-keyboard eller --mouse)
 E permission          Input Monitoring er ikke tillatt
 ```
 
 ## Regler som ikke skal brytes
 
-1. **Filteret ligger i hjelpeprogrammet.** Bare taster sammen med Cmd eller Ctrl, pluss Esc og F-tastene, slipper ut. Option alene skriver tegn (for eksempel | [ ] på norsk tastatur) og skal ikke slippe ut. Shift alene skal ikke slippe ut. Gjentatte tastetrykk (autorepeat) slippes ikke ut. Eneste unntak er `--game`, som slipper ut `GAME_KEYS` i `filter.h` (venstre tastaturhalvdel) etter et eget samtykke. Ikke flytt filteret til Reccut, ikke utvid listen, og ikke lag et valg for hele tastaturet.
+1. **Filteret ligger i hjelpeprogrammet.** Bare taster sammen med Cmd eller Ctrl, pluss Esc og F-tastene, slipper ut. Option alene skriver tegn (for eksempel | [ ] på norsk tastatur) og skal ikke slippe ut. Shift alene skal ikke slippe ut. Gjentatte tastetrykk (autorepeat) slippes ikke ut. Unntakene er `--game` (`GAME_KEYS` i `filter.h`, venstre tastaturhalvdel) og `--full-keyboard` (også `FULL_KEYS`), hvert med sitt eget samtykke. Ikke flytt filteret til Reccut, og ikke utvid listene uten at brukeren ber om det.
 2. **Ingen lagring og ikke noe nett i hjelpeprogrammet.** Det skriver bare til stdout. Ingen filer, ingen logger, ingen nettverkskall.
 3. **Tillegget lever bare under et opptak.** Det avslutter når stdin lukkes. Ikke la det kjøre i bakgrunnen.
 4. **Hold det utenfor installasjonsfilen.** `native/` skal ikke inn i `build.files` i `package.json`.
@@ -90,7 +90,7 @@ Forventet: `READY`. Bytt til en annen app og prøv:
 | ⌘ ← | `K ArrowLeft 8` |
 | Hold ⌘ J inne | bare én `K J 8` |
 
-Med `--game --no-shortcuts`: W gir `D W` og `U W`, Shift gir `D Shift` og `U Shift`, og J gir ingenting. Med `--mouse --no-shortcuts`: venstreklikk gir `D MouseLeft` og `U MouseLeft`, og ingen taster gir noe.
+Med `--game --no-shortcuts`: W gir `D W` og `U W`, Shift gir `D Shift` og `U Shift`, og J gir ingenting. Med `--full-keyboard --no-shortcuts` gir J `D J` og `U J`, mens Numpad 1 og Home ikke gir noe. Med `--mouse --no-shortcuts`: venstreklikk gir `D MouseLeft` og `U MouseLeft`, og ingen taster gir noe.
 
 Skriv i et passordfelt: ingenting skal komme ut, fordi macOS slår av event taps under Secure Input.
 

@@ -459,9 +459,9 @@ ipcMain.handle('keystrokes:install', (e, opts) => {
   if (!fromMain(e)) throw new Error('Not allowed.');
   return keystrokes.install({ consent: opts?.consent === true });
 });
-ipcMain.handle('keystrokes:allowGame', (e, opts) => {
+ipcMain.handle('keystrokes:allowKeyboard', (e, opts) => {
   if (!fromMain(e)) throw new Error('Not allowed.');
-  return keystrokes.allowGame({ consent: opts?.consent === true });
+  return keystrokes.allowKeyboard({ consent: opts?.consent === true, mode: opts?.mode });
 });
 // Controller state comes from the Gamepad API in the renderer. It needs no add-on process.
 ipcMain.handle('rec:pad', (e, presses, stick) => {

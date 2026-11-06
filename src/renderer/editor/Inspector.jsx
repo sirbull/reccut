@@ -150,8 +150,9 @@ function tabsFor(clip, media) {
   if (clip.type === 'recording') tabs.push({ id: 'recording', label: 'Recording', icon: MonitorPlay });
   if (clip.type === 'redact') tabs.push({ id: 'redact', label: 'Redact', icon: EyeOff });
   if (isVisual(clip) && clip.type !== 'gap' && clip.type !== 'redact') tabs.push({ id: 'video', label: 'Video', icon: Film });
-  if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'adjustment') tabs.push({ id: 'color', label: 'Color', icon: Palette });
-  if (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title' || clip.type === 'adjustment') tabs.push({ id: 'effects', label: 'Effects', icon: Wand2 });
+  const keys = clip.recordingPart === 'keys'; // Bare tegnede taster, ingen bilder å fargekorrigere.
+  if (!keys && (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'adjustment')) tabs.push({ id: 'color', label: 'Color', icon: Palette });
+  if (!keys && (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'title' || clip.type === 'adjustment')) tabs.push({ id: 'effects', label: 'Effects', icon: Wand2 });
   if (canMask(clip)) tabs.push({ id: 'masks', label: 'Masks', icon: SquareDashed });
   if (clipHasAudio(clip, media)) tabs.push({ id: 'audio', label: 'Audio', icon: Volume2 });
   if (['video', 'recording', 'audio'].includes(clip.type)) tabs.push({ id: 'speed', label: clip.speed === 0 ? 'Freeze' : 'Speed', icon: Gauge });
@@ -1338,7 +1339,7 @@ function ColorTab({ clip, mediaIds }) {
   const p = project.value;
   return (
     <>
-      {clip.type === 'recording' && clip.recordingPart !== 'screen' && p.media[clip.mediaId]?.streams?.camera?.hasVideo && <CameraColorSection clip={clip} />}
+      {clip.type === 'recording' && clip.recordingPart !== 'screen' && clip.recordingPart !== 'keys' && p.media[clip.mediaId]?.streams?.camera?.hasVideo && <CameraColorSection clip={clip} />}
       {mediaIds?.length > 0 && (
         <Section title="Camera LUT">
           <CameraLutRow media={p.media[mediaIds[0]]} ids={mediaIds} />
@@ -1514,7 +1515,9 @@ function RecordingTab({ clip, media }) {
   const s = sourceTime(clip, Tc);
   const layout = valueAt(clip, 'layout', Tc) ?? 6;
   const atSwitch = keyframeIndexAt(clip, 'layout', s, 0.05) >= 0;
-  const hasCam = clip.recordingPart !== 'screen' && media?.streams?.camera?.hasVideo;
+  const keysPart = clip.recordingPart === 'keys';
+  const hasCam = clip.recordingPart !== 'screen' && !keysPart && media?.streams?.camera?.hasVideo;
+  const keysLayer = Object.values(project.value.clips).some((c) => c.recordingPart === 'keys' && c.linkedTo === clip.id);
   const camera = recordingChildren(project.value, clip.id)[0];
   const parents = clip.recordingPart === 'camera' ? Object.values(project.value.clips).filter((c) => c.recordingPart === 'screen' && c.mediaId === clip.mediaId && (!recordingChildren(project.value, c.id).length || c.id === clip.linkedTo)) : [];
   const rec = media?.rec || {};
@@ -1610,10 +1613,10 @@ function RecordingTab({ clip, media }) {
       {usesSide && <SideBySideSection clip={clip} />}
       {hasCam && <CameraColorSection clip={clip} />}
       {clip.recordingPart !== 'camera' && <Section title="Overlays">
-        {(rec.keys?.length > 0 || rec.inputs?.length > 0) && <Row label={`Keystrokes (${(rec.keys?.length || 0) + (rec.inputs?.filter((e) => e[2]).length || 0)})`}>
+        {!keysLayer && (rec.keys?.length > 0 || rec.inputs?.length > 0) && <Row label={`Keystrokes (${(rec.keys?.length || 0) + (rec.inputs?.filter((e) => e[2]).length || 0)})`}>
           <Toggle checked={clip.props.showKeys} onChange={(v) => setProp(clip, { showKeys: v })} />
         </Row>}
-        {rec.overlays?.inputs && (rec.inputs?.length > 0 || rec.sticks?.length > 0) && <>
+        {!keysLayer && rec.overlays?.inputs && (rec.inputs?.length > 0 || rec.sticks?.length > 0) && <>
           <Row label="Input overlay">
             <Toggle checked={Boolean(clip.props.showInputs)} onChange={(v) => setProp(clip, { showInputs: v })} />
           </Row>
@@ -1622,10 +1625,12 @@ function RecordingTab({ clip, media }) {
             <Param clip={clip} prop="inputY" label="Overlay Y" min={0} max={100} scale={100} unit="%" def={INPUT_POSITION.y} />
           </>}
         </>}
-        <Row label={`Cursor zoom (${rec.zooms?.length || 0})`}>
+        {!keysPart && <Row label={`Cursor zoom (${rec.zooms?.length || 0})`}>
           <Toggle checked={clip.props.cursorZoom} onChange={(v) => setProp(clip, { cursorZoom: v })} />
-        </Row>
-        {rec.clicks?.length > 0 && <Row label={`Click highlights (${rec.clicks.length})`}>
+        </Row>}
+        {keysLayer && <p class="hint">Keystrokes are on their own layer above this clip. Select that layer to change them.</p>}
+        {keysPart && !rec.keys?.length && !rec.inputs?.length && !rec.sticks?.length && <p class="hint">No keys were captured in this recording.</p>}
+        {!keysPart && rec.clicks?.length > 0 && <Row label={`Click highlights (${rec.clicks.length})`}>
           <Toggle checked={clip.props.showClicks} onChange={(v) => setProp(clip, { showClicks: v })} />
         </Row>}
         <p class="hint">Blade the clip (B or {window.api.platform === 'darwin' ? 'Cmd' : 'Ctrl'} B) to turn overlays on or off for part of the recording.</p>

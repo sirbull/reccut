@@ -86,7 +86,7 @@ const DEFAULTS = {
   showKeys: false,
   // Hva tillegget leser, og hvordan det vises. Alt unntatt snarveier er av til brukeren slår det på.
   inputShortcuts: true,
-  inputGame: false,
+  inputKeyboard: 'off',
   inputMouse: false,
   inputPad: false,
   inputPills: true,

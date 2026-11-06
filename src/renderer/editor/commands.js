@@ -1351,7 +1351,7 @@ export async function clipContextMenu(clipId, T) {
     items.push({ separator: true });
   }
   const media = project.value.media[c.mediaId];
-  if (c.linkedTo || recordingChildren(project.value, clipId).length) items.push({ id: 'detachPip', label: 'Detach PiP' });
+  if ((c.linkedTo && c.recordingPart === 'camera') || recordingChildren(project.value, clipId).length) items.push({ id: 'detachPip', label: 'Detach PiP' });
   if (c.type === 'recording' && !c.recordingPart && media?.streams?.screen?.hasVideo && media.streams.camera?.hasVideo) items.push({ id: 'separatePip', label: 'Show PiP on Separate Track' });
   const hasAudio = clipHasAudio(c, media);
   if (['video', 'recording', 'audio'].includes(c.type) && !(c.speed === 0 && !c.ramp)) {
