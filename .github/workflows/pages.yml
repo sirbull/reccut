@@ -1,0 +1,57 @@
+name: Publish website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out website
+        uses: actions/checkout@v7
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Check entry page and media
+        shell: python
+        run: |
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          class WebsiteMedia(HTMLParser):
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  for key in ("src", "poster", "data-before"):
+                      value = attrs.get(key, "")
+                      if value.startswith("media/"):
+                          assert (Path("docs") / value).is_file(), f"Missing website media: {value}"
+
+          WebsiteMedia().feed(Path("docs/index.html").read_text(encoding="utf-8"))
+
+      - name: Upload website and media
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Publish to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
