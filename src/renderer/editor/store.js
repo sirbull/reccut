@@ -297,10 +297,11 @@ export function endTransient(keep = true) {
   pruneSelection();
 }
 
-function restoreEditHistory(restored) {
+function restoreEditHistory(restored, preserveName = false) {
   const current = project.value;
-  if (restored.designs === current.designs && restored.designAssets === current.designAssets) return restored;
-  return { ...restored, designs: current.designs, designAssets: current.designAssets };
+  const name = preserveName ? current.name : restored.name;
+  if (restored.designs === current.designs && restored.designAssets === current.designAssets && restored.name === name) return restored;
+  return { ...restored, name, designs: current.designs, designAssets: current.designAssets };
 }
 
 export function undo() {
@@ -309,7 +310,7 @@ export function undo() {
   const prevId = currentSequence(project.value).id;
   redoStack.push(project.value);
   // Navnet følger prosjektfilen og angres ikke.
-  project.value = { ...restoreEditHistory(undoStack.pop()), name: project.value.name };
+  project.value = restoreEditHistory(undoStack.pop(), true);
   historyVersion.value++;
   if (currentSequence(project.value).id !== prevId) afterSequenceChange(prevId);
   pruneSelection();
@@ -322,7 +323,7 @@ export function redo() {
   const prevId = currentSequence(project.value).id;
   undoStack.push(project.value);
   // Navnet følger prosjektfilen og angres ikke.
-  project.value = { ...restoreEditHistory(redoStack.pop()), name: project.value.name };
+  project.value = restoreEditHistory(redoStack.pop(), true);
   historyVersion.value++;
   if (currentSequence(project.value).id !== prevId) afterSequenceChange(prevId);
   pruneSelection();

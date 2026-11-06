@@ -283,7 +283,7 @@ Open source used: Electron, Preact, Lucide (icons), Mediabunny (decoding and enc
 * Also save thumbnail in video export prepares a design snapshot and writes a JPEG alongside the completed video using its actual base name. Existing JPEG files are preserved with an error message.
 * Open Image or an empty-room image drop creates a design at the displayed pixel dimensions, honoring JPEG orientation. Nondestructive canvas cropping, quarter-turn rotations, flips and Canvas Size with a nine-point content anchor.
 
-* Design Brand Kits store color roles, title/body fonts and default System/Flat/Outline emoji style. Font edits update current matching text; new elements use Brand defaults. The bundled library includes 111 text styles, 40 palettes, 224 other elements and 3,781 emoji.
+* Design Brand Kits store color roles, title/body fonts and default System/Flat/Outline emoji style. Font edits update current matching text; new elements use Brand defaults. The bundled library includes 111 text styles, 40 palettes, 178 other elements and 3,781 emoji.
 * Design online resources: main-process source engine, cached previews, independent project downloads/credits, source plugins, OAuth/PKCE/MCP and configurable template catalog. Provider registration, publication and live-account acceptance remain necessary before Phase C is production complete; see DESIGN-REDESIGN-C-QA.md.
 
 * Settings → Plugins groups tools under Record, Edit, Export and Design, with the current workspace first and expanded. Workspace shortcuts, connection statuses and setup guidance make each integration easier to find. Video tools and installation are under Edit; photo sources and the template catalog are under Design.

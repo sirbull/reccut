@@ -10,15 +10,15 @@ function setup() {
 }
 test('design and Edit undo and redo preserve the other room in both directions', () => {
   const { editor: e, design: s } = setup();
-  e.commit((p) => { p.name = 'Edited'; });
+  e.commit((p) => { p.fps = 60; });
   const d = s.addDesign({ name: 'Design' }); s.addText();
   const designs = e.project.value.designs;
-  e.undo(); assert.equal(e.project.value.name, 'Untitled Project'); assert.equal(e.project.value.designs, designs);
-  e.redo(); assert.equal(e.project.value.name, 'Edited'); assert.equal(e.project.value.designs, designs);
-  s.designUndo(); assert.equal(e.project.value.designs[d.id].layers.length, 0); assert.equal(e.project.value.name, 'Edited');
-  s.designRedo(); assert.equal(e.project.value.designs[d.id].layers.length, 1); assert.equal(e.project.value.name, 'Edited');
-  e.commit((p) => { p.name = 'Again'; }); s.designUndo(); e.undo();
-  assert.equal(e.project.value.name, 'Edited'); assert.equal(e.project.value.designs[d.id].layers.length, 0);
+  e.undo(); assert.equal(e.project.value.fps, 30); assert.equal(e.project.value.designs, designs);
+  e.redo(); assert.equal(e.project.value.fps, 60); assert.equal(e.project.value.designs, designs);
+  s.designUndo(); assert.equal(e.project.value.designs[d.id].layers.length, 0); assert.equal(e.project.value.fps, 60);
+  s.designRedo(); assert.equal(e.project.value.designs[d.id].layers.length, 1); assert.equal(e.project.value.fps, 60);
+  e.commit((p) => { p.fps = 25; }); s.designUndo(); e.undo();
+  assert.equal(e.project.value.fps, 60); assert.equal(e.project.value.designs[d.id].layers.length, 0);
 });
 test('design transients commit one undo step, cancel and do not clobber timeline changes', () => {
   const { editor: e, design: s } = setup(); const d = s.addDesign(); s.addText();

@@ -12,7 +12,7 @@ function setup() {
   const module = { exports: {} };
   vm.runInNewContext(bundle, {
     module, exports: module.exports,
-    window: { addEventListener() {}, api: { onTasks() {}, onFlush() {}, onAnalyzed() {}, listTasks: async () => [] } },
+    window: { addEventListener() {}, api: { onTasks() {}, onFlush() {}, onAnalyzed() {}, listTasks: async () => [], renameProject: async (_file, name) => `/project/${name}.reccut`, saveProject: async (_project, file) => file } },
     localStorage: { getItem: () => null, setItem() {} },
     performance: { now: () => 0 }, setTimeout: () => 0, clearTimeout() {}, structuredClone,
   });
@@ -71,6 +71,21 @@ test('hover preview shows an edit without an undo step, and a click commits from
   s.commit(p => { p.clips[id].props.film = 'velvia50'; });
   s.undo();
   assert.equal(s.project.value, before);
+});
+
+test('undo and redo retain the renamed project file and reuse unchanged history snapshots', async () => {
+  const { store: s, id } = setup();
+  s.commit(p => { p.clips[id].props.text = 'Edited'; });
+  assert.equal(await s.renameProject('Renamed'), true);
+  const edited = s.project.value;
+  s.undo();
+  assert.equal(s.project.value.clips[id].props.text, 'Original');
+  assert.equal(s.project.value.name, 'Renamed');
+  assert.equal(s.projectPath.value, '/project/Renamed.reccut');
+  s.redo();
+  assert.equal(s.project.value, edited);
+  assert.equal(s.project.value.name, 'Renamed');
+  assert.equal(s.projectPath.value, '/project/Renamed.reccut');
 });
 
 test('edits in the multi clip inspector are copied to the other selected clips', () => {

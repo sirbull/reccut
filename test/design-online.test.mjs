@@ -1,12 +1,43 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';import crypto from 'node:crypto';import{createRequire}from'node:module';
 import{BRAND_ROLES,designBrand,brandLayer}from'../src/shared/designBrand.js';import{newLayer,solidFill}from'../src/shared/design.js';import{DESIGN_ELEMENTS,DESIGN_EMOJIS}from'../src/shared/designContent.js';import{BUILTIN_DESIGN_STYLES,DESIGN_PALETTES}from'../src/shared/designTemplates.js';
+import { EXTRA_PALETTES } from '../src/shared/designLibraryExtras.js';
+import { rankLibraryItems } from '../src/shared/designLibrary.js';
 const require=createRequire(import.meta.url),{validateSource,mapResults,credits}=require('../src/shared/stockSources.cjs'),{createStockHost,imageType}=require('../src/main/stock'),{network}=require('../src/main/stock/network'),{pkce,signIn,client}=require('../src/main/stock/mcp'),{secrets}=require('../src/main/stock/secrets');
 const manifest={format:'reccut-image-source-v1',id:'test-photos',name:'Test Photos',homepage:'https://photos.example.org',hosts:['api.example.org'],search:{url:'https://api.example.org/search?q={query}&page={page}',headers:{Authorization:'{key}'}},results:{items:'items',fields:{id:'id',preview:'preview',full:'full',author:'author',pageUrl:'page',license:'license'}}};
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jNioAAAAASUVORK5CYII=','base64');
 const row={id:'one',preview:'https://images.example.org/small.png',full:'https://images.example.org/full.png',author:'Photographer',page:'https://photos.example.org/one',license:'CC BY 4.0'};
 const temp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'reccut-stock-'));
 const response=value=>({bytes:Buffer.from(JSON.stringify(value)),headers:new Headers()});
-test('expanded offline library has meaningful searchable variety and unique IDs',()=>{assert.ok(BUILTIN_DESIGN_STYLES.length>=100);assert.ok(DESIGN_PALETTES.length>=40);assert.ok(DESIGN_ELEMENTS.filter(e=>!['emoji','badge'].includes(e.kind)).length>=180);assert.equal(new Set(DESIGN_ELEMENTS.filter(e=>e.kind==='badge').map(e=>JSON.stringify(e.badgeStyle))).size,12);for(const list of[BUILTIN_DESIGN_STYLES,DESIGN_PALETTES,DESIGN_ELEMENTS])assert.equal(new Set(list.map(e=>e.id)).size,list.length);});
+test('curated offline library retains searchable categories, distinct artwork and unique IDs', () => {
+  assert.ok(BUILTIN_DESIGN_STYLES.length >= 100);
+  assert.ok(DESIGN_PALETTES.length >= 40);
+  const elements = new Map(DESIGN_ELEMENTS.map(e => [e.id, e]));
+  for (const kind of ['shape', 'drawing', 'background', 'texture', 'sticker']) {
+    assert.ok(DESIGN_ELEMENTS.some(e => e.kind === kind), `Missing ${kind} elements`);
+  }
+  for (const shape of ['rect', 'ellipse', 'polygon', 'star', 'line', 'arrow']) {
+    assert.ok(DESIGN_ELEMENTS.some(e => e.kind === 'shape' && e.shape === shape), `Missing ${shape}`);
+  }
+  // Rotated copies were deliberately removed from the library. Check distinct
+  // content and search coverage instead of counting those copies as variety.
+  for (const [id, query] of [['arrow-block', 'block arrow'], ['price-tag', 'price tag'], ['thought', 'thought bubble'], ['cursor', 'mouse pointer'], ['paper', 'torn paper'], ['orb', 'gradient orb']]) {
+    const element = elements.get(`graphic-${id}`);
+    assert.ok(element?.svg, `Missing graphic ${id}`);
+    assert.ok(rankLibraryItems(DESIGN_ELEMENTS, query).includes(element), `Cannot find ${query}`);
+  }
+  const drawings = DESIGN_ELEMENTS.filter(e => e.kind === 'drawing');
+  assert.equal(new Set(drawings.map(e => e.svg)).size, drawings.length);
+  for (const palette of EXTRA_PALETTES) for (const mode of ['solid', 'linear', 'radial']) {
+    assert.equal(elements.get(`${mode}-${palette.id}`)?.kind, 'background');
+  }
+  for (const kind of ['dots', 'grid']) for (const spacing of [16, 32, 64, 96]) {
+    assert.ok(rankLibraryItems(DESIGN_ELEMENTS, `${kind} ${spacing}`).includes(elements.get(`pattern-${kind}-${spacing}`)));
+  }
+  assert.equal(new Set(DESIGN_ELEMENTS.filter(e => e.kind === 'badge').map(e => JSON.stringify(e.badgeStyle))).size, 12);
+  for (const list of [BUILTIN_DESIGN_STYLES, DESIGN_PALETTES, DESIGN_ELEMENTS]) {
+    assert.equal(new Set(list.map(e => e.id)).size, list.length);
+  }
+});
 test('brand roles affect new elements and text but preserve disabled defaults and emoji',()=>{const b=designBrand({roles:{fill:'#123456',cta:'#cc2200',title:'#abcdef'},emojiStyle:'outline'});assert.equal(b.roles.background,BRAND_ROLES.background);const l=newLayer('shape');assert.equal(brandLayer(l,b).fill.color,'#123456');const text=brandLayer(newLayer('text',{placeholder:'subtitle'}),b,{body:'serif'});assert.equal(text.font,'serif');assert.equal(brandLayer(newLayer('text',{box:{fill:solidFill('#000000')}}),b).box.fill.color,'#cc2200');const badge=brandLayer(newLayer('text',{box:{fill:solidFill('#000000')}}),designBrand());assert.equal(badge.fill.color,'#111827');assert.equal(brandLayer(newLayer('shape',{pattern:{kind:'dots'}}),b).pattern.color,b.roles.secondary);assert.equal(brandLayer(l,{enabled:false}),l);const emoji=newLayer('text',{text:'😀',emoji:{text:'😀',style:'system'}});assert.equal(brandLayer(emoji,b),emoji);});
 test('OpenMoji supplies color and outline assets for most searchable emoji with license and no external SVG references',()=>{let count=0;for(const e of DESIGN_EMOJIS){const code=[...e.text].map(c=>c.codePointAt(0).toString(16).toUpperCase()).filter(c=>c!=='FE0F').join('-');if(fs.existsSync(`assets/emoji/flat/${code}.svg`)){count++;assert.ok(fs.existsSync(`assets/emoji/outline/${code}.svg`));}}assert.ok(count>3500);assert.match(fs.readFileSync('assets/licenses/OPENMOJI-LICENSE.txt','utf8'),/Attribution-ShareAlike/);for(const style of['flat','outline'])for(const file of fs.readdirSync(`assets/emoji/${style}`))assert.doesNotMatch(fs.readFileSync(`assets/emoji/${style}/${file}`,'utf8'),/<script|(?:href|src)=["']https?:|url\(https?:/i);});
 test('image-source manifests reject invalid URLs, unknown placeholders, host escape and mapping injection',()=>{assert.equal(validateSource(manifest).id,'test-photos');for(const change of[{search:{url:'http://api.example.org'}},{search:{url:'https://evil.example.org'}},{search:{url:'https://api.example.org/{unknown}'}},{hosts:['localhost']},{results:{items:'items',fields:{...manifest.results.fields,provider:'evil'}}}])assert.throws(()=>validateSource({...manifest,...change}));const items=mapResults(manifest,{items:[row,{...row,id:'evil',full:'http://private.local/a.png'}]});assert.equal(items.length,1);assert.equal(items[0].provider,'test-photos');assert.match(credits(items),/Photographer \/ Test Photos/);});
