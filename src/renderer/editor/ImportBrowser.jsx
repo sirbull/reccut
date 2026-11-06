@@ -5,6 +5,7 @@ import { ArrowUp, Check, FileAudio, Film, Folder, HardDrive, House, Image as Ima
 import { formatDuration } from '../../shared/model.js';
 import { fileUrl } from './playback.js';
 import { isTyping } from '../keyboard.js';
+import { audioSink } from '../prefs.js';
 import { Select } from '../ui.jsx';
 
 const api = window.api;
@@ -105,6 +106,8 @@ function Tile({ entry, checked, focused, onPick, onToggle, onOpen }) {
   );
 }
 
+const applySink = (el) => el?.setSinkId(audioSink.value).catch(() => {});
+
 function Preview({ entry }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [entry?.path]);
@@ -112,8 +115,8 @@ function Preview({ entry }) {
   const info = infos.get(entry.path);
   const thumb = info?.thumb ? fileUrl(info.thumb) : null;
   let view;
-  if (entry.kind === 'video' && !failed) view = <video key={entry.path} src={fileUrl(entry.path)} poster={thumb} controls autoPlay onError={() => setFailed(true)} />;
-  else if (entry.kind === 'audio') view = <audio key={entry.path} src={fileUrl(entry.path)} controls autoPlay />;
+  if (entry.kind === 'video' && !failed) view = <video key={entry.path} ref={applySink} src={fileUrl(entry.path)} poster={thumb} controls autoPlay onError={() => setFailed(true)} />;
+  else if (entry.kind === 'audio') view = <audio key={entry.path} ref={applySink} src={fileUrl(entry.path)} controls autoPlay />;
   else if (entry.kind === 'image' && WEB_IMAGE.test(entry.name)) view = <img src={fileUrl(entry.path)} alt="" />;
   else view = thumb ? <img src={thumb} alt="" /> : <Film size={32} />;
   const meta = [info?.width ? `${info.width} × ${info.height}` : null, info?.duration > 0 && entry.kind !== 'image' ? formatDuration(info.duration) : null, formatSize(entry.size)].filter(Boolean).join(' · ');

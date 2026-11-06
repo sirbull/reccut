@@ -17,7 +17,7 @@ import {
   Volume2,
 } from 'lucide-preact';
 import { Button, Row, Section, Segmented, Select, Toggle } from '../ui.jsx';
-import { MODIFIERS, modifierInfo, saveSettings, settings } from './settings.js';
+import { LAYOUTS, MODIFIERS, modifierInfo, saveSettings, settings } from './settings.js';
 import * as engine from './engine.js';
 import { project, projectFolders } from '../editor/store.js';
 import * as editorCommands from '../editor/commands.js';
@@ -25,24 +25,18 @@ import { GainControl, MicrophoneMixer } from './MicrophoneMixer.jsx';
 import { KeystrokesRows } from './KeystrokesAddon.jsx';
 import { meterDb } from './mixer.js';
 import { RECORDING_VIDEO_FORMATS, recordingAudioChoice, recordingAudioOptions } from '../../shared/recordingFormats.cjs';
+import { SIDE_LAYOUT, isSide } from '../../shared/model.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
 
-const LAYOUTS = [
-  { n: 1, label: 'Camera', cls: 'full-cam' },
-  { n: 2, label: 'Screen', cls: 'screen' },
-  { n: 3, label: 'Top left', cls: 'screen', cam: 'tl' },
-  { n: 4, label: 'Top right', cls: 'screen', cam: 'tr' },
-  { n: 5, label: 'Bottom left', cls: 'screen', cam: 'bl' },
-  { n: 6, label: 'Bottom right', cls: 'screen', cam: 'br' },
-];
 
 export function Recorder({ active }) {
   const canvasRef = useRef(null);
   const [failed, setFailed] = useState([]);
   const [mixerOpen, setMixerOpen] = useState(false);
   const s = settings.value;
+  const side = isSide(s.layout);
   const mod = modifierInfo();
 
   useEffect(() => {
@@ -52,7 +46,7 @@ export function Recorder({ active }) {
 
   useEffect(() => {
     engine.setActive(active);
-    api.setShortcutsActive(active || engine.recording.value);
+    api.setShortcutsActive(active || engine.recording.value).then(setFailed);
   }, [active, engine.recording.value]);
 
   useEffect(() => {
@@ -85,8 +79,8 @@ export function Recorder({ active }) {
         </div>
         <div class="layout-row">
           {LAYOUTS.map((l) => (
-            <button key={l.n} class={`layout-btn${s.layout === l.n ? ' active' : ''}`} title={`${mod.short}${l.n}`} onClick={() => engine.setLayout(l.n)}>
-              <div class={`mini ${l.cls}`}>{l.cam && <div class={`cam ${l.cam} ${s.pipShape}`} />}</div>
+            <button key={l.n} class={`layout-btn${s.layout === l.n ? ' active' : ''}`} title={l.noKey ? l.label : `${mod.short}${l.n}`} onClick={() => engine.setLayout(l.n)}>
+              <div class={`mini ${l.cls}`}>{l.cam && <div class={`cam ${l.cam} ${isSide(l.n) ? s.sideShape : s.pipShape}`} style={isSide(l.n) ? { width: `${s.sideSize}%` } : undefined} />}</div>
               <span>
                 <b>{l.n}</b> {l.label}
               </span>
@@ -145,7 +139,7 @@ export function Recorder({ active }) {
               value={s.cameraId}
               disabled={recording}
               options={[{ value: '', label: 'No camera' }, ...engine.cameras.value.map((c) => ({ value: c.id, label: c.label }))]}
-              onChange={(v) => set({ cameraId: v }, engine.useCamera)}
+              onChange={engine.chooseCamera}
             />
           </Row>
           <Row label={<><Mic size={14} /> Microphone</>} stacked>
@@ -153,7 +147,7 @@ export function Recorder({ active }) {
               value={s.micId}
               disabled={recording || engine.finishing.value || Boolean(engine.micTest.value)}
               options={[{ value: '', label: 'No microphone' }, ...engine.mics.value.map((m) => ({ value: m.id, label: m.label }))]}
-              onChange={(v) => set({ micId: v }, engine.useMic)}
+              onChange={engine.chooseMic}
             />
             <div class="meter">
               <div style={{ width: `${engine.level.value * 100}%` }} />
@@ -188,8 +182,8 @@ export function Recorder({ active }) {
         <Section title="Camera">
           <Row label="Shape">
             <Segmented
-              value={s.pipShape}
-              onChange={(v) => set({ pipShape: v })}
+              value={side ? s.sideShape : s.pipShape}
+              onChange={(v) => set(side ? { sideShape: v } : { pipShape: v })}
               options={[
                 { value: 'circle', label: 'Circle', icon: Circle, showLabel: true },
                 { value: 'square', label: 'Square', icon: Square, showLabel: true },
@@ -198,28 +192,38 @@ export function Recorder({ active }) {
               ]}
             />
           </Row>
-          <Row label="Size">
-            <Segmented
-              value={s.pipSize}
-              onChange={(v) => set({ pipSize: v })}
-              options={[
-                { value: 'small', label: 'Small' },
-                { value: 'medium', label: 'Medium' },
-                { value: 'large', label: 'Large' },
-              ]}
-            />
-          </Row>
+          {side ? (
+            <GainControl label="Camera width" value={s.sideSize} min={SIDE_LAYOUT.min} max={SIDE_LAYOUT.max} reset={SIDE_LAYOUT.size} unit="%" onChange={(v) => set({ sideSize: v })} />
+          ) : (
+            <Row label="Size">
+              <Segmented
+                value={s.pipSize}
+                onChange={(v) => set({ pipSize: v })}
+                options={[
+                  { value: 'small', label: 'Small' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'large', label: 'Large' },
+                ]}
+              />
+            </Row>
+          )}
           <Row label="Mirror">
             <Toggle checked={s.mirror} onChange={(v) => set({ mirror: v })} />
           </Row>
-          <Row label="Show PiP on screen">
-            <Toggle checked={s.showPipOnScreen} disabled={engine.isWindowSource()} onChange={(v) => set({ showPipOnScreen: v })} />
-          </Row>
-          <p class="hint">
-            {engine.isWindowSource()
-              ? 'Choose a full display or a screen area to show PiP over the app you are recording.'
-              : <>Shows the camera over your other apps at its recorded size and position. Clicks pass through. Use {mod.short}3–6 to change corners. {api.platform !== 'win32' && 'The on-screen camera can also be captured in the screen file. Turn this off to keep the screen file free of the camera for later editing.'}</>}
-          </p>
+          {side ? (
+            <p class="hint">Shape and width are saved for Camera left and Camera right, and are used when you switch to these layouts while recording. The screen gets the rest of the frame.</p>
+          ) : (
+            <>
+              <Row label="Show PiP on screen">
+                <Toggle checked={s.showPipOnScreen} disabled={engine.isWindowSource()} onChange={(v) => set({ showPipOnScreen: v })} />
+              </Row>
+              <p class="hint">
+                {engine.isWindowSource()
+                  ? 'Choose a full display or a screen area to show PiP over the app you are recording.'
+                  : <>Shows the camera over your other apps at its recorded size and position. Clicks pass through. Use {mod.short}3–6 to change corners. {api.platform !== 'win32' && 'The on-screen camera can also be captured in the screen file. Turn this off to keep the screen file free of the camera for later editing.'}</>}
+              </p>
+            </>
+          )}
         </Section>
 
         <Section title="Overlays">

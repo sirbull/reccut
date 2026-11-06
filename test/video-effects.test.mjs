@@ -182,3 +182,18 @@ test('custom shadow settings and keyframes survive save, paste and removal', () 
   assert.equal(destination.kf.shadowOffsetX, undefined);
   assert.equal(destination.props.shadow, 0);
 });
+
+test('chroma key motion blur keeps blurred subject edges translucent and removes the screen colour', () => {
+  const e = makeVideoEffect('chroma'),
+    skin = [0.9, 0.7, 0.6],
+    screen = [0, 0xb1 / 255, 0x40 / 255];
+  const blur = skin.map((v, i) => 0.6 * v + 0.4 * screen[i]); // 60 % subject, 40 % screen
+  assert.equal(keyAlpha(blur, e), 1);
+  e.p.motionBlur = 1;
+  const a = keyAlpha(blur, e);
+  assert.ok(a > 0.3 && a < 0.8, `alpha ${a}`);
+  assert.equal(keyAlpha(skin, e), 1);
+  assert.equal(keyAlpha(screen, e), 0);
+  const out = keyPixels(new Uint8ClampedArray([...blur.map((v) => v * 255), 255]), 1, 1, e);
+  assert.ok(out[1] < out[0], 'recovered edge colour is no longer green-dominant');
+});

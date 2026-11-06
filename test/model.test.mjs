@@ -276,6 +276,14 @@ test('frakoblet lyd blir egne klipp og videoen blir stum', () => {
   assert.equal(sources[0].clip.id, ids[0]);
 });
 
+test('frakoblet lyd beholder monovalget for lydkilden', () => {
+  const p = setup();
+  const [a] = p.primary;
+  p.clips[a].props.audioMono = { main: true };
+  const [id] = detachAudio(p, a);
+  assert.deepEqual(p.clips[id].props.audioMono, { main: true });
+});
+
 test('utvidet lyd: J-kutt lar lyden starte før bildet', () => {
   const p = setup();
   const [a, b] = p.primary;

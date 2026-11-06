@@ -12,6 +12,7 @@ import {
   Loader2,
   PanelLeft,
   PanelRight,
+  Palette,
   Plus,
   Redo2,
   Settings,
@@ -26,7 +27,7 @@ import { Recorder } from './recorder/Recorder.jsx';
 import * as engine from './recorder/engine.js';
 import { modifierInfo, settings } from './recorder/settings.js';
 import { Editor } from './editor/Editor.jsx';
-import { byId, commandForEvent, menuTemplate, runCommand } from './registry.js';
+import { byId, commandForEvent, inRoom, menuTemplate, runCommand } from './registry.js';
 import { effect, signal } from '@preact/signals';
 import {
   canRedo,
@@ -46,6 +47,8 @@ import {
 import * as commands from './editor/commands.js';
 import { ExportDialog, startExport } from './editor/ExportDialog.jsx';
 import { ExportFrameDialog } from './editor/ExportFrameDialog.jsx';
+import { DesignRoom } from './design/DesignRoom.jsx';
+import { designUndo, designRedo, canDesignUndo, canDesignRedo, currentDesign, exportDesignOpen, historyVersion as designHistoryVersion } from './design/store.js';
 import { ExportRoom } from './export/ExportRoom.jsx';
 import { prepareProjectExport } from './export/state.js';
 import { currentSequence, formatDuration } from '../shared/model.js';
@@ -91,6 +94,8 @@ export function toggleRecording() {
   if (engine.recording.value) finishRecording().catch((err) => toast(`Could not save the recording: ${err.message}`, { kind: 'error' }));
   else engine.startRecording().catch((err) => toast(`Could not start recording: ${err.message}`, { kind: 'error' }));
 }
+
+byId.get('record:toggle').run = toggleRecording;
 
 function TasksIndicator() {
   const [open, setOpen] = useState(false);
@@ -153,6 +158,7 @@ function TitleBar() {
   const rec = engine.recording.value;
   const mod = modifierInfo();
   historyVersion.value;
+  designHistoryVersion.value;
   return (
     <header class={`titlebar${isMac ? ' mac' : ''}`}>
       <div class="brand">
@@ -172,6 +178,7 @@ function TitleBar() {
           <Share size={14} />
           Export
         </button>
+        <button class={r === 'design' ? 'active' : ''} onClick={() => (room.value = 'design')} title="Design"><Palette size={14} />Design</button>
       </div>
       <button class="project-btn" title={`${project.value.name}. Click for project info, or to open or create projects.`} onClick={() => (commands.projectsOpen.value = true)}>
         <FolderOpen size={14} />
@@ -201,6 +208,12 @@ function TitleBar() {
             <Share size={15} />
             Export Project
           </button>
+        </div>
+      ) : r === 'design' ? (
+        <div class="actions">
+          <IconButton icon={Undo2} title="Undo Design" disabled={!canDesignUndo()} onClick={designUndo} />
+          <IconButton icon={Redo2} title="Redo Design" disabled={!canDesignRedo()} onClick={designRedo} />
+          <button class="btn primary" disabled={!currentDesign.value} onClick={() => { exportDesignOpen.value = true; }}><Share size={15}/>Export Design…</button>
         </div>
       ) : r === 'export' ? (
         <div class="actions" />
@@ -290,7 +303,8 @@ function handleMenu(id) {
     if (!cmd?.allowWhileTyping) return;
     document.activeElement?.blur?.();
   }
-  if (dialogOwnsKeyboard()) return;
+  // Menyen bygges om etter et rombytte, så et tastetrykk rett etter byttet kan treffe den gamle menyen.
+  if (dialogOwnsKeyboard() || !cmd || !inRoom(cmd)) return;
   runCommand(id);
 }
 
@@ -308,6 +322,7 @@ let menuTimer = null;
 effect(() => {
   menuTemplate();
   historyVersion.value;
+  designHistoryVersion.value;
   clearTimeout(menuTimer);
   menuTimer = setTimeout(() => api.setMenu(menuTemplate()), 60);
 });
@@ -389,6 +404,7 @@ function App() {
         <div class="room" hidden={r !== 'export'}>
           <ExportRoom active={r === 'export'} />
         </div>
+        <div class="room" hidden={r !== 'design'}><DesignRoom active={r === 'design'} /></div>
       </main>
       {commands.exportOpen.value && <ExportDialog />}
       {commands.frameExportOpen.value && <ExportFrameDialog request={commands.frameExportOpen.value} />}

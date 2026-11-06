@@ -134,6 +134,10 @@ function summary(p, c) {
     ...(c.props?.fields ? { fields: c.props.fields } : {}),
     properties: Object.fromEntries(Object.entries(c.props || {}).filter(([k, v]) => Object.hasOwn(PROPERTY_RANGES, k) && v)),
     ...(c.props?.vfx?.length ? { effectStack: c.props.vfx.map((e) => e.type) } : {}),
+    // Sporing: bare en oversikt, ikke punktene i sporet.
+    ...(c.props?.tracks?.length ? { tracks: c.props.tracks.map((t) => ({ id: t.id, name: t.name, seconds: round((t.frames.length - 1) / t.fps) })) } : {}),
+    ...(c.props?.follow ? { followsTrack: { videoClipId: c.props.follow.clipId, trackId: c.props.follow.trackId, mode: 'live', rotation: Boolean(c.props.follow.rotation), scale: Boolean(c.props.follow.scale) } } : {}),
+    ...(c.props?.trackedKeys?.length ? { hasTrackingKeyframes: true } : {}),
   };
 }
 const titleList = () =>

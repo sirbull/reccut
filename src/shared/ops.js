@@ -128,6 +128,7 @@ function mediaLength(project, clip) {
 
 export function shiftKeyframes(c, delta) {
   if (Math.abs(delta) < 1e-9) return;
+  for (const expression of Object.values(c.expressions || {})) expression.timeOffset = (expression.timeOffset || 0) - delta / kfRate(c);
   for (const [prop, list] of Object.entries(c.kf || {})) {
     if (prop === 'layout') continue;
     for (const k of list) k[0] = round(k[0] + delta);
@@ -229,6 +230,26 @@ export function groupMembers(project, id) {
   const g = project.clips[id]?.group;
   if (!g) return project.clips[id] ? [id] : [];
   return Object.values(project.clips).filter((c) => c.group === g).map((c) => c.id);
+}
+
+// Rediger innholdet som vanlige klipp, uten at gruppens tidskobling tar med de andre.
+// Vanlig magnetisk redigering utenfor gruppen og eksplisitte PiP-koblinger beholdes.
+export function editGroupContents(project, group, ids, edit) {
+  if (!group) return edit(project);
+  const selected = new Set(ids);
+  const members = Object.values(project.clips).filter((c) => c.group === group).map((c) => ({ id: c.id, start: c.start }));
+  for (const { id } of members) delete project.clips[id].group;
+  try {
+    return edit(project);
+  } finally {
+    const remaining = members.filter(({ id }) => project.clips[id]);
+    for (const { id, start } of remaining) {
+      const c = project.clips[id];
+      if (remaining.length > 1) c.group = group;
+      if (!selected.has(id) && c.lane !== 0) c.start = start;
+    }
+    updateDuration(project);
+  }
 }
 
 // Klippet i hovedsporet som styrer gruppen, eller null om alle er frie.
@@ -495,9 +516,16 @@ export function mediaClip(media, opts = {}) {
   return clip;
 }
 
+// Lyd ligger under hovedsporet og bilde over. Media hører aldri hjemme i CC-sporet.
+export function mediaLane(media, lane) {
+  if (media.kind === 'audio') return lane < 0 ? lane : -1;
+  return lane < 0 || lane === CAPTION_LANE ? 1 : lane;
+}
+
 export function addMediaClip(project, media, mode, T, laneHint, opts = {}) {
   const clip = mediaClip(media, opts);
   const audioOnly = clip.type === 'audio';
+  laneHint = mediaLane(media, laneHint);
   if (mode === 'overwrite' && !audioOnly) {
     overwritePrimary(project, clip, T ?? 0);
   } else if (audioOnly || mode === 'connect') {
@@ -516,7 +544,7 @@ export function addMediaClip(project, media, mode, T, laneHint, opts = {}) {
 // Bilde erstatter bilde og lyd erstatter lyd, ellers skjer ingenting.
 export function replaceClip(project, targetId, clip) {
   const old = project.clips[targetId];
-  if (!old || old.type === 'gap' || project.lanes?.[old.lane]?.locked || isVisual(old) !== isVisual(clip)) return false;
+  if (!old || old.type === 'gap' || old.type === 'caption' || project.lanes?.[old.lane]?.locked || isVisual(old) !== isVisual(clip)) return false;
   if (old.lane === 0) {
     withSync(project, () => {
       clip.lane = 0;
@@ -860,6 +888,7 @@ export function detachAudio(project, id) {
     a.props.aLead = c.props.aLead || 0;
     a.props.aTail = c.props.aTail || 0;
     a.props.preservePitch = c.props.preservePitch;
+    if (c.props.audioMono?.[stream]) a.props.audioMono = { [stream]: true };
     if (c.kf[volumeProp]) a.kf.volume = deepClone(c.kf[volumeProp]);
     placeFree(project, a, c.start, -1);
     ids.push(a.id);

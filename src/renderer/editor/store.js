@@ -1,5 +1,5 @@
 // Tilstand for redigeringen: prosjekt, utvalg, historikk og lagring.
-import { signal, computed, effect } from '@preact/signals';
+import { signal, computed, effect, batch } from '@preact/signals';
 import { produce, setAutoFreeze } from 'immer';
 import {
   CAPTION_LANE,
@@ -14,12 +14,13 @@ import {
   parseTransitionSelection,
   updateDuration,
 } from '../../shared/model.js';
-import { addMediaClip, autoFormat } from '../../shared/ops.js';
+import { addMediaClip, autoFormat, editGroupContents, groupMembers } from '../../shared/ops.js';
 import { templateDefaults } from '../../shared/titletemplates.js';
 import { hasMotion, setMotion } from '../../shared/stabilize.js';
 import { CAMERA_LOGS, hasLut, setLut } from '../../shared/grade.js';
 import { couldNotRead } from '../../shared/formats.js';
 import { prefs } from '../prefs.js';
+import { normalizeDesignProject } from '../../shared/design.js';
 
 // Objektene i prosjektet endres bare gjennom commit, så de trenger ikke fryses.
 setAutoFreeze(true);
@@ -28,15 +29,64 @@ const api = window.api;
 
 export const room = signal('record');
 export const project = signal(newProject());
+export const projectEpoch = signal(0);
 // Hver versjon av prosjektet endres aldri etter at den er laget, så tidsindeksen kan gjenbrukes.
 effect(() => sealProject(project.value));
 export const projectPath = signal(null);
-// Sekvensinnstillinger: null, {} fra menyen, eller { mediaId } når første klipp nettopp satte formatet.
+// Sekvensinnstillinger: null, {} fra menyen, { mediaId } for første klipp, eller { create, projectId } for ny sekvens.
 export const sequenceSettingsOpen = signal(null);
 export const selection = signal([]);
+// Gruppen som er åpnet for redigering. Dette er visningstilstand, og lagres ikke i prosjektet.
+export const editingGroup = signal(null);
+export const selectedGroup = computed(() => {
+  if (editingGroup.value || selection.value.length < 2) return null;
+  const ids = selection.value;
+  const g = project.value.clips[ids[0]]?.group;
+  return g && ids.every((id) => project.value.clips[id]?.group === g) && groupMembers(project.value, ids[0]).length === ids.length ? g : null;
+});
+
+export function inEditingGroup(clip) {
+  return !editingGroup.value || clip?.group === editingGroup.value;
+}
+
+export function enterGroup(id) {
+  const clip = project.value.clips[id];
+  if (!clip?.group || project.value.lanes?.[clip.lane]?.locked) return;
+  batch(() => {
+    editingGroup.value = clip.group;
+    selection.value = [id];
+    selectedTransition.value = null;
+    selectedComponent.value = null;
+    skim.value = null;
+  });
+}
+
+export function exitGroup() {
+  const g = editingGroup.value;
+  if (!g) return;
+  batch(() => {
+    editingGroup.value = null;
+    selection.value = Object.values(project.value.clips).filter((c) => c.group === g).map((c) => c.id);
+    selectedTransition.value = null;
+    selectedComponent.value = null;
+  });
+}
+
+export function clipSelection(id, individual = false) {
+  const clip = project.value.clips[id];
+  if (!clip || !inEditingGroup(clip)) return [];
+  return editingGroup.value || individual || clip.slideshowParent || clip.slideshowForeground ? [id] : groupMembers(project.value, id);
+}
 export const selectedTransition = signal(null);
 // Valgt lydkomponent i utvidet lyd: { clipId, key }. V slår den av og på.
 export const selectedComponent = signal(null);
+effect(() => {
+  const g = editingGroup.value;
+  if (!g) return;
+  const clips = project.value.clips;
+  // Sletting, opphevet gruppering, Angre eller valg fra biblioteket kan avslutte gruppemodusen.
+  if (Object.values(clips).filter((c) => c.group === g).length < 2 || selection.value.some((id) => clips[id] && clips[id].group !== g)) editingGroup.value = null;
+});
 export const tool = signal('select');
 export const snapping = signal(prefs.value.snapping);
 // Skumming som i Final Cut Pro: S slår av og på, N slår lyden av og på.
@@ -176,8 +226,11 @@ function copyChanges(before, after, targets) {
 function mirrored(base, next) {
   const { from, to, paused } = mirror;
   const a = base.clips[from], b = next.clips[from];
-  if (paused || !a || !b || a.props === b.props) return next;
-  return produce(next, (d) => copyChanges(a.props, b.props, to.map((id) => d.clips[id]?.props).filter(Boolean)));
+  if (paused || !a || !b || (a.props === b.props && a.expressions === b.expressions)) return next;
+  return produce(next, (d) => {
+    copyChanges(a.props, b.props, to.map((id) => d.clips[id]?.props).filter(Boolean));
+    if (a.expressions !== b.expressions) copyChanges(a.expressions || {}, b.expressions || {}, to.map(id => d.clips[id]).filter(Boolean).map(c => (c.expressions ||= {})));
+  });
 }
 
 // Forhåndsvisning: viser en endring i seeren mens musa er over et valg, uten angresteg eller lagring.
@@ -186,10 +239,10 @@ let previewBase = null;
 export function previewEdit(mutator) {
   if (transientBase) return;
   previewBase ??= project.value;
-  project.value = withDuration(mirrored(previewBase, produce(previewBase, (d) => void mutator(d))));
+  project.value = restoreEditHistory(withDuration(mirrored(previewBase, produce(previewBase, (d) => void mutator(d)))));
 }
 export function endPreview() {
-  if (previewBase) project.value = previewBase;
+  if (previewBase) project.value = restoreEditHistory(previewBase);
   previewBase = null;
 }
 
@@ -214,6 +267,14 @@ export function commit(mutator) {
   return result;
 }
 
+export function commitClipEdit(mutator) {
+  return commit((p) => editGroupContents(p, editingGroup.value, selection.value, mutator));
+}
+
+export function updateClipEdit(mutator) {
+  updateTransient((p) => editGroupContents(p, editingGroup.value, selection.value, mutator));
+}
+
 let transientBase = null;
 export function beginTransient() {
   endPreview();
@@ -221,9 +282,9 @@ export function beginTransient() {
 }
 export function updateTransient(mutator) {
   if (!transientBase) beginTransient();
-  project.value = withDuration(mirrored(transientBase, produce(transientBase, (d) => {
+  project.value = restoreEditHistory(withDuration(mirrored(transientBase, produce(transientBase, (d) => {
     mutator(d);
-  })));
+  }))));
 }
 export function endTransient(keep = true) {
   if (!transientBase) return;
@@ -231,9 +292,15 @@ export function endTransient(keep = true) {
     project.value = pruneTracks(transientBase, project.value);
     pushUndo(transientBase);
     scheduleSave();
-  } else if (!keep) project.value = transientBase;
+  } else if (!keep) project.value = restoreEditHistory(transientBase);
   transientBase = null;
   pruneSelection();
+}
+
+function restoreEditHistory(restored) {
+  const current = project.value;
+  if (restored.designs === current.designs && restored.designAssets === current.designAssets) return restored;
+  return { ...restored, designs: current.designs, designAssets: current.designAssets };
 }
 
 export function undo() {
@@ -241,7 +308,8 @@ export function undo() {
   if (!undoStack.length) return;
   const prevId = currentSequence(project.value).id;
   redoStack.push(project.value);
-  project.value = undoStack.pop();
+  // Navnet følger prosjektfilen og angres ikke.
+  project.value = { ...restoreEditHistory(undoStack.pop()), name: project.value.name };
   historyVersion.value++;
   if (currentSequence(project.value).id !== prevId) afterSequenceChange(prevId);
   pruneSelection();
@@ -253,7 +321,8 @@ export function redo() {
   if (!redoStack.length) return;
   const prevId = currentSequence(project.value).id;
   undoStack.push(project.value);
-  project.value = redoStack.pop();
+  // Navnet følger prosjektfilen og angres ikke.
+  project.value = { ...restoreEditHistory(redoStack.pop()), name: project.value.name };
   historyVersion.value++;
   if (currentSequence(project.value).id !== prevId) afterSequenceChange(prevId);
   pruneSelection();
@@ -281,6 +350,7 @@ function pruneSelection() {
 const sequenceTimes = new Map();
 
 function afterSequenceChange(prevId) {
+  editingGroup.value = null;
   sequenceTimes.set(prevId, getTime());
   selection.value = [];
   selectedTransition.value = null;
@@ -330,7 +400,7 @@ export async function saveNow() {
   }
   saveState.value = 'saving';
   try {
-    const p = { ...(previewBase || project.value), modified: Date.now() };
+    const p = { ...restoreEditHistory(previewBase || project.value), modified: Date.now() };
     projectPath.value = await api.saveProject(p, projectPath.value);
     localStorage.setItem('lastProject', projectPath.value);
     saveState.value = 'saved';
@@ -341,6 +411,13 @@ export async function saveNow() {
 }
 
 export function setProject(p, path = null) {
+  editingGroup.value = null;
+  clearTimeout(saveTimer);
+  projectFolders.value = null;
+  p = normalizeDesignProject(p);
+  transientBase = null;
+  previewBase = null;
+  projectEpoch.value++;
   playing.value = false;
   sourceMediaId.value = null;
   browserPlayhead.value = null;
@@ -390,11 +467,13 @@ export async function openProjectFile(path) {
 
 // Henter tilbake en tidligere versjon som én endring, så Angre tar deg tilbake.
 export function restoreProject(data) {
+  data = normalizeDesignProject(data);
   commit((q) => {
     for (const k of Object.keys(q)) delete q[k];
     Object.assign(q, data);
     relayoutPrimary(q);
   });
+  projectEpoch.value++;
   selection.value = [];
 }
 
@@ -407,6 +486,24 @@ export async function saveProjectAs(location, name) {
   setProject(p, r.file);
   undoStack.push(...keepUndo);
   return r;
+}
+
+// Nytt navn på prosjektet og prosjektfilen. Ikke i angrelisten, siden filen har fått nytt navn.
+// Gir false og en melding om det ikke gikk (for eksempel om navnet er tatt).
+export async function renameProject(name) {
+  await saveNow();
+  let file;
+  try {
+    file = await api.renameProject(projectPath.value, name);
+  } catch (err) {
+    const msg = err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+    import('../ui.jsx').then(({ toast }) => toast(`Could not rename the project: ${msg}`, { kind: 'error' }));
+    return false;
+  }
+  project.value = { ...project.value, name: file.split(/[\\/]/).pop().replace(/\.[^.]+$/, '') };
+  projectPath.value = file;
+  await saveNow();
+  return true;
 }
 
 // Nytt prosjekt: lager en egen mappe med navnet på valgt plassering.

@@ -79,6 +79,7 @@ Click **×** beside an effect name to remove it. Adjusted effects show a warning
 ## Matte and edge controls
 
 - **Similarity** sets how much background is removed. **Softness** smooths the transition around the threshold.
+- **Motion blur** keeps blurred edges of fast movement translucent and removes the screen colour from them, so they blend with the new background instead of turning grey or green. Start around 0.5.
 - **Recover fine detail** restores fractional coverage in hair and fine edges. Raise gradually to avoid restoring dark background patches.
 - **Preserve source shadows** keeps darker areas with the screen’s hue as translucent shadows. Select an unshadowed Screen color sample; **Shadow color range** sets hue tolerance.
 - **Recover edge color** reduces screen contamination in translucent edge pixels. **Spill** reduces the dominant screen colour channel.

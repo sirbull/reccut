@@ -14,6 +14,7 @@ import { prefs, setPrefs } from './prefs.js';
 import { saveSettings, settings } from './recorder/settings.js';
 import { pause, seek, snapshot } from './editor/playback.js';
 import { readClipFrames } from './editor/sourceFrame.js';
+import { attachToTrack, detach, removeTrackingKeyframes, trackForward } from './editor/track.js';
 
 const api = window.api;
 const MAX_STEPS = 40;
@@ -69,7 +70,6 @@ const RUNTIME_TOOLS = [
       properties: {
         mediaId: { type: 'string' },
         language: { type: 'string', description: 'Spoken language in English, lowercase, for example "norwegian", or "auto".' },
-        accurate: { type: 'boolean', description: 'Slower, better model. Default true.' },
         words: { type: 'boolean', description: 'Include every word with its time. Use for the part you are cutting.' },
         from: { type: 'number' },
         to: { type: 'number' },
@@ -91,11 +91,11 @@ const RUNTIME_TOOLS = [
         if (!sources.length) throw new Error('There is no audio on the timeline.');
       }
       const language = /^[a-z]{2,20}$/.test(a.language || '') ? a.language : 'auto',
-        model = a.accurate === false ? 'base' : 'small';
+        model = (await api.subtitleModels()).active;
       const key = JSON.stringify([sources, language, model]);
       if (!transcripts.has(key)) {
         let off = [];
-        const job = api.startTranscribe({ sources, duration, language, model, projectId: p.id, agent: true });
+        const job = api.startTranscribe({ sources, duration, language, projectId: p.id, agent: true });
         const result = await new Promise((resolve, reject) => {
           job.catch(reject);
           const abort = () => job.then((id) => api.cancelTask(id));
@@ -404,7 +404,7 @@ const RUNTIME_TOOLS = [
     parameters: { type: 'object', properties: { query: { type: 'string' } } },
     async run(a) {
       const words = String(a.query || '').toLowerCase().split(/\W+/).filter(Boolean);
-      const hits = COMMANDS.filter((c) => words.every((w) => `${c.id} ${c.label} ${c.menu || ''} ${c.keywords || ''} ${c.desc || ''}`.toLowerCase().includes(w)));
+      const hits = COMMANDS.filter((c) => !c.menuOnly && words.every((w) => `${c.id} ${c.label} ${c.menu || ''} ${c.keywords || ''} ${c.desc || ''}`.toLowerCase().includes(w)));
       return {
         content: JSON.stringify(
           hits.map((c) => ({
@@ -427,7 +427,7 @@ const RUNTIME_TOOLS = [
     parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
     async run(a) {
       const cmd = byId.get(a.id);
-      if (!cmd) throw new Error('Unknown command. Use find_commands.');
+      if (!cmd || cmd.menuOnly) throw new Error('Unknown command. Use find_commands.');
       if (!runCommand(cmd)) throw new Error(`${cmd.label} is not available right now.`);
       await new Promise((r) => setTimeout(r, 150));
       return { content: JSON.stringify({ ran: cmd.label, room: room.value, selected: selection.value, playhead: getTime() }) };
@@ -441,6 +441,82 @@ const RUNTIME_TOOLS = [
       if (Array.isArray(a.clipIds)) selection.value = a.clipIds.filter((id) => typeof id === 'string' && Object.hasOwn(project.value.clips, id));
       if (Number.isFinite(a.playhead) && a.playhead >= 0) seek(a.playhead);
       return { content: JSON.stringify({ selected: selection.value, playhead: getTime() }) };
+    },
+  },
+  {
+    name: 'track_object',
+    description:
+      'Follow something that moves in a video or screen recording clip (a face, a license plate, a product), and optionally attach other clips to it (a redaction, title, image or video on a higher lane). Find the object with preview_frames first. box is the object at time `at`, in project pixels (width and height from get_timeline) with x and y the top left corner; keep it tight around the object. The track runs from `at` to `until` (default the end of the clip) and is saved on the clip, so clips can be attached later with attach_to_track. Attached clips keep the place they have at `at` relative to the object and are grouped with the video. mode "live" (default) always uses the track as it is now; "keyframes" writes keyframes the user can adjust. rotation (default true) and scale (default false, experimental: follows the object getting closer or further away) say what the attached clips follow. To hide a moving face or plate: select the video, move the playhead to `at` and run_command redact:pixelate (or redact:blur, redact:solid, redact:frosted), then set_clip_properties on the new redaction: x and y are its centre as an offset from the frame centre in pixels, w and h its size. Then call track_object with the same box and the redaction in attach. The user can also do this from the Tracking and Follow Track sections of the inspector.',
+    parameters: {
+      type: 'object',
+      properties: {
+        clipId: { type: 'string', description: 'The video or screen recording clip to track in.' },
+        at: { type: 'number', description: 'Timeline seconds where the box is right.' },
+        until: { type: 'number', description: 'Timeline seconds to stop. Default: end of the clip.' },
+        box: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' } }, required: ['x', 'y', 'width', 'height'] },
+        attach: { type: 'array', items: { type: 'string' }, description: 'Clip ids to attach to the track.' },
+        mode: { type: 'string', enum: ['live', 'keyframes'] },
+        rotation: { type: 'boolean' },
+        scale: { type: 'boolean' },
+      },
+      required: ['clipId', 'at', 'box'],
+    },
+    async run(a) {
+      const p = project.value;
+      const v = p.clips[a.clipId];
+      if (!v || (v.type !== 'video' && v.type !== 'recording')) throw new Error('clipId must be a video or screen recording clip from get_timeline.');
+      const b = a.box || {};
+      if (![b.x, b.y, b.width, b.height].every(Number.isFinite) || b.width < 4 || b.height < 4) throw new Error('box needs x, y, width and height in project pixels.');
+      if (!Number.isFinite(a.at) || a.at < v.start || a.at >= v.start + v.dur) throw new Error('at must be inside the clip.');
+      const attach = Array.isArray(a.attach) ? a.attach : [];
+      for (const id of attach) if (!p.clips[id] || p.clips[id].lane <= v.lane) throw new Error(`Clip ${id} must exist and be on a higher lane than the video.`);
+      seek(a.at);
+      const tr = await trackForward(v.id, { cx: b.x + b.width / 2, cy: b.y + b.height / 2, w: b.width, h: b.height, a: 0 }, Number.isFinite(a.until) ? a.until : Infinity);
+      if (!tr) throw new Error('Could not follow anything in that box. Try a box with more detail, or check the time.');
+      const opts = { live: a.mode !== 'keyframes', rotation: a.rotation !== false, scale: a.scale === true };
+      const attached = attach.filter((id) => attachToTrack(id, v.id, tr.id, opts));
+      return { content: JSON.stringify({ trackId: tr.id, trackedSeconds: tr.seconds, lostObject: tr.lost, attached }) };
+    },
+  },
+  {
+    name: 'attach_to_track',
+    description:
+      'Attach clips on a higher lane to a track that already exists on a video clip (see "tracks" in get_timeline). The clips keep the place they have at `at` (default the playhead) relative to the object, and are grouped with the video. mode, rotation and scale work as in track_object.',
+    parameters: {
+      type: 'object',
+      properties: {
+        clipIds: { type: 'array', items: { type: 'string' } },
+        videoClipId: { type: 'string' },
+        trackId: { type: 'string' },
+        at: { type: 'number' },
+        mode: { type: 'string', enum: ['live', 'keyframes'] },
+        rotation: { type: 'boolean' },
+        scale: { type: 'boolean' },
+      },
+      required: ['clipIds', 'videoClipId', 'trackId'],
+    },
+    async run(a) {
+      const v = project.value.clips[a.videoClipId];
+      if (!v?.props.tracks?.some((t) => t.id === a.trackId)) throw new Error('No such track. Read "tracks" on the video clip in get_timeline.');
+      if (Number.isFinite(a.at)) seek(a.at);
+      const opts = { live: a.mode !== 'keyframes', rotation: a.rotation !== false, scale: a.scale === true };
+      const ids = Array.isArray(a.clipIds) ? a.clipIds.filter((id) => project.value.clips[id]) : [];
+      const attached = ids.filter((id) => attachToTrack(id, v.id, a.trackId, opts));
+      if (!attached.length) throw new Error('Nothing was attached. The clips must overlap the track in time.');
+      return { content: JSON.stringify({ attached }) };
+    },
+  },
+  {
+    name: 'detach_from_track',
+    description: 'Stop clips from following a track. Removes the live link, and with removeKeyframes also the keyframes that tracking wrote (other keyframes stay). The clips stay grouped with the video.',
+    parameters: { type: 'object', properties: { clipIds: { type: 'array', items: { type: 'string' } }, removeKeyframes: { type: 'boolean' } }, required: ['clipIds'] },
+    async run(a) {
+      const ids = (Array.isArray(a.clipIds) ? a.clipIds : []).filter((id) => project.value.clips[id]);
+      for (const id of ids) {
+        if (project.value.clips[id].props.follow) detach(id);
+        if (a.removeKeyframes && project.value.clips[id].props.trackedKeys) removeTrackingKeyframes(id);
+      }
+      return { content: JSON.stringify({ detached: ids }) };
     },
   },
   {

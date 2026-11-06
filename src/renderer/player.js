@@ -3,15 +3,30 @@
 // Redigeringen og eksportfanen har hver sin spiller.
 import { audioWindow, computeAudio, computeFrame, instSpeed, sideBackgroundMedia, sourceTime, transitionWindow, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
-import { activeEffects } from '../shared/audiofx.js';
-import { prefs, previewResolutionScale } from './prefs.js';
+import { componentEffects } from '../shared/audiofx.js';
+import { effect } from '@preact/signals';
+import { audioSink, prefs, previewResolutionScale } from './prefs.js';
 
 const PRELOAD = 1.5;
 const KEEP = 6;
 
+function lastFrameTime(p, end = p.duration) {
+  const fps = Number.isFinite(p.fps) && p.fps > 0 ? p.fps : 30;
+  return Math.max(0, Math.ceil(end * fps - 1e-7) - 1) / fps;
+}
+
+// Klipp har en eksklusiv sluttgrense. Ved selve tidslinjeslutten viser
+// forhåndsvisningen siste bilde, som ved eksport av et stillbilde.
+function viewerFrameTime(p, T) {
+  return p.duration > 0 && T === p.duration ? lastFrameTime(p) : T;
+}
+
 export const fileUrl = (p) => `media://file/${encodeURIComponent(p)}`;
 
 const audioCtx = new AudioContext({ latencyHint: 'interactive' });
+effect(() => {
+  audioCtx.setSinkId?.(audioSink.value).catch((err) => console.warn('Could not switch audio output', err));
+});
 
 // Lydeffektene lastes én gang. Til de er klare, spilles lyden uten effekter.
 let fxReady = false;
@@ -21,14 +36,14 @@ audioCtx.audioWorklet
   .catch((err) => console.warn('Could not load audio effects', err));
 
 // Kobler effektkjeden til klippet inn mellom kilden og volumet, og sender nye innstillinger.
-function applyFx(entry, clip) {
+function applyFx(entry, clip, stream) {
   if (!entry.srcNode) return;
-  const list = activeEffects(clip);
+  const list = componentEffects(clip, stream);
   const key = JSON.stringify(list);
   if (key === entry.fxKey) return;
   if (list.length && !entry.fx) {
     if (!fxReady) return;
-    entry.fx = new AudioWorkletNode(audioCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
+    entry.fx = new AudioWorkletNode(audioCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
     entry.srcNode.disconnect();
     entry.srcNode.connect(entry.fx).connect(entry.gain);
   }
@@ -40,7 +55,7 @@ function applyFx(entry, clip) {
  * getProject: gir prosjektet som skal spilles.
  * playing: signal med true/false. getTime/setTime: spillhodet.
  */
-export function createPlayer({ getProject, playing, getTime, setTime }) {
+export function createPlayer({ getProject, playing, getTime, setTime, resolutionScale = previewResolutionScale, keepSeconds = KEEP }) {
   const master = audioCtx.createGain();
   master.connect(audioCtx.destination);
   const pool = new Map();
@@ -164,7 +179,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
 
   // Skaler før fargekorrigering og kildeeffekter, så også disse behandler færre piksler.
   function previewSource(src) {
-    if (!canvas || previewResolutionScale() === 1) return src;
+    if (!canvas || resolutionScale() === 1) return src;
     const scale = Math.min(1, canvas.width / src.w, canvas.height / src.h);
     if (scale >= 1) return src;
     const w = Math.max(2, Math.round(src.w * scale));
@@ -248,7 +263,8 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
   // Hvilke strømmer som trengs ved tid T, med kildetid for hver.
   function neededAt(p, T) {
     const out = new Map();
-    const frame = computeFrame(p, T, { captions: false });
+    const visualT = viewerFrameTime(p, T);
+    const frame = computeFrame(p, visualT, { captions: false });
     const addVisual = (clip, t) => {
       const m = p.media[clip.mediaId];
       if (!m || m.kind === 'image' || m.offline) return;
@@ -260,9 +276,9 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     };
     for (const l of frame.layers) {
       if (l.transition) {
-        if (l.a) addVisual(l.a.clip, T);
-        if (l.b) addVisual(l.b.clip, T);
-      } else addVisual(l.clip, T);
+        if (l.a) addVisual(l.a.clip, visualT);
+        if (l.b) addVisual(l.b.clip, visualT);
+      } else addVisual(l.clip, visualT);
     }
     for (const a of computeAudio(p, T)) {
       const id = `${a.clip.id}:${a.stream}`;
@@ -283,7 +299,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       seen.add(id);
       const entry = getEl(n.clip, n.key);
       if (!entry) continue;
-      if (entry.gain) applyFx(entry, n.clip);
+      if (entry.gain) applyFx(entry, n.clip, n.key);
       const el = entry.el;
       const dur = el.duration || Infinity;
       // I en baklengs kopi er tiden speilet.
@@ -345,7 +361,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       if (seen.has(id)) continue;
       if (entry.gain) entry.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.015);
       if (!entry.el.paused) entry.el.pause();
-      if (now - entry.lastUsed > KEEP * 1000) disposeEntry(id, entry);
+      if (now - entry.lastUsed > keepSeconds * 1000) disposeEntry(id, entry);
     }
   }
 
@@ -371,7 +387,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     const dpr = window.devicePixelRatio || 1;
     const fit = Math.min(cssW / p.width, cssH / p.height);
     // Reduser etter at full oppløsning er begrenset, også i fullskjerm på Retina.
-    const scale = Math.min(1, fit * dpr, cap) * previewResolutionScale();
+    const scale = Math.min(1, fit * dpr, cap) * resolutionScale();
     const W = Math.max(2, Math.round(p.width * scale));
     const H = Math.max(2, Math.round(p.height * scale));
     if (canvas.width !== W || canvas.height !== H) {
@@ -393,7 +409,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       canvasProjectId = p.id;
     }
-    const frame = computeFrame(p, T);
+    const frame = computeFrame(p, viewerFrameTime(p, T));
     staging ||= document.createElement('canvas');
     if (staging.width !== canvas.width || staging.height !== canvas.height) {
       staging.width = canvas.width;
@@ -442,7 +458,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
             clockBase = T;
             clockStart = now;
           } else {
-            T = end;
+            T = lastFrameTime(p, end);
             pause();
           }
         }
@@ -451,7 +467,7 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
         pause();
       }
       setTime(T);
-      sync(T, true);
+      sync(T, playing.value);
       dirty = !draw(T);
       return;
     }
@@ -527,8 +543,27 @@ export function createPlayer({ getProject, playing, getTime, setTime }) {
     dirty = true;
   }
 
-  // snapshot: the viewer canvas once the current time is fully drawn, for AI previews.
-  return { attachCanvas, resizeCanvas, start, stopLoop, play, pause, toggle, getRate, shuttle, seek, scrubAudio, invalidate: () => (dirty = true), snapshot: () => (!dirty && canvas) || null, dispose };
+  // Sampling must wait for the requested video frame, while ordinary scrubbing
+  // is allowed to keep showing the previous frame during a decoder seek.
+  function snapshot({ fresh = false } = {}) {
+    if (dirty || !canvas) return null;
+    if (fresh) {
+      const p = getProject(), frame = computeFrame(p, viewerFrameTime(p, getTime()));
+      const sides = frame.layers.flatMap(l => l.clip ? [l] : [l.a, l.b].filter(Boolean));
+      for (const side of sides) for (const clip of [side.clip, ...(side.companions || [])]) {
+        const media = p.media[clip.mediaId];
+        if (media?.kind === 'image') {
+          const img = images.get(media.streams?.main?.proxy || media.path);
+          if (!img?.complete || !img.naturalWidth) return null;
+        } else for (const [key] of visualStreams(clip, media)) {
+          const entry = pool.get(`${clip.id}:${key}`), el = entry?.el;
+          if (!el || el.error || el.seeking || el.readyState < 2 || !el.videoWidth || Math.abs(el.currentTime - entry.target) > 0.5 / 60) return null;
+        }
+      }
+    }
+    return canvas;
+  }
+  return { attachCanvas, resizeCanvas, start, stopLoop, play, pause, toggle, getRate, shuttle, seek, scrubAudio, invalidate: () => (dirty = true), snapshot, dispose };
 
   function dispose() {
     stopLoop();

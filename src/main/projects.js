@@ -8,7 +8,7 @@ const fs = require('fs');
 const history = require('./history');
 const path = require('path');
 
-const SUBDIRS = { media: 'Media', recordings: 'Recordings', optimized: 'Optimized Media', exports: 'Exports' };
+const SUBDIRS = { media: 'Media', recordings: 'Recordings', optimized: 'Optimized Media', exports: 'Exports', designs: 'Designs' };
 
 function legacyDir(base) {
   return path.join(base, 'Projects');
@@ -98,6 +98,9 @@ function fixOldPaths(text) {
 const LINK_FIELDS = ['path', 'proxy', 'optimized', 'reversed', 'motion', 'wave'];
 
 function addRelative(project, dir) {
+  project.designs ||= {};
+  project.designAssets ||= {};
+  for (const a of Object.values(project.designAssets)) if (a.path) a.rel = path.relative(dir, a.path);
   for (const m of Object.values(project.media || {})) {
     if (m.path) m.rel = path.relative(dir, m.path);
     for (const st of Object.values(m.streams || {})) {
@@ -113,6 +116,12 @@ function resolveRelative(project, dir) {
     const cand = path.resolve(dir, rel.split(/[\\/]/).join(path.sep));
     return fs.existsSync(cand) ? cand : abs;
   };
+  project.designs ||= {};
+  project.designAssets ||= {};
+  for (const a of Object.values(project.designAssets)) {
+    a.path = fix(a.path, a.rel);
+    a.missing = !a.path || !fs.existsSync(a.path);
+  }
   for (const m of Object.values(project.media || {})) {
     m.path = fix(m.path, m.rel);
     for (const st of Object.values(m.streams || {})) {
@@ -136,10 +145,12 @@ async function save(base, project, file, { history: keepHistory = true } = {}) {
   if (!file) file = (await create(path.join(base), project.name)).file;
   const tmp = file + '.tmp';
   const data = JSON.parse(JSON.stringify(project));
+  const cutoutCleanup = await require('./designCleanup').plan(data, file, history);
   addRelative(data, path.dirname(file));
   const text = JSON.stringify(data);
   await fs.promises.writeFile(tmp, text);
   await fs.promises.rename(tmp, file);
+  await cutoutCleanup.commit();
   if (!keepHistory) return file;
   lastFile = file;
   // Versjonshistorikk: en kopi med noen minutters mellomrom (i bakgrunnen).
@@ -153,6 +164,28 @@ async function saveAs(project, location, name) {
   const p = { ...project, name: created.name };
   await save(null, p, created.file);
   return { file: created.file, name: created.name };
+}
+
+// Gir prosjektfilen nytt navn. Kopiene i Auto-Save får samme navn, så historikken følger med.
+// ponytail: bare filen, ikke prosjektmappen (et opptak kan skrive dit mens vi endrer navn).
+async function rename(file, name) {
+  const ext = path.extname(file);
+  const base = path.basename(file, ext);
+  const next = path.join(path.dirname(file), safeName(name) + ext);
+  if (next === file) return file;
+  // Bare store/små bokstaver endret: macOS ser det som samme fil.
+  if (next.toLowerCase() !== file.toLowerCase() && fs.existsSync(next)) throw new Error(`A project named "${path.basename(next)}" already exists in this folder.`);
+  await fs.promises.rename(file, next);
+  const dir = history.historyDir(file);
+  const newBase = path.basename(next, ext);
+  for (const it of await history.list(file)) {
+    const rest = path.basename(it.file).slice(base.length);
+    // Bare kopier av dette prosjektet, ikke av «Test 2» når prosjektet heter «Test».
+    if (/^ \d{4}-/.test(rest)) await fs.promises.rename(it.file, path.join(dir, newBase + rest)).catch(() => {});
+  }
+  await writeRecent((await readRecent()).map((f) => (f === file ? next : f)));
+  if (lastFile === file) lastFile = next;
+  return next;
 }
 
 let lastFile = null;
@@ -181,4 +214,4 @@ async function trash(base, file) {
   await shell.trashItem(f.own ? f.root : file).catch(() => fs.promises.unlink(file).catch(() => {}));
 }
 
-module.exports = { historyList, historyLoad, historySnapshot, lastSaved: () => lastFile, list, load, save, saveAs, create, folders, forget, trash, touchRecent };
+module.exports = { historyList, historyLoad, historySnapshot, lastSaved: () => lastFile, list, load, save, saveAs, create, folders, forget, rename, trash, touchRecent };

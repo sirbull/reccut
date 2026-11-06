@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reccut — Open-source video editor and screen recorder</title>
-<meta name="description" content="Edit video from your camera, phone or screen on a magnetic timeline. Free and open source for Mac, Windows and Linux, with screen recording and optional AI agents.">
+<meta name="description" content="Edit videos, record your screen and camera, create thumbnails and edit images. Free and open source for Mac, Windows and Linux, with optional AI agents.">
 <meta property="og:title" content="Reccut — Open-source video editor and screen recorder">
-<meta property="og:description" content="An open-source video editor and screen recorder for Mac, Windows and Linux. Edit imported footage, mix audio, add titles and connect an AI agent to your choice of model.">
+<meta property="og:description" content="Edit videos, record your screen and camera, create thumbnails and edit images in one open-source app for Mac, Windows and Linux.">
 <meta property="og:image" content="media/overview.jpg">
 <meta name="theme-color" content="#0b0c0e">
 <link rel="icon" type="image/png" href="media/icon-192.png">
@@ -39,6 +39,8 @@ body {
 }
 img, video { display: block; max-width: 100%; height: auto; }
 a { color: inherit; }
+html:not([data-keyboard-focus]) :focus { outline: none; }
+html[data-keyboard-focus] :focus-visible { outline: 2px solid #c3c5cc; outline-offset: 3px; }
 .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
 .serif { font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-weight: 400; }
 
@@ -139,7 +141,7 @@ h3 { font-size: 22px; letter-spacing: -.01em; margin: 0 0 8px; }
 /* Before/after */
 .compare { position: relative; margin-top: 56px; border-radius: 22px; overflow: hidden; aspect-ratio: 16/9; box-shadow: 0 60px 120px -40px rgba(0,0,0,.9); user-select: none; }
 .compare.square { max-width: 720px; margin: 32px auto 0; aspect-ratio: 1; }
-.compare:focus-within { outline: 2px solid var(--accent); outline-offset: 4px; }
+html[data-keyboard-focus] .compare:focus-within { outline: 2px solid #c3c5cc; outline-offset: 4px; }
 .compare img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .compare .after { clip-path: inset(0 0 0 var(--pos, 50%)); }
 .compare .bar { position: absolute; top: 0; bottom: 0; left: var(--pos, 50%); width: 2px; background: #fff; transform: translateX(-1px); pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,.4); }
@@ -153,7 +155,10 @@ h3 { font-size: 22px; letter-spacing: -.01em; margin: 0 0 8px; }
 .look { position: relative; border-radius: 14px; overflow: hidden; cursor: zoom-in; }
 .look img { width: 100%; aspect-ratio: 16/9; object-fit: cover; transition: transform 1s cubic-bezier(.2,.7,.2,1); }
 .look:hover img { transform: scale(1.04); }
+.look-open { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
+html[data-keyboard-focus] .look:focus-within { outline: 2px solid #c3c5cc; outline-offset: 4px; }
 .look figcaption { position: absolute; inset: auto 0 0; padding: 30px 16px 14px; font-size: 14px; font-weight: 600; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
+.look figcaption { pointer-events: none; }
 .look figcaption small { display: block; font-weight: 400; color: #c9cad0; font-size: 12px; }
 figure { margin: 0; }
 
@@ -210,12 +215,23 @@ pre .c { color: #6b6e78; }
 pre .p { color: var(--accent2); user-select: none; }
 
 footer { padding: 60px 0 70px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
-footer .wrap { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+footer .wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 20px; }
+footer .credit { text-align: center; }
+footer .wrap > :last-child { justify-self: end; }
 
 /* Lightbox */
 dialog { padding: 0; border: 0; background: transparent; max-width: 96vw; max-height: 94vh; }
 dialog::backdrop { background: rgba(0,0,0,.88); backdrop-filter: blur(6px); }
 dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoom-out; }
+.lightbox-image[hidden], .lightbox-look[hidden] { display: none; }
+.lightbox-close { position: absolute; top: 8px; right: 8px; z-index: 2; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid #ffffff40; border-radius: 50%; background: #111215d9; color: #fff; appearance: none; line-height: 0; cursor: pointer; }
+.lightbox-close svg { display: block; width: 18px; height: 18px; pointer-events: none; }
+.lightbox-look { width: min(92vw, 1280px, calc((100dvh - 160px) * 1.777778)); color: var(--text); }
+.lightbox-look > figcaption { padding: 12px 60px 18px 4px; font-size: 18px; font-weight: 600; }
+.lightbox-compare { margin: 0; border-radius: 12px; box-shadow: none; }
+.lightbox-compare img { max-width: none; max-height: none; border-radius: 0; cursor: default; }
+.lightbox-compare input { touch-action: none; }
+.lightbox-look .caption { margin: 14px 0 0; font-size: 13px; }
 
 /* Scroll reveal (progressive enhancement) */
 @supports (animation-timeline: view()) {
@@ -230,6 +246,8 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 @media (max-width: 900px) {
   nav .links { display: none; }
   nav .btn { margin-left: auto; }
+  footer .wrap { grid-template-columns: 1fr; text-align: center; }
+  footer .wrap > :last-child { justify-self: center; }
   section { padding: 40px 0; }
   .rooms, .stills, .oss, .record-details, .import-formats { grid-template-columns: 1fr; }
   .looks { grid-template-columns: 1fr 1fr; }
@@ -260,6 +278,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <a href="#edit">Video editing</a>
       <a href="#record">Record</a>
       <a href="#looks">Color</a>
+      <a href="#design">Design</a>
       <a href="#export">Export</a>
       <a href="#ai">AI agents</a>
       <a href="#open-source">Open source</a>
@@ -277,8 +296,8 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   </video>
   <div class="wrap">
     <span class="eyebrow"><b>Free &amp; open source</b> Mac, Windows &amp; Linux</span>
-    <h1>Video editing and<br><span class="serif">screen recording.</span></h1>
-    <p class="lead">Edit footage from your camera, phone or screen. Build a video with multiple tracks, titles, music and color correction, or record your screen and camera straight into a project.</p>
+    <h1>All-in-one tool for<br><span class="serif">content creators.</span></h1>
+    <p class="lead">Edit videos, record your screen and camera, create thumbnails and edit images. Bring in footage from your camera or phone, then add titles, music and color correction on a multitrack timeline.</p>
     <div class="ctas">
       <a class="btn primary" href="https://github.com/sirbull/reccut/releases/latest">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
@@ -291,7 +310,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 </header>
 
 <div class="wrap showcase reveal">
-  <div class="frame"><img src="media/overview.jpg" alt="The Reccut editor with the title Into the Wild over a mountain lake, and a timeline of nature clips with transitions, titles and music" width="2000" height="1333"></div>
+  <div class="frame"><img src="media/overview.jpg" alt="The current Reccut editor with Record, Edit, Export and Design tabs, the title Into the Wild over a mountain lake, and a timeline of nature clips, titles and music" width="2000" height="1255"></div>
 </div>
 
 <section id="edit">
@@ -301,7 +320,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <h2>Edit video on a <span class="serif">magnetic timeline</span></h2>
       <p class="sub">Import footage from your camera or phone and build a short film, an interview or a YouTube video. Arrange clips on the timeline, work with picture and sound on separate tracks, and add titles and subtitles.</p>
     </div>
-    <div class="frame reveal" style="margin-top:50px"><img src="media/timeline.jpg" alt="A Reccut edit with imported nature footage on the magnetic timeline, titles on a separate video track, transitions and music underneath" loading="lazy" width="2000" height="551"></div>
+    <div class="frame reveal" style="margin-top:50px"><img src="media/timeline.jpg" alt="A Reccut edit with imported nature footage on the magnetic timeline, titles on a separate video track, transitions and music underneath" loading="lazy" width="2000" height="509"></div>
     <div class="rooms reveal">
       <div class="room">
         <h3>Cut and arrange clips</h3>
@@ -327,7 +346,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <h2>Press <kbd>Control</kbd> <kbd>Space</kbd> <span class="serif">and type</span></h2>
       <p class="sub">No hunting through menus. Type a few letters and press Enter: effects and looks are applied to the selected clips, settings open in the inspector, tools switch on, commands run and help articles open. Every command shows its shortcut, so you learn them as you go.</p>
     </div>
-    <div class="frame reveal" style="margin:50px auto 0;max-width:760px"><img src="media/quick-search.jpg" alt="Quick Search in Reccut with the word color typed in, listing the Color Wheels setting, clip color commands with their shortcuts and help articles" loading="lazy" width="1200" height="976"></div>
+    <div class="frame reveal" style="margin:50px auto 0;max-width:760px"><img src="media/quick-search.jpg" alt="Quick Search in Reccut with the word color typed in, listing the Color Wheels setting, clip color commands with their shortcuts and help articles" loading="lazy" width="1200" height="1086"></div>
     <p class="caption">Also opens with Cmd K on Mac and Ctrl K on Windows and Linux.</p>
   </div>
 </section>
@@ -341,12 +360,12 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     </div>
     <figure class="record-demo reveal">
       <div class="frame">
-        <video id="record-demo" autoplay muted loop playsinline controls preload="metadata" poster="media/record-gameplay.jpg" width="1440" height="960" aria-label="Gameplay and camera recording demo in Reccut">
+        <video id="record-demo" autoplay muted loop playsinline controls preload="metadata" poster="media/record-gameplay.jpg" width="1440" height="904" aria-label="Gameplay and camera recording demo in Reccut">
           <source src="media/record-gameplay.mp4" type="video/mp4">
-          <img src="media/record-gameplay.jpg" alt="Reccut recording gameplay from Echoes of Quite Recent, with the creator's face in the lower-right corner" width="2000" height="1333">
+          <img src="media/record-gameplay.jpg" alt="Reccut recording gameplay from Echoes of Quite Recent, with the creator's face in the lower-right corner" width="2000" height="1255">
         </video>
       </div>
-      <figcaption class="caption">Playing my own game, Echoes of Quite Recent. A recording demo using gameplay footage with my camera in the corner.</figcaption>
+      <figcaption class="caption">Playing my own game, <a href="https://sirbull.itch.io/echoes-of-quite-recent">Echoes of Quite Recent</a>, with screen and camera recorded separately.</figcaption>
     </figure>
     <div class="record-details reveal">
       <div>
@@ -359,8 +378,9 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       </div>
     </div>
     <div class="record-followup reveal">
-      <p class="sub">The same gameplay recording in Edit, with a cut and a title added on the timeline.</p>
-      <div class="frame"><img src="media/record-gameplay-edit.jpg" alt="The gameplay recording opened in Reccut’s editor, split into clips with an Echoes of Quite Recent title on a separate track" loading="lazy" width="2000" height="1333"></div>
+      <p class="sub">The trimmed recording in Edit: screen and camera on separate tracks, with a fade-in and a link to the game.</p>
+      <div class="frame"><img src="media/record-gameplay-edit.jpg" alt="Reccut’s editor with linked screen clips on V1, separate camera clips on V2, and the title Play the game yourself at sirbull.itch.io/echoes-of-quite-recent on V3" loading="lazy" width="2000" height="1255"></div>
+      <p class="caption"><a href="media/echoes-edited.mp4">Watch the finished clip</a></p>
     </div>
   </div>
 </section>
@@ -395,7 +415,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       </div>
       <div class="room">
         <h3>PiP, masks and stabilization</h3>
-        <p>Key or mask the separate PiP camera clip without changing your screen recording. Draw and animate masks with the pen tool, smooth shaky footage with stabilization, and combine the result with titles and effects.</p>
+        <p>Key or mask the separate PiP camera clip without changing your screen recording. Draw and animate masks with the pen tool, smooth shaky footage with stabilization, pin redactions and titles to moving objects with tracking, and combine the result with titles and effects.</p>
       </div>
     </div>
     <p class="caption">Apply these adjustments in Edit; the same keying and masks are used in preview and export. For a static background without a green screen, use Remove static background with a fixed camera and steady lighting, or capture a clean background reference.</p>
@@ -408,8 +428,8 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     <h2>Titles and <span class="serif">lower thirds</span></h2>
     <p class="sub">Add a title to the timeline, enter your text and position it in the preview. The animation adjusts to the length of the clip.</p>
     <div class="stills">
-      <figure class="still reveal"><img src="media/still-title.jpg" alt="Title Into the Wild, A moment outside, over a mountain lake" loading="lazy"><span>Title</span></figure>
-      <figure class="still reveal"><img src="media/still-lowerthird.jpg" alt="Lower third Falling water, A quiet moment in the forest, over a waterfall" loading="lazy"><span>Lower third</span></figure>
+      <figure class="still reveal"><img src="media/still-title.jpg" width="1600" height="900" alt="Title Into the Wild, A moment outside, over a mountain lake" loading="lazy"><span>Title</span></figure>
+      <figure class="still reveal"><img src="media/still-lowerthird.jpg" width="1600" height="900" alt="Lower third Falling water, A quiet moment in the forest, over a waterfall" loading="lazy"><span>Lower third</span></figure>
     </div>
   </div>
 </section>
@@ -422,27 +442,41 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <p class="sub">Adjust exposure, white balance and color wheels, or start with one of more than 40 film looks. You can also convert LOG footage and load your own LUTs.</p>
     </div>
     <div class="compare reveal" id="compare">
-      <img src="media/ba-before.jpg" alt="Coastal ridge, original footage" loading="lazy">
-      <img class="after" src="media/ba-after.jpg" alt="Coastal ridge with the Technicolor three-strip look" loading="lazy">
+      <img src="media/ba-before.jpg" width="1600" height="900" alt="Coastal ridge, original footage" loading="lazy">
+      <img class="after" src="media/ba-after.jpg" width="1600" height="900" alt="Coastal ridge with the Technicolor three-strip look" loading="lazy">
       <div class="bar"></div>
       <span class="tag l">Original</span><span class="tag r">Technicolor three-strip</span>
       <input type="range" min="0" max="100" value="50" aria-label="Drag to compare original and graded footage">
     </div>
     <div class="looks">
-      <figure class="look reveal"><img src="media/look-velvia50.jpg" alt="Waterfall with the Fujifilm Velvia 50 look" loading="lazy"><figcaption>Fujifilm Velvia 50<small>Color film</small></figcaption></figure>
-      <figure class="look reveal"><img src="media/look-vision500t.jpg" alt="Forest with the Kodak Vision3 500T look" loading="lazy"><figcaption>Kodak Vision3 500T<small>Cinema film</small></figcaption></figure>
-      <figure class="look reveal"><img src="media/look-goldenhour.jpg" alt="Blossoms with the Golden hour look" loading="lazy"><figcaption>Golden hour<small>Creative</small></figcaption></figure>
-      <figure class="look reveal"><img src="media/look-portra400.jpg" alt="Coastal cliff with the Kodak Portra 400 look" loading="lazy"><figcaption>Kodak Portra 400<small>Color film</small></figcaption></figure>
-      <figure class="look reveal"><img src="media/look-bleachbypass.jpg" alt="River gorge with the Bleach bypass look" loading="lazy"><figcaption>Bleach bypass<small>Cinema film</small></figcaption></figure>
-      <figure class="look reveal"><img src="media/look-trix400.jpg" alt="Beach with the Kodak Tri-X 400 look" loading="lazy"><figcaption>Kodak Tri-X 400<small>Black &amp; white film</small></figcaption></figure>
+      <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-velvia50-before.jpg" aria-label="Compare Fujifilm Velvia 50 with original footage"><img src="media/look-velvia50.jpg" width="1280" height="720" alt="Waterfall with the Fujifilm Velvia 50 look" loading="lazy"></button><figcaption>Fujifilm Velvia 50<small>Color film</small></figcaption></figure>
+      <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-vision500t-before.jpg" aria-label="Compare Kodak Vision3 500T with original footage"><img src="media/look-vision500t.jpg" width="1280" height="720" alt="Forest with the Kodak Vision3 500T look" loading="lazy"></button><figcaption>Kodak Vision3 500T<small>Cinema film</small></figcaption></figure>
+      <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-goldenhour-before.jpg" aria-label="Compare Golden hour with original footage"><img src="media/look-goldenhour.jpg" width="1280" height="720" alt="Blossoms with the Golden hour look" loading="lazy"></button><figcaption>Golden hour<small>Creative</small></figcaption></figure>
+      <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-portra400-before.jpg" aria-label="Compare Kodak Portra 400 with original footage"><img src="media/look-portra400.jpg" width="1280" height="720" alt="Coastal cliff with the Kodak Portra 400 look" loading="lazy"></button><figcaption>Kodak Portra 400<small>Color film</small></figcaption></figure>
+      <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-bleachbypass-before.jpg" aria-label="Compare Bleach bypass with original footage"><img src="media/look-bleachbypass.jpg" width="1280" height="720" alt="River gorge with the Bleach bypass look" loading="lazy"></button><figcaption>Bleach bypass<small>Cinema film</small></figcaption></figure>
+      <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-trix400-before.jpg" aria-label="Compare Kodak Tri-X 400 with original footage"><img src="media/look-trix400.jpg" width="1280" height="720" alt="Beach with the Kodak Tri-X 400 look" loading="lazy"></button><figcaption>Kodak Tri-X 400<small>Black &amp; white film</small></figcaption></figure>
     </div>
-    <p class="caption">Real frames from the demo project, graded with Reccut's built-in looks.</p>
+    <p class="caption">Real frames from the demo project, graded with Reccut's built-in looks. Click a look to compare it with the original.</p>
   </div>
 </section>
 
 
 
 
+
+<section id="design">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Design</div>
+      <h2>Give your video <span class="serif">a cover</span></h2>
+      <p class="sub">Create thumbnails and social graphics in the same project as your edit. Start with a template or build your own design with text, images and shapes on separate layers.</p>
+    </div>
+    <figure class="reveal" style="margin-top:40px">
+      <div class="frame"><img src="media/design.jpg" alt="Reccut’s Design tab with a layered Into the Wild film cover, templates on the left and editable text, shapes and a coastal video frame in the layer panel" loading="lazy" width="2000" height="1255"></div>
+      <figcaption class="caption">A cover for Into the Wild, built from a frame of the film, editable text and shapes.</figcaption>
+    </figure>
+  </div>
+</section>
 
 <section id="formats" class="band">
   <div class="wrap">
@@ -481,7 +515,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <p class="sub">Export an edit, convert video files, make smaller copies or extract audio. Use a preset or choose the codec, size, frame rate and quality yourself. It’s included in Reccut, free and open source.</p>
     </div>
     <figure class="reveal" style="margin-top:32px">
-      <div class="frame"><img src="media/export-queue.jpg" alt="Reccut’s Export tab with the current project, imported video files, format settings and three real export jobs running or waiting in the queue" loading="lazy" width="2000" height="1333"></div>
+      <div class="frame"><img src="media/export-queue.jpg" alt="Reccut’s Export tab with the current project, imported video files, format settings and three real export jobs running or waiting in the queue" loading="lazy" width="2000" height="1255"></div>
       <figcaption class="caption">A project export and two file conversions in the same background queue.</figcaption>
     </figure>
     <div class="rooms reveal">
@@ -499,9 +533,9 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       </div>
     </div>
     <div class="screens reveal">
-      <figure class="s169"><img src="media/fmt-169.jpg" alt="Waterfall in 16:9" loading="lazy"><b>YouTube</b>16:9 · up to 4K</figure>
-      <figure class="s916"><img src="media/fmt-916.jpg" alt="Waterfall in vertical 9:16" loading="lazy"><b>Shorts · Reels · TikTok</b>9:16</figure>
-      <figure class="s11"><img src="media/fmt-11.jpg" alt="Waterfall in square 1:1" loading="lazy"><b>Instagram</b>1:1 · 4:5</figure>
+      <figure class="s169"><img src="media/fmt-169.jpg" width="1280" height="720" alt="Waterfall in 16:9" loading="lazy"><b>YouTube</b>16:9 · up to 4K</figure>
+      <figure class="s916"><img src="media/fmt-916.jpg" width="720" height="1280" alt="Waterfall in vertical 9:16" loading="lazy"><b>Shorts · Reels · TikTok</b>9:16</figure>
+      <figure class="s11"><img src="media/fmt-11.jpg" width="1080" height="1080" alt="Waterfall in square 1:1" loading="lazy"><b>Instagram</b>1:1 · 4:5</figure>
     </div>
     <div class="chips reveal" style="justify-content:center;margin-top:50px">
       <span class="chip hot">MP4 · H.264</span><span class="chip hot">H.265 / HEVC</span><span class="chip hot">AV1</span><span class="chip">WebM · VP9</span><span class="chip">MOV · ProRes 422</span><span class="chip">MKV</span><span class="chip">GIF</span><span class="chip">MP3</span><span class="chip">AAC</span><span class="chip">WAV</span><span class="chip">FLAC</span><span class="chip">Opus</span>
@@ -510,10 +544,24 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   </div>
 </section>
 
+<section id="subtitles" style="padding-top:0" aria-labelledby="subtitles-title">
+  <div class="wrap">
+    <div class="format-card reveal">
+      <div class="kicker">Free local AI</div>
+      <h2 id="subtitles-title" style="font-size:clamp(28px,4vw,40px)">Closed captions, <span class="serif">on your computer</span></h2>
+      <p>Generate closed captions (subtitles) with free AI models that run locally. Choose a model to balance speed and accuracy, then review and edit the captions on the timeline.</p>
+      <p class="providers">Whisper Base is included. Download additional models in Settings → AI → Manage Models and use them offline, with no account or API key. Export SRT/WebVTT files or embed a subtitle track.</p>
+      <div class="chips">
+        <span class="chip">Whisper Tiny</span><span class="chip">Whisper Base</span><span class="chip">Whisper Small</span><span class="chip">Whisper Medium</span><span class="chip">Whisper Large V3 Turbo</span>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="ai" style="padding-top:0">
   <div class="wrap">
     <div class="ai reveal">
-      <img src="media/look-vision500t.jpg" alt="" loading="lazy">
+      <img src="media/look-vision500t.jpg" width="1280" height="720" width="1280" height="720" alt="" loading="lazy">
       <div class="kicker">Optional AI agents</div>
       <h2>Let an AI agent <span class="serif">do the editing</span></h2>
       <p class="sub">Connect a model and tell the AI agent what you want changed. It can cut clips, add subtitles, adjust color and create titles using Reccut’s editing tools. Review its edits on the timeline and undo them if needed.</p>
@@ -591,32 +639,114 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 <footer>
   <div class="wrap">
     <span>© Reccut contributors · MIT licence</span>
+    <span class="credit">Developed by <a href="https://bullfolio.no">Bullfolio.no</a></span>
     <span><a href="https://github.com/sirbull/reccut/issues">Report an issue</a></span>
   </div>
 </footer>
 
-<dialog id="lightbox"><img alt=""></dialog>
+<dialog id="lightbox" aria-label="Image preview">
+  <button type="button" class="lightbox-close" aria-label="Close image preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
+  <img class="lightbox-image" alt="">
+  <figure class="lightbox-look" hidden>
+    <figcaption id="lightbox-look-title"></figcaption>
+    <div class="compare lightbox-compare">
+      <img data-compare-before alt="" width="1280" height="720" draggable="false">
+      <img class="after" data-compare-after alt="" width="1280" height="720" draggable="false">
+      <div class="bar" aria-hidden="true"></div>
+      <span class="tag l">Original</span><span class="tag r" data-look-label></span>
+      <input type="range" min="0" max="100" step="1" value="50" aria-label="Compare original footage and film look">
+    </div>
+    <p class="caption">Drag to compare. You can also use the arrow keys.</p>
+  </figure>
+</dialog>
 <script>
+  // Programmatic dialog/slider focus must not leave rings after mouse or touch
+  // interaction. Show a neutral focus indicator during keyboard navigation.
+  document.addEventListener('pointerdown', () => {
+    document.documentElement.removeAttribute('data-keyboard-focus');
+  }, { capture: true });
+  document.addEventListener('keydown', (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (['Tab', 'Enter', ' ', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key) || event.key.startsWith('Arrow')) {
+      document.documentElement.setAttribute('data-keyboard-focus', '');
+    }
+  }, { capture: true });
   const recordDemo = document.getElementById('record-demo');
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     recordDemo.autoplay = false;
     recordDemo.pause();
   }
   const box = document.getElementById('lightbox');
-  const big = box.querySelector('img');
-  document.querySelectorAll('.frame img, .still img, .look img').forEach((img) => img.addEventListener('click', () => {
+  const big = box.querySelector('.lightbox-image');
+  const lookView = box.querySelector('.lightbox-look');
+  const lookCompare = box.querySelector('.lightbox-compare');
+  const lookSlider = lookCompare.querySelector('input');
+  const lookTitle = box.querySelector('#lightbox-look-title');
+  const lookLabel = lookCompare.querySelector('[data-look-label]');
+  document.querySelectorAll('.frame img, .still img').forEach((img) => img.addEventListener('click', () => {
+    lookView.hidden = true;
+    big.hidden = false;
     big.src = img.src;
     big.alt = img.alt;
+    box.setAttribute('aria-label', 'Image preview');
     box.showModal();
   }));
-  box.addEventListener('click', () => box.close());
+  document.querySelectorAll('.look-open').forEach((button) => button.addEventListener('click', () => {
+    const img = button.querySelector('img');
+    const name = button.closest('figure').querySelector('figcaption').firstChild.textContent.trim();
+    big.hidden = true;
+    lookView.hidden = false;
+    lookTitle.textContent = name;
+    lookLabel.textContent = name;
+    const before = lookCompare.querySelector('[data-compare-before]');
+    const after = lookCompare.querySelector('[data-compare-after]');
+    before.src = button.dataset.before;
+    before.alt = 'Original footage before applying ' + name;
+    after.src = img.src;
+    after.alt = img.alt;
+    lookSlider.value = '50';
+    lookSlider.setAttribute('aria-label', 'Compare original footage with ' + name);
+    lookSlider.dispatchEvent(new Event('input'));
+    box.setAttribute('aria-label', name + ' — before and after');
+    box.showModal();
+    lookSlider.focus({ preventScroll: true });
+  }));
+  box.querySelector('.lightbox-close').addEventListener('click', () => box.close());
+  box.addEventListener('click', (event) => {
+    if (event.target === box || event.target === big) box.close();
+  });
 
   document.querySelectorAll('.compare').forEach((compare) => {
     const slider = compare.querySelector('input[type="range"]');
-    const update = () => compare.style.setProperty('--pos', slider.value + '%');
+    const update = () => {
+      compare.style.setProperty('--pos', slider.value + '%');
+      if (compare === lookCompare) slider.setAttribute('aria-valuetext', `${slider.value}% original, ${100 - slider.value}% ${lookLabel.textContent}`);
+    };
     slider.addEventListener('input', update);
     update();
   });
+  // Capture the pointer so dragging anywhere on the image works with mouse,
+  // touch and pen, including when the pointer moves outside the image.
+  const moveLookSlider = (event) => {
+    const rect = lookCompare.getBoundingClientRect();
+    lookSlider.value = String(Math.round(Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100))));
+    lookSlider.dispatchEvent(new Event('input'));
+  };
+  lookSlider.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    lookSlider.focus({ preventScroll: true });
+    lookSlider.setPointerCapture(event.pointerId);
+    moveLookSlider(event);
+  });
+  lookSlider.addEventListener('pointermove', (event) => {
+    if (lookSlider.hasPointerCapture(event.pointerId)) moveLookSlider(event);
+  });
+  const releaseLookSlider = (event) => {
+    if (lookSlider.hasPointerCapture(event.pointerId)) lookSlider.releasePointerCapture(event.pointerId);
+  };
+  lookSlider.addEventListener('pointerup', releaseLookSlider);
+  lookSlider.addEventListener('pointercancel', releaseLookSlider);
 </script>
 </body>
 </html>

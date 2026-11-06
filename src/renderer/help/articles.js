@@ -2,9 +2,166 @@
 // ## heading, - bullets, numbered steps, ![caption](file), **bold**, {{key:id}}, [[run:id|label]], [[article:id|label]].
 import { WORKFLOWS } from './workflows.js';
 import { CATALOG_ARTICLES } from './catalog.js';
-export const SECTIONS = ['Getting Started', 'Recording', 'Media', 'Editing', 'Audio', 'Look', 'AI and Plugins', 'Export', 'Reference'];
+export const SECTIONS = ['Getting Started', 'Recording', 'Media', 'Editing', 'Audio', 'Look', 'AI and Plugins', 'Export', 'Design', 'Reference'];
 
 export const ARTICLES = [
+  {
+    id: 'third-party-licenses', section: 'Reference', title: 'Third-party Software and Licenses',
+    summary: 'Find offline license texts, component credits and information about source-code and artwork rights.',
+    keywords: 'about copyright attribution license licence open source GPL LGPL MPL ffmpeg mediabunny uiohook openmoji commercial credits',
+    body: `Open **About Reccut → Third-party licenses** to read the local component list and license texts. On macOS, About Reccut is in the Reccut menu. On Windows and Linux, use the Help menu. The license reader works offline; project links open upstream websites in your browser.
+
+Choose **Open license files and documentation** in the reader to open the local notices directory. DISTRIBUTION.md contains more detail about source-code and distribution requirements. The directory also contains original license texts and a component manifest with the versions recorded at build time.
+
+## Separate component licenses
+
+Reccut uses Electron, Preact, Signals, Immer, Lucide, Tabler, PDF.js, Mediabunny, FFmpeg, uiohook-napi, Transformers.js and ONNX Runtime, along with model weights and artwork. Each component retains its own license and copyright notices. The application license does not replace those terms.
+
+FFmpeg is used as a separate command-line program under GPLv3 or later. Mediabunny is MPL 2.0. The MIT-licensed uiohook-napi wrapper contains the LGPL-licensed libuiohook native library. These licenses include source-code and distribution rights, beyond the notices shown in About.
+
+Whisper and the bundled BiRefNet models declare MIT licenses. OpenMoji graphics use CC BY-SA 4.0, and Unicode emoji data has its own license. When included, Blackmagic RAW libraries have separate proprietary SDK terms.
+
+## Your recordings and artwork
+
+Processing a recording with FFmpeg does not by itself make the recording GPL-licensed. Imported footage, fonts, stock images and artwork still have their own terms. Preserve attribution and license information for assets such as OpenMoji graphics and downloaded stock images. Copy Credits in Design's export options can help collect the source information stored with supported assets.
+
+For complete terms, use the original texts in the license reader. For build-specific source delivery and native-library requirements, read DISTRIBUTION.md in the local license folder.`,
+    see: ['welcome', 'design', 'export'],
+  },
+  {
+    id: 'design', section: 'Design', title: 'Design Thumbnails and Images',
+    summary: 'Make layered images from video frames, photos, text and shapes, then export or package them.',
+    keywords: 'thumbnail image design canvas text layers picture photo png jpeg webp',
+    body: `Open [[run:roomDesign|Design]] in the title bar. Choose New Design for a size preset or enter a custom size from 1 to 8192 pixels. You can keep several designs in a project. The bottom strip shows them as pages: click to open, double click to rename, or right click to duplicate, make a variant or delete. The + button adds a design, and Export opens the export choices.
+
+The left rail opens Search, Templates, Video, Text, Add Content, Elements, Styles or Brand. Only one panel is open at a time. Click its rail icon again or Close panel to give the canvas more room. Expand panel widens it. The last panel and width are remembered. Layers is above Properties on the right. Dragging a layer opens an animated gap; move to another position before dropping. Groups move together. Escape or dropping outside cancels; only a completed drop adds an Undo step. The list scrolls near its edges.
+
+## Add pictures
+
+Open Add Content and choose Import Image. Its main action follows the import copy preference. The arrow menu offers Import Embedded, Import Linked and Open as New Design. Import Embedded copies a photo into Designs/Assets. For a layered PSD, PSB or SVG, choose Place as one image or Place layers. Select the layers to keep. Layer positions and order are preserved, and imported layers are grouped. Import Linked references the original file. The Design menu also keeps Place Embedded and Place Linked. Design pictures stay separate from the Edit media browser. Recent shows images imported into this project; From Project references images already imported in Edit.
+
+The Video panel has its own preview and scrubber. Use This Frame saves a full quality PNG of the sequence or selected source video into Designs/Frames. The full frame is placed with its original aspect ratio, fitted inside the design without cropping. Move and resize the layer to compose the thumbnail. Changing the timeline afterwards does not change this image. Click the timecode to type HH:MM:SS:FF, HH:MM:SS, MM:SS or seconds, then press Enter or click away to seek. Escape cancels; invalid entries keep the previous position. After Enter, arrow keys are ready to step frames in the Video panel. Play/Pause and Space control this preview independently of Edit. The side buttons skip five seconds; hold Shift to skip ten. Arrow keys step one frame while the Video panel has focus; Shift and arrows step one second. Typing, scrubbing or stepping pauses playback. While typing a timecode, arrow keys move the text caret. Navigation stops at the first and last visible frame. Use This Frame can also create the first design. An empty or audio only timeline cannot supply a video frame.
+
+Drop files to place them using the import copy preference. Hold Alt while dropping to reverse the choice. Cmd/Ctrl V pastes an image from the system clipboard. Cmd/Ctrl C and X copy and cut selected layers, and V pastes them into another design or project. Referenced images travel with the layers; embedded files are copied into the receiving project. Plain text becomes a text layer. Paste keeps relative centers when the design size changes. Shift Cmd/Ctrl V pastes in place. Linked images have a link icon. A missing image has a warning in Layers: click Relink to find the file before exporting.
+
+## Edit layers
+
+V selects the Move Tool, T the Type Tool, U the Shape Tool, H the Hand Tool and C the Crop Tool. Shift U cycles rectangle, ellipse, polygon, star, line and arrow. The shape menu also offers each tool. Double click text to edit it directly; Escape finishes editing. For text, Character appears first in Properties with searchable installed fonts, font refresh, weight, size, Tracking, Leading, All Caps and Text Color. Download and install a Google Font on your computer to use it here; Browse Google Fonts opens the font site. Select words in Content or while editing on the canvas to change just their font, size, weight, tracking, case or color. The selected-text notice identifies the words being formatted; Whole layer clears that selection. Position, paragraph alignment, masks and other layer controls continue to affect the layer. Rich text is retained when saving, exporting and copying layers. Fit text in box shrinks long titles, down to 6 pixels. At the minimum size, extremely long text can still be clipped.
+
+Click or Shift click to select layers, or drag on empty canvas to make a selection box. Drag the selection to move it; guides snap to edges and centers. Hold Cmd/Ctrl to turn snapping off. With Rulers on, drag from the top or left ruler to pull out a guide. Layers snap to it, the Move Tool drags it, and dragging it back to a ruler removes it. Guides are never exported and hide with the rulers. Arrow keys move one pixel; Shift and arrows move ten. Backspace deletes; Cmd/Ctrl J duplicates a layer. Cmd/Ctrl D or Escape deselects. Cmd/Ctrl T selects Free Transform.
+
+Drag handles to resize and use the handle above the box to rotate. Images keep their aspect ratio by default; Shift frees it. For other layers Shift locks aspect. Alt resizes from the center. Shift snaps rotation to 15 degrees. Space and drag, or scrolling, pans. Cmd/Ctrl and scrolling zooms, Cmd/Ctrl 0 fits on screen. Use the 100% command for actual size. Cmd/Ctrl 1 still opens Record, so 100% has no shortcut.
+
+Layers are shown top first. Drag the divider above Properties to change the Layers height; the app remembers it. Double click the divider to return to the compact automatic height. The divider also supports Up/Down, Home and End keys. Drag rows to change their order; use eye and lock buttons to hide or protect a layer. Double click a layer name to rename it. Right click for more layer actions. Selecting a locked layer lets you unlock it, but does not allow transforms.
+
+## Styles and text
+
+Properties has Fill controls for solid colors and linear, radial or freeform gradients. The gradient spans the layer box and follows its rotation. Stroke offers Size, Position (Inside, Center, Outside), solid/dashed/dotted styles and joins. Text starts with an Outside stroke. A Size of zero hides the stroke.
+
+Layer Styles adds Soft Drop Shadow, Hard Shadow, Outer Glow or Long Shadow. You can add several shadows, reorder them and adjust Color, Opacity, Angle, Distance, Spread and Size. Spread also follows the transparency of images. Blend Mode controls how a layer combines with the layers below it. Images also have Brightness, Contrast, Saturation, Hue, Blur and Grayscale, with Reset Adjustments.
+
+Use paired asterisks, *words*, to give words the Highlight fill. Type \\* to keep a literal asterisk. Consecutive or unmatched asterisks remain literal. Text Effects can add a padded, rounded background box behind each line. Missing local fonts fall back to the system font and show Font not installed in Properties and Layers.
+
+## Groups, alignment and crop
+
+Cmd/Ctrl G groups selected layers and Shift Cmd/Ctrl G ungroups them. A click selects the group; double click selects a member. In Layers, Alt click also selects one member. Collapse a group with its arrow and double click its name to rename it. Locked group members must be unlocked before moving, regrouping or changing group order. Group resize preserves each member's rotation and does not add skew.
+
+Align and Distribute in Properties aligns selected bounds. With one layer, alignment uses the canvas. Distribution needs at least three layers and makes the gaps equal. Rotated layers use their visible rectangular bounds.
+
+Double click an image or choose Crop… in Properties to show the full source dimmed around the crop. This also works on locked image layers. Drag the image to reposition it and drag handles to change the crop. Hold Shift to keep the crop's shape, or Alt to scale it from the center, also with Free. Choose Free, Design, 1:1, 16:9, 9:16 or 4:5. Enter or Apply Crop applies it in one undo step; Escape or Cancel discards it. Reset Crop restores the full source within the current layer box.
+
+## Design shortcuts
+
+- {{key:design:select}} Move Tool, {{key:design:text}} Type Tool, {{key:design:shape}} Shape Tool.
+- {{key:design:cycleShape}} Next Shape Tool, {{key:design:hand}} Hand Tool, {{key:design:crop}} Crop Tool.
+- {{key:design:group}} Group Layers, {{key:design:ungroup}} Ungroup Layers.
+- {{key:design:duplicate}} Duplicate Layer, {{key:design:clear}} Deselect, {{key:design:transform}} Free Transform.
+- {{key:design:pasteInPlace}} Paste in Place.
+- {{key:design:up}} Bring Forward, {{key:design:down}} Send Backward, {{key:design:front}} Bring to Front, {{key:design:back}} Send to Back.
+- {{key:design:moveLeft1}} / {{key:design:moveRight1}} / {{key:design:moveUp1}} / {{key:design:moveDown1}} move one pixel. Shift moves ten pixels.
+- {{key:design:zoomIn}} Zoom In, {{key:design:zoomOut}} Zoom Out, {{key:design:zoomFit}} Fit on Screen.
+- {{key:design:export}} Export As.
+
+Settings has a separate Design keyboard group. Shortcut conflicts are checked within the current room and against shared commands such as Save. Quick Search lists every Design command, including alignment and distribution.
+
+## Save and export
+
+Canvas Size changes the canvas without scaling layers. Use its nine-point content anchor to choose where existing content stays. Resize scales content for new sizes.
+
+Design changes save with the project and have their own Undo and Redo. Undo in Design keeps the timeline intact, and Undo in Edit keeps designs intact. Opening a project clears both histories.
+
+Export As saves PNG, JPEG or WebP using the same drawing as the canvas. PNG and WebP can omit the canvas background for transparency. JPEG uses an opaque background. Choose a width or scale and an optional file size limit in MB. Zero disables the limit. If a file cannot fit, reduce its width or raise the limit. Existing files get numbered names. Quick Export as PNG uses the current design size and canvas background, retaining transparency when the canvas has no background.
+
+Package Project includes design assets and image media used by designs, even when Remove unused media is enabled. Fonts are listed in the package report and must be installed on the destination computer.
+
+## Color correction
+
+Select images, text, shapes or a mixture of layers and expand Color Correction in Properties. Light offers Exposure in stops, Brightness, Contrast, Highlights and Shadows. Color offers Hue, Saturation, Temperature and Tint. Curves has RGB, Red, Green and Blue channels: click to add points, drag to adjust, use arrow keys to fine-tune and Delete to remove a selected interior point. Effects has Blur and Grayscale. These panels collapse independently. Enable compares with the original appearance; Reset All clears the corrections. Multi-selection changes only the setting being edited, preserving each layer's other corrections. Edits can be undone, stay editable after saving, and use the same rendering for the canvas and export. Saved layer styles include color corrections.
+
+## Cutouts and masks
+
+Select an image and choose Remove Background in Properties. The model runs locally with the app, including without internet. Tasks shows progress and Cancel. The original image stays intact; the result is a separate mask. Feather softens the edge and Shift Edge expands or contracts it. Edit Layer Mask opens Erase and Restore brushes with Size and Hardness. Each stroke can be undone and redone. Done leaves brush mode. Sticker Outline follows the final visible edge; shadows follow it too.
+
+Layer Mask adds a rectangle, ellipse or polygon. Edit Mask shows that shape on the canvas with draggable handles, including the ellipse outline. Edit Mask moves its handles; Feather and Invert adjust its edge. Clip to Layer Below keeps a layer inside the visible layer below. Select one text layer and one image, then Fill Text With Image to make a clipping group. The Video panel offers Cut Out Camera when the selected recording has a camera stream. Cut Out This Frame captures the selected full frame and removes its background locally, keeping the original source and a separate editable mask.
+
+Export Design is the blue button at the top right. Copy Credits in Export As copies attribution for third-party images. Settings → Design controls online sources, sign-in and the optional online template catalog. Search terms go only to enabled sources; downloaded images stay in the project. Design → Plugins → Image Source Plugins offers optional sources such as Pixabay with your own API key. Add the source, get a key on its website, save it locally and use Test Connection. Source exports and projects never include keys. Pexels still needs app approval; Unsplash is not offered as a personal-key plugin.
+
+## Reusable styles and templates
+
+The Text panel offers Add Title, Add Subtitle and Add Badge, sized for the canvas and filled with the project name. Brand Fonts supplies the title and body fonts and changes matching existing text when edited. Brand also stores color roles, an emoji style and named Brand Kits; new generic elements use these defaults. Apply Brand restyles existing editable elements. Explicit library styles retain their example palette. Font Pairs applies separate title and subtitle fonts together; pairs with missing local fonts are hidden. It also offers 111 built-in text styles and My Styles. Save Style in the section header stores the selected layer's appearance. Text size adapts to the design height. Right click a saved style to rename, update from the selection, or delete it. You can store up to 500 styles.
+
+Text styles with a second text color automatically emphasize the longest word using the same colors as their example. Equal-length words use the first one. Existing words marked with paired asterisks keep their emphasis instead. Applying a style replaces prior character overrides for that style's appearance settings. Your text and layer placement stay intact, and Undo restores the previous formatting. You can select another word in Properties to customize its color afterward.
+
+Library sections show a horizontal row of cards. See All opens the whole section as a grid; Back returns to the sections. Search filters the current panel. Hover or focus previews a card on the canvas without saving or adding undo steps. A single click applies the card and selects it; Enter also applies it. Double clicking inserts only once. Drag an image to place it at that point. Drag a style or color onto a compatible unlocked layer to affect only that layer. Right click offers Apply and the actions available for that item.
+
+Templates offers 22 built-in layouts for wide, tall and square designs, plus My Templates. Click a template or press Enter to create a new design using its size or the current canvas size. It uses the current frame, cutout, project title and My Logo when available. By Style groups templates by tags such as Bold, Minimal, Tutorial and News. Save as Template lets you assign picture and text placeholders, comma-separated tags and a color role for each text or shape layer. Import and export use .reccut-design-template files, without links to original project files.
+
+Brand has the reusable Logo, Brand Colors, title/body Brand Fonts and a Brand Palette. Click a color to apply it to selected text or shapes, or to the background when nothing is selected. My Colors also stores up to 20 colors beside color controls. Save Color in Brand adds the chosen color; right click a swatch to remove it. My Logo is copied into each new design that uses it, so replacing the saved logo keeps existing projects intact.
+
+## Elements, palettes and search
+
+Elements offers editable shapes and badges, hand-drawn arrows, circles and underlines, system emoji, stickers, solid/gradient backgrounds and textures. Click or press Enter to add an item; drag places it at that canvas point. Badges remain text layers, including the sequence duration badge. Backgrounds, including gradients, create separate editable layers. New backgrounds are placed above older background layers and below normal content. Dots and grids have Pattern controls for background and foreground colors, symbol size or line width, and independent X/Y spacing. Symbols include circles, squares, diamonds, triangles, stars and hexagons. Size Variation randomizes their sizes; Random Seed selects a repeatable arrangement. Size Distribution makes symbols or grid lines larger in the center, at the edges, or toward the left, right, top or bottom. Distribution Strength controls how strongly sizes change. Older raster textures offer Make Pattern Editable, which can be undone. Right click an element to save it to My Elements. Emoji offers 3,781 choices, English search, categories and paged grids. Brand selects System, Flat or Outline as its default; the library follows this choice and Properties can change one emoji. Flat/Outline use bundled OpenMoji graphics with CC BY-SA 4.0 credits; their appearance depends on the installed system fonts.
+
+Styles has Recommended, Colors and Fonts. Recommended combines a five-color palette with a font pair. Colors applies palettes alone; From This Frame samples colors locally from the frame selected in Video, or a suggested sequence frame if none was selected. Brand Palette uses your saved colors. Font pairs use installed fonts only. Right click to save palettes or font pairs for reuse, or delete saved items.
+
+Palettes map to background, title, highlight, accent and stroke roles. For layers without roles, the first title uses the title color, other text uses accent and shapes use highlight. Applying a palette preserves photos, hidden layers and locked layers or groups. Dropping a palette on compatible text or a shape changes only that layer and keeps the background intact. Hover previews the result before applying it; Undo restores the previous appearance.
+
+Search in the rail finds built-in and saved templates, text styles, elements, palettes, font pairs, project images, brand colors and your logo. Results are grouped by type. Exact names come first, followed by names starting with the search words. See All opens a group's grid. Search works offline.
+
+## Design suggestions
+
+Templates shows For This Video as cards after local analysis. Video shows Best Frames from the same analysis. Hover previews a suggestion; click or Enter captures the full-quality original. Templates creates an editable layout; Best Frames places a background image, preserving the complete frame and its aspect ratio. Either can create the first design. Changing the timeline discards stale frame suggestions. Title and Shuffle in Templates let you adjust the inline suggestions. More Suggestions opens the dialog with additional sizes, title ideas and optional AI title suggestions.
+
+Choose Suggestions from the Design empty state, the Templates panel or the Design menu. Reccut analyzes the current sequence locally and offers up to six frames with four layouts for each. It favors clear, well-exposed frames, avoids fades and transitions, and spreads choices across the video. Camera visibility adds priority. Analysis is limited to about 14 seconds; slow or unavailable frames can be skipped.
+
+Choose a canvas size and title, or type your own title. Offline title ideas come from the project and sequence names, timeline titles and captions, including Norwegian captions. Shuffle changes the layouts and title. Click a card to capture that frame at full quality and create a new editable design in one undo step. The entire source frame is retained without automatic cropping. The timeline and its playhead stay unchanged.
+
+When an AI provider is configured, Suggest Titles with AI is available for sequences with captions. The first use in a Suggestions window names the provider and asks before sending up to 12,000 transcript characters. No image, audio or video file is sent by this action. AI never runs automatically, and offline suggestions remain available if the provider fails.
+
+Closing Suggestions cancels the analysis or pending frame capture. Switching projects, rooms or changing the sequence also discards stale results.
+
+## Preview and readability
+
+Preview in the toolbar shows generic video-list layouts at 360, 246 and 168 pixels wide and in a phone layout. Switch light/dark backgrounds and the progress bar. The duration badge uses the current sequence duration. The whole design is fitted inside each preview.
+
+Safe Zones highlights generic overlay areas for the selected size on the editing canvas. It also draws a safe frame that follows the shape of the canvas: action safe at 90%, title safe at 80%, a center cross and lines for a 4:3 center crop on wide or tall designs. These areas are guides, not platform requirements, and are never exported. Readability in the toolbar automatically checks for small text, low text-fill contrast and text overlapping an overlay area after edits. A warning dot appears when there are issues. Open it to review the warnings or run Check Readability again. Select jumps to the affected text layer. Checks use the layers behind the text and a white backdrop for transparency. Outlines and shadows may improve actual legibility.
+
+## Variants and sizes
+
+Canvas offers Make Variant. Export in the bottom strip offers Compare Variants. Each variant is independently editable. Keep this one marks a favorite without deleting any design. Favorites appear in the designs strip.
+
+Resize in the toolbar creates designs for one or more selected sizes, scaling and positioning layers using anchors or relative centers. Resize current design requires exactly one target size. Export All Sizes saves the selected designs to a folder as PNG, JPEG or WebP, with dimensions in their file names. Existing files get unique names.
+
+The Export room and Easy Export offer Also save thumbnail when the project has designs. Choose a design to save a JPEG next to the completed video with the same base name. Its appearance is prepared before video export starts, so later edits do not change it. An existing JPEG is kept and an error is shown rather than overwriting it.
+
+## Open Image and canvas tools
+
+Open as New Design in the Import Image menu, or the Open Image command, creates a separate design at the image's displayed pixel size, with just that image and a transparent canvas. Dropping images on the empty Design room does the same. The import-copy preference controls embedded or linked sources. JPEG orientation is honored. Open Image supports up to 8192 pixels per side; larger images can be placed into an existing design.
+
+Canvas offers Crop Canvas, Rotate Canvas Left/Right and Flip Canvas Horizontally/Vertically. The Crop Tool ({{key:design:crop}}) is the same as Crop Canvas and works whatever layer is selected or locked. It has aspect presets and draggable handles; drag a handle past the canvas edge to make the design wider or taller, up to 8192 pixels per side, and drag inside to move the crop. Shift keeps the crop's shape and Alt scales it from the center. Enter or Apply Canvas Crop applies it; Escape or Cancel discards it. Cropping moves every layer and changes the canvas size. Image sources and masks stay intact, so they can still be repositioned. The canvas background adapts to the new size. All canvas operations can be undone.`,
+    see: ['projects', 'package', 'export-frame'],
+  },
+
   {
     id: 'welcome',
     section: 'Getting Started',
@@ -12,11 +169,12 @@ export const ARTICLES = [
     summary: 'Your illustrated, searchable guide to recording, editing, AI tools and delivery. Available offline inside Reccut.',
     keywords: 'overview rooms start',
     body: `
-Reccut has three rooms, shown at the top of the window. Switch between them with {{key:roomRecord}}, {{key:roomEdit}} and {{key:roomExport}}.
+Reccut has four rooms, shown at the top of the window. Switch between them with {{key:roomRecord}}, {{key:roomEdit}} and {{key:roomExport}}.
 
 - **Record** captures your screen, camera and microphone, with cursor zoom.
 - **Edit** is a magnetic timeline editor with the tools and shortcuts from Final Cut Pro.
 - **Export** turns the project, or any file, into the format you need.
+- **Design** makes thumbnails and images with separate layers.
 
 ![The Into the Wild nature project: media on the left, viewer in the centre, inspector on the right and the timeline below.](overview.jpg)
 
@@ -128,10 +286,12 @@ The open project is shown at the top of the window. Click it to see facts about 
 
 A project can hold several sequences, which are separate timelines that share the same media. Use them for a long and a short cut, or a vertical version of the same video.
 
-- **New Sequence** ({{key:newSequence}}), the sequence button in the Media browser, or right click an empty spot in the browser. The new sequence gets the format of the open one.
+- **New Sequence** ({{key:newSequence}}), the sequence button in the Media browser, or right click an empty spot in the browser. Choose a name, format and frame rate, then click **Create Sequence**. The settings start with the format of the open sequence. Cancel closes the window without creating a sequence.
 - **Duplicate Sequence** copies the open sequence, or right click any sequence and choose Duplicate.
 
 When a project has more than one sequence, they are listed at the top of the Media browser. Double click one to open it in the timeline. Right click to rename, duplicate or delete it. Format, frame rate and captions style belong to each sequence, so changing them in the Inspector only changes the open one. Export exports the open sequence.
+
+Choose **Current Display** in the Format menu to match the pixel resolution of the screen containing the Reccut window, including Retina scaling. This is available when creating a sequence and when changing its format later. Moving Reccut to another screen updates the option; existing sequences keep their chosen size until you change it.
 
 In a project made with the Automatic template, the first video you add sets the size and frame rate of the sequence, and Sequence Settings opens so you can keep that or choose another format. Turn off **Ask when adding the first clip** to skip the window; turn it back on in Settings › General. Change the format at any time with File › Sequence Settings (Cmd J), or in the Inspector when no clip is selected. Clips with another size are scaled to fit, and clips with another frame rate or codec play at their normal speed. If a clip's frame rate does not divide evenly into the export frame rate (25 fps in 30, for example), motion stutters slightly; the export window warns about this and suggests a better frame rate. Speed counts: a 60 fps clip at 50% fits a 30 fps sequence and gives smooth slow motion.
 
@@ -215,6 +375,17 @@ Under the microphone meter, Reccut tells you if the microphone is silent, very q
 
 Choose **Flat**, **Clear speech**, **Warm voice** or **Bright voice** as a starting point. Changes apply to both Test and new recordings, and are saved automatically when the mixer closes and between app launches. **Reset to Flat** restores 0 dB gain and neutral processing. Processing is baked into the recorded microphone audio; system audio stays separate.
 
+## Use an audio interface or an external camera
+
+Audio interfaces, USB microphones and HDMI capture devices such as Elgato Cam Link appear in the **Camera** and **Microphone** menus as soon as they are connected. If you unplug the one you chose, Reccut uses another device and goes back to yours when it returns.
+
+Open **Settings → Audio & Video** for more:
+
+- **Input channel**: a microphone in input 1 of an audio interface is recorded on the left side only. Choose **Left only (input 1)** or **Right only (input 2)** to hear it on both sides. **Mono** mixes both inputs into one signal.
+- **Output**: where Reccut plays sound. **System default** follows your computer.
+- **Resolution** and **Frame rate**: what Reccut asks the camera for. The line below shows what it really sends. Over HDMI the format is set on the camera.
+- **Delay microphone**: an HDMI camera shows the picture slightly after the sound. If your lips are out of sync in the recording, increase this in small steps.
+
 ## If Reccut or the computer crashes
 
 The recording is written to disk while you record. If Reccut is closed by a crash or a power cut, it offers to **recover** the recording the next time it starts, with layouts and cursor movements up to the last few seconds.
@@ -233,7 +404,7 @@ Choose a countdown of 3, 5 or 10 seconds under Recording. The numbers are shown 
 
 ![The Record room. The layouts at the bottom switch between camera, screen and picture in picture.](record.jpg)
 
-- The layout buttons, or the shortcuts shown on them, switch between camera full screen, screen only and the camera in a corner. To use these keys from another app, enable **Allow shortcuts in other apps** under **Record → Shortcuts**.
+- The layout buttons, or the shortcuts shown on them, switch between camera full screen, screen only, the camera in a corner and camera and screen side by side (7 and 8; layout 8 has no shortcut because 8 pauses). To use these keys from another app, enable **Allow shortcuts in other apps** under **Record → Shortcuts**.
 - Choose the camera shape (circle, square or 16:9), size and mirroring.
 - Turn on **Show PiP on screen** under Camera to see the camera over the app you are demonstrating. It follows the recording's position, size and shape, including when recording a screen area. Clicks pass through to the app underneath. It appears while Reccut is in the background and hides when you return. Use the layout shortcuts with **3–6** to switch corners. This is available for display and area capture. On macOS and Linux, the on-screen camera can also appear in the screen file; leave it off if you need a clean screen file for later editing.
 - **Show keystrokes** needs the optional **Keystroke Add-on**. Reccut itself never reads the keyboard outside its own window. Click **Get Add-on** to read what the add-on does before it is downloaded: it reads the keyboard for the whole computer while you record, only shortcuts with Cmd, Ctrl, Alt or Win (plus Esc and the F keys) leave it, and they are saved in the recording so you can change them in Edit. It runs only while you record, and **Keys** in the recording controls shows when it is active. Reccut's own shortcuts are never shown. Remove the add-on under Overlays.
@@ -660,7 +831,7 @@ While Reccut works on a clip in the background, for example analyzing motion for
 Select clips and choose Group Clips ({{key:group}}). Any kind of clip can be grouped: video, audio, images, titles, lower thirds, captions and redactions. Grouped clips have a link badge. If one of the clips is already in a group, the groups are joined into one.
 
 - Moving the video moves the rest of the group too, for example the audio, a lower third and a caption, even if a clip starts before the video.
-- A click selects the whole group; Option (Alt) click selects one clip.
+- A click selects the whole group; Option (Alt) click or double click selects one clip, as if you were inside the group.
 - Deleting the video in the storyline deletes the grouped audio.
 - Copy and paste makes a new group.
 
@@ -765,17 +936,68 @@ The same correction is used in the viewer and in exports. How it works: Reccut f
     see: ['inspector'],
   },
   {
+    id: 'tracking',
+    section: 'Editing',
+    title: 'Tracking: Attach Clips to Moving Objects',
+    summary: 'Follow a face, a sign or a product in the video, and pin a redaction, title or image to it.',
+    keywords: 'track tracking tracker motion follow attach pin stick object face license plate redact blur pixelate live keyframes parent sporing',
+    body: `
+Tracking follows something that moves in a video or screen recording, and lets other clips follow it. Use it to keep a redaction on a moving face or license plate, or to pin a title, an arrow or an image to an object. It works in two steps, so you can track first and decide later what should follow.
+
+## 1. Track the object
+
+1. Select the video clip and move the playhead to where the object is clearly visible.
+2. In the **Video** tab, under **Tracking**, turn on **Show area**. Drag the dashed box over the object and resize it so it fits tightly.
+3. Press **Track Forward**. Reccut follows the object from the playhead to the end of the clip (progress is shown on the button and at the top).
+
+![Show area over a face in the Video tab, and the finished Track 1 under Tracking.](tracking-area.jpg)
+
+The result is saved on the clip as **Track 1**, **Track 2** and so on, with its length. Delete a track with the trash button. If the object disappears for more than half a second, tracking stops there and tells you when.
+
+Choose an area with detail, such as a face, text or a logo. Plain surfaces, motion blur and things that are covered are hard to follow. If tracking stops early, move the playhead to where it stopped and track again from there.
+
+## 2. Attach a clip
+
+1. Put the clip that should follow on a track above the video, for example a redaction, a title or an image, and place it where it should be relative to the object.
+2. Select it. Under **Follow Track** choose the track and the mode, and press **Attach**.
+
+![A pixelate redaction following the face live. The redaction and the video are grouped (link badge).](tracking-follow.jpg)
+
+The clip keeps the place it has at the playhead relative to the object, also when it is beside it. It is grouped with the video, so they move together on the timeline. Double click a clip in the group to select only that clip.
+
+- **Live** (default): the clip always follows the track as it is now. Track again, or move, scale or stabilize the video, and the clip follows without attaching it again. Drag the clip in the viewer to change where it sits relative to the object.
+- **Keyframes**: writes position, rotation and size keyframes you can adjust one by one. **Tracking keyframes: Remove** deletes only the keyframes tracking wrote; your own keyframes outside the tracked part stay.
+- **Rotation** makes the clip turn with the object.
+- **Scale (experimental)** makes the clip grow and shrink as the object comes closer or moves away. Real perspective, like a sign seen from the side, is not followed.
+
+**Detach** stops a live link. The clip stays grouped with the video; ungroup it with {{key:ungroup}} if you want.
+
+## Redactions in one step
+
+For a redaction, put it over what it should hide and press **Track Forward** under Follow Track. Reccut tracks what the redaction covers in the video below and attaches the redaction to it.
+
+## With the AI agent
+
+Ask the agent, for example "Blur the face of the woman in the pink shirt" or "Put a label that follows the car". It finds the object in the frames, adds the redaction or title, tracks the object and attaches the clip. You can adjust the result as usual.
+
+How it works: Reccut finds corners inside the area, follows them from frame to frame and works out how the area moves, turns and changes size, ignoring points that do not move with the rest. Tracking and following work the same in the viewer and in exports.
+`,
+    see: ['redact', 'grouping', 'keyframes', 'stabilize'],
+  },
+  {
     id: 'transitions',
     section: 'Editing',
     title: 'Transitions',
     summary: 'Dissolves, wipes, pushes and audio crossfades.',
-    keywords: 'transition dissolve crossfade wipe push fade',
+    keywords: 'transition dissolve crossfade wipe push fade motion blur',
     body: `
 Add Cross Dissolve ({{key:addTransition}}) adds a dissolve at the selected edit. More transitions are in the Transitions browser ({{key:browser:transitions}}); hold the pointer over one to preview it, and drag it to an edit.
 
 Clips above the storyline can have a transition at the start and the end, and so can effects like Pixelate and Blur. Drag a transition to the start of an effect to fade, wipe or slide the effect in.
 
 A transition covers only the picture part of the clips, so you can still drag the audio fade handles below it. By default it also crossfades the audio. Turn that off for one transition in the inspector (Crossfade audio), or for new transitions in Preferences > Editing; the audio then cuts at the edit.
+
+Push, Wipe, Circle Reveal and Zoom can have motion blur. Turn on Motion blur in the inspector to soften moving edges. The faster the transition, the stronger the blur. Effects like Pixelate and Blur do not have this option.
 
 Select two audio clips that touch and press {{key:addTransition}} to add an audio crossfade. The default length is set in Preferences.
 `,
@@ -857,7 +1079,7 @@ Import the template ({{key:importTemplate}}), drop the .reccut-title file on Rec
     summary: 'Subtitles with full styling, import, export and automatic captions.',
     keywords: 'captions subtitles srt vtt transcribe whisper',
     body: `
-Add Caption ({{key:addCaption}}) adds a caption at the playhead. The Captions tab ({{key:browser:captions}}) generates captions automatically from speech, and imports and exports SRT and WebVTT. Captions can have one to three lines, any font, color, outline and background, and can be placed anywhere. When exporting, burn them in, embed them, or save them as a separate file.
+Add Caption ({{key:addCaption}}) adds a caption at the playhead. Double click an empty spot on the caption track to add one that starts there. The Captions tab ({{key:browser:captions}}) generates captions automatically from speech, and imports and exports SRT and WebVTT. Captions can have one to three lines, any font, color, outline and background, and can be placed anywhere. When exporting, burn them in, embed them, or save them as a separate file.
 
 Captions keep their own timing when video clips are moved, trimmed or deleted. You can add text without selecting a video clip. Type directly in the inspector, drag a caption along the caption track to change its time, or drag it in the viewer to change its position. Only explicit grouping makes a caption follow a video clip. While an input field has focus, editor shortcuts are disabled so you can type freely.
 `,
@@ -913,7 +1135,7 @@ For full manual control, use **Blur**, **Pixelate** or **Frosted Glass** from th
 
 ## Styles
 
-- **Pixelate** turns the area into large blocks. Good for text and faces.
+- **Pixelate** turns the area into large blocks. Good for text and faces. With **Whole blocks at edge** (on for new redactions) the blocks along the edge are kept whole instead of being cut by the shape, so the edge follows the blocks and can reach a little outside the shape. Turn it off for an exact edge.
 - **Blur** makes it soft. Use a high amount for text.
 - **Solid** covers the area with a color. This is the safest for passwords, because nothing of the original is left.
 - **Frosted** combines blur and blocks, like frosted glass.
@@ -922,13 +1144,15 @@ In the Redact tab of the inspector you can choose the shape (rectangle, rounded,
 
 ## Follow something that moves
 
-Position, size and rotation can have keyframes. Go to where the object starts, click the keyframe button next to Position and Size, move the playhead and drag the box to the new place. Reccut moves the box smoothly between the keyframes.
+The quickest way is tracking: put the redaction over the object and press **Track Forward** under **Follow Track** in the Redact tab. Reccut follows the object and keeps the redaction on it. See [[article:tracking|Tracking]].
+
+You can also do it by hand. Position, size and rotation can have keyframes. Go to where the object starts, click the keyframe button next to Position and Size, move the playhead and drag the box to the new place. Reccut moves the box smoothly between the keyframes.
 
 With **Freeform** you can follow any shape: drag the points in the viewer, double click the outline to add a point and Option (Alt) click a point to remove it. Click the keyframe button next to **Shape** to animate the points, so the redaction can change shape over time. See Masks.
 
 Redactions work the same in the viewer and in the exported file.
 `,
-    see: ['keyframes', 'effects'],
+    see: ['tracking', 'keyframes', 'effects'],
   },
   {
     id: 'effects',
@@ -967,11 +1191,11 @@ Start with light film grain and glow for a subtle look. Use RGB split and glitch
 
 Choose **Solid color** or **Gradient ramp** under **Color fills** in the Effects browser, or from **Add stack effect…** in the inspector. These effects fill a video, image or recording source. **Strength** blends the fill with the source. Turn on **Preserve source alpha** to keep transparent areas, for example after a color key.
 
-- **Linear**: drag the start and end handles to set the direction and length. Double-click the color bar to add stops, then drag each stop or set its position and color below.
+- **Linear**: drag the start and end handles to set the direction and length, or enter **Angle** in degrees and choose a preset. 0° runs left to right and 90° runs down. Click the color bar once to add a color. Click a round color handle to select it, then change its color or position below.
 - **Radial**: drag the center and radius handles. Color stops run from the center to the outer radius. Center and Radius also have numeric controls.
 - **Freeform**: double-click the preview to add a color point. Drag points to place them, choose their colors, and adjust **Point spread** with the square handle or numeric control. Larger spread gives a color more influence. Freeform uses smooth point blending; it does not include Illustrator's gradient lines.
 
-Use **Add point/stop** and **Remove point/stop** for explicit controls. A gradient supports up to 32 stops or points. Arrow keys move focused handles; Shift makes larger steps. Edits support undo and redo and are saved in the project. Gradient settings are static. Preview and export use the same renderer.
+Drag a color handle down off the color bar to remove it, or select it and press **Backspace/Delete**. At least two colors remain. Press Escape during a drag to cancel it. **Add point/stop** and **Remove point/stop** also work. A gradient supports up to 32 stops or points. Arrow keys move focused handles; Shift makes larger steps. Edits support undo and redo and are saved in the project. Gradient settings are static. Preview and export use the same renderer. Design fills use these same controls.
 `,
     see: ['keying', 'ai-plugins', 'keyframes', 'color', 'redact'],
   },
@@ -1019,6 +1243,7 @@ Cloud providers need your own API key and bill you for usage. Keys use encrypted
 Choose **AI** in the toolbar. The first time, a short setup lets you choose a model on this computer, Google Gemini, Claude or OpenAI. Choose **? What can I ask** for tips and examples. Describe the result you want. The agent reads the timeline and library, places and cuts clips, trims, moves and deletes, adds titles, captions and transitions, sets volume, fades, colour and stack effects, imports files you name, and looks up this manual. It renders frames from the timeline to check its work.
 
 - **Subtitles and translation:** "Subtitle this video in Finnish." The agent transcribes the speech with the local speech model, translates and condenses it, and replaces the captions in one step. Reccut fits the timing to common subtitle rules: at least one second on screen, no more than 17 characters per second, two lines of 42 characters, a short gap between captions and no overlaps. The agent rewrites captions that break the rules. Read through the result before you publish it.
+- **Hide or follow something that moves:** "Blur the face of the man in the blue jacket." The agent finds the object in the frames, adds a redaction, tracks the object and attaches the redaction to it. It can also pin titles and images to objects, and attach clips to tracks you made yourself.
 - **Colour and exposure:** "Adjust colour and exposure on every clip so they look good." The agent measures brightness, clipping, saturation and colour cast in each clip, corrects them with the colour controls and wheels, and makes clips from the same scene match.
 - **Edit raw footage:** "Make a tutorial from my talking head and the screen recordings." The agent transcribes each clip with word times, finds pauses from the audio level, keeps the best take of each sentence, finds what happens in long screen recordings from scene changes, cursor zoom and contact sheets, and builds the whole edit in one step with the screen parts timed to the narration. Cuts are placed between words with a short natural pause.
 - **Your own titles:** describe a lower third, callout or end card and the agent designs an animated title template for it, adds it to the Titles library and places it.
@@ -1029,7 +1254,9 @@ Choose **AI** in the toolbar. The first time, a short setup lets you choose a mo
 
 ## Managing and sharing plugins
 
-In **Settings → Plugins**, each plugin has **Open**, **Settings**, **Share…** and **Remove**. The gear in a plugin's window opens the same settings. A plugin's settings are the values it starts with, also when the AI agent uses it; you can still change them in its window each time. Higgsfield's settings hold your account, the models and whether to ask before each generation. Share saves a .reccut-plugin file; others install it by double-clicking it. Sharing is free, and you may also sell your plugins on your own terms; you accept the sharing terms when you export. Installing any plugin, from the agent or from a file, asks you to confirm that you use it at your own risk: a plugin runs on your computer with your permissions and can change files and projects. Install only plugins you trust and keep backups.
+In **Settings → Plugins**, tools are grouped into **Record**, **Edit**, **Export** and **Design**. Your current workspace appears first and opens automatically. Use the workspace buttons to jump to another section. Photo sources, API keys and online templates are under **Design**; video tools and plugin installation are under **Edit**. Source labels explain whether a connection is ready, needs a key or needs sign-in.
+
+Video plugins have **Open**, **Settings**, **Share…** and **Remove**. The gear in a plugin's window opens the same settings. A plugin's settings are the values it starts with, also when the AI agent uses it; you can still change them in its window each time. Higgsfield's settings hold your account, the models and whether to ask before each generation. Share saves a .reccut-plugin file; others install it by double-clicking it. Sharing is free, and you may also sell your plugins on your own terms; you accept the sharing terms when you export. Installing any plugin, from the agent or from a file, asks you to confirm that you use it at your own risk: a plugin runs on your computer with your permissions and can change files and projects. Install only plugins you trust and keep backups.
 
 Scripts from **Typeloom**: export the project as a Typeloom project file (.typeloom) and attach it. The binder order, scene headings, character cues, dialogue and the corkboard synopsis of each document are kept, so the agent can follow the acts and scenes. A screenplay exported as PDF works too.
 - **Anything in the menus:** the agent can find and run every command in Reccut, select clips, move the playhead, change any inspector property, the project format and caption style, Settings, recording settings and keyboard shortcuts.
@@ -1038,7 +1265,7 @@ Scripts from **Typeloom**: export the project as a Typeloom project file (.typel
 
 Each change is an undo step, and **Undo this request** reverts everything the agent did in its last request. **Stop** ends a request between steps.
 
-The agent cannot yet create voice-over or music, or export. What is sent to the provider: your messages and attached images, what the agent reads from the project (clip names, timings, captions, the transcript and look measurements) and, if the model can see images, rendered frames. Media files, audio and local paths are not uploaded. The speech model runs on your computer and is downloaded the first time.
+The agent cannot yet create voice-over or music, or export. What is sent to the provider: your messages and attached images, what the agent reads from the project (clip names, timings, captions, the transcript and look measurements) and, if the model can see images, rendered frames. Media files, audio and local paths are not uploaded. The speech model runs on your computer. Manage installed subtitle models in Settings → AI; Whisper Base is included, and additional models are optional downloads.
 
 **External video processors** install from a Reccut JSON manifest pointing to a trusted local executable. On a video clip, open Effects → External processing to process the full source and apply the result to that clip. The source timing must be preserved; original audio and media remain available. Cancel through Background tasks.
 
@@ -1086,9 +1313,89 @@ Click the diamond next to a value to add a keyframe at the playhead, and change 
     body: `
 Most values in the inspector, including position, scale, opacity, color, effects and volume, can have keyframes. Click the diamond to add one, use the arrows to jump between them, and right click a keyframe on the clip to change its easing.
 
+**Pattern backgrounds:** in Editing, open **Titles → Backgrounds** and add Shape Background or Grid Background. The Video inspector has the same pattern controls as Design, with diamonds for animation. Size, spacing, variation, distribution strength, seed, symbol rotation and X/Y offsets interpolate between keyframes. Symbol, pattern type, colors and distribution direction switch at the next keyframe.
+
+**Expressions:** hold Alt/Option over a property name or its diamond. When the pointer shows **ƒx**, click to add automatic motion such as Wiggle or Oscillate. See [[article:expressions|Expressions]].
+
 New keyframes use **Ease In and Out** by default. Change this to **Linear** in Settings → Editing → Default keyframe interpolation, or use the curve button in the timeline toolbar. The default applies to all properties; existing keyframes keep their easing.
 `,
-    see: ['inspector'],
+    see: ['inspector', 'expressions'],
+  },
+  {
+    id: 'expressions',
+    section: 'Editing',
+    title: 'Expressions',
+    summary: 'Add automatic motion such as wiggle, pulse or continuous rotation to a value without setting keyframes.',
+    keywords: 'expression expressions fx ƒx wiggle shake jitter oscillate sine pulse rotate spin drift bounce ramp saw flicker random seed procedural automatic animation loop alt option',
+    body: `
+An expression animates a value for you. Instead of placing many keyframes to make a title shake, a logo spin or a light flicker, you choose a preset and set how strong and how fast it is. Expressions are presets with settings, not code you type.
+
+## Which values can have an expression
+
+Every numeric value in the inspector that has a keyframe diamond can have an expression: position, scale, rotation, opacity, crop, effect amounts, color values, pattern background settings, volume and so on. Values without a diamond, and the layout value of split screens, cannot.
+
+## Add an expression
+
+1. Select the clip and find the value in the inspector.
+2. Hold **Alt/Option** and move the pointer over the value's name or its diamond. The pointer changes to an arrow with a red **ƒx** badge when the value supports expressions.
+3. Click while holding Alt/Option. The expression controls open under the value.
+4. Choose a preset in the Expression menu and adjust its settings.
+5. Click **Done** to close the controls.
+
+You can also reach the name with Tab and press Alt/Option and Enter or Space. The playhead must be inside the clip to Alt-click the diamond; the name works at any time.
+
+## Presets
+
+- **Wiggle:** smooth random movement around the value, up and down. A new random target is reached once per cycle.
+- **Oscillate:** moves smoothly back and forth, like a sine wave, between the value minus Amount and the value plus Amount.
+- **Pulse:** grows from the value up to the value plus Amount and back, once per cycle.
+- **Rotation:** continuous rotation. Only offered for rotation values. Amount is degrees per second.
+- **Drift:** a steady change that keeps going. Amount is units per second, for example pixels per second for position.
+- **Bounce:** a repeating hop above the value, like a ball bouncing on the floor.
+- **Ramp:** rises from the value to the value plus Amount and jumps back, once per cycle.
+- **Flicker:** jumps to a new random value between the value minus Amount and the value plus Amount at every cycle, with no smoothing.
+
+Use a negative Amount to turn the direction around, for example a Pulse that shrinks instead of grows, or a Rotation that turns counterclockwise.
+
+## Settings
+
+- **Enabled:** turns the expression off without removing it, so you can compare with and without.
+- **Amount:** how far the value moves, in the same unit as the value itself (pixels, percent, degrees and so on). For Rotation and Drift it is the change per second.
+- **Cycles / second:** how fast the motion repeats. 2 means two cycles every second; 0.5 means one cycle every two seconds. For Rotation and Drift this is called **Speed multiplier** and multiplies Amount.
+- **Phase (°):** where in the cycle the motion starts. 360° is one full cycle, so 180° starts halfway. Give two clips the same preset with different phases to keep them out of step.
+- **Random Seed:** only for Wiggle and Flicker. Clips with the same seed and settings move the same way; change the seed for a different random pattern.
+
+New expressions start with a moderate Amount for the value, a speed of 1 and a phase of 0. Rotation starts at 45 degrees per second.
+
+## How expressions combine with keyframes
+
+The expression is added on top of the value. Without keyframes it moves around the number in the inspector. With keyframes it moves around the keyframed animation, so you can for example animate a title across the screen with two keyframes and let Wiggle add a shake as it travels.
+
+The number field and the slider still edit the base value, and the diamond still adds keyframes to it. The viewer, playback and export show the result with the expression added. The result stays inside the value's normal range: an opacity cannot go above 100% or below 0%, for example. The Rotation preset is not limited.
+
+Time is counted from the start of the clip, so the motion moves with the clip when you move it on the timeline. Trimming the start of the clip keeps the motion in place, as with keyframes. Clip speed and speed ramps are taken into account.
+
+## See, change and remove an expression
+
+- A value with an active expression has a red diamond, and a **ƒx** link with the preset name under the value. Click the link to open the controls again. A turned off expression shows (disabled) after the name.
+- The diamond's tooltip shows the active preset.
+- **Remove Expression**, or None in the Expression menu, removes the expression and keeps the base value and keyframes.
+- **Reset** (the arrow at the end of the row) removes the expression, the keyframes and returns the value to its default.
+
+## Copying and groups
+
+Expressions are saved with the project and used in exports. Copy and Paste Attributes copies them with the other attributes, and Remove Attributes removes them. With several clips selected, an expression you add or change in the inspector is applied to all of them.
+
+When a clip follows a track in **Live** mode, the track controls position and rotation (and scale if Scale is on), so expressions on those values are not used while it follows. Use **Keyframes** mode if you want a wiggle on top of the tracked motion.
+
+## Tips
+
+- A small Wiggle on Position (Amount 3 to 8, about 2 cycles per second) gives a handheld camera feel.
+- Pulse on Scale at 1 cycle per second makes a logo or button breathe.
+- Flicker on Opacity with a small Amount and high speed looks like an old film or a faulty light.
+- Rotation on a pattern background's symbol rotation gives a slowly turning background.
+`,
+    see: ['keyframes', 'inspector', 'effects'],
   },
 
   /* Lyd */
@@ -1160,6 +1467,7 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
 - Drag the fade handles at the top corners of the audio to fade in and out.
 - **Expand Audio** ({{key:expandAudio}}) shows the audio below the video. Drag its edges past the video for J and L cuts.
 - The **Levels** at the top of the Audio tab show the waveform of the clip with its peak and average level. Red means the audio clips (goes over 0 dBFS). Audio Format shows the codec, sample rate and channels of the file.
+- **Stereo or mono**: in the Audio tab, **Channels** sets each audio source in a clip to Stereo or Mono. Mono mixes all channels in the source and plays them equally on both sides, also in the export.
 - **Audio components**: a clip can have several audio tracks, for example the camera microphone and synchronized audio from a recorder. Switch them on and off in the Audio tab, in the right click menu, or by clicking one in the expanded audio and pressing {{key:toggleEnabled}}. A track that is off is kept, greyed out.
 - **Detach Audio** ({{key:detachAudio}}) turns the audio into separate clips.
 - **Solo** ({{key:solo}}) plays only the selected clips.
@@ -1273,6 +1581,8 @@ Under **Keyboard** you can change the shortcut of any command:
 - If the keys are already used, Reccut says by which command, and you choose whether to move them.
 - The × removes a shortcut, and the arrow brings back the default. Changed only shows what you have changed, and Reset All goes back to the defaults.
 - Export saves your shortcuts to a file, and Import loads them, for example on another computer.
+
+Record, Edit, Export and Design each have their own shortcuts, and the menu bar changes with the room. A key only works in the room you are in, so the same key can do different things in Edit and Design. Project, room, Settings and Help commands work everywhere. The recording keys are set under Shortcuts in Record.
 
 The menus, the Keyboard Shortcuts list ({{key:shortcuts}}) and Quick Search always show your own shortcuts.
 

@@ -1,0 +1,33 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {designSafeFrame,newDesign,newLayer,layerBounds,resizeDesign,resizeDesignContent,cropDesignCanvas,rotateDesignCanvas,flipDesignCanvas,duplicateDesign,designVariants,readabilityWarnings,contrastRatio,designSafeZones,normalizeDesign} from '../src/shared/design.js';import {BUILTIN_DESIGN_TEMPLATES,applyTemplate} from '../src/shared/designTemplates.js';
+const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-6,`${a} != ${b}`);
+test('resizing all template and unanchored layouts keeps rotated bounds inside every target ratio',()=>{
+ for(const template of BUILTIN_DESIGN_TEMPLATES)for(const anchored of[true,false]){let d=applyTemplate(template,{frame:'frame',cutout:{asset:'subject',cutout:{asset:'mask',enabled:true}}});if(!anchored)d.layers=d.layers.map(l=>{const next={...l,rotation:23};delete next.anchor;return next});for(const [width,height]of[[1080,1920],[1080,1080],[1280,720]]){d=resizeDesignContent(d,width,height);for(const l of d.layers){const b=layerBounds(l);assert.ok(b.x>=-1e-6&&b.y>=-1e-6&&b.x+b.w<=width+1e-6&&b.y+b.h<=height+1e-6);if(l.type==='image')assert.equal(l.crop.w,1);}}}
+});
+test('resize preserves sources, masks, IDs and relative centers without mutating the source',()=>{
+ const d=newDesign(),l=newLayer('image',{asset:'photo',cutout:{asset:'mask',enabled:true},x:100,y:120,w:200,h:200,fit:'contain'});d.layers=[l];const before=JSON.stringify(d),n=resizeDesignContent(d,1080,1920);assert.equal(JSON.stringify(d),before);assert.equal(n.layers[0].id,l.id);assert.equal(n.layers[0].cutout.asset,'mask');near((n.layers[0].x+n.layers[0].w/2)/1080,(l.x+l.w/2)/1280);assert.throws(()=>resizeDesignContent(d,0,10),/whole numbers/);
+});
+test('canvas size anchor changes position only and supports all nine anchors',()=>{
+ const d=newDesign({width:400,height:300});d.layers=[newLayer('shape',{x:20,y:30,w:80,h:40})];for(const x of[0,.5,1])for(const y of[0,.5,1]){const n=resizeDesign(d,600,500,{x,y});assert.equal(n.layers[0].x,20+200*x);assert.equal(n.layers[0].y,30+200*y);assert.equal(n.layers[0].w,80);}
+});
+test('canvas crop moves every layer including locked and hidden content while retaining source crop and masks',()=>{
+ const d=newDesign({width:600,height:400});d.layers=[newLayer('image',{x:10,y:20,w:300,h:200,asset:'a',locked:true,hidden:true,cutout:{asset:'m',enabled:true}})];const n=cropDesignCanvas(d,{x:100,y:50,w:200,h:200});assert.equal(n.width,200);assert.equal(n.height,200);assert.equal(n.layers[0].x,-90);assert.equal(n.layers[0].y,-30);assert.equal(n.layers[0].crop.w,1);assert.equal(n.layers[0].cutout.asset,'m');assert.equal(d.layers[0].x,10);assert.throws(()=>cropDesignCanvas(d,{x:0,y:0,w:0,h:100}),/pixel/);const wide=cropDesignCanvas(d,{x:-50,y:0,w:700,h:500});assert.equal(wide.width,700);assert.equal(wide.height,500);assert.equal(wide.layers[0].x,60);assert.equal(wide.layers[0].y,20);assert.throws(()=>cropDesignCanvas(d,{x:0,y:0,w:9000,h:100}),/pixel/);
+});
+test('four canvas rotations and double flips preserve all layer geometry and gradient points',()=>{
+ const d=newDesign({width:600,height:400});d.background={type:'gradient',alpha:1,gradient:{mode:'linear',start:{x:.1,y:.2},end:{x:.9,y:.8}}};d.layers=[newLayer('text',{x:20,y:30,w:200,h:60,rotation:30,flipX:true,text:'Hello'}),newLayer('image',{x:280,y:50,w:250,h:300,asset:'a',flipY:true})];let n=d;for(let i=0;i<4;i++)n=rotateDesignCanvas(n);assert.deepEqual(n.layers,d.layers);near(n.background.gradient.start.x,.1);near(n.background.gradient.start.y,.2);for(const axis of['x','y'])assert.deepEqual(flipDesignCanvas(flipDesignCanvas(d,axis),axis).layers,d.layers);
+ const clockwise=rotateDesignCanvas(d),reversed=rotateDesignCanvas(clockwise,-1);assert.deepEqual(reversed.layers,d.layers);assert.equal(clockwise.width,400);assert.equal(clockwise.height,600);
+});
+test('variants own independent layers and groups, preserve assets and identify a shared family',()=>{
+ const d=newDesign();d.layers=[newLayer('image',{asset:'a',group:'g'}),newLayer('text',{group:'g'})];const v=duplicateDesign(d,{variant:true}),w=duplicateDesign(v,{variant:true});assert.equal(v.variantOf,d.id);assert.equal(w.variantOf,d.id);assert.notEqual(v.layers[0].id,d.layers[0].id);assert.notEqual(v.layers[0].group,'g');assert.equal(v.layers[0].group,v.layers[1].group);assert.equal(v.layers[0].asset,'a');assert.equal(designVariants({[d.id]:d,[v.id]:v,[w.id]:w},w).length,3);v.layers[0].crop.x=.1;assert.equal(d.layers[0].crop.x,0);assert.equal(normalizeDesign({...v,favorite:true}).favorite,true);
+});
+test('readability detects small text, low contrast and safe overlays but ignores hidden/empty text',()=>{
+ const d=newDesign();d.layers=[newLayer('text',{id:'small',size:30,x:1100,y:650,w:170,h:60,text:'Title'}),newLayer('text',{id:'hidden',hidden:true,size:6}),newLayer('text',{id:'empty',text:''})];const warnings=readabilityWarnings(d,{contrasts:{small:1.2}});assert.deepEqual(warnings.map(w=>w.kind),['small','contrast','safe']);assert.ok(warnings.every(w=>w.layerId==='small'));assert.equal(designSafeZones(d).length,1);assert.equal(contrastRatio('#000000','#ffffff'),21);assert.equal(contrastRatio('#dddddd','#dddddd'),1);near(contrastRatio('#777777','#ffffff'),4.478089453577214);assert.equal(readabilityWarnings({...d,layers:[newLayer('text',{size:160,x:0,y:0,w:600,h:200})]}).length,0);
+});
+
+test('canvas rotations and flips carry template anchors with the content',()=>{const d=newDesign();d.layers=[newLayer('text',{anchor:{x:'left',y:'top'}})];assert.deepEqual(rotateDesignCanvas(d).layers[0].anchor,{x:'right',y:'top'});assert.deepEqual(rotateDesignCanvas(d,-1).layers[0].anchor,{x:'left',y:'bottom'});assert.deepEqual(flipDesignCanvas(d).layers[0].anchor,{x:'right',y:'top'});let n=d;for(let i=0;i<4;i++)n=rotateDesignCanvas(n);assert.deepEqual(n.layers[0].anchor,d.layers[0].anchor)});
+
+test('portrait text is checked at its actual fitted feed size',()=>{const d=newDesign({width:1080,height:1920,size:'shorts'});d.layers=[newLayer('text',{text:'Portrait title',size:200,x:0,y:0,w:1080,h:400})];assert.ok(readabilityWarnings(d).some(w=>w.kind==='small'))});
+test('safe frame follows the canvas shape and only shows center cut lines where they fit',()=>{
+ const wide=designSafeFrame({width:1920,height:1080});assert.equal(wide.length,18);assert.deepEqual(wide[0].map(Math.round),[96,54,1824,54]);assert.ok(wide.some(l=>Math.abs(l[0]-312)<1e-6&&l[0]===l[2]));
+ const tall=designSafeFrame({width:1080,height:1920});assert.equal(tall.length,18);assert.ok(tall.some(l=>Math.abs(l[1]-312)<1e-6&&l[1]===l[3]));
+ assert.equal(designSafeFrame({width:1000,height:1000}).length,14);assert.equal(designSafeFrame({width:1200,height:900}).length,14);
+});

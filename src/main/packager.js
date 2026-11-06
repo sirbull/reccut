@@ -78,7 +78,7 @@ async function packageProject(payload, ctx) {
   }
 }
 
-async function writePackage({ project, files, dest, removed }, ctx, root) {
+async function writePackage({ project, files, designFiles = [], dest, removed }, ctx, root) {
   const p = JSON.parse(JSON.stringify(project));
   const footage = path.join(root, 'Footage');
   const recDir = path.join(root, 'Recordings');
@@ -103,6 +103,10 @@ async function writePackage({ project, files, dest, removed }, ctx, root) {
       else jobs.push({ f, s, from: s.path, size });
     }
   }
+  for (const f of designFiles) {
+    if (f.path && fs.existsSync(f.path) && (await fs.promises.stat(f.path)).isFile()) jobs.push({ design: f, from: f.path, size: await sizeOf(f.path) });
+    else missing.push(`${f.name || f.assetId}: ${f.path || 'Missing design asset path'}`);
+  }
   const total = jobs.reduce((a, j) => a + j.size, 0);
   try {
     const st = await fs.promises.statfs(dest);
@@ -117,6 +121,7 @@ async function writePackage({ project, files, dest, removed }, ctx, root) {
   // Kopier, og husk hvor hver fil havnet.
   const taken = { footage: new Set(), rec: new Set() };
   const moved = new Map();
+  const designMoved = new Map(), designTaken = new Map(), designLog = [];
   const log = [];
   let done = 0;
   for (const j of jobs) {
@@ -125,7 +130,24 @@ async function writePackage({ project, files, dest, removed }, ctx, root) {
       throw new Error('Canceled');
     }
     ctx.progress(total ? done / total : 0, `Copying ${path.basename(j.from)}`);
-    if (j.dir) {
+    if (j.design) {
+      let to = designMoved.get(j.from);
+      if (!to) {
+        const parts = path.normalize(j.from).split(path.sep);
+        const at = parts.lastIndexOf('Designs');
+        const sub = at >= 0 && ['Assets', 'Frames', 'Cutouts'].includes(parts[at + 1]) ? parts.slice(at + 1, -1) : ['Assets'];
+        const dir = path.join(root, 'Designs', ...sub);
+        await fs.promises.mkdir(dir, { recursive: true });
+        if (!designTaken.has(dir)) designTaken.set(dir, new Set());
+        to = uniquePath(dir, path.basename(j.from), designTaken.get(dir));
+        await fs.promises.copyFile(j.from, to);
+        if ((await fs.promises.stat(to)).size !== j.size) throw new Error(`The copy of ${j.from} is incomplete.`);
+        designMoved.set(j.from, to);
+        const line = `${path.relative(root, to)}  (${fmtBytes(j.size)}, from ${j.from})`;
+        designLog.push(line); log.push(line);
+      }
+      if (p.designAssets?.[j.design.assetId]) Object.assign(p.designAssets[j.design.assetId], { path: to, copied: true, missing: false });
+    } else if (j.dir) {
       await fs.promises.mkdir(recDir, { recursive: true });
       const to = uniquePath(recDir, path.basename(j.from), taken.rec);
       await fs.promises.cp(j.from, to, { recursive: true });
@@ -205,6 +227,9 @@ async function writePackage({ project, files, dest, removed }, ctx, root) {
     'Copied:',
     ...log.map((l) => `  ${l}`),
   ];
+  if (designLog.length) lines.push('', 'Design files:', ...designLog.map((l) => `  ${l}`));
+  const fonts = [...new Set(Object.values(p.designs || {}).flatMap((d) => (d.layers || []).filter(l=>l.type==='text').flatMap(l=>[l.font,...(l.textStyles||[]).map(r=>r.style?.font)]).filter(font=>font&&!['sans','serif','mono','rounded'].includes(font))))].sort();
+  if (fonts.length) lines.push('', 'Fonts used in designs:', ...fonts.map((f) => `  ${f}`), 'Fonts are not copied. Install them on the other computer.');
   if (removed) {
     lines.push('', 'Removed from the packaged project (the original project is not changed):');
     if (removed.clips?.length) lines.push(`  ${removed.clips.length} disabled or hidden clips: ${removed.clips.join(', ')}`);

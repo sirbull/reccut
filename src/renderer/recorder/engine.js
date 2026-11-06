@@ -1,8 +1,10 @@
 // Opptaksmotor: kilder, live forhåndsvisning og opptak til separate filer.
 import { signal } from '@preact/signals';
 import { drawCamera, drawCursor, drawKeys } from '../../shared/render.js';
-import { KEY_LIFE, LAYOUT_ANIM, easeOutCubic, lerpRect, pipRect, ZOOM_RAMP, clamp } from '../../shared/model.js';
-import { settings, saveSettings } from './settings.js';
+import { KEY_LIFE, LAYOUT_ANIM, easeOutCubic, isCorner, lerpRect, pipRect, screenArea, ZOOM_RAMP, clamp } from '../../shared/model.js';
+import { containRect } from '../../shared/follow.js';
+import { pickDevice, settings, saveSettings } from './settings.js';
+import { audioOutputs, audioSink } from '../prefs.js';
 import { recordingAudioChoice, recordingPlan, recordingVideoFormat } from '../../shared/recordingFormats.cjs';
 import { projectFolders } from '../editor/store.js';
 import { createMicMixer, EMPTY_LEVELS, normalizeMix } from './mixer.js';
@@ -12,6 +14,8 @@ const api = window.api;
 export const screens = signal([]);
 export const cameras = signal([]);
 export const mics = signal([]);
+// Det kameraet faktisk leverer. Over HDMI er det kameraet som bestemmer formatet.
+export const cameraInfo = signal(null);
 export const recording = signal(false);
 export const elapsed = signal(0);
 export const level = signal(0);
@@ -158,12 +162,28 @@ export async function refreshDevices() {
   mics.value = devices
     .filter((d) => d.kind === 'audioinput' && d.deviceId !== 'communications')
     .map((d, i) => ({ id: d.deviceId, label: d.label || `Microphone ${i + 1}` }));
+  audioOutputs.value = devices
+    .filter((d) => d.kind === 'audiooutput' && !['default', 'communications'].includes(d.deviceId))
+    .map((d, i) => ({ id: d.deviceId, label: d.label || `Output ${i + 1}` }));
   const s = settings.value;
+  const busy = recording.value || countdown.value > 0 || finishing.value;
+  const camera = pickDevice(s.cameraId, s.cameraWanted, cameras.value, busy);
+  const mic = pickDevice(s.micId, s.micWanted, mics.value, busy);
   const patch = {};
-  if (s.cameraId === null || (s.cameraId && !cameras.value.some((c) => c.id === s.cameraId))) patch.cameraId = cameras.value[0]?.id ?? '';
-  if (s.micId === null || (s.micId && !mics.value.some((m) => m.id === s.micId))) patch.micId = mics.value[0]?.id ?? '';
+  if (camera.id !== s.cameraId) Object.assign(patch, { cameraId: camera.id, cameraWanted: camera.wanted });
+  if (mic.id !== s.micId) Object.assign(patch, { micId: mic.id, micWanted: mic.wanted });
   if (Object.keys(patch).length) saveSettings(patch);
   return patch;
+}
+
+export function chooseCamera(id) {
+  saveSettings({ cameraId: id, cameraWanted: id });
+  useCamera();
+}
+
+export function chooseMic(id) {
+  saveSettings({ micId: id, micWanted: id });
+  useMic();
 }
 
 export async function useScreen() {
@@ -200,20 +220,23 @@ export async function useScreen() {
 
 export async function useCamera() {
   const request = ++cameraRequest;
-  const id = settings.value.cameraId;
+  const { cameraId: id, cameraHeight: height, cameraFps: fps } = settings.value;
   stop(cameraStream);
   cameraStream = null;
   cameraVideo.srcObject = null;
+  cameraInfo.value = null;
   if (!id || (!roomActive && !recording.value)) return updateSize();
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { deviceId: { exact: id }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+      video: { deviceId: { exact: id }, width: { ideal: Math.round(height * 16 / 9) }, height: { ideal: height }, frameRate: { ideal: fps } },
     });
     if (request !== cameraRequest) { stop(stream); return; }
     cameraStream = stream;
     cameraVideo.srcObject = cameraStream;
     await cameraVideo.play().catch(() => {});
+    const got = stream.getVideoTracks()[0].getSettings();
+    cameraInfo.value = `${got.width} × ${got.height}${got.frameRate ? `, ${+got.frameRate.toFixed(2)} fps` : ''}`;
   } catch (err) {
     if (request !== cameraRequest) return;
     console.error(err);
@@ -235,7 +258,7 @@ export async function useMic() {
     });
     if (request !== micRequest) { stop(stream); return; }
     micStream = stream;
-    micMixer = createMicMixer(audioCtx, stream, settings.value.micMixer);
+    micMixer = createMicMixer(audioCtx, stream, settings.value.micMixer, { channel: settings.value.micChannel, delay: settings.value.micDelay });
     await audioCtx.resume();
   } catch (err) {
     if (request !== micRequest) return;
@@ -263,6 +286,7 @@ function releaseDevices() {
   stop(cameraStream);
   cameraStream = null;
   cameraVideo.srcObject = null;
+  cameraInfo.value = null;
   releaseMic();
 }
 
@@ -301,6 +325,9 @@ let cam = null;
 let camFrom = null;
 let camTo = null;
 let camAnimStart = 0;
+let scr = null;
+let scrFrom = null;
+let scrTo = null;
 let lastCorner = 6;
 let liveZoom = { on: false, at: 0, off: 0 };
 let liveCursor = null;
@@ -327,7 +354,7 @@ function syncPipPreview(now, force = false) {
   const s = settings.value;
   const visible = s.showPipOnScreen && (roomActive || recording.value || countdown.value) &&
     !editingArea.value && !isWindowSource() && !document.hasFocus() &&
-    ready(screenVideo) && ready(cameraVideo) && effectiveLayout() >= 3 && cam?.a > 0.01;
+    ready(screenVideo) && ready(cameraVideo) && isCorner(effectiveLayout()) && cam?.a > 0.01;
   if (!visible) {
     if (pipVisible) api.recPipPreview(null);
     pipVisible = false;
@@ -393,7 +420,7 @@ export function attachCanvas(el) {
 }
 
 export function setLayout(n) {
-  if (n >= 3) lastCorner = n;
+  if (isCorner(n)) lastCorner = n;
   saveSettings({ layout: n });
   if (recording.value) layouts.push([round((Date.now() - t0) / 1000), n]);
 }
@@ -434,8 +461,8 @@ function currentMeta() {
     pauses: pauses.map(([a, b]) => [round((a - t0) / 1000), round(((b ?? Date.now()) - t0) / 1000)]),
     ...(activeArea() ? { area: activeArea() } : {}),
     ...(isWindowSource() ? { source: 'window' } : {}),
-    pip: { size: s.pipSize, shape: s.pipShape, mirror: s.mirror },
-    // Pekerzoom følger skjermen, så den er av når bare et vindu tas opp.
+    pip: { size: s.pipSize, shape: s.pipShape, mirror: s.mirror, sideSize: s.sideSize, sideShape: s.sideShape },
+    // Pekerzoom og klikk følger skjermen, så de er av når bare et vindu tas opp.
     overlays: { keys: Boolean(s.showKeys && keystrokesRunning.value), cursorZoom: s.cursorZoom && !isWindowSource() },
   };
   for (const r of recorders) {
@@ -472,30 +499,43 @@ function draw() {
 
   const hasScreen = ready(screenVideo);
   const hasCamera = ready(cameraVideo);
-  const target = pipRect(effectiveLayout(), lastCorner, W, H, s.pipSize, s.pipShape);
+  const layout = effectiveLayout();
+  const side = { size: s.sideSize, shape: s.sideShape };
+  const target = pipRect(layout, lastCorner, W, H, s.pipSize, s.pipShape, side);
+  const scrTarget = screenArea(layout, W, H, side);
   // Fortsett fra posisjonen akkurat nå, også når en ny snarvei avbryter en pågående flytting.
   const t = Math.min(1, (now - camAnimStart) / (LAYOUT_ANIM * 1000));
-  if (cam) cam = t >= 1 ? camTo : lerpRect(camFrom, camTo, easeOutCubic(t));
-  if (!cam) cam = camFrom = camTo = target;
-  else if (['x', 'y', 'w', 'h', 'r', 'a'].some((k) => Math.abs(target[k] - camTo[k]) > 0.5 || (k === 'a' && target.a !== camTo.a))) {
+  if (cam) {
+    cam = t >= 1 ? camTo : lerpRect(camFrom, camTo, easeOutCubic(t));
+    scr = t >= 1 ? scrTo : lerpRect(scrFrom, scrTo, easeOutCubic(t));
+  }
+  if (!cam) {
+    cam = camFrom = camTo = target;
+    scr = scrFrom = scrTo = scrTarget;
+  } else if (['x', 'y', 'w', 'h', 'r', 'a'].some((k) => Math.abs(target[k] - camTo[k]) > 0.5 || (k === 'a' && target.a !== camTo.a) || Math.abs(scrTarget[k] - scrTo[k]) > 0.5)) {
     camFrom = { ...cam };
     camTo = target;
+    scrFrom = { ...scr };
+    scrTo = scrTarget;
     camAnimStart = now;
   }
 
   let rect = { x: 0, y: 0, w: W, h: H };
   const area = activeArea();
   const editing = editingArea.value && area;
+  // Skjermen passes inn i sitt område: hele bildet, eller plassen ved siden av kameraet.
+  const fit = (w, h, a) => {
+    const r = containRect(w, h, a.w, a.h);
+    return { ...r, x: r.x + a.x, y: r.y + a.y };
+  };
   if (hasScreen && area && !editing) {
     // Bare området: samme utsnitt som opptaket får.
     const r = areaPixels(area, screenVideo.videoWidth, screenVideo.videoHeight);
-    ctx.drawImage(screenVideo, r.x, r.y, r.w, r.h, 0, 0, W, H);
+    rect = fit(r.w, r.h, scr);
+    ctx.drawImage(screenVideo, r.x, r.y, r.w, r.h, rect.x, rect.y, rect.w, rect.h);
   }
   if (hasScreen && (!area || editing)) {
-    const sc = Math.min(W / screenVideo.videoWidth, H / screenVideo.videoHeight);
-    rect = { w: screenVideo.videoWidth * sc, h: screenVideo.videoHeight * sc };
-    rect.x = (W - rect.w) / 2;
-    rect.y = (H - rect.h) / 2;
+    rect = fit(screenVideo.videoWidth, screenVideo.videoHeight, editing ? rect : scr);
     ctx.drawImage(screenVideo, rect.x, rect.y, rect.w, rect.h);
   }
   if (hasScreen && !editing) {
@@ -509,7 +549,7 @@ function draw() {
   if (hasCamera && cam.a > 0.01 && !editing) {
     ctx.save();
     ctx.globalAlpha = cam.a;
-    drawCamera(ctx, cameraVideo, cameraVideo.videoWidth, cameraVideo.videoHeight, cam, s.mirror, cam.w < W * 0.9);
+    drawCamera(ctx, cameraVideo, cameraVideo.videoWidth, cameraVideo.videoHeight, cam, s.mirror, cam.h < H * 0.9);
     ctx.restore();
   }
   if (keystrokesRunning.value) {
@@ -797,7 +837,8 @@ async function beginRecording() {
   }
   const camTracks = [...(cameraStream?.getVideoTracks() || []), ...micTracks()];
   if (camTracks.length) {
-    recorders.push(await startRecorder('camera', camTracks, 8e6));
+    const { width = 1920, height = 1080, frameRate = 30 } = cameraStream?.getVideoTracks()[0]?.getSettings() ?? {};
+    recorders.push(await startRecorder('camera', camTracks, Math.round(clamp(width * height * frameRate * 0.1, 8e6, 60e6))));
   }
   recording.value = true;
   elapsed.value = 0;
@@ -888,6 +929,7 @@ export async function testMic() {
     micTest.value = 'playing';
     url = URL.createObjectURL(new Blob(chunks, { type: mime }));
     playback = new Audio(url);
+    await playback.setSinkId(audioSink.value).catch(() => {});
     await new Promise((resolve) => {
       const timeout = setTimeout(resolve, 6000);
       const done = () => { clearTimeout(timeout); resolve(); };
@@ -928,9 +970,12 @@ export async function initSources() {
   await Promise.all([refreshScreens(), refreshDevices()]);
   sourcesReady = true;
   navigator.mediaDevices.addEventListener('devicechange', async () => {
+    const systemMic = () => mics.value.find((m) => m.id === 'default')?.label;
+    const before = systemMic();
     const patch = await refreshDevices();
     if ('cameraId' in patch) useCamera();
-    if ('micId' in patch) useMic();
+    // 'default' keeps its id when the system switches input, so the stream must be reopened.
+    if ('micId' in patch || (settings.value.micId === 'default' && systemMic() !== before)) useMic();
   });
   await Promise.all([useScreen(), useCamera(), useMic()]);
 }

@@ -231,24 +231,48 @@ async function sipsToPng(file) {
 
 // RAW-bilde: kameraets innebygde JPEG hentes ut og rettes opp etter orienteringen i filen.
 // DNG uten forhåndsvisning prøves med FFmpeg.
+// Skriver RAW-filens innebygde forhåndsvisning, rotert riktig, til out. False hvis den mangler.
+async function rawPreview(file, out) {
+  const tmp = `${out}.part.jpg`;
+  const prev = await raw.extractPreview(file, tmp);
+  if (prev) {
+    const rotate = { 3: 'transpose=1,transpose=1', 6: 'transpose=1', 8: 'transpose=2' }[prev.orientation];
+    if (rotate) {
+      await ff.run(['-i', tmp, '-vf', rotate, '-q:v', '2', out]).promise;
+      await fs.promises.unlink(tmp).catch(() => {});
+    } else await fs.promises.rename(tmp, out);
+  } else if (path.extname(file).toLowerCase() === '.dng') {
+    await ff.run(['-i', file, '-frames:v', '1', '-q:v', '2', out]).promise;
+  } else return false;
+  return true;
+}
+
+// Et bilde Chromium kan vise: originalen, eller en konvertert kopi i hurtigbufferen (HEIC, TIFF, RAW og lignende).
+async function readableImage(file) {
+  const ext = path.extname(file).toLowerCase();
+  if (NATIVE_IMAGE.has(ext)) return file;
+  const isRaw = raw.RAW_EXT.has(ext);
+  if (!isRaw && !IMAGE_EXT.has(ext) && ext !== '.psb') throw new Error('This file type is not a supported image.');
+  const out = path.join(await cacheDirFor(file), `${path.basename(file, ext)}.${isRaw ? 'jpg' : 'png'}`);
+  if (fs.existsSync(out)) return out;
+  if (isRaw) {
+    if (!(await rawPreview(file, out))) throw new Error('This RAW photo has no preview that can be read.');
+  } else {
+    const tmp = `${out}.part.png`;
+    await ff.convertImage(file, tmp);
+    await fs.promises.rename(tmp, out);
+  }
+  return out;
+}
+
+const imageExtensions = () => [...IMAGE_EXT, ...raw.RAW_EXT, '.psb'].map((e) => e.slice(1));
+
 async function importRaw(file, notify) {
   const dir = await cacheDirFor(file);
   const out = path.join(dir, 'raw.jpg');
   let width;
   let height;
-  if (!fs.existsSync(out)) {
-    const tmp = path.join(dir, 'raw-preview.jpg');
-    const prev = await raw.extractPreview(file, tmp);
-    if (prev) {
-      const rotate = { 3: 'transpose=1,transpose=1', 6: 'transpose=1', 8: 'transpose=2' }[prev.orientation];
-      if (rotate) {
-        await ff.run(['-i', tmp, '-vf', rotate, '-q:v', '2', out]).promise;
-        await fs.promises.unlink(tmp).catch(() => {});
-      } else await fs.promises.rename(tmp, out);
-    } else if (path.extname(file).toLowerCase() === '.dng') {
-      await ff.run(['-i', file, '-frames:v', '1', '-q:v', '2', out]).promise;
-    } else return null;
-  }
+  if (!fs.existsSync(out) && !(await rawPreview(file, out))) return null;
   const info = await ff.probe(out);
   width = info.width;
   height = info.height;
@@ -692,4 +716,4 @@ function extensions() {
   return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT, ...raw.RAW_EXT, '.psb', '.reccut-title'].map((e) => e.slice(1));
 }
 
-module.exports = { browseDir, browseThumb, browsePlaces, scheduleMotion, isOffline, relink, scheduleOptimize, reverseStream, scheduleReverse, extensions, importFiles, recordingMedia, kindOf, cacheRoot, newId };
+module.exports = { browseDir, browseThumb, browsePlaces, scheduleMotion, isOffline, relink, scheduleOptimize, reverseStream, scheduleReverse, extensions, imageExtensions, readableImage, importFiles, recordingMedia, kindOf, cacheRoot, newId };

@@ -1,0 +1,274 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "wide-0",
+      "name": "Presenter Focus",
+      "ratio": "16:9",
+      "tags": [
+        "Bold",
+        "Face + Title",
+        "Podcast"
+      ],
+      "version": 1,
+      "url": "templates/wide-0.reccut-design-template",
+      "preview": "previews/wide-0.png"
+    },
+    {
+      "id": "wide-1",
+      "name": "Clean Tutorial",
+      "ratio": "16:9",
+      "tags": [
+        "Minimal",
+        "Tutorial"
+      ],
+      "version": 1,
+      "url": "templates/wide-1.reccut-design-template",
+      "preview": "previews/wide-1.png"
+    },
+    {
+      "id": "wide-2",
+      "name": "Top Story",
+      "ratio": "16:9",
+      "tags": [
+        "News",
+        "List / Number"
+      ],
+      "version": 1,
+      "url": "templates/wide-2.reccut-design-template",
+      "preview": "previews/wide-2.png"
+    },
+    {
+      "id": "wide-3",
+      "name": "Neon Lesson",
+      "ratio": "16:9",
+      "tags": [
+        "Bold",
+        "Gaming",
+        "Face + Title"
+      ],
+      "version": 1,
+      "url": "templates/wide-3.reccut-design-template",
+      "preview": "previews/wide-3.png"
+    },
+    {
+      "id": "wide-4",
+      "name": "Editorial",
+      "ratio": "16:9",
+      "tags": [
+        "Minimal",
+        "Before/After"
+      ],
+      "version": 1,
+      "url": "templates/wide-4.reccut-design-template",
+      "preview": "previews/wide-4.png"
+    },
+    {
+      "id": "wide-5",
+      "name": "Code Walkthrough",
+      "ratio": "16:9",
+      "tags": [
+        "Tutorial"
+      ],
+      "version": 1,
+      "url": "templates/wide-5.reccut-design-template",
+      "preview": "previews/wide-5.png"
+    },
+    {
+      "id": "wide-6",
+      "name": "Quick Guide",
+      "ratio": "16:9",
+      "tags": [
+        "Bold",
+        "Face + Title",
+        "Podcast"
+      ],
+      "version": 1,
+      "url": "templates/wide-6.reccut-design-template",
+      "preview": "previews/wide-6.png"
+    },
+    {
+      "id": "wide-7",
+      "name": "Bold Interview",
+      "ratio": "16:9",
+      "tags": [
+        "Minimal",
+        "Tutorial"
+      ],
+      "version": 1,
+      "url": "templates/wide-7.reccut-design-template",
+      "preview": "previews/wide-7.png"
+    },
+    {
+      "id": "wide-8",
+      "name": "Product Reveal",
+      "ratio": "16:9",
+      "tags": [
+        "News",
+        "List / Number"
+      ],
+      "version": 1,
+      "url": "templates/wide-8.reccut-design-template",
+      "preview": "previews/wide-8.png"
+    },
+    {
+      "id": "wide-9",
+      "name": "Creative Tools",
+      "ratio": "16:9",
+      "tags": [
+        "Bold",
+        "Gaming",
+        "Face + Title"
+      ],
+      "version": 1,
+      "url": "templates/wide-9.reccut-design-template",
+      "preview": "previews/wide-9.png"
+    },
+    {
+      "id": "wide-10",
+      "name": "Paper Notes",
+      "ratio": "16:9",
+      "tags": [
+        "Minimal",
+        "Before/After"
+      ],
+      "version": 1,
+      "url": "templates/wide-10.reccut-design-template",
+      "preview": "previews/wide-10.png"
+    },
+    {
+      "id": "wide-11",
+      "name": "Developer Update",
+      "ratio": "16:9",
+      "tags": [
+        "Tutorial"
+      ],
+      "version": 1,
+      "url": "templates/wide-11.reccut-design-template",
+      "preview": "previews/wide-11.png"
+    },
+    {
+      "id": "tall-0",
+      "name": "Story Focus",
+      "ratio": "9:16",
+      "tags": [
+        "Bold",
+        "Face + Title",
+        "Podcast"
+      ],
+      "version": 1,
+      "url": "templates/tall-0.reccut-design-template",
+      "preview": "previews/tall-0.png"
+    },
+    {
+      "id": "tall-1",
+      "name": "Daily Lesson",
+      "ratio": "9:16",
+      "tags": [
+        "Minimal",
+        "Tutorial"
+      ],
+      "version": 1,
+      "url": "templates/tall-1.reccut-design-template",
+      "preview": "previews/tall-1.png"
+    },
+    {
+      "id": "tall-2",
+      "name": "Top Tip",
+      "ratio": "9:16",
+      "tags": [
+        "News",
+        "List / Number"
+      ],
+      "version": 1,
+      "url": "templates/tall-2.reccut-design-template",
+      "preview": "previews/tall-2.png"
+    },
+    {
+      "id": "tall-3",
+      "name": "Neon Short",
+      "ratio": "9:16",
+      "tags": [
+        "Bold",
+        "Gaming",
+        "Face + Title"
+      ],
+      "version": 1,
+      "url": "templates/tall-3.reccut-design-template",
+      "preview": "previews/tall-3.png"
+    },
+    {
+      "id": "tall-4",
+      "name": "Personal Story",
+      "ratio": "9:16",
+      "tags": [
+        "Minimal",
+        "Before/After"
+      ],
+      "version": 1,
+      "url": "templates/tall-4.reccut-design-template",
+      "preview": "previews/tall-4.png"
+    },
+    {
+      "id": "tall-5",
+      "name": "Code Short",
+      "ratio": "9:16",
+      "tags": [
+        "Tutorial"
+      ],
+      "version": 1,
+      "url": "templates/tall-5.reccut-design-template",
+      "preview": "previews/tall-5.png"
+    },
+    {
+      "id": "square-0",
+      "name": "Square Focus",
+      "ratio": "1:1",
+      "tags": [
+        "Bold",
+        "Face + Title",
+        "Podcast"
+      ],
+      "version": 1,
+      "url": "templates/square-0.reccut-design-template",
+      "preview": "previews/square-0.png"
+    },
+    {
+      "id": "square-1",
+      "name": "Clean Post",
+      "ratio": "1:1",
+      "tags": [
+        "Minimal",
+        "Tutorial"
+      ],
+      "version": 1,
+      "url": "templates/square-1.reccut-design-template",
+      "preview": "previews/square-1.png"
+    },
+    {
+      "id": "square-2",
+      "name": "Product Card",
+      "ratio": "1:1",
+      "tags": [
+        "News",
+        "List / Number"
+      ],
+      "version": 1,
+      "url": "templates/square-2.reccut-design-template",
+      "preview": "previews/square-2.png"
+    },
+    {
+      "id": "square-3",
+      "name": "Neon Post",
+      "ratio": "1:1",
+      "tags": [
+        "Bold",
+        "Gaming",
+        "Face + Title"
+      ],
+      "version": 1,
+      "url": "templates/square-3.reccut-design-template",
+      "preview": "previews/square-3.png"
+    }
+  ]
+}

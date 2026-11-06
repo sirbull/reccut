@@ -35,7 +35,7 @@ in vec2 uv; out vec4 outColor;
 uniform sampler2D image, referenceImage;
 uniform int kind, mode, radius, invertKey;
 uniform vec3 keyColor;
-uniform float similarity, softness, despill, blackPoint, whitePoint, matteGamma, detail, shadows, shadowRange, edgeColor;
+uniform float similarity, softness, despill, blackPoint, whitePoint, matteGamma, detail, shadows, shadowRange, edgeColor, motionBlur;
 uniform vec2 texel;
 vec2 chroma(vec3 c){return vec2(dot(c,vec3(-0.168736,-0.331264,0.5)),dot(c,vec3(0.5,-0.418688,-0.081312)));}
 void main(){
@@ -49,6 +49,7 @@ void main(){
    float excess=channel==0?c.r-max(c.g,c.b):channel==1?c.g-max(c.r,c.b):c.b-max(c.r,c.g);
    float keyExcess=channel==0?keyColor.r-max(keyColor.g,keyColor.b):channel==1?keyColor.g-max(keyColor.r,keyColor.b):keyColor.b-max(keyColor.r,keyColor.g);
    a=max(a,(keyExcess>0.001?clamp(1.0-max(0.0,excess)/keyExcess,0.0,1.0):0.0)*detail);
+   if(keyExcess>0.001)a=mix(a,min(a,1.0-clamp(excess/keyExcess,0.0,1.0)),motionBlur);
    float brightness=max(c.r,max(c.g,c.b)), screenBrightness=max(keyColor.r,max(keyColor.g,keyColor.b));
    float hueDistance=length(c.rgb/max(0.001,brightness)-keyColor/max(0.001,screenBrightness))/sqrt(3.0);
    float affinity=1.0-smoothstep(shadowRange,shadowRange+0.1,hueDistance);
@@ -59,7 +60,7 @@ void main(){
   a=pow(a,1.0/max(0.1,matteGamma));
   if(invertKey==1)a=1.0-a;
   if(kind==0){
-   c.rgb=mix(c.rgb,clamp((c.rgb-(1.0-a)*keyColor)/max(0.01,a),0.0,1.0),max(edgeColor,shadowWeight));
+   c.rgb=mix(c.rgb,clamp((c.rgb-(1.0-a)*keyColor)/max(0.01,a),0.0,1.0),max(max(edgeColor,motionBlur),shadowWeight));
    if(keyColor.g>=keyColor.r&&keyColor.g>=keyColor.b)c.g-=max(0.0,c.g-max(c.r,c.b))*despill;
    else if(keyColor.r>=keyColor.b)c.r-=max(0.0,c.r-max(c.g,c.b))*despill;
    else c.b-=max(0.0,c.b-max(c.r,c.g))*despill;
@@ -141,6 +142,7 @@ function setup() {
         'shadows',
         'shadowRange',
         'edgeColor',
+        'motionBlur',
       ].map((n) => [n, gl.getUniformLocation(program, n)]),
     );
     gpu = { gl, canvas, textures, u: uniforms };
@@ -182,6 +184,7 @@ function gpuKey(img, w, h, effect, ref) {
     shadows: p.shadows || 0,
     shadowRange: p.shadowRange ?? 0.25,
     edgeColor: p.edgeColor || 0,
+    motionBlur: p.motionBlur || 0,
   }))
     gl.uniform1f(u[name], value);
   gl.uniform1i(u.invertKey, p.invert ? 1 : 0);

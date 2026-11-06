@@ -1,0 +1,20 @@
+.subtitle-model-summary,.subtitle-model-heading,.subtitle-model-actions,.subtitle-model-badges{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.subtitle-model-summary{justify-content:space-between;margin-top:12px}
+.subtitle-model-list{display:grid;gap:12px;margin-top:16px}
+.subtitle-model-card{padding:16px;border:1px solid var(--line);border-radius:8px;background:var(--bg-2)}
+.subtitle-model-card.active{border-color:var(--accent)}
+.subtitle-model-heading{justify-content:space-between;gap:8px}
+.subtitle-model-heading h3{font-size:13px;margin:0}
+.subtitle-model-badges{gap:6px;font-size:10px;color:var(--text-2)}
+.subtitle-model-badges span{padding:3px 6px;background:var(--bg-3);border-radius:4px}
+.subtitle-model-badges .active{color:var(--accent-2)}
+.subtitle-model-card p{font-size:12px;line-height:1.5;margin:8px 0}
+.subtitle-model-card dl{font-size:11px;margin:10px 0;display:grid;gap:5px}
+.subtitle-model-card dl>div{display:grid;grid-template-columns:110px 1fr;gap:10px}
+.subtitle-model-card dt{color:var(--text-2)}
+.subtitle-model-card dd{margin:0;line-height:1.5}
+.subtitle-model-card details{font-size:11px;color:var(--text-2);margin:12px 0}
+.subtitle-model-card summary{cursor:pointer}
+.subtitle-model-progress progress{width:100%;height:6px;accent-color:var(--accent)}
+.subtitle-model-error{color:var(--red,#ff6b6b)}
+.subtitle-model-actions{margin-top:12px}

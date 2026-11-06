@@ -1,13 +1,16 @@
+import { PATTERN_SHAPES, PATTERN_DISTRIBUTIONS, patternClipProps } from '../../shared/designPattern.js';
+import { SIDE_LAYOUT, baseValueAt } from '../../shared/model.js';
+import { SequenceFormatSettings } from './SequenceFormatSettings.jsx';
+import { ExpressionControls } from './ExpressionControls.jsx';
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
 import { ProcessorEffects } from './ProcessorEffects.jsx';
 import { RemoveEffectButton } from './RemoveEffectButton.jsx';
 import { VideoEffects } from './VideoEffects.jsx';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { ArrowDown, ArrowUp, Captions, ChevronLeft, ChevronRight, Circle, Diamond, EyeOff, Film, PanelLeft, PanelRight, PenTool, RectangleHorizontal, SquareDashed, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
 import {
   audioComponents,
-  FRAME_RATES,
   CLIP_COLORS,
   componentVolumeProp,
   ANIMATION_PRESETS,
@@ -24,6 +27,7 @@ import {
   redactLabel,
   TITLE_STYLES,
   TRANSITIONS,
+  canMotionBlur,
   parseTransitionSelection,
   applyAnimationPreset,
   clipHasAudio,
@@ -48,15 +52,17 @@ import { recordingChildren, setClipDuration, setSpeed, setTransition } from '../
 import { GRADE_PROPS, CAMERA_LOGS } from '../../shared/grade.js';
 import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { beginTransient, commit, endPreview, endTransient, getWave, importPaths, mirror, previewEdit, motionVersion, project, selectedClips, selectedTransition, selection, tasks, timeSig, updateTransient, waveVersion } from './store.js';
+import { beginTransient, commit, endPreview, projectPath, renameProject, endTransient, enterGroup, getWave, importPaths, mirror, previewEdit, motionVersion, project, selectedClips, selectedGroup, selectedTransition, selection, tasks, timeSig, updateTransient, waveVersion } from './store.js';
+import { groupPositionClips, groupVisuals, setGroupOpacity, setGroupPosition } from '../../shared/groupSettings.js';
 import { seek } from './playback.js';
 import { setKeyframe } from './keyframes.js';
-import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, toggleComponent } from './commands.js';
+import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, setComponentMono, toggleComponent } from './commands.js';
 import { prefs } from '../prefs.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
+import { attachToTrack, deleteTrack, detach, removeTrackingKeyframes, trackArea, trackForward, trackRedaction, tracksFor } from './track.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { MASK_MODES, MASK_SHAPES, canMask, defaultPoints, ellipsePoints, maskKey, maskList, setMaskShape } from '../../shared/shapes.js';
-import { Button, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
+import { Button, FontPicker, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
 
 export function Inspector() {
   const clips = selectedClips.value;
@@ -69,8 +75,31 @@ export function Inspector() {
   if (transId?.startsWith('ax:') && p.clips[transId.slice(3)]?.axfade) return <CrossfadeInspector clip={p.clips[transId.slice(3)]} />;
   const transition = parseTransitionSelection(transId);
   if (transId && p.clips[transition.id]?.[transition.key]) return <TransitionInspector clip={p.clips[transition.id]} edge={transition.edge} />;
-  if (clips.length) return <ClipInspector clip={clips[0]} clips={clips} />;
+  if (clips.length) return <ClipInspector clip={clips[0]} clips={clips} group={Boolean(selectedGroup.value)} />;
   return <ProjectInspector />;
+}
+
+function GroupVideoTab({ clips }) {
+  const p = project.value;
+  const ids = clips.map((c) => c.id);
+  const visuals = groupVisuals(p, ids);
+  const positioned = groupPositionClips(p, ids);
+  const T = timeSig.value;
+  const field = (label, value, min, max, unit, change) => <Row label={label}>
+    <NumberField value={value} min={min} max={max} unit={unit} precision={unit === '%' ? 1 : 0}
+      onStart={beginTransient} onChange={(v) => updateTransient((q) => change(q, v))} onCommit={() => endTransient(true)} />
+  </Row>;
+  return <>
+      {!!visuals.length && <Section title="Compositing">
+        {field('Opacity', (valueAt(visuals[0], 'opacity', T) ?? 1) * 100, 0, 100, '%', (q, v) => setGroupOpacity(q, ids, v / 100, T))}
+        <p class="hint">Applies to the group’s visual clips. The value shown is from the first visual clip.</p>
+      </Section>}
+      {!!positioned.length && <Section title="Transform">
+        {field('Position X', valueAt(positioned[0], 'x', T) ?? 0, -p.width, p.width, 'px', (q, v) => setGroupPosition(q, ids, 'x', v, T))}
+        {field('Position Y', valueAt(positioned[0], 'y', T) ?? 0, -p.height, p.height, 'px', (q, v) => setGroupPosition(q, ids, 'y', v, T))}
+        <p class="hint">Moves the clips together, preserving their offsets and animation.</p>
+      </Section>}
+  </>;
 }
 
 function MediaInspector({ media }) {
@@ -116,7 +145,7 @@ function MediaInspector({ media }) {
 // Fanene som i Final Cut Pro: et ikon for hver del, og klippet velges bare ved å markere det.
 function tabsFor(clip, media) {
   const tabs = [];
-  if (clip.type === 'title') tabs.push({ id: 'text', label: 'Text', icon: Type });
+  if (clip.type === 'title' && !clip.props.patternKind) tabs.push({ id: 'text', label: 'Text', icon: Type });
   if (clip.type === 'caption') tabs.push({ id: 'caption', label: 'Caption', icon: Captions });
   if (clip.type === 'recording') tabs.push({ id: 'recording', label: 'Recording', icon: MonitorPlay });
   if (clip.type === 'redact') tabs.push({ id: 'redact', label: 'Redact', icon: EyeOff });
@@ -133,25 +162,26 @@ function tabsFor(clip, media) {
 // Fanene som gir mening for flere klipp samtidig. Endringene i dem kopieres til alle (mirror i store.js).
 const MULTI_TABS = ['video', 'color', 'effects', 'audio'];
 
-function ClipInspector({ clip, clips = [clip] }) {
+function ClipInspector({ clip, clips = [clip], group = false }) {
   const p = project.value;
   const media = p.media[clip.mediaId];
   const multi = clips.length > 1;
   const tabs = multi
     ? tabsFor(clip, media).filter((t) => MULTI_TABS.includes(t.id) && clips.every((c) => tabsFor(c, p.media[c.mediaId]).some((x) => x.id === t.id)))
     : tabsFor(clip, media);
+  if (group && groupVisuals(p, clips.map((c) => c.id)).length && !tabs.some((t) => t.id === 'video')) tabs.unshift({ id: 'video', label: 'Video', icon: Film });
   const tab = tabs.find((t) => t.id === inspectorTab.value) ? inspectorTab.value : tabs[0]?.id;
-  const title = multi ? `${clips.length} clips selected` : clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? redactLabel(clip) : clip.type === 'caption' ? 'Caption' : clip.type === 'gap' ? 'Gap' : clip.name || media?.name || 'Clip';
+  const title = group ? `Group · ${clips.length} clips` : multi ? `${clips.length} clips selected` : clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? redactLabel(clip) : clip.type === 'caption' ? 'Caption' : clip.type === 'gap' ? 'Gap' : clip.name || media?.name || 'Clip';
   const ids = clips.map((c) => c.id).join();
-  useEffect(() => {
-    if (!multi) return;
+  useLayoutEffect(() => {
+    if (!multi || (group && tab === 'video')) return;
     mirror.from = clip.id;
     mirror.to = clips.slice(1).map((c) => c.id);
     return () => {
       mirror.from = null;
       mirror.to = [];
     };
-  }, [ids]);
+  }, [ids, group, tab]);
   const mediaIds = [...new Set(clips.map((c) => c.mediaId).filter((id) => p.media[id] && p.media[id].kind !== 'audio'))];
 
   return (
@@ -170,11 +200,14 @@ function ClipInspector({ clip, clips = [clip] }) {
         <Toggle checked={clips.every((c) => c.enabled)} onChange={(v) => commit((q) => clips.forEach((c) => q.clips[c.id] && (q.clips[c.id].enabled = v)))} />
       </div>
       <div class="insp-body">
-        {multi && <p class="hint">{tabs.length ? 'Changes apply to all selected clips. The values shown are from the first clip.' : 'These clips have no settings in common.'}</p>}
+        {group ? <>
+          <p class="hint">Change shared settings here, or double click a clip to edit the group’s contents.</p>
+          <Button class="small" onClick={() => enterGroup(clip.id)}>Edit Group</Button>
+        </> : multi && <p class="hint">{tabs.length ? 'Changes apply to all selected clips. The values shown are from the first clip.' : 'These clips have no settings in common.'}</p>}
         {tab === 'text' && <TextTab clip={clip} />}
         {tab === 'caption' && <CaptionTab clip={clip} />}
         {tab === 'recording' && <RecordingTab clip={clip} media={media} />}
-        {tab === 'video' && <VideoTab clip={clip} />}
+        {tab === 'video' && (group ? <GroupVideoTab clips={clips} /> : <VideoTab clip={clip} />)}
         {tab === 'redact' && <RedactTab clip={clip} />}
         {tab === 'masks' && <MasksTab clip={clip} />}
         {tab === 'effects' && <EffectsTab clip={clip} multi={multi} />}
@@ -189,16 +222,26 @@ function ClipInspector({ clip, clips = [clip] }) {
 
 /* Egenskaper med nøkkelbilder */
 
+// Mens Alt/Option holdes får navn og diamanter som støtter expressions en ƒx-peker (se .alt-held i app.css).
+const altHeld = (on) => document.documentElement.classList.toggle('alt-held', on);
+addEventListener('keydown', (e) => altHeld(e.altKey));
+addEventListener('keyup', (e) => altHeld(e.altKey));
+addEventListener('blur', () => altHeld(false));
+
 function setValue(c, prop, v, T) {
   if (c.kf?.[prop]?.length) setKeyframe(c, prop, kfTime(c, T), v);
   else c.props[prop] = v;
 }
 
 export function Param({ clip, prop, label, min, max, step = 1, unit = '', precision = 0, scale = 1, slider = true, center, keyframes = true, def }) {
+  const [expressionOpen, setExpressionOpen] = useState(false);
+  const expression = clip.expressions?.[prop];
+  const expressionActive = expression && expression.enabled !== false;
+  const canExpress = keyframes && prop !== 'layout';
   const T = timeSig.value;
   const inside = T >= clip.start && T <= clip.start + clip.dur;
   const Tc = Math.min(Math.max(T, clip.start), clip.start + clip.dur);
-  const raw = valueAt(clip, prop, Tc) ?? def ?? 0;
+  const raw = baseValueAt(clip, prop, Tc) ?? def ?? 0;
   const value = raw * scale;
   const s = kfTime(clip, Tc);
   const list = clip.kf?.[prop] || [];
@@ -209,13 +252,16 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
   const prev = list.filter(([t]) => t < s - 1e-3).at(-1);
   const next = list.find(([t]) => t > s + 1e-3);
   const goto = (t) => seek(kfToTimeline(clip, t));
-  const fallback = def ?? defaultProps(clip.type)[prop] ?? 0;
-  const isDefault = !list.length && raw === fallback;
+  const fallback = def ?? (clip.props.patternKind ? patternClipProps(clip.props.patternKind)[prop] : undefined) ?? defaultProps(clip.type)[prop] ?? 0;
+  const isDefault = !expression && !list.length && raw === fallback;
 
   return (
     <>
       <div class="param" data-prop={prop}>
-        <span class="param-label" title={label}>
+        <span class={`param-label${canExpress ? ' can-express' : ''}`} title={canExpress ? `${label} · Alt/Option-click for expressions` : label}
+          role={canExpress ? 'button' : undefined} tabIndex={canExpress ? 0 : undefined}
+          onClick={e=>{if(canExpress && e.altKey){e.preventDefault();setExpressionOpen(v=>!v);}}}
+          onKeyDown={e=>{if(canExpress && e.altKey && ['Enter',' '].includes(e.key)){e.preventDefault();setExpressionOpen(v=>!v);}}}>
           {label}
         </span>
         {slider ? (
@@ -228,16 +274,17 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
           <div class="kf-ctl">
             <IconButton icon={ChevronLeft} size={12} title="Previous keyframe" disabled={!prev} onClick={() => prev && goto(prev[0])} />
             <button
-              class={`kf-btn${atKf ? ' on' : list.length ? ' has' : ''}`}
+              class={`kf-btn${atKf ? ' on' : list.length ? ' has' : ''}${expressionActive ? ' expression' : ''}${canExpress ? ' can-express' : ''}`}
               disabled={!inside}
-              title={atKf ? 'Remove keyframe' : 'Add keyframe at the playhead'}
-              onClick={() =>
+              title={`${atKf ? 'Remove keyframe' : 'Add keyframe at the playhead'}${expressionActive ? ` · Active expression: ${expression.preset}` : ''} · Alt/Option-click for expressions`}
+              onClick={e => {
+                if(e.altKey && canExpress){e.preventDefault();setExpressionOpen(v=>!v);return;}
                 commit((q) => {
                   const c = q.clips[id];
                   if (atKf) removeKeyframe(c, prop, s);
                   else setKeyframe(c, prop, s, raw);
-                })
-              }
+                });
+              }}
             >
               <Diamond size={11} />
             </button>
@@ -255,11 +302,14 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
             commit((q) => {
               const c = q.clips[id];
               delete c.kf[prop];
+              if(c.expressions) delete c.expressions[prop];
               c.props[prop] = fallback;
             })
           }
         />
       </div>
+      {canExpress && expression && !expressionOpen && <div class="ease-row"><button class="link" onClick={()=>setExpressionOpen(true)}>ƒx {expression.preset}{expression.enabled===false?' (disabled)':''}</button></div>}
+      {canExpress && expressionOpen && <ExpressionControls clip={clip} prop={prop} min={min} max={max} scale={scale} baseValue={raw} onClose={()=>setExpressionOpen(false)}/>}
       {atKf && next && (
         <div class="ease-row">
           <span>Easing</span>
@@ -325,6 +375,7 @@ function VideoTab({ clip }) {
   const p = project.value;
   return (
     <>
+      {clip.props.patternKind && <PatternSection clip={clip}/>}
       {clip.type === 'image' && <Section title="Image framing & motion" data-section="image-motion">
         <Row label="Fit"><Select value={clip.props.imageFit || 'contain'} options={IMAGE_FITS}
           onChange={(imageFit) => commit((q) => { q.clips[clip.id].props.imageFit = imageFit; })} /></Row>
@@ -347,8 +398,10 @@ function VideoTab({ clip }) {
         <Param clip={clip} prop="y" label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} />
         <Param clip={clip} prop="scale" label="Scale" min={10} max={400} scale={100} unit="%" />
         <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
-        <p class="hint">Tip: drag the clip directly in the viewer to move it.</p>
+        <p class="hint">Drag the clip in the viewer to move it. Alt/Option-click a property name or diamond to choose an expression.</p>
       </Section>}
+      {(clip.type === 'video' || clip.type === 'recording') && <TrackSection clip={clip} />}
+      {clip.type !== 'adjustment' && clip.lane > 0 && <FollowSection clip={clip} />}
       {clip.type === 'video' && <StabilizeSection clip={clip} />}
       {(clip.type === 'video' || clip.type === 'image') && (
         <Section title="Crop">
@@ -365,6 +418,37 @@ function VideoTab({ clip }) {
       </Section>
     </>
   );
+}
+
+function PatternChoice({ clip, prop, label, options, color = false }) {
+  const T = Math.max(clip.start, Math.min(timeSig.value, clip.start + clip.dur)), s = kfTime(clip, T);
+  const value = valueAt(clip, prop, T) ?? clip.props[prop], at = keyframeIndexAt(clip, prop, s) >= 0;
+  const set = v => commit(q => setValue(q.clips[clip.id], prop, v, T));
+  return <Row label={label}>
+    {color ? <ColorField value={value} onLive={v=>updateTransient(q=>setValue(q.clips[clip.id],prop,v,T))}/> : <Select value={value} options={options} onChange={set}/>}
+    <button class={`kf-btn${at?' on':clip.kf?.[prop]?.length?' has':''}`} title={at?'Remove keyframe':`Keyframe ${label} at the playhead`} onClick={()=>commit(q=>{
+      const c=q.clips[clip.id];if(at)removeKeyframe(c,prop,s);else setKeyframe(c,prop,s,value);
+    })}><Diamond size={11}/></button>
+  </Row>;
+}
+
+function PatternSection({ clip }) {
+  const kind = valueAt(clip, 'patternKind', timeSig.value);
+  const number = (key,label,min,max,step=1,scale=1) => <Param clip={clip} prop={`pattern.${key}`} label={label} min={min} max={max} step={step} scale={scale} precision={step<1?1:0}/>;
+  return <Section title="Pattern Background" collapsible={false}>
+    <PatternChoice clip={clip} prop="patternKind" label="Pattern" options={[{value:'dots',label:'Shapes'},{value:'grid',label:'Grid'}]}/>
+    {kind==='dots'&&<PatternChoice clip={clip} prop="patternShape" label="Symbol" options={PATTERN_SHAPES}/>}
+    <PatternChoice clip={clip} prop="patternBackground" label="Background" color/>
+    <PatternChoice clip={clip} prop="patternColor" label="Pattern Color" color/>
+    <PatternChoice clip={clip} prop="patternDistribution" label="Size Distribution" options={PATTERN_DISTRIBUTIONS}/>
+    {number('size',kind==='grid'?'Line Width':'Symbol Size',.5,256,.5)}
+    {number('spacingX','Spacing X',4,1024,.5)}{number('spacingY','Spacing Y',4,1024,.5)}
+    {number('random','Size Variation',0,100,1,100)}{number('strength','Distribution Strength',0,100,1,100)}
+    {number('seed','Random Seed',0,99999)}
+    {kind==='dots'&&number('rotation','Symbol Rotation',-36000,36000)}
+    {number('offsetX','Offset X',-4096,4096)}{number('offsetY','Offset Y',-4096,4096)}
+    <p class="hint">Use diamonds to animate the background. Symbol, pattern, colors and distribution switch at their keyframes. Alt/Option-click a numeric property name or diamond for automatic motion.</p>
+  </Section>;
 }
 
 // Sladding: stil, form, styrke og plassering. Plassering og størrelse kan animeres med nøkkelbilder,
@@ -385,6 +469,11 @@ function RedactTab({ clip }) {
           </Row>
         ) : (
           <Param clip={clip} prop="amount" label="Amount" min={0} max={100} scale={100} unit="%" keyframes={false} />
+        )}
+        {pr.mode === 'pixelate' && (
+          <Row label="Whole blocks at edge">
+            <Toggle checked={Boolean(pr.wholeBlocks)} onChange={(v) => set({ wholeBlocks: v })} />
+          </Row>
         )}
         {pr.shape !== 'full' && (
           <Row label="Redact outside">
@@ -422,13 +511,112 @@ function RedactTab({ clip }) {
         {pr.shape !== 'full' && <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />}
         {pr.shape !== 'full' && <Param clip={clip} prop="feather" label="Soft edge" min={0} max={200} unit="px" />}
         {pr.shape === 'path' && <p class="hint">Drag the points in the viewer. Double click the outline to add a point, and Option (Alt) click a point to remove it.</p>}
-        {pr.shape !== 'full' && <p class="hint">Drag the box in the viewer to move it, and drag its corners and edges to resize it. Add keyframes to make it follow something that moves.</p>}
+        {pr.shape !== 'full' && <p class="hint">Drag the box in the viewer to move it, and drag its corners and edges to resize it. Add keyframes, or use Tracking below, to make it follow something that moves.</p>}
       </Section>
+      {pr.shape !== 'full' && <FollowSection clip={clip} />}
       <Section title="Fade">
         <PlainNumber clip={clip} prop="vFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
         <PlainNumber clip={clip} prop="vFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
       </Section>
     </>
+  );
+}
+
+const trackBusy = () => tasks.value.find((t) => t.title === 'Tracking motion' && (t.state === 'running' || t.state === 'queued'));
+const trackLabel = (job) => (job ? `Tracking ${Math.round((job.progress || 0) * 100)} %` : 'Track Forward');
+
+// Sporing i videoen: et område følges, og sporet lagres på klippet (se track.js).
+function TrackSection({ clip }) {
+  const job = trackBusy();
+  const tracks = clip.props.tracks || [];
+  return (
+    <Section title="Tracking" data-section="tracking">
+      <Row label="Show area">
+        <Toggle checked={trackArea.value === clip.id} onChange={(v) => (trackArea.value = v ? clip.id : null)} />
+      </Row>
+      <Button class="small" disabled={Boolean(job)} onClick={() => trackForward(clip.id)}>
+        {trackLabel(job)}
+      </Button>
+      {tracks.map((t) => (
+        <Row key={t.id} label={t.name}>
+          <span class="value">{((t.frames.length - 1) / t.fps).toFixed(1)} s</span>
+          <IconButton icon={Trash2} title="Delete track" onClick={() => deleteTrack(clip.id, t.id)} />
+        </Row>
+      ))}
+      <p class="hint">Turn on Show area, put the area over what you want to follow, and press Track Forward. It follows from the playhead to the end of the clip. Then select a clip above this video (a redaction, title or image) and attach it under Follow Track.</p>
+    </Section>
+  );
+}
+
+// Fest klippet til et spor i videoen under: posisjon, rotasjon og eventuelt skala blir nøkkelbilder.
+function FollowSection({ clip }) {
+  const p = project.value;
+  const [rotation, setRotation] = useState(true);
+  const [scale, setScale] = useState(false);
+  const [live, setLive] = useState(true);
+  const [picked, setPicked] = useState('');
+  const options = tracksFor(p, clip);
+  const redact = clip.type === 'redact';
+  const follow = clip.props.follow;
+  const tracked = Boolean(clip.props.trackedKeys?.length);
+  if (!options.length && !redact && !follow && !tracked) return null;
+  const value = options.some((o) => o.value === picked) ? picked : options[0]?.value;
+  const job = trackBusy();
+  const opts = { rotation, scale, live };
+  const current = follow && options.find((o) => o.value === `${follow.clipId}/${follow.trackId}`);
+  return (
+    <Section title="Follow Track" data-section="follow">
+      {follow && (
+        <Row label={current ? `Following ${current.label}` : 'The track is gone'}>
+          <Button class="small" onClick={() => detach(clip.id)}>
+            Detach
+          </Button>
+        </Row>
+      )}
+      {tracked && (
+        <Row label="Tracking keyframes">
+          <Button class="small" onClick={() => removeTrackingKeyframes(clip.id)}>
+            Remove
+          </Button>
+        </Row>
+      )}
+      <Row label="Mode">
+        <Segmented
+          value={live ? 'live' : 'keyframes'}
+          onChange={(v) => setLive(v === 'live')}
+          options={[
+            { value: 'live', label: 'Live', title: 'The clip always follows the track as it is now. Move the clip to change where it sits relative to the object.' },
+            { value: 'keyframes', label: 'Keyframes', title: 'Writes keyframes you can adjust one by one. They do not change if you track again.' },
+          ]}
+        />
+      </Row>
+      {options.length > 0 && (
+        <Row label="Track">
+          <Select value={value} options={options} onChange={setPicked} />
+        </Row>
+      )}
+      <Row label="Rotation">
+        <Toggle checked={rotation} onChange={setRotation} />
+      </Row>
+      <Row label="Scale (experimental)">
+        <Toggle checked={scale} onChange={setScale} />
+      </Row>
+      <div class="row">
+        {options.length > 0 && (
+          <Button class="small" onClick={() => attachToTrack(clip.id, ...value.split('/'), opts)}>
+            Attach
+          </Button>
+        )}
+        {redact && (
+          <Button class="small" disabled={Boolean(job)} onClick={() => trackRedaction(clip.id, opts)}>
+            {trackLabel(job)}
+          </Button>
+        )}
+      </div>
+      <p class="hint">
+        Attach makes this clip follow the track, keeping the place it has at the playhead relative to the object. {live ? 'Live always uses the track as it is now, and moving the clip moves it relative to the object. ' : 'Keyframes writes position and rotation keyframes you can adjust one by one. '}{redact ? 'Track Forward follows what the redaction covers in the video below and attaches it in one step. ' : ''}Scale follows the object as it gets closer or further away.
+      </p>
+    </Section>
   );
 }
 
@@ -836,6 +1024,21 @@ function AudioComponentsSection({ clip }) {
   );
 }
 
+// Stereo eller mono for hver lydkilde i klippet, i avspilling og eksport.
+function AudioChannelsSection({ clip, comps }) {
+  if (!comps.length) return null;
+  return (
+    <Section title="Channels">
+      {comps.map((c) => (
+        <Row key={c.key} label={comps.length > 1 ? c.label : 'Output'}>
+          <Segmented value={c.mono ? 'mono' : 'stereo'} options={[{ value: 'stereo', label: 'Stereo' }, { value: 'mono', label: 'Mono' }]} onChange={(v) => setComponentMono(clip.id, c.key, v === 'mono')} />
+        </Row>
+      ))}
+      <p class="hint">Mono mixes all channels in the source and plays them equally on both sides.</p>
+    </Section>
+  );
+}
+
 // Nivåer fra lydbølgen innenfor klippet: topp og gjennomsnitt i dBFS, etter volumet på klippet.
 function clipLevels(clip, comp, wave) {
   if (!wave || !comp) return null;
@@ -914,6 +1117,7 @@ function AudioTab({ clip }) {
         <LevelMeter clip={clip} comp={main} />
       </Section>
       <AudioComponentsSection clip={clip} />
+      <AudioChannelsSection clip={clip} comps={comps} />
       <Section title="Volume">
         {props.length <= 1 ? (
           <Param clip={clip} prop={props[0] || 'volume'} label="Volume" min={-60} max={12} step={0.5} precision={1} unit="dB" center={0} />
@@ -1423,12 +1627,22 @@ function SideBySideSection({ clip }) {
           options={[
             { value: 'portrait', label: '9:16' },
             { value: 'tall', label: '3:4' },
+            { value: 'rect', label: '16:9' },
+            { value: 'circle', label: 'Circle' },
             { value: 'square', label: 'Square' },
           ]}
         />
       </Row>
-      <Row label="Camera size">
-        <Segmented
+      <Row label="Sizing">
+        <Select value={typeof p.sideSize === 'number' ? 'width' : 'relative'}
+          options={[{ value: 'width', label: 'Width in percent' }, { value: 'relative', label: 'Relative to screen' }]}
+          onChange={v=>setProp(clip,{sideSize:v==='width'?SIDE_LAYOUT.size:'medium'})}/>
+      </Row>
+      <Row label={typeof p.sideSize === 'number' ? 'Camera width' : 'Camera size'}>
+        {typeof p.sideSize === 'number' ? <>
+          <Slider value={p.sideSize} min={SIDE_LAYOUT.min} max={SIDE_LAYOUT.max} step={.5} onStart={beginTransient} onInput={live('sideSize')} onCommit={()=>endTransient(true)}/>
+          <NumberField value={p.sideSize} min={SIDE_LAYOUT.min} max={SIDE_LAYOUT.max} step={.5} precision={1} unit="%" onStart={beginTransient} onChange={live('sideSize')} onCommit={()=>endTransient(true)}/>
+        </> : <Segmented
           value={p.sideSize}
           onChange={(v) => setProp(clip, { sideSize: v })}
           options={[
@@ -1436,7 +1650,7 @@ function SideBySideSection({ clip }) {
             { value: 'medium', label: 'Medium' },
             { value: 'large', label: 'Large' },
           ]}
-        />
+        />}
       </Row>
       <Row label="Background">
         <Segmented
@@ -1500,7 +1714,7 @@ const BUILTIN_FONTS = [
 const COMMON_FONTS = ['Arial', 'Helvetica Neue', 'Verdana', 'Trebuchet MS', 'Georgia', 'Times New Roman', 'Courier New', 'Impact', 'Futura', 'Avenir Next', 'Gill Sans', 'Segoe UI', 'Calibri', 'Roboto', 'Inter'];
 const systemFonts = signal(null);
 
-async function loadSystemFonts() {
+export async function loadSystemFonts() {
   if (systemFonts.value) return;
   try {
     const list = await window.queryLocalFonts();
@@ -1510,13 +1724,13 @@ async function loadSystemFonts() {
   }
 }
 
-export function FontSelect({ value, onChange }) {
+export function FontSelect({ value, onChange, sample }) {
   const fonts = systemFonts.value || COMMON_FONTS;
   const options = [...BUILTIN_FONTS, ...fonts.map((f) => ({ value: f, label: f }))];
   if (!options.some((o) => o.value === value)) options.push({ value, label: value });
   return (
     <div onPointerDown={loadSystemFonts} style={{ width: '100%' }}>
-      <Select value={value} options={options} onChange={onChange} />
+      <FontPicker value={value} options={options} onChange={onChange} sample={sample} />
     </div>
   );
 }
@@ -1568,7 +1782,7 @@ function TemplateTab({ clip }) {
           </Row>
         ))}
         <Row label="Font">
-          <FontSelect value={pr.font || 'sans'} onChange={(v) => setProp(clip, { font: v })} />
+          <FontSelect value={pr.font || 'sans'} sample={Object.values(pr.fields || {}).find(Boolean)} onChange={(v) => setProp(clip, { font: v })} />
         </Row>
       </Section>
       {(tpl.colors || []).length > 0 && (
@@ -1630,7 +1844,7 @@ function TextTab({ clip }) {
           <Select value={pr.style} options={TITLE_STYLES.map((s) => ({ value: s.id, label: s.label }))} onChange={(v) => setProp(clip, { style: v })} />
         </Row>
         <Row label="Font" stacked>
-          <FontSelect value={pr.font} onChange={(v) => setProp(clip, { font: v })} />
+          <FontSelect value={pr.font} sample={pr.text} onChange={(v) => setProp(clip, { font: v })} />
         </Row>
         <Row label="Size">
           <NumberField value={pr.size} min={8} max={400} unit="pt" onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.clips[id].props.size = v))} onCommit={() => endTransient(true)} />
@@ -2024,6 +2238,11 @@ function TransitionInspector({ clip, edge = 'start' }) {
           <Row label="Crossfade audio">
             <Toggle checked={t.audio !== false} onChange={(v) => commit((q) => (q.clips[clip.id][edge === 'end' ? 'transitionOut' : 'transition'].audio = v))} />
           </Row>
+          {canMotionBlur(t.type, clip) && (
+            <Row label="Motion blur">
+              <Toggle checked={Boolean(t.motionBlur)} onChange={(v) => commit((q) => (q.clips[clip.id][edge === 'end' ? 'transitionOut' : 'transition'].motionBlur = v))} />
+            </Row>
+          )}
           <p class="hint">Drag the transition handles on the timeline to change its duration. Press Delete to remove it. Transitions at a cut use extra frames before and after when available.</p>
         </Section>
       </div>
@@ -2031,22 +2250,8 @@ function TransitionInspector({ clip, edge = 'start' }) {
   );
 }
 
-export const FORMATS = [
-  { value: '7680x4320', label: '8K UHD (7680 × 4320)' },
-  { value: '3840x2160', label: '4K UHD (3840 × 2160)' },
-  { value: '2560x1440', label: '1440p (2560 × 1440)' },
-  { value: '1920x1080', label: '1080p HD (1920 × 1080)' },
-  { value: '1280x720', label: '720p HD (1280 × 720)' },
-  { value: '1080x1920', label: 'Vertical (1080 × 1920)' },
-  { value: '1080x1350', label: 'Portrait 4:5 (1080 × 1350)' },
-  { value: '1080x1080', label: 'Square (1080 × 1080)' },
-];
-
 export function ProjectSettings({ name = true }) {
   const p = project.value;
-  const current = `${p.width}x${p.height}`;
-  const fmt = !p.customFormat && FORMATS.some((f) => f.value === current) ? current : 'custom';
-  const fpsList = FRAME_RATES;
   return (
     <>
       {name && <Row label="Name" stacked>
@@ -2058,46 +2263,15 @@ export function ProjectSettings({ name = true }) {
             if (e.key === 'Enter') e.currentTarget.blur();
           }}
           onChange={(e) => {
-            const name = e.currentTarget.value.trim();
-            if (name) commit((q) => (q.name = name));
+            const input = e.currentTarget;
+            const name = input.value.trim();
+            if (!name || name === p.name) return void (input.value = p.name);
+            if (!projectPath.value) return void commit((q) => (q.name = name));
+            renameProject(name).then((ok) => ok || (input.value = p.name));
           }}
         />
       </Row>}
-      <Row label="Format" stacked>
-        <Select
-          value={fmt}
-          options={[...FORMATS, { value: 'custom', label: fmt === 'custom' ? `Custom (${p.width} × ${p.height})` : 'Custom size' }]}
-          onChange={(v) => {
-            const [w, h] = v === 'custom' ? [p.width, p.height] : v.split('x').map(Number);
-            commit((q) => {
-              q.width = w;
-              q.height = h;
-              q.autoFormat = false;
-              if (v === 'custom') q.customFormat = true;
-              else delete q.customFormat;
-            });
-          }}
-        />
-      </Row>
-      {fmt === 'custom' && (
-        <div class="wh-row">
-          <NumberField value={p.width} min={16} max={8192} step={2} unit="W" width={84} onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.width = Math.max(16, Math.round(v / 2) * 2)))} onCommit={() => endTransient(true)} />
-          <span class="dim">×</span>
-          <NumberField value={p.height} min={16} max={8192} step={2} unit="H" width={84} onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.height = Math.max(16, Math.round(v / 2) * 2)))} onCommit={() => endTransient(true)} />
-        </div>
-      )}
-      <Row label="Frame rate">
-        <Select
-          value={fpsList.includes(p.fps) ? String(p.fps) : 'custom'}
-          options={[...fpsList.map((f) => ({ value: String(f), label: `${f} fps` })), { value: 'custom', label: fpsList.includes(p.fps) ? 'Custom' : `Custom (${p.fps})` }]}
-          onChange={(v) => commit((q) => (q.fps = v === 'custom' ? 15 : Number(v)))}
-        />
-      </Row>
-      {!fpsList.includes(p.fps) && (
-        <Row label="Custom frame rate">
-          <NumberField value={p.fps} min={1} max={120} precision={2} onChange={(v) => commit((q) => (q.fps = Math.round(v * 100) / 100))} />
-        </Row>
-      )}
+      <SequenceFormatSettings settings={p} onChange={commit} onStart={beginTransient} onPreview={updateTransient} onCommit={() => endTransient(true)} />
     </>
   );
 }

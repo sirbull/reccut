@@ -1,7 +1,8 @@
 // Små, gjenbrukbare grensesnittkomponenter i samme stil som resten av appen.
-import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { X } from 'lucide-preact';
+import { ChevronDown, X } from 'lucide-preact';
+import { FONTS } from '../shared/model.js';
 
 export function Toggle({ checked, onChange, disabled }) {
   return (
@@ -49,6 +50,52 @@ export function Select({ value, options, onChange, disabled, title }) {
   );
 }
 
+// Fontvelger der hvert valg vises i sin egen skrift, med brukerens tekst som prøve.
+// Native <select> kan ikke style valgene på macOS, derfor popover + CSS anchor.
+export function FontPicker({ value, options, onChange, sample }) {
+  const id = useId(), ref = useRef();
+  const [query, setQuery] = useState('');
+  const css = (f) => FONTS[f] || `${JSON.stringify(f)}, ${FONTS.sans}`;
+  const text = String(sample || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  const current = options.find((o) => o.value === value);
+  const q = query.trim().toLowerCase();
+  const shown = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
+  const pick = (v) => { ref.current.hidePopover(); onChange(v); };
+  const onToggle = (e) => {
+    if (e.newState !== 'open') return setQuery('');
+    ref.current.querySelector('[aria-selected=true]')?.scrollIntoView({ block: 'center' });
+    ref.current.querySelector('input').focus();
+  };
+  const onKeyDown = (e) => {
+    e.stopPropagation(); // ingen app-snarveier mens menyen er åpen
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT' && shown[0]) return pick(shown[0].value);
+    const step = { ArrowDown: 1, ArrowUp: -1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const items = [...ref.current.querySelectorAll('input, [role=option]')], i = items.indexOf(document.activeElement);
+    items[Math.max(0, Math.min(items.length - 1, i + step))]?.focus();
+  };
+  return (
+    <>
+      <button type="button" class="select font-picker" popovertarget={id} style={{ anchorName: `--${id}`, fontFamily: css(value) }}>
+        {current?.label ?? value}
+      </button>
+      <div ref={ref} id={id} popover="auto" class="font-picker-list" style={{ positionAnchor: `--${id}` }} onToggle={onToggle} onKeyDown={onKeyDown}>
+        <input class="text-input" type="search" aria-label="Search fonts" placeholder="Search fonts" value={query} onInput={(e) => setQuery(e.currentTarget.value)} />
+        <div role="listbox">
+          {shown.map((o) => (
+            <button type="button" role="option" key={o.value} aria-selected={o.value === value} onClick={() => pick(o.value)}>
+              <span style={{ fontFamily: css(o.value) }}>{text || o.label}</span>
+              {text && <small>{o.label}</small>}
+            </button>
+          ))}
+          {!shown.length && <p class="hint">No fonts match “{query}”.</p>}
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function Row({ label, children, hint, stacked }) {
   return (
     <div class={`row${stacked ? ' stacked' : ''}`}>
@@ -63,11 +110,12 @@ export function Section({ title, children, actions, open: initialOpen = true, co
   const [open, setOpen] = useState(initialOpen);
   return (
     <section class={`section${open ? '' : ' closed'}`} {...rest}>
-      <header onClick={() => collapsible && setOpen(!open)}>
+      <header class={collapsible ? 'collapsible' : ''} aria-expanded={collapsible ? open : undefined} onClick={() => collapsible && setOpen(!open)}>
         <h3>{title}</h3>
         <div class="section-actions" onClick={(e) => e.stopPropagation()}>
           {actions}
         </div>
+        {collapsible && <ChevronDown class="section-chevron" size={14} />}
       </header>
       {open && <div class="section-body">{children}</div>}
     </section>

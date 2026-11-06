@@ -2,10 +2,14 @@
 // på et gitt tidspunkt. Brukes av forhåndsvisning, eksport og tester.
 
 import { current, isDraft } from 'immer';
+import { expressionValue } from './expressions.js';
+import { patternClipProps } from './designPattern.js';
 import { BUILTIN_TEMPLATES, templateDefaults } from './titletemplates.js';
 
 export const LAYOUT_ANIM = 0.32;
 export const PIP_SIZES = { small: 0.17, medium: 0.23, large: 0.31 };
+// Kamera ved siden av skjermen (oppsett 7 og 8). Størrelsen er prosent av bildets bredde.
+export const SIDE_LAYOUT = { size: 30, min: 15, max: 50, shape: 'square' };
 export const CAMERA_COLOR_PROPS = { cameraExposure: 0, cameraContrast: 0, cameraSaturation: 0, cameraTemperature: 0 };
 export const CAPTION_LANE = 1000;
 
@@ -13,12 +17,12 @@ export const TRANSITIONS = [
   { id: 'dissolve', label: 'Cross Dissolve' },
   { id: 'dip', label: 'Fade to Black' },
   { id: 'dipWhite', label: 'Fade to White' },
-  { id: 'slideLeft', label: 'Push Left' },
-  { id: 'slideRight', label: 'Push Right' },
-  { id: 'slideUp', label: 'Push Up' },
-  { id: 'wipe', label: 'Wipe' },
-  { id: 'circle', label: 'Circle Reveal' },
-  { id: 'zoom', label: 'Zoom' },
+  { id: 'slideLeft', label: 'Push Left', motion: true },
+  { id: 'slideRight', label: 'Push Right', motion: true },
+  { id: 'slideUp', label: 'Push Up', motion: true },
+  { id: 'wipe', label: 'Wipe', motion: true },
+  { id: 'circle', label: 'Circle Reveal', motion: true },
+  { id: 'zoom', label: 'Zoom', motion: true },
   { id: 'blur', label: 'Blur' },
 ];
 
@@ -43,7 +47,7 @@ export const TITLE_TEMPLATES = [
 
 // Supringer og titler laget som malfiler (se titletemplates.js). De vises i samme bibliotek.
 export const TEMPLATE_TITLES = BUILTIN_TEMPLATES.map((t) => ({ id: t.id, label: t.name, category: t.category, props: { template: t.id, ...templateDefaults(t) } }));
-TITLE_TEMPLATES.push(...TEMPLATE_TITLES);
+TITLE_TEMPLATES.push(...TEMPLATE_TITLES, ...['dots', 'grid'].map(kind => ({ id: `pattern-${kind}`, label: kind === 'dots' ? 'Shape Background' : 'Grid Background', category: 'Backgrounds', props: { ...patternClipProps(kind), text: kind === 'dots' ? 'Shape Background' : 'Grid Background', anim: 'none' } })));
 
 // Fargekoder for klipp. Turkis er holdt av til klipp som analyseres, så den finnes ikke her.
 export const CLIP_COLORS = [
@@ -270,15 +274,16 @@ export function audioComponents(clip, media) {
   if (!media || !clip) return [];
   if (clip.recordingPart === 'camera') return [];
   const off = clip.props?.audioOff || {};
+  const mono = clip.props?.audioMono || {};
   if (clip.type === 'audio') {
     const key = clip.stream || 'main';
     const st = media.streams[key];
-    return st?.hasAudio ? [{ key, stream: st, label: componentLabel(media, key, st), off: Boolean(off[key]) }] : [];
+    return st?.hasAudio ? [{ key, stream: st, label: componentLabel(media, key, st), off: Boolean(off[key]), mono: Boolean(mono[key]) }] : [];
   }
   if (clip.type !== 'video' && clip.type !== 'recording') return [];
   return Object.entries(media.streams)
     .filter(([, st]) => st.hasAudio)
-    .map(([key, st]) => ({ key, stream: st, label: componentLabel(media, key, st), off: Boolean(off[key]) }));
+    .map(([key, st]) => ({ key, stream: st, label: componentLabel(media, key, st), off: Boolean(off[key]), mono: Boolean(mono[key]) }));
 }
 
 // Kamera og skjerm kan være egne klipp, men peker fortsatt på samme opptaksmedia.
@@ -313,6 +318,8 @@ export function newProject(name = 'Untitled Project') {
     fps: 30,
     autoFormat: true,
     media: {},
+    designs: {},
+    designAssets: {},
     clips: {},
     primary: [],
     markers: [],
@@ -437,6 +444,7 @@ export function defaultProps(type, media) {
         pipShape: rec.pip?.shape || 'rect',
         mirror: Boolean(rec.pip?.mirror),
         ...SIDE_DEFAULTS,
+        ...(typeof rec.pip?.sideSize === 'number' ? { sideSize: rec.pip.sideSize, sideShape: rec.pip.sideShape || SIDE_LAYOUT.shape, sideBg: 'color', sideBgColor: '#000000', sideFrame: 'none' } : {}),
         showKeys: rec.overlays?.keys ?? true,
         cursorZoom: rec.overlays?.cursorZoom ?? true,
         showClicks: rec.overlays?.clicks ?? false,
@@ -460,7 +468,7 @@ export function defaultProps(type, media) {
     case 'caption':
       return { text: '', align: null, pos: null };
     case 'redact':
-      return { opacity: 1, vFadeIn: 0, vFadeOut: 0, x: 0, y: 0, w: 480, h: 120, rotation: 0, mode: 'pixelate', shape: 'rounded', amount: 0.5, color: '#000000', invert: false, feather: 0 };
+      return { opacity: 1, vFadeIn: 0, vFadeOut: 0, x: 0, y: 0, w: 480, h: 120, rotation: 0, mode: 'pixelate', shape: 'rounded', amount: 0.5, color: '#000000', invert: false, feather: 0, wholeBlocks: true };
     default:
       return {};
   }
@@ -578,6 +586,12 @@ export const RAMP_PRESETS = [
 ];
 
 export function valueAt(clip, prop, T) {
+  const base = baseValueAt(clip, prop, T);
+  const expression = clip.expressions?.[prop];
+  return expression ? expressionValue(base, expression, kfTime(clip, T) / kfRate(clip)) : base;
+}
+
+export function baseValueAt(clip, prop, T) {
   const list = clip.kf?.[prop];
   if (!list || !list.length) return clip.props[prop];
   if (prop === 'layout') return stepValue(list, sourceTime(clip, T));
@@ -669,8 +683,32 @@ export function removeKeyframe(clip, prop, s) {
 
 /* Oppsett for bilde i bilde, felles for opptak og redigering. */
 
-export function pipRect(layout, lastCorner, W, H, size, shape) {
+export const isCorner = (layout) => layout >= 3 && layout <= 6;
+export const isSide = (layout) => layout === 7 || layout === 8;
+
+// Kameraet står midt på høyden ved siden av skjermen, og skjermen får resten av bredden.
+function legacySideRects(layout, W, H, { size = SIDE_LAYOUT.size, shape = SIDE_LAYOUT.shape } = {}) {
+  const m = Math.min(W, H) * 0.025;
+  const maxH = H - 2 * m;
+  const aspect = SIDE_SHAPES[shape] || 1;
+  const w = Math.min((W * size) / 100, maxH * aspect);
+  const h = w / aspect;
+  const left = layout === 7;
+  return {
+    camera: { x: left ? m : W - m - w, y: (H - h) / 2, w, h, r: shape === 'circle' ? w / 2 : w * 0.06, a: 1 },
+    screen: { x: left ? w + 2 * m : m, y: m, w: W - w - 3 * m, h: maxH, r: 0, a: 1 },
+  };
+}
+
+// Skjermens område: hele bildet, eller det kameraet lar stå igjen side om side (7, 8).
+export function screenArea(layout, W, H, side) {
+  if (isSide(layout)) return legacySideRects(layout, W, H, side).screen;
+  return { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
+}
+
+export function pipRect(layout, lastCorner, W, H, size, shape, side) {
   if (layout === 1) return { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
+  if (isSide(layout)) return legacySideRects(layout, W, H, side).camera;
   const base = W * (PIP_SIZES[size] || PIP_SIZES.medium);
   const portrait = shape === 'portrait';
   const w = shape === 'rect' || !shape ? base : portrait ? base * 0.5 : base * 0.7;
@@ -692,7 +730,7 @@ export function lerpRect(a, b, t) {
    Oppsett 7 har kameraet til venstre, 8 til høyre. Velges i redigeringen. */
 
 export const isSideLayout = (n) => n === 7 || n === 8;
-export const SIDE_SHAPES = { portrait: 9 / 16, tall: 3 / 4, square: 1 };
+export const SIDE_SHAPES = { portrait: 9 / 16, tall: 3 / 4, square: 1, rect: 16 / 9, circle: 1 };
 export const SIDE_SIZES = { small: 0.55, medium: 0.75, large: 1 };
 export const SIDE_DEFAULTS = {
   sideShape: 'portrait',
@@ -728,7 +766,7 @@ export function sideRects(layout, W, H, screenAspect, shape, size) {
   const r = Math.min(W, H) * 0.018;
   return {
     screen: { x: camLeft ? x0 + cw + gap : x0, y: (H - h) / 2, w: sw, h, r, a: 1 },
-    cam: { x: camLeft ? x0 : x0 + sw + gap, y: (H - ch) / 2, w: cw, h: ch, r, a: 1 },
+    cam: { x: camLeft ? x0 : x0 + sw + gap, y: (H - ch) / 2, w: cw, h: ch, r: shape === 'circle' ? cw / 2 : r, a: 1 },
   };
 }
 
@@ -741,6 +779,16 @@ function fullScreenRect(W, H, aspect) {
 // Kamera og skjerm ved kildetid s, med myk overgang rett etter hvert oppsettsbytte.
 // side er 1 når oppsettet er side om side, og glir mellom 0 og 1 i overgangen.
 export function recordingRectsAt(clip, s, W, H, screenAspect = 16 / 9) {
+  // Width-based layouts saved during recording retain their original geometry.
+  // Relative camera sizes use the side-by-side editor with backgrounds/frames.
+  if (typeof clip.props.sideSize !== 'string') {
+    const area = legacyScreenAreaAt(clip, s, W, H);
+    const full = fullScreenRect(area.w, area.h, screenAspect);
+    const screen = { ...full, x: full.x + area.x, y: full.y + area.y };
+    const cam = legacyCameraRectAt(clip, s, W, H);
+    const side = Math.max(Math.abs(area.x), Math.abs(area.y), W - area.w, H - area.h) > 0.001 ? 1 : 0;
+    return { screen, cam, side };
+  }
   const list = clip.kf?.layout?.length ? clip.kf.layout : [[0, 6]];
   let idx = 0;
   for (let i = 0; i < list.length; i++) if (list[i][0] <= s) idx = i;
@@ -791,6 +839,38 @@ export function layoutClipFor(project, clip, T) {
   const cam = Object.values(project.clips).find((c) => c.recordingPart === 'camera' && c.linkedTo === clip.id);
   if (!cam || !cam.enabled || laneHidden(project, cam.lane) || T < cam.start || T >= cam.start + cam.dur) return null;
   return valueAt(cam, 'showCamera', T) !== false ? cam : null;
+}
+
+function legacyLayoutRectAt(clip, s, rectFor) {
+  const list = clip.kf?.layout?.length ? clip.kf.layout : [[0, 6]];
+  let idx = 0;
+  for (let i = 0; i < list.length; i++) if (list[i][0] <= s) idx = i;
+  const cur = list[idx][1];
+  const prev = idx > 0 ? list[idx - 1][1] : cur;
+  const cornerBefore = (i) => {
+    for (let j = i; j >= 0; j--) if (isCorner(list[j][1])) return list[j][1];
+    return 6;
+  };
+  const to = rectFor(cur, cornerBefore(idx));
+  const t = idx > 0 || list[0][0] > 0 ? clamp((s - list[idx][0]) / LAYOUT_ANIM, 0, 1) : 1;
+  if (t >= 1 || prev === cur) return to;
+  const from = rectFor(prev, cornerBefore(idx - 1));
+  return lerpRect(from, to, easeOutCubic(t));
+}
+
+const sideOf = (clip) => ({ size: clip.props.sideSize, shape: clip.props.sideShape });
+
+function legacyCameraRectAt(clip, s, W, H) {
+  const { pipSize, pipShape } = clip.props;
+  return legacyLayoutRectAt(clip, s, (layout, corner) => pipRect(layout, corner, W, H, pipSize, pipShape, sideOf(clip)));
+}
+
+function legacyScreenAreaAt(clip, s, W, H) {
+  return legacyLayoutRectAt(clip, s, (layout) => screenArea(layout, W, H, sideOf(clip)));
+}
+
+export function screenAreaAt(clip, s, W, H, screenAspect) {
+  return typeof clip.props.sideSize === 'string' ? recordingRectsAt(clip, s, W, H, screenAspect).screen : legacyScreenAreaAt(clip, s, W, H);
 }
 
 /* Hendelser fra opptaket: musepeker, forstørring, klikk og taster. */
@@ -889,6 +969,15 @@ export function transitionWindow(clip, hasPrev = true, prev = null, edge = 'star
   return hasPrev ? [clip.start - d / 2, clip.start + d / 2] : [clip.start, clip.start + d];
 }
 
+// Tilstanden til en overgang ved tid T, innenfor vinduet [a, b].
+const transitionState = (t, a, b, T) => ({ type: t.type, p: clamp((T - a) / (b - a), 0, 1), audio: t.audio !== false, motionBlur: Boolean(t.motionBlur), dur: b - a });
+
+// Bevegelsesuskarphet gjelder overganger som flytter bildet. Effektklipp leser bildet under
+// seg når de tegnes, så de kan ikke tegnes på forhånd og flyttes.
+export function canMotionBlur(type, clip) {
+  return Boolean(TRANSITIONS.find((t) => t.id === type)?.motion) && clip.type !== 'adjustment' && clip.type !== 'redact';
+}
+
 // Klipp over hovedsporet kan også ha overganger. De tones inn fra og ut til det som ligger under.
 // Effekter (Pixelate, Blur, sladding) også: effekten toner, tørker eller glir inn over bildet.
 export function hasFreeTransitions(clip) {
@@ -900,7 +989,7 @@ export function freeTransitionAt(clip, T) {
     const t = clip[edge === 'end' ? 'transitionOut' : 'transition'];
     if (!t) continue;
     const [a, b] = transitionWindow(clip, false, null, edge);
-    if (T >= a && T < b) return { type: t.type, p: clamp((T - a) / (b - a), 0, 1), audio: t.audio !== false, edge };
+    if (T >= a && T < b) return { ...transitionState(t, a, b, T), edge };
   }
   return null;
 }
@@ -1004,14 +1093,11 @@ export function primaryAt(project, T) {
     if (c.transition) {
       const prev = i > 0 ? project.clips[list[i - 1]] : null;
       const [a, b] = transitionWindow(c, Boolean(prev), prev);
-      if (T >= a && T < b) {
-        const p = clamp((T - a) / (b - a), 0, 1);
-        return { transition: { type: c.transition.type, p, audio: c.transition.audio !== false }, a: prev, b: c };
-      }
+      if (T >= a && T < b) return { transition: transitionState(c.transition, a, b, T), a: prev, b: c };
     }
     if (c.transitionOut) {
       const [a, b] = transitionWindow(c, false, null, 'end');
-      if (T >= a && T < b) return { transition: { type: c.transitionOut.type, p: clamp((T - a) / (b - a), 0, 1), audio: c.transitionOut.audio !== false }, a: c, b: null };
+      if (T >= a && T < b) return { transition: transitionState(c.transitionOut, a, b, T), a: c, b: null };
     }
   }
   for (let i = Math.max(0, lo - 1); i <= Math.min(list.length - 1, lo + 1); i++) {

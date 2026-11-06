@@ -2,7 +2,7 @@
 import { CAPTION_LANE, clipHasAudio, hasFreeTransitions, isVisual, primaryAt, round, transitionWindow } from './model.js';
 import { Immer } from 'immer';
 import { BROWSER_VIDEO_EFFECTS } from './videoEffects.js';
-import { addMediaClip, autoFormat, mediaClip, replaceClip } from './ops.js';
+import { addMediaClip, autoFormat, mediaClip, mediaLane, replaceClip } from './ops.js';
 
 const previewProject = new Immer({ autoFreeze: false });
 
@@ -25,7 +25,7 @@ export function applyMediaDrop(project, item, lane, T, replaceId = null) {
     if (!media) continue;
     const audio = media.kind === 'audio';
     const mode = lane === 0 && !audio ? 'insert' : 'connect';
-    const targetLane = audio && lane >= 0 ? -1 : !audio && (lane < 0 || lane === CAPTION_LANE) ? 1 : lane;
+    const targetLane = mediaLane(media, lane);
     if (project.lanes?.[targetLane]?.locked) continue;
     autoFormat(project, media);
     const id = addMediaClip(project, media, mode, t, targetLane, source.opts || {});

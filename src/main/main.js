@@ -5,6 +5,8 @@ const {
   Menu,
   Notification,
   desktopCapturer,
+  clipboard,
+  nativeImage,
   dialog,
   globalShortcut,
   ipcMain,
@@ -25,6 +27,15 @@ if (developmentMode) app.setPath('userData', path.join(app.getPath('appData'), '
 const ff = require('./ffmpeg');
 const { finalizeRecordingStream } = require('./recording');
 const jobs = require('./jobs');
+const { SubtitleModelManager } = require('./subtitleModels');
+const subtitleModels = new SubtitleModelManager({
+  dir: path.join(app.getPath('userData'), 'subtitle-models'),
+  legacyDir: path.join(app.getPath('userData'), 'models'),
+  bundleDir: app.isPackaged ? path.join(process.resourcesPath, 'subtitle-models') : path.join(__dirname, '../../vendor/subtitle-models'),
+  onChange: state => send('subtitle-models:changed', state),
+  unload: () => jobs.unloadTranscription(),
+});
+subtitleModels.ready.catch(error => console.error('Subtitle model registry:', error));
 const about = require('./about');
 const { createSplashWindow } = require('./splash');
 const media = require('./media');
@@ -44,6 +55,8 @@ const { createExtensionHost, readDocument } = require('./extensions');
 const { renderGraphic } = require('./graphics');
 const extensions = createExtensionHost({ dir: path.join(app.getPath('userData'), 'extensions'), safeStorage, ffmpegPath: ff.getFfmpegPath() });
 
+const stock=require('./stock').createStockHost({dir:path.join(app.getPath('userData'),'stock'),cacheDir:path.join(app.getPath('userData'),'Cache','Stock'),fetchImpl:(...args)=>require('electron').net.fetch(...args),safeStorage,openExternal:url=>shell.openExternal(url)});
+for(const [channel,method]of Object.entries({providers:'providers',addPlugin:'addPlugin',testConnection:'testConnection',settings:'settings',search:'search',preview:'preview',download:'download',install:'install',remove:'remove',manifest:'manifest',saveKey:'saveKey',signIn:'signIn',signOut:'signOut',acceptCosts:'acceptCosts',catalog:'catalog',catalogFile:'catalogFile',catalogPreview:'catalogPreview'}))ipcMain.handle('stock:'+channel,(_event,...args)=>stock[method](...args));
 const isMac = process.platform === 'darwin';
 
 // Keep Electron's built-in UI in English, including on Norwegian systems.
@@ -207,6 +220,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, '..', '..', 'build', 'index.html')).catch((err) => failStartup(err.message));
   win.on('focus', () => { pipPreview.hide(); registerShortcuts(); });
   win.on('blur', registerShortcuts);
+  win.on('move', () => send('screens:changed'));
   const resetKeyboardScope = () => {
     pipPreview.hide(); shortcutsBlocked = true; backgroundShortcuts = false; registerShortcuts();
   };
@@ -265,7 +279,7 @@ function menuFromTemplate(items) {
   return items.map((it) => {
     if (it.separator) return { type: 'separator' };
     if (it.role === 'about') return { label: it.label, click: about.show };
-    if (it.role && !it.submenu) return { role: it.role, label: it.label };
+    if (it.role && !it.submenu) return { role: it.role, label: it.label, accelerator: it.accelerator };
     if (it.submenu) return { label: it.label, role: it.role, submenu: menuFromTemplate(it.submenu) };
     return {
       label: it.label,
@@ -333,6 +347,15 @@ app.on('browser-window-blur', () => setImmediate(registerShortcuts));
 input.listener = (event) => send('input', event);
 
 ipcMain.handle('screens:list', () => listScreens());
+// Use the display containing the app, independent of the selected recording source.
+ipcMain.handle('screens:current', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const display = window ? screen.getDisplayMatching(window.getBounds()) : screen.getPrimaryDisplay();
+  return {
+    width: Math.round(display.size.width * display.scaleFactor),
+    height: Math.round(display.size.height * display.scaleFactor),
+  };
+});
 ipcMain.handle('screens:select', (_e, { id, displayId, systemAudio, area: rect }) => {
   selectedScreenId = id;
   wantSystemAudio = Boolean(systemAudio);
@@ -368,7 +391,7 @@ ipcMain.handle('shortcuts:set', (_e, modifier) => {
 });
 ipcMain.handle('shortcuts:active', (_e, active) => {
   shortcutsActive = active;
-  registerShortcuts();
+  return registerShortcuts();
 });
 ipcMain.handle('shortcuts:scope', (e, scope) => {
   if (e.sender !== win?.webContents) return [];
@@ -722,8 +745,53 @@ ipcMain.handle('file:writeBinary', async (_e, file, data) => {
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   await fs.promises.writeFile(file, Buffer.from(data));
 });
+const designCleanup = require('./designCleanup');
+designCleanup.onCollected(value=>send('design:cutoutsCollected',value));
+ipcMain.handle('design:retainCutouts',(_e,id,paths)=>designCleanup.retain(id,paths));
+ipcMain.handle('design:discardCutout',(_e,file)=>designCleanup.discard(file));
+ipcMain.handle('design:videoThumbnail',(_e,file,data)=>require('./design').writeVideoThumbnail(file,data));
+ipcMain.handle('design:readableImage', (_e, file) => media.readableImage(file));
+ipcMain.handle('design:imageExtensions', () => media.imageExtensions());
+ipcMain.handle('design:writeImage', async (_e, file, data) => designCleanup.register(await require('./design').writeImage(file, data)));
+let designLibrary;
+function getDesignLibrary() {
+  if(!designLibrary)designLibrary=require('./designLibrary').createDesignLibrary(app.getPath('userData'),require('../../build/designTemplates.cjs').validateDesignTemplate);
+  return designLibrary;
+}
+ipcMain.handle('design:templates:list',()=>getDesignLibrary().list());
+ipcMain.handle('design:templates:save',(_e,data,id)=>getDesignLibrary().save(data,id));
+ipcMain.handle('design:templates:remove',(_e,id)=>getDesignLibrary().remove(id));
+ipcMain.handle('design:brand:logo',()=>getDesignLibrary().logo());
+ipcMain.handle('design:brand:setLogo',(_e,file)=>getDesignLibrary().setLogo(file));
+function startDesignSegment(payload) {
+  if (!payload || typeof payload.path !== 'string' || !path.isAbsolute(payload.path)) throw new Error('Choose a local image to remove its background.');
+  const model = require('./designModels');
+  const modelDir = app.isPackaged ? path.join(process.resourcesPath, 'models') : path.join(__dirname, '..', '..', 'vendor', 'models');
+  let result;
+  const task=jobs.add({ kind: 'segment', title: 'Removing background', queue: 'heavy', run: async (ctx) => { result=await jobs.runInWorker('segment', { path: payload.path, maxSide: Math.max(1, Math.min(2048, Number(payload.maxSide) || 1024)), model: model.id, fallback: model.fallback, modelDir }, ctx);return {width:result.width,height:result.height,model:result.model,device:result.device}; } });
+  return {id:task.id,done:task.done.then(()=>result)};
+}
+ipcMain.handle('design:segment', (_e, payload) => startDesignSegment(payload).done);
+ipcMain.handle('design:segmentStart', (_e, payload) => {
+  const { id, done } = startDesignSegment(payload);
+  done.then((result) => send('design:segmentDone', { id, result }), (err) => send('design:segmentDone', { id, error: String(err.message || err) }));
+  return id;
+});
+ipcMain.handle('design:clipboardRead', () => require('./design').readClipboard(clipboard, (bytes) => nativeImage.createFromBuffer(bytes).toPNG()));
+ipcMain.handle('design:clipboardWrite', (_e, text) => clipboard.writeText(String(text)));
+
 ipcMain.handle('media:analyzeMotion', (_e, m) => {
   media.scheduleMotion(m, notifyAnalyzed);
+});
+// Følger et objekt i videoen (se track i motion.js), så et klipp kan festes til det.
+ipcMain.handle('media:track', (_e, file, opts) => {
+  const { done } = jobs.add({
+    kind: 'analyze',
+    title: 'Tracking motion',
+    queue: 'light',
+    run: (ctx) => require('./motion').track(ff.getFfmpegPath(), file, { ...opts, onProgress: (p) => ctx.progress(p), isCanceled: ctx.isCanceled }),
+  });
+  return done;
 });
 ipcMain.handle('media:details', (_e, file) => ff.details(file));
 // Sceneskift (nytt vindu, ny side, kameraklipp) for AI-agenten. Bildet skaleres ned først, så
@@ -836,13 +904,14 @@ ipcMain.handle('projects:create', (_e, { location, name }) => projects.create(lo
 ipcMain.handle('projects:folders', (_e, file) => projects.folders(baseDir(), file));
 ipcMain.handle('projects:forget', (_e, file) => projects.forget(file));
 ipcMain.handle('projects:trash', (_e, file) => projects.trash(baseDir(), file));
+ipcMain.handle('projects:rename', (_e, file, name) => projects.rename(file, name));
 ipcMain.handle('dialog:openProject', async () => {
   const r = await dialog.showOpenDialog(win, { title: 'Open Project', defaultPath: baseDir(), properties: ['openFile'], filters: [{ name: 'Reccut Project', extensions: ['reccut', 'obslite'] }] });
   return r.canceled ? null : r.filePaths[0];
 });
 
 // Kopierer filer inn i prosjektmappen. Filer som allerede ligger der, brukes som de er.
-ipcMain.handle('media:copyIn', (_e, files, dir) => {
+ipcMain.handle('media:copyIn', (_e, files, dir, options = {}) => {
   const { done } = jobs.add({
     kind: 'copy',
     title: files.length > 1 ? `Copying ${files.length} files to the project` : `Copying ${path.basename(files[0])} to the project`,
@@ -862,7 +931,7 @@ ipcMain.handle('media:copyIn', (_e, files, dir) => {
         const stem = path.basename(file, ext);
         let target = path.join(dir, path.basename(file));
         let n = 2;
-        while (fs.existsSync(target) && fs.statSync(target).size !== sizes[i]) target = path.join(dir, `${stem} ${n++}${ext}`);
+        while (fs.existsSync(target) && (options.unique || fs.statSync(target).size !== sizes[i])) target = path.join(dir, `${stem} ${n++}${ext}`);
         if (!fs.existsSync(target)) {
           const tmp = target + '.part';
           await new Promise((resolve, reject) => {
@@ -941,8 +1010,8 @@ ipcMain.handle('export:start', (_e, payload) => {
   done.finally(() => reservedOutputs.delete(payload.settings.output)).catch(() => {});
   done.then(
     (file) => {
-      send('export:done', { id, file });
-      if (Notification.isSupported() && !win?.isFocused()) {
+      send('export:done', { id, file, quiet: Boolean(payload.settings.quiet) });
+      if (!payload.settings.quiet && Notification.isSupported() && !win?.isFocused()) {
         new Notification({ title: 'Export finished', body: path.basename(file) }).show();
       }
     },
@@ -951,7 +1020,8 @@ ipcMain.handle('export:start', (_e, payload) => {
   return id;
 });
 
-ipcMain.handle('transcribe:start', (_e, payload) => {
+ipcMain.handle('transcribe:start', async (_e, payload) => {
+  const lease = await subtitleModels.acquireActiveModel();
   const { id, done } = jobs.add({
     kind: 'transcribe',
     title: 'Generating captions',
@@ -959,10 +1029,13 @@ ipcMain.handle('transcribe:start', (_e, payload) => {
     run: async (ctx) => {
       ctx.progress(0, 'Reading audio');
       const audio = await mixForTranscription(payload, ctx);
-      return jobs.runInWorker('transcribe', { ...payload, audio }, ctx);
+      if (ctx.isCanceled()) throw new Error('Canceled');
+      const result = await jobs.runInWorker('transcribe', { ...payload, model: lease.model, audio }, ctx);
+      if (ctx.isCanceled()) throw new Error('Canceled');
+      return result;
     },
   });
-  done.then((result) => send('transcribe:done', { id, ...result, payload }), (err) => send('transcribe:error', { id, error: String(err.message || err), payload: { agent: payload.agent } }));
+  done.then((result) => send('transcribe:done', { id, ...result, payload }), (err) => send('transcribe:error', { id, error: String(err.message || err), payload: { agent: payload.agent } })).finally(lease.release);
   return id;
 });
 
@@ -971,13 +1044,15 @@ async function mixForTranscription({ sources, duration }, ctx) {
   const rate = 16000;
   const out = new Float32Array(Math.ceil(duration * rate));
   for (const [i, s] of sources.entries()) {
+    if (ctx.isCanceled()) throw new Error('Canceled');
     const job = ff.decodePcm(s.path, { start: s.in, duration: s.dur, rate, channels: 1 });
     ctx.setCancel(job.kill);
     const buf = await job.promise;
     const pcm = new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 4));
-    const offset = Math.round(s.start * rate);
     const gain = s.gain ?? 1;
-    for (let j = 0; j < pcm.length && offset + j < out.length; j++) out[offset + j] += pcm[j] * gain;
+    // Audio is mapped into timeline time before inference, including trims and speed ramps.
+    const { mixSpeechSource } = require('../../build/subtitleAudio.cjs');
+    mixSpeechSource(out, pcm, s, rate, gain);
     ctx.progress(((i + 1) / sources.length) * 0.1, 'Reading audio');
   }
   return out;
@@ -989,6 +1064,8 @@ function modelCachePath(key) {
   return path.join(app.getPath('userData'), 'models', hash);
 }
 ipcMain.handle('modelcache:get', async (_e, key) => {
+  const subtitleFile = await subtitleModels.readModelFile(key);
+  if (subtitleFile) return subtitleFile;
   const file = modelCachePath(key);
   return fs.existsSync(file) ? new Uint8Array(await fs.promises.readFile(file)) : null;
 });
@@ -1041,6 +1118,7 @@ ipcMain.handle('project:pendingOpen', () => {
 });
 
 app.whenReady().then(async () => {
+  for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(event, () => send('screens:changed'));
   splash = createSplashWindow({ BrowserWindow, version: app.getVersion() });
   try {
     await splash.ready;
@@ -1054,7 +1132,7 @@ app.whenReady().then(async () => {
   if (!app.isPackaged) app.dock?.setIcon(path.join(__dirname, '../../assets/icon-mac.png'));
   protocol.handle('media', serveMedia);
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(['media', 'display-capture', 'mediaKeySystem', 'notifications', 'fullscreen'].includes(permission));
+    callback(['media', 'display-capture', 'mediaKeySystem', 'notifications', 'fullscreen'].includes(permission) || permission==='local-fonts'&&_wc===win?.webContents);
   });
 
   // getDisplayMedia i vinduet får skjermen som er valgt i appen, uten systemvelger.
@@ -1082,15 +1160,26 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on('will-quit', () => {
-  splash?.destroy();
-  area.closeFrame();
-  pipPreview.destroy();
-  recordUI.destroy();
-  globalShortcut.unregisterAll();
-  input.stop();
-  keystrokes.stop();
-  jobs.destroyWorkers();
+let subtitleShutdown = false;
+app.on('will-quit', event => {
+  // At this point every window has accepted closing. A recording's "Keep
+  // Recording" action must not permanently shut down the model manager.
+  event.preventDefault();
+  if (subtitleShutdown) return;
+  subtitleShutdown = true;
+  subtitleModels.shutdown().catch(error => console.error(error)).finally(() => {
+    splash?.destroy();
+    area.closeFrame();
+    pipPreview.destroy();
+    recordUI.destroy();
+    globalShortcut.unregisterAll();
+    input.stop();
+    keystrokes.stop();
+    jobs.destroyWorkers();
+    // All windows have already closed. Re-entering app.quit() from will-quit
+    // can leave Electron alive after an asynchronous prevented quit.
+    app.exit(0);
+  });
 });
 
 // A failed splash may be destroyed before the workspace window is created.
@@ -1104,6 +1193,16 @@ function extensionHandler(channel, handler) {
   });
 }
 extensionHandler('ai:config', () => extensions.aiConfig());
+extensionHandler('subtitle-models:list', () => subtitleModels.listAvailableModels());
+extensionHandler('subtitle-models:download', id => subtitleModels.downloadModel(id));
+extensionHandler('subtitle-models:cancel', id => subtitleModels.cancelDownload(id));
+extensionHandler('subtitle-models:select', id => subtitleModels.setActiveModel(id));
+extensionHandler('subtitle-models:remove', async id => {
+  const state = await subtitleModels.listAvailableModels(), model = state.models.find(m => m.id === id);
+  if (!model?.installed || !model.removable) throw new Error('This model cannot be deleted.');
+  const { response } = await dialog.showMessageBox(win, { type: 'question', title: 'Delete this subtitle model?', message: 'Delete this subtitle model?', detail: `${model.name} — ${(model.installedSizeBytes / 1e6).toFixed(1)} MB\nThe model can be downloaded again later.`, buttons: ['Cancel', 'Delete'], defaultId: 0, cancelId: 0, noLink: true });
+  return response === 1 ? subtitleModels.removeModel(id) : subtitleModels.listAvailableModels();
+});
 extensionHandler('ai:save', (config) => extensions.saveAI(config));
 extensionHandler('ai:complete', (request) => extensions.complete(request));
 extensionHandler('ai:models', (config) => extensions.listModels(config));

@@ -247,6 +247,7 @@ export function VideoEffects({ clip }) {
               <>
                 {number(e, 'similarity', e.type === 'luma' ? 'Black threshold' : 'Tolerance', 0, 1)}
                 {number(e, 'softness', 'Softness', 0.001, 1)}
+                {e.type === 'chroma' && number(e, 'motionBlur', 'Motion blur', 0, 1)}
                 <details class="vfx-advanced">
                   <summary>Advanced</summary>
                   {e.type === 'chroma' && <>

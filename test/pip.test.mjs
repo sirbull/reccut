@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
-import { pipRect } from '../src/shared/model.js';
+import { cameraRectAt, defaultProps, pipRect, screenArea, screenAreaAt } from '../src/shared/model.js';
 
 // Test native vindustyring uten å starte Electron eller be om kameratilgang.
-function setup() {
+function setup(platform = 'darwin') {
   const windows = [];
   let focused = false;
   let finishLoading;
@@ -22,8 +22,8 @@ function setup() {
       this.webContents = { on() {}, send: (...args) => this.messages.push(args) };
       windows.push(this);
     }
-    setAlwaysOnTop(v) { this.onTop = v; }
-    setVisibleOnAllWorkspaces(v) { this.allSpaces = v; }
+    setAlwaysOnTop(v, level) { this.onTop = v; this.level = level; }
+    setVisibleOnAllWorkspaces(v, options) { this.allSpaces = v; this.workspaceOptions = options; }
     setIgnoreMouseEvents(v) { this.passThrough = v; }
     setContentProtection(v) { this.protected = v; }
     isDestroyed() { return this.dead; }
@@ -38,7 +38,7 @@ function setup() {
   const require = createRequire(import.meta.url);
   const module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(new URL('../src/main/pip.js', import.meta.url), 'utf8'), {
-    module, console, __dirname: '/app/src/main',
+    module, console, process: { platform }, __dirname: '/app/src/main',
     require: (name) => name === 'electron' ? { BrowserWindow: Window, screen: { getAllDisplays: () => [display] } } : require(name),
   });
   const preview = module.exports.createPipPreview({ getMainWindow: () => ({ isDestroyed: () => false, isFocused: () => focused }) });
@@ -92,6 +92,34 @@ test('PiP lar klikk gå gjennom og åpnes uten fokus; bare nyeste bilde vises et
   assert.equal(w.visible, false);
   s.preview.destroy();
   assert.equal(w.dead, true);
+});
+
+test('macOS PiP bruker et ikke-aktiverende panel over Spaces og fullskjermsapper', async () => {
+  const s = setup('darwin');
+  s.preview.update(s.frame);
+  await s.loaded();
+  const [w] = s.windows;
+  assert.equal(w.options.type, 'panel');
+  assert.equal(w.options.fullscreenable, false);
+  assert.equal(w.options.focusable, false);
+  assert.equal(w.level, 'screen-saver');
+  assert.equal(w.allSpaces, true);
+  assert.equal(w.workspaceOptions.visibleOnFullScreen, true);
+  assert.equal(w.passThrough, true);
+  assert.equal(w.visible, true);
+});
+
+test('Windows og Linux beholder vanlig PiP-vindustype', async () => {
+  for (const platform of ['win32', 'linux']) {
+    const s = setup(platform);
+    s.preview.update(s.frame);
+    await s.loaded();
+    const [w] = s.windows;
+    assert.equal(w.options.type, undefined);
+    assert.equal(w.onTop, true);
+    assert.equal(w.passThrough, true);
+    assert.equal(w.visible, true);
+  }
 });
 
 test('flytting bruker et fast vindu og fortsetter mellom kamerabilder', async () => {
@@ -148,4 +176,41 @@ test('et forsinket PiP-vindu dukker ikke opp etter at forhåndsvisningen er slå
   assert.equal(s.windows[0].messages.length, 0);
   s.preview.update({ ...s.frame, displayId: 999 });
   assert.equal(s.windows[0].visible, false);
+});
+
+test('side by side layouts leave most of the frame to the screen and keep the last corner', () => {
+  const clip = { props: {}, kf: { layout: [[0, 3], [1, 7], [2, 8], [3, 2]] } };
+  assert.deepEqual(cameraRectAt(clip, 1.5, 1920, 1080), { x: 27, y: 252, w: 576, h: 576, r: 576 * 0.06, a: 1 });
+  assert.deepEqual(screenAreaAt(clip, 1.5, 1920, 1080), { x: 630, y: 27, w: 1263, h: 1026, r: 0, a: 1 });
+  assert.equal(cameraRectAt(clip, 2.5, 1920, 1080).x, 1317);
+  assert.equal(screenAreaAt(clip, 2.5, 1920, 1080).x, 27);
+  // Screen only after 8 hides the camera in the corner from before (3), not at 8.
+  const hidden = cameraRectAt(clip, 3.5, 1920, 1080);
+  assert.equal(hidden.a, 0);
+  assert.ok(hidden.x < 100 && hidden.y < 100);
+  assert.deepEqual(screenAreaAt(clip, 3.5, 1920, 1080), { x: 0, y: 0, w: 1920, h: 1080, r: 0, a: 1 });
+});
+
+test('side layout template follows the recording: width and shape reach camera and screen', () => {
+  const media = { rec: { pip: { sideSize: 40, sideShape: 'circle' } } };
+  const clip = { props: defaultProps('recording', media), kf: { layout: [[0, 6], [5, 7]] } };
+  const camera = cameraRectAt(clip, 6, 1920, 1080);
+  assert.equal(camera.w, 768);
+  assert.equal(camera.h, 768);
+  assert.equal(camera.r, 384);
+  assert.equal(camera.y, 156);
+  assert.equal(screenAreaAt(clip, 6, 1920, 1080).w, 1920 - 768 - 81);
+
+  const wide = pipRect(8, 6, 1920, 1080, 'medium', 'rect', { size: 30, shape: 'rect' });
+  assert.equal(wide.h, wide.w * 9 / 16);
+});
+
+test('side camera never outgrows a wide frame, and the screen takes what is left', () => {
+  const side = { size: 50, shape: 'square' };
+  const camera = pipRect(7, 6, 3000, 600, 'medium', 'rect', side);
+  assert.equal(camera.w, 570);
+  assert.equal(camera.h, 570);
+  const screen = screenArea(7, 3000, 600, side);
+  assert.equal(screen.x, camera.x + camera.w + 15);
+  assert.equal(screen.x + screen.w, 3000 - 15);
 });

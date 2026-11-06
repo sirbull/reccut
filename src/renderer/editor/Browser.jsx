@@ -1,6 +1,8 @@
 // Bibliotek med medier, titler, overganger, effekter og undertekster, som i Final Cut Pro.
 // Forhåndsvisningene tegnes med den ekte tegnemotoren, så de ser ut akkurat som resultatet.
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { modelAction, useSubtitleModels } from '../subtitleModels.js';
+import { SubtitleModelManager } from '../SubtitleModels.jsx';
 import {
   Blend,
   Captions,
@@ -78,7 +80,8 @@ export function Browser() {
 function dragData(e, item) {
   if (item.kind === 'media') {
     const ids = item.ids || [item.id];
-    item = { ...item, clips: ids.map((id) => ({ id, opts: commands.browserClipOpts(project.value.media[id], ids.length === 1) })) };
+    const media = project.value.media[item.id || ids[0]];
+    item = { ...item, label: media?.name, mediaKind: media?.kind, clips: ids.map((id) => ({ id, opts: commands.browserClipOpts(project.value.media[id], ids.length === 1) })) };
   }
   startLibraryDrag(e, item);
 }
@@ -145,7 +148,7 @@ function MediaTab() {
         if (e.defaultPrevented) return;
         e.preventDefault();
         const id = await api.popupMenu([
-          { id: 'sequence', label: 'New Sequence', accelerator: 'Alt+CmdOrCtrl+N' },
+          { id: 'sequence', label: 'New Sequence…', accelerator: 'Alt+CmdOrCtrl+N' },
           { id: 'import', label: 'Import Media…', accelerator: 'CmdOrCtrl+I' },
         ]);
         if (id === 'sequence') commands.newSequence();
@@ -767,7 +770,8 @@ function TitlesTab() {
   const custom = Object.values(project.value.templates || {}).map((t) => ({ id: t.id, label: t.name, category: 'Custom', props: { template: t.id, ...templateDefaults(t) } }));
   const groups = [
     ['Lower Thirds', TITLE_TEMPLATES.filter((t) => t.category === 'Lower Thirds')],
-    ['Titles', TITLE_TEMPLATES.filter((t) => t.category !== 'Lower Thirds')],
+    ['Titles', TITLE_TEMPLATES.filter((t) => !['Lower Thirds', 'Backgrounds'].includes(t.category))],
+    ['Backgrounds', TITLE_TEMPLATES.filter((t) => t.category === 'Backgrounds')],
     ['Custom', custom],
   ];
   return (
@@ -1062,7 +1066,8 @@ function CaptionsTab() {
     .filter((c) => c.lane === CAPTION_LANE)
     .sort((a, b) => a.start - b.start);
   const [lang, setLang] = useState(localStorage.getItem('captionLang') || 'english');
-  const [model, setModel] = useState(localStorage.getItem('captionModel') || 'base');
+  const models = useSubtitleModels();
+  const [manageModels, setManageModels] = useState(false);
   const running = tasks.value.find((t) => t.kind === 'transcribe' && (t.state === 'running' || t.state === 'queued'));
   const maxLines = p.captionStyle?.maxLines || 3;
 
@@ -1071,9 +1076,10 @@ function CaptionsTab() {
     if (!sources.length) return toast('There is no audio on the timeline to transcribe.');
     if (caps.length && !confirm('Replace the existing captions with new ones?')) return;
     localStorage.setItem('captionLang', lang);
-    localStorage.setItem('captionModel', model);
-    await api.startTranscribe({ sources, duration: p.duration, language: lang, model, projectId: p.id });
-    toast('Transcribing in the background. The speech model is downloaded the first time.');
+    try {
+      await api.startTranscribe({ sources, duration: p.duration, language: lang, projectId: p.id });
+      toast('Transcribing locally in the background.');
+    } catch (e) { toast(e.message, { kind: 'error' }); }
   };
 
   const importFile = async () => {
@@ -1108,14 +1114,14 @@ function CaptionsTab() {
         <div class="auto-row">
           <Select value={lang} options={LANGS} onChange={setLang} />
           <Select
-            value={model}
-            options={[
-              { value: 'base', label: 'Fast' },
-              { value: 'small', label: 'Accurate' },
-            ]}
-            onChange={setModel}
+            value={models?.active || ''}
+            options={models?.models.some(m => m.usable) ? models.models.filter(m => m.usable).map(m => ({ value: m.id, label: m.name })) : [{ value: '', label: 'Install a subtitle model' }]}
+            onChange={id => modelAction('selectSubtitleModel', id)}
+            disabled={!models?.models.some(m => m.usable)}
           />
         </div>
+        <Button onClick={() => setManageModels(true)}>Manage Models</Button>
+        {manageModels && <SubtitleModelManager state={models} onClose={() => setManageModels(false)} />}
         <Button variant="primary" icon={Sparkles} disabled={Boolean(running)} onClick={generate}>
           {running ? `Transcribing ${Math.round((running.progress || 0) * 100)} %` : 'Generate captions'}
         </Button>

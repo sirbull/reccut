@@ -1,5 +1,7 @@
+import { paintPattern, patternFromClip } from './designPattern.js';
 // Tegner ett bilde av prosjektet. Samme kode brukes i forhåndsvisning og eksport,
 // så det du ser i redigeringen er det som havner i filen.
+import { containRect, followed } from './follow.js';
 import { gpuGradeAvailable, gradeImage, gradeParams } from './grade.js';
 import { shadowStyle } from './shadow.js';
 import { applyVideoEffects } from './videoEffectsRender.js';
@@ -11,6 +13,7 @@ import { clipMatrix, maskList, paintMask, shapeAt, shapeCorners, shapePath } fro
 import {
   DEFAULT_CAPTION_STYLE,
   FONTS,
+  canMotionBlur,
   clamp,
   clicksAt,
   cursorAt,
@@ -93,20 +96,72 @@ function drawVisualSide(ctx, project, side, getSource, alpha = 1) {
 function drawTransition(ctx, project, layer, getSource, transparent = false) {
   const W = project.width;
   const H = project.height;
-  const { p } = layer.transition;
+  const { p, motionBlur, dur } = layer.transition;
   // ponytail: over andre spor blir dip en vanlig toning, ellers ville svart/hvitt dekke sporene under.
   const type = layer.overlay && layer.transition.type.startsWith('dip') ? 'dissolve' : layer.transition.type;
-  const drawSide = (side, alpha) => {
-    if (side) return drawVisualSide(ctx, project, side, getSource, alpha);
+  const drawSide = (g, side, alpha = 1) => {
+    if (side) return drawVisualSide(g, project, side, getSource, alpha);
     if (layer.overlay || transparent) return;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
-    ctx.restore();
+    g.save();
+    g.globalAlpha = alpha;
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, W, H);
+    g.restore();
   };
-  const A = (alpha = 1) => drawSide(layer.a, alpha);
-  const B = (alpha = 1) => drawSide(layer.b, alpha);
+  if (motionBlur && [layer.a, layer.b].every((side) => !side || canMotionBlur(type, side.clip))) {
+    return drawMotionBlur(ctx, W, H, type, p, SHUTTER / (project.fps * dur), (g, key) => drawSide(g, layer[key]));
+  }
+  paintTransition(ctx, W, H, type, p, (alpha) => drawSide(ctx, layer.a, alpha), (alpha) => drawSide(ctx, layer.b, alpha));
+}
+
+// Andel av et bilde lukkeren står åpen: 180 grader, som på et filmkamera.
+const SHUTTER = 0.5;
+
+// Punktene i overgangen som snittes for ett bilde, midt rundt p. span er lukkertiden
+// som andel av overgangen, og size lengste kant i piksler. Antallet følger hvor langt bildet
+// flytter seg, så trege overganger og liten forhåndsvisning koster lite.
+export function shutterSamples(p, span, size) {
+  const n = clamp(Math.ceil((span * 2 * size) / 3), 2, 32);
+  return Array.from({ length: n }, (_, i) => clamp(p + span * ((i + 0.5) / n - 0.5), 0, 1));
+}
+
+// Kildene står stille innenfor ett bilde, så hver side tegnes bare én gang.
+function drawMotionBlur(ctx, W, H, type, p, span, drawSide) {
+  const m = ctx.getTransform();
+  const w = Math.max(1, Math.round(W * m.a));
+  const h = Math.max(1, Math.round(H * m.d));
+  const side = (i, key) => {
+    const { c, g } = scratchCanvas(i, w, h);
+    g.setTransform(w / W, 0, 0, h / H, 0, 0);
+    drawSide(g, key);
+    return c;
+  };
+  const a = side(11, 'a');
+  const b = side(12, 'b');
+  const { c: sample, g: sg } = scratchCanvas(13, w, h);
+  const { c: mean, g: mg } = scratchCanvas(14, w, h);
+  const image = (c) => (alpha = 1) => {
+    sg.globalAlpha = alpha;
+    sg.drawImage(c, 0, 0, W, H);
+    sg.globalAlpha = 1;
+  };
+  shutterSamples(p, span, Math.max(w, h)).forEach((t, i) => {
+    sg.setTransform(1, 0, 0, 1, 0, 0);
+    sg.clearRect(0, 0, w, h);
+    sg.setTransform(w / W, 0, 0, h / H, 0, 0);
+    paintTransition(sg, W, H, type, t, image(a), image(b));
+    // Løpende snitt av premultipliserte piksler, så gjennomsiktige områder stemmer. Å legge
+    // sammen bilder med 1/n styrke ville gitt synlige bånd i myke gradienter.
+    mg.globalAlpha = 1 / (i + 1);
+    mg.globalCompositeOperation = 'destination-out';
+    mg.fillRect(0, 0, w, h);
+    mg.globalCompositeOperation = 'lighter';
+    mg.drawImage(sample, 0, 0);
+  });
+  ctx.drawImage(mean, 0, 0, W, H);
+}
+
+function paintTransition(ctx, W, H, type, p, A, B) {
   const e = easeInOut(p);
   switch (type) {
     case 'dip':
@@ -331,14 +386,9 @@ function applyTemperature(ctx, clip, T, rect) {
   ctx.restore();
 }
 
-function containRect(sw, sh, W, H) {
-  const s = Math.min(W / sw, H / sh);
-  const w = sw * s;
-  const h = sh * s;
-  return { x: (W - w) / 2, y: (H - h) / 2, w, h };
-}
-
 export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmasked = false) {
+  // Levende kobling til et spor: klippet tegnes der objektet er nå.
+  clip = followed(project, clip, T);
   const W = project.width;
   const H = project.height;
   const alpha = visualOpacity(clip, T) * alphaMul;
@@ -406,7 +456,10 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmaske
   } else if (clip.type === 'recording' && media) {
     drawRecording(ctx, project, clip, media, T, s, getSource);
   } else if (clip.type === 'title') {
-    if (clip.props.template) {
+    if (clip.props.patternKind) {
+      ctx.fillStyle = valueAt(clip, 'patternBackground', T) || '#182133'; ctx.fillRect(0, 0, W, H);
+      paintPattern(ctx, patternFromClip(clip, T, valueAt), W, H);
+    } else if (clip.props.template) {
       // Malbasert tittel: inn- og ut-animasjonen følger starten og slutten på klippet.
       const tpl = findTemplate(clip.props.template, project.templates || {});
       if (tpl) drawTemplate(ctx, tpl, T - clip.start, clip.dur, W, H, clip.props);
@@ -528,6 +581,8 @@ function drawRedact(ctx, clip, T, W, H, alpha) {
   const src = ctx.canvas;
   const { block, blur } = redactStrength(pr.amount, H);
   const { c: P, g } = scratchCanvas(0, bw, bh);
+  let sw = 0;
+  let sh = 0;
   if (mode === 'solid') {
     g.fillStyle = pr.color || '#000';
     g.fillRect(0, 0, bw, bh);
@@ -550,8 +605,8 @@ function drawRedact(ctx, clip, T, W, H, alpha) {
     // Pikselering (og frostet glass: mindre blokker som gjøres myke).
     const frosted = mode === 'frosted';
     const blk = Math.max(2, block * k * (frosted ? 0.6 : 1));
-    const sw = Math.max(1, Math.ceil(bw / blk));
-    const sh = Math.max(1, Math.ceil(bh / blk));
+    sw = Math.max(1, Math.ceil(bw / blk));
+    sh = Math.max(1, Math.ceil(bh / blk));
     const { c: S, g: sg } = scratchCanvas(1, sw, sh);
     sg.imageSmoothingQuality = 'high';
     sg.drawImage(src, bx, by, bw, bh, 0, 0, sw, sh);
@@ -560,23 +615,48 @@ function drawRedact(ctx, clip, T, W, H, alpha) {
     g.drawImage(S, 0, 0, sw, sh, 0, 0, bw, bh);
     g.filter = 'none';
   }
-  // Masken: formen (eller alt utenfor den), med myk kant om ønsket.
-  g.setTransform(1, 0, 0, 1, -bx, -by);
-  g.globalCompositeOperation = pr.invert ? 'destination-out' : 'destination-in';
-  if (feather > 0.5) g.filter = `blur(${(feather / 2).toFixed(1)}px)`;
-  g.fillStyle = '#000';
-  if (geom.shape !== 'full') g.fill(devPath);
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.filter = 'none';
-  g.globalCompositeOperation = 'source-over';
-  // Masker på effekten (tegnet med pennen eller som former): bare der virker den.
-  if (maskList(clip).length) {
-    const { c: Mk, g: mg } = scratchCanvas(2, cw, ch);
-    paintMask(mg, clip, T, W, H, m, cw, ch);
+  // Masken: formen (eller alt utenfor den), med myk kant om ønsket, og maskene på effekten
+  // (tegnet med pennen eller som former): bare der virker den.
+  const cut = (t, soft) => {
+    t.setTransform(1, 0, 0, 1, -bx, -by);
+    t.globalCompositeOperation = pr.invert ? 'destination-out' : 'destination-in';
+    if (soft > 0.5) t.filter = `blur(${(soft / 2).toFixed(1)}px)`;
+    t.fillStyle = '#000';
+    if (geom.shape !== 'full') t.fill(devPath);
+    t.setTransform(1, 0, 0, 1, 0, 0);
+    t.filter = 'none';
+    t.globalCompositeOperation = 'source-over';
+    if (maskList(clip).length) {
+      const { c: Mk, g: mg } = scratchCanvas(2, cw, ch);
+      paintMask(mg, clip, T, W, H, m, cw, ch);
+      t.globalCompositeOperation = 'destination-in';
+      t.drawImage(Mk, bx, by, bw, bh, 0, 0, bw, bh);
+      t.globalCompositeOperation = 'source-over';
+    }
+  };
+  if (mode === 'pixelate' && pr.wholeBlocks && sw) {
+    // Hele blokker: masken regnes per blokk, så blokkene langs kanten ikke kuttes. En blokk er med
+    // når litt av den er innenfor, så kanten kan gå litt utenfor formen, men ikke innenfor.
+    const { c: M, g: mg } = scratchCanvas(3, bw, bh);
+    mg.fillStyle = '#000';
+    mg.fillRect(0, 0, bw, bh);
+    cut(mg, 0);
+    const { c: Q, g: qg } = scratchCanvas(1, sw, sh);
+    qg.imageSmoothingQuality = 'high';
+    qg.drawImage(M, 0, 0, bw, bh, 0, 0, sw, sh);
+    const d = qg.getImageData(0, 0, sw, sh);
+    // ponytail: terskelen 10/255 tar med blokker med noen få prosent av formen, men ikke naboene
+    // som bare får litt fra nedskaleringen.
+    for (let i = 3; i < d.data.length; i += 4) d.data[i] = d.data[i] > 10 ? 255 : 0;
+    qg.putImageData(d, 0, 0);
     g.globalCompositeOperation = 'destination-in';
-    g.drawImage(Mk, bx, by, bw, bh, 0, 0, bw, bh);
+    g.imageSmoothingEnabled = false;
+    if (feather > 0.5) g.filter = `blur(${(feather / 2).toFixed(1)}px)`;
+    g.drawImage(Q, 0, 0, sw, sh, 0, 0, bw, bh);
+    g.filter = 'none';
+    g.imageSmoothingEnabled = true;
     g.globalCompositeOperation = 'source-over';
-  }
+  } else cut(g, feather);
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = alpha;
@@ -668,7 +748,7 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
       ctx.globalAlpha *= rect.a;
       drawWithEffects(ctx, clip, T, rect, H, (ctx) => {
         ctx.filter = colorFilter(clip, T, H, 'camera');
-        drawCamera(ctx, src.img, src.w, src.h, rect, clip.props.mirror, rect.w < W * 0.9 && !(valueAt(clip, 'shadow', T) > 0));
+        drawCamera(ctx, src.img, src.w, src.h, rect, clip.props.mirror, rect.h < H * 0.9 && !(valueAt(clip, 'shadow', T) > 0));
       });
       if (side > 0.001) drawSideFrame(ctx, sp, rect, side, H);
       ctx.restore();

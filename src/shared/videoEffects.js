@@ -50,6 +50,7 @@ export const VIDEO_EFFECTS = [
       similarity: 0.12,
       softness: 0.12,
       despill: 0.7,
+      motionBlur: 0,
       detail: 0,
       shadows: 0,
       shadowRange: 0.25,
@@ -145,7 +146,7 @@ export function keyAlpha(c, effect, reference = null) {
     distance = Math.hypot(a[0] - b[0], a[1] - b[1]);
   }
   let a = smooth(p.similarity, p.similarity + Math.max(0.0001, p.softness), distance);
-  if (effect.type === 'chroma' && (p.detail > 0 || p.shadows > 0)) {
+  if (effect.type === 'chroma' && (p.detail > 0 || p.shadows > 0 || p.motionBlur > 0)) {
     const key = rgb(p.color);
     const channel = key.indexOf(Math.max(...key));
     const others = [0, 1, 2].filter((i) => i !== channel);
@@ -153,6 +154,9 @@ export function keyAlpha(c, effect, reference = null) {
     // Recover fractional coverage in dark hair mixed with the screen color.
     const detail = excess(key) > 0.001 ? clamp(1 - excess(c) / excess(key)) : 0;
     a = Math.max(a, detail * clamp(p.detail));
+    // Motion blur: a blurred edge is a linear mix of subject and screen. The colour difference matte
+    // follows that mix, so the edge stays translucent instead of turning opaque too early.
+    if (excess(key) > 0.001) a -= (a - Math.min(a, 1 - clamp(excess(c) / excess(key)))) * clamp(p.motionBlur);
     // Darker screen-colored pixels become translucent shadows rather than opaque screen patches.
     const shadow = p.shadows > 0 ? screenShadow(c, p) : { coverage: 0, weight: 0 };
     a += (shadow.coverage - a) * shadow.weight;
@@ -214,7 +218,7 @@ export function keyPixels(data, width, height, effect, reference = null) {
     if (effect.type === 'chroma') {
       const key = rgb(p.color);
       const shadow = p.shadows > 0 ? screenShadow(c, p) : { weight: 0 };
-      const amount = Math.max(clamp(p.edgeColor), shadow.weight);
+      const amount = Math.max(clamp(p.edgeColor), clamp(p.motionBlur), shadow.weight);
       const restored = c.map((v, j) => v + (clamp((v - (1 - coverage) * key[j]) / Math.max(0.01, coverage)) - v) * amount);
       removeSpill(restored, effect).forEach((v, j) => (out[i * 4 + j] = v * 255));
     }

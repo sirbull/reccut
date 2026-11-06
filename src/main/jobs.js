@@ -162,6 +162,13 @@ function runInWorker(kind, payload, ctx) {
     if (win.webContents.isLoading()) win.webContents.once('did-finish-load', sendJob);
     else sendJob();
     ctx?.setCancel(() => {
+      if (kind === 'transcribe') {
+        // Interrupt inference and release its WASM/GPU memory immediately.
+        pending.delete(jobId);
+        reject(new Error('Canceled'));
+        if (!win.isDestroyed()) win.destroy();
+        return;
+      }
       if (!win.isDestroyed()) win.webContents.send('worker:cancel', jobId);
     });
   });
@@ -185,4 +192,10 @@ function destroyWorkers() {
   for (const w of Object.values(workers)) if (w && !w.isDestroyed()) w.destroy();
 }
 
-module.exports = { add, cancel, clearFinished, onChange, snapshot, runInWorker, destroyWorkers };
+function unloadTranscription() {
+  if ([...pending.values()].some(p => p.kind === 'transcribe')) return;
+  const win = workers.transcribe;
+  if (win && !win.isDestroyed()) win.destroy();
+}
+
+module.exports = { add, cancel, clearFinished, onChange, snapshot, runInWorker, destroyWorkers, unloadTranscription };

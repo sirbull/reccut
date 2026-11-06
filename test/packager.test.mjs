@@ -175,3 +175,27 @@ test('recording packages copy synced audio outside the recording folder and rema
   assert.ok(saved.media.r.streams.sync.path.startsWith(result.root));
   assert.ok(saved.media.r.streams.screen.path.startsWith(saved.media.r.path));
 });
+
+test('Design packaging copies originals, external assets, frames and cutouts, and reports fonts', async (t) => {
+  const { designFiles, reduceProject } = await import('../src/shared/package.js');
+  const { dir, packager } = setup(t), p = newProject('Designed');
+  for (const [id, sub] of [['copied','Assets'], ['frame','Frames'], ['mask','Cutouts'], ['external','outside'], ['unused','Assets']]) {
+    const file = path.join(dir, ...(sub === 'outside' ? ['outside'] : ['Original','Designs',sub]), `${id}.png`);
+    fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, id);
+    p.designAssets[id] = { id, name: `${id}.png`, path: file, origin: id === 'frame' ? 'frame' : 'placed' };
+  }
+  const editImage = path.join(dir,'edit.png'); fs.writeFileSync(editImage, 'edit image');
+  p.media.photo = { id: 'photo', kind: 'image', name: 'Photo', path: editImage, streams: { main: { path: editImage } } };
+  p.designs.d = { layers: [{ type: 'image', asset: 'copied', cutout: { asset: 'mask' } }, { type: 'image', asset: 'external' }, { type: 'image', asset: 'frame' }, { type: 'image', media: 'photo' }, { type: 'text', font: 'Impact', textStyles:[{start:0,end:4,style:{font:'Georgia'}}] }] };
+  const reduced = reduceProject(p, { removeUnused: true });
+  const result = await packager.packageProject({ project: reduced.project, files: mediaFiles(reduced.project), designFiles: designFiles(reduced.project), dest: dir, name: 'Package', removed: reduced.removed }, context());
+  const saved = JSON.parse(fs.readFileSync(result.file,'utf8'));
+  assert.equal(saved.designAssets.unused, undefined); assert.ok(saved.media.photo);
+  for (const [id, a] of Object.entries(saved.designAssets)) { assert.ok(a.path.startsWith(result.root + path.sep)); assert.equal(fs.readFileSync(a.path,'utf8'), id); assert.equal(a.copied,true); assert.ok(a.rel.startsWith('Designs' + path.sep)); }
+  assert.ok(saved.designAssets.frame.path.includes(path.join('Designs','Frames'))); assert.ok(saved.designAssets.mask.path.includes(path.join('Designs','Cutouts'))); assert.ok(saved.designAssets.external.path.includes(path.join('Designs','Assets')));
+  assert.equal(fs.readFileSync(saved.media.photo.path,'utf8'),'edit image');
+  const report = fs.readFileSync(path.join(result.root,'Package Report.txt'),'utf8'); assert.match(report,/Design files:/); assert.match(report,/Fonts used in designs:[\s\S]*Impact/);
+  assert.match(report,/Georgia/); assert.match(report,/Fonts are not copied/);
+  fs.rmSync(path.join(dir,'Original'), { recursive: true }); fs.rmSync(path.join(dir,'outside'), { recursive: true }); fs.unlinkSync(editImage);
+  for (const a of Object.values(saved.designAssets)) assert.ok(fs.existsSync(a.path));
+});

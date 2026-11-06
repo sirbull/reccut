@@ -10,12 +10,12 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
-    "postinstall": "node scripts/fetch-ffmpeg.mjs",
+    "postinstall": "node scripts/fetch-ffmpeg.mjs && node scripts/fetch-models.mjs",
     "start": "node scripts/start.mjs",
-    "dist": "node scripts/fetch-ffmpeg.mjs && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --publish never",
-    "dist:mac": "node scripts/fetch-ffmpeg.mjs && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --mac --publish never",
-    "dist:win": "node scripts/fetch-ffmpeg.mjs win-x64 && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --win --publish never",
-    "dist:linux": "node scripts/fetch-ffmpeg.mjs linux-x64 && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --linux --x64 --publish never",
+    "dist": "node scripts/fetch-ffmpeg.mjs && node scripts/build-braw.mjs && node scripts/fetch-models.mjs && node scripts/build.mjs && electron-builder --publish never",
+    "dist:mac": "node scripts/fetch-ffmpeg.mjs && node scripts/build-braw.mjs && node scripts/fetch-models.mjs && node scripts/build.mjs && electron-builder --mac --publish never",
+    "dist:win": "node scripts/fetch-ffmpeg.mjs win-x64 && node scripts/build-braw.mjs && node scripts/fetch-models.mjs && node scripts/build.mjs && electron-builder --win --publish never",
+    "dist:linux": "node scripts/fetch-ffmpeg.mjs linux-x64 && node scripts/build-braw.mjs && node scripts/fetch-models.mjs && node scripts/build.mjs && electron-builder --linux --x64 --publish never",
     "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
@@ -39,10 +39,12 @@
     ],
     "files": [
       "build/**/*",
+      "!build/licenses/**/*",
       "src/main/**/*",
       "assets/reccut-wordmark.svg",
       "src/shared/pluginTerms.json",
       "src/shared/recordingFormats.cjs",
+      "src/shared/stockSources.cjs",
       "package.json"
     ],
     "icon": "assets/icon.png",
@@ -95,12 +97,35 @@
     },
     "extraResources": [
       {
+        "from": "build/licenses",
+        "to": "licenses"
+      },
+      {
+        "from": "vendor/subtitle-models/whisper-base",
+        "to": "subtitle-models/whisper-base"
+      },
+      {
         "from": "vendor/ffmpeg/${os}-${arch}",
         "to": "ffmpeg"
       },
       {
         "from": "vendor/decoders",
         "to": "decoders"
+      },
+      {
+        "from": "vendor/models/jiabins0303/birefnet-lite-1024-webgpu",
+        "to": "models/jiabins0303/birefnet-lite-1024-webgpu"
+      },
+      {
+        "from": "vendor/models/studioludens/birefnet-lite-512",
+        "to": "models/studioludens/birefnet-lite-512",
+        "filter": [
+          "config.json",
+          "preprocessor_config.json",
+          "README.md",
+          "LICENSE",
+          "onnx/model.onnx"
+        ]
       }
     ],
     "npmRebuild": false,
@@ -117,7 +142,8 @@
         "description": "Reccut Plugin",
         "role": "Viewer"
       }
-    ]
+    ],
+    "beforePack": "scripts/before-pack.cjs"
   },
   "dependencies": {
     "immer": "^10.1.1",

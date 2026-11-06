@@ -41,7 +41,7 @@ export function groupsWithContent(src) {
     if (!groupApplies(g, src)) return false;
     const changed = Object.keys(src.props).some((k) => g.keys(k) && JSON.stringify(src.props[k]) !== JSON.stringify(defs[k] ?? (k === 'fx' || k === 'afx' || k === 'masks' ? [] : undefined)));
     const animated = Object.keys(src.kf || {}).some((k) => g.keys(k) && src.kf[k].length);
-    return changed || animated;
+    return changed || animated || Object.keys(src.expressions || {}).some(k => g.keys(k));
   }).map((g) => g.id);
 }
 
@@ -69,11 +69,13 @@ export function pasteAttributes(src, dst, groupIds, { stretch = false } = {}) {
     removeGroup(dst, g);
     for (const [k, v] of Object.entries(src.props)) if (g.keys(k)) dst.props[k] = deepClone(v);
     for (const [k, list] of Object.entries(src.kf || {})) if (g.keys(k) && list.length) dst.kf[k] = mapKeyframes(list, src, dst, stretch);
+    for (const [k, expression] of Object.entries(src.expressions || {})) if (g.keys(k)) { dst.expressions ||= {}; dst.expressions[k] = deepClone(expression); }
     // Opptak har eget volum for mikrofon og systemlyd; andre klipp bruker bare volume.
     if (g.id === 'volume' && dst.type !== 'recording') {
       for (const k of ['micVolume', 'sysVolume']) {
         delete dst.props[k];
         delete dst.kf[k];
+        if (dst.expressions) delete dst.expressions[k];
       }
     }
     // Nye id-er på lydeffektene, så avspillingen behandler dem som egne.
@@ -93,6 +95,7 @@ function removeGroup(clip, g) {
   if (g.id === 'afx') clip.props.afx = [];
   if (g.id === 'masks') clip.props.masks = [];
   if (g.id === 'stabilization') clip.props.stabilize = false;
+  for (const k of Object.keys(clip.expressions || {})) if (g.keys(k)) delete clip.expressions[k];
   for (const k of Object.keys(clip.kf || {})) if (g.keys(k)) delete clip.kf[k];
 }
 

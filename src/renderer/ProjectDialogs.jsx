@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'preact/hooks';
 import { FilePlus2, FolderOpen, FolderSearch, MoreHorizontal } from 'lucide-preact';
 import { PROJECT_TEMPLATES, formatDuration, sequenceList, timelines } from '../shared/model.js';
-import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, restoreProject, saveNow, saveProjectAs, sequenceSettingsOpen } from './editor/store.js';
+import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, renameProject, restoreProject, saveNow, saveProjectAs, sequenceSettingsOpen } from './editor/store.js';
 import { ProjectSettings } from './editor/Inspector.jsx';
+import { SequenceFormatSettings } from './editor/SequenceFormatSettings.jsx';
 import { prefs, setPrefs } from './prefs.js';
-import { mediaFiles, reduceProject, trimProject } from '../shared/package.js';
+import { designFiles, mediaFiles, reduceProject, trimProject } from '../shared/package.js';
 import * as commands from './editor/commands.js';
 import { Button, IconButton, Modal, Row, Toggle, toast } from './ui.jsx';
 
@@ -120,7 +121,7 @@ export function NewProjectDialog() {
 }
 
 // Fakta om det åpne prosjektet, øverst i prosjektlisten.
-function ProjectInfo() {
+function ProjectInfo({ onRenamed }) {
   const p = project.value;
   const seqs = sequenceList(p);
   const media = Object.values(p.media);
@@ -134,7 +135,31 @@ function ProjectInfo() {
   return (
     <div class="project-info">
       <div class="project-info-head">
-        <b>{p.name}</b>
+        {projectPath.value ? (
+          <input
+            class="project-name-input"
+            value={p.name}
+            title="Rename the project and its project file"
+            aria-label="Project name"
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') {
+                e.currentTarget.value = p.name;
+                e.currentTarget.blur();
+              }
+            }}
+            onChange={async (e) => {
+              const input = e.currentTarget;
+              const name = input.value.trim();
+              if (!name || name === p.name) return void (input.value = p.name);
+              if (await renameProject(name)) onRenamed();
+              else input.value = p.name;
+            }}
+          />
+        ) : (
+          <b>{p.name}</b>
+        )}
         {projectPath.value && (
           <Button variant="ghost" icon={FolderOpen} onClick={() => api.reveal(projectPath.value)}>
             {isMac ? 'Reveal in Finder' : 'Show in Explorer'}
@@ -227,7 +252,7 @@ export function ProjectsDialog() {
         </>
       }
     >
-      {!needsProject.value && <ProjectInfo />}
+      {!needsProject.value && <ProjectInfo onRenamed={load} />}
       <div class="project-list">
         {list === null && <p class="dim">Loading</p>}
         {list?.length === 0 && <p class="dim">No projects yet.</p>}
@@ -262,6 +287,7 @@ export function ProjectsDialog() {
    første klipp legges i et tomt prosjekt, og da har sekvensen allerede fått klippets format. */
 
 export function SequenceSettingsDialog() {
+  if (sequenceSettingsOpen.value.create) return <NewSequenceDialog />;
   const { mediaId } = sequenceSettingsOpen.value;
   const m = project.value.media[mediaId];
   const close = () => (sequenceSettingsOpen.value = null);
@@ -287,6 +313,39 @@ export function SequenceSettingsDialog() {
       <Row label="Ask when adding the first clip">
         <Toggle checked={prefs.value.askSequenceSettings} onChange={(v) => setPrefs({ askSequenceSettings: v })} />
       </Row>
+    </Modal>
+  );
+}
+
+function NewSequenceDialog() {
+  const [settings, setSettings] = useState(() => {
+    const p = project.value;
+    return { name: `Sequence ${sequenceList(p).length + 1}`, width: p.width, height: p.height, fps: p.fps, customFormat: p.customFormat };
+  });
+  const [error, setError] = useState('');
+  const close = () => (sequenceSettingsOpen.value = null);
+  const change = (mutator) => setSettings((previous) => {
+    const next = { ...previous };
+    mutator(next);
+    return next;
+  });
+  const create = () => {
+    try { commands.confirmNewSequence(settings); }
+    catch (err) { setError(err.message); }
+  };
+  return (
+    <Modal title="New Sequence" width={440} onClose={close} footer={<>
+      <Button variant="secondary" onClick={close}>Cancel</Button>
+      <Button variant="primary" onClick={create}>Create Sequence</Button>
+    </>}>
+      <Row label="Name" stacked>
+        <input class="text-input" value={settings.name} autoFocus
+          onInput={(e) => { const name = e.currentTarget.value; change((q) => (q.name = name)); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') create(); }} />
+      </Row>
+      <SequenceFormatSettings settings={settings} onChange={change} />
+      <p class="hint">Choose the format for the new sequence. You can change it later with File › Sequence Settings.</p>
+      {error && <p class="hint" role="alert">{error}</p>}
     </Modal>
   );
 }
@@ -378,7 +437,8 @@ export function PackageDialog() {
   const reduced = trimResult ? trimResult.project : reducedResult.project;
   const removed = { ...reducedResult.removed, trimmed: trimResult?.trimmed || [] };
   const files = mediaFiles(reduced, opts);
-  const paths = [...new Set(files.flatMap((f) => ([...(f.dir ? [f.dir] : []), ...f.sources.map((s) => s.path)])))];
+  const designs = designFiles(reduced);
+  const paths = [...new Set([...files.flatMap((f) => ([...(f.dir ? [f.dir] : []), ...f.sources.map((s) => s.path)])), ...designs.map((f) => f.path).filter(Boolean)])];
   // Kuttede deler tar omtrent sin andel av filen.
   const share = new Map();
   for (const f of files) for (const s of f.sources || []) if (s.trim) share.set(s.path, (share.get(s.path) || 0) + (s.trim.to - s.trim.from) / Math.max(0.1, s.trim.total || s.trim.to));
@@ -407,7 +467,7 @@ export function PackageDialog() {
   };
   const start = async () => {
     await saveNow();
-    await api.packageProject({ project: reduced, files, dest, name: name.trim() || project.value.name, removed });
+    await api.packageProject({ project: reduced, files, designFiles: designs, dest, name: name.trim() || project.value.name, removed });
     close();
     toast('Packaging started. Follow the progress at the top of the window.', { timeout: 4000 });
   };
@@ -445,7 +505,7 @@ export function PackageDialog() {
         </button>
       </Row>
       <div class="pkg-opts">
-        {check('removeUnused', 'Remove unused media', 'Media in the browser that is not used on the timeline is left out.')}
+        {check('removeUnused', 'Remove unused media', 'Media in the browser that is not used on a timeline or in a design is left out.')}
         {check('removeDisabled', 'Remove disabled clips', 'Clips that are switched off are removed. In the storyline they become gaps, so nothing moves.')}
         {check('removeOffAudio', 'Remove switched off audio', 'Synced audio that is switched off in every clip is left out.')}
         {check('removeHidden', 'Remove clips on hidden tracks', 'Clips on tracks you have hidden are removed.')}
@@ -461,7 +521,7 @@ export function PackageDialog() {
       </div>
       <div class="pkg-summary">
         <div>
-          <b>{files.length}</b> media, <b>{paths.length}</b> files and folders, {opts.trim ? 'estimated ' : ''}<b>{total === null ? '…' : fmtBytes(total)}</b>
+          <b>{files.length}</b> media, <b>{designs.length}</b> design assets, <b>{paths.length}</b> files and folders, {opts.trim ? 'estimated ' : ''}<b>{total === null ? '…' : fmtBytes(total)}</b>
         </div>
         <div class="muted">
           Removed: {removed.media.length} unused media, {removed.clips.length} clips, {removed.streams.length} audio tracks

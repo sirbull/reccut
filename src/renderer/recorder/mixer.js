@@ -22,8 +22,9 @@ export const meterPercent = (db) => Math.min(100, Math.max(0, (db + 60) / 60 * 1
 export const meterDb = (value) => Number.isFinite(value) && value > -90 ? `${value.toFixed(1)} dBFS` : '−∞ dBFS';
 export const EMPTY_LEVELS = Object.freeze({ input: -Infinity, output: -Infinity, rms: -Infinity, held: -Infinity, reduction: 0, spectrum: [] });
 
-export function createMicMixer(context, stream, initial) {
+export function createMicMixer(context, stream, initial, { channel = 'stereo', delay: delayMs = 0 } = {}) {
   const source = context.createMediaStreamSource(stream);
+  const splitter = context.createChannelSplitter(2);
   const input = context.createAnalyser();
   const gain = context.createGain();
   const highpass = context.createBiquadFilter();
@@ -40,9 +41,11 @@ export function createMicMixer(context, stream, initial) {
   compressor.attack.value = 0.008;
   compressor.release.value = 0.18;
   const output = context.createAnalyser();
+  const delay = context.createDelay(1);
+  delay.delayTime.value = delayMs / 1000;
   input.fftSize = output.fftSize = 2048;
   const destination = context.createMediaStreamDestination();
-  const nodes = [source, input, gain, highpass, ...filters, compressor, output, destination];
+  const nodes = [source, splitter, input, gain, highpass, ...filters, compressor, output, delay, destination];
   let highpassOn = null;
   // Bypass the high-pass filter completely in Flat mode.
   const set = (value) => {
@@ -62,8 +65,14 @@ export function createMicMixer(context, stream, initial) {
       highpassOn = mix.highpass;
     }
   };
-  source.connect(input).connect(gain);
-  filters[0].connect(filters[1]).connect(filters[2]).connect(compressor).connect(output).connect(destination);
+  // One channel fills both sides in the recording. A mono track has no second channel to pick.
+  const picked = { left: 0, right: 1 }[channel];
+  if (picked !== undefined && stream.getAudioTracks()[0]?.getSettings().channelCount >= 2) source.connect(splitter).connect(input, picked);
+  else source.connect(input);
+  // Mixes down here, and the recorded stream gets the same signal on both sides.
+  if (channel === 'mono') { gain.channelCount = 1; gain.channelCountMode = 'explicit'; }
+  input.connect(gain);
+  filters[0].connect(filters[1]).connect(filters[2]).connect(compressor).connect(output).connect(delay).connect(destination);
   set(initial);
   const inputData = new Float32Array(input.fftSize);
   const outputData = new Float32Array(output.fftSize);

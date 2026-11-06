@@ -97,3 +97,19 @@ test('a background image is loaded only when chosen, and packaging keeps it', ()
   delete p.media.bg;
   assert.equal(sideBackgroundMedia(p, camera), null);
 });
+
+test('width-based recordings keep the live camera geometry and source aspect in Edit', () => {
+  for (const layout of [7, 8]) for (const shape of ['circle', 'square', 'rect', 'portrait']) for (const width of [20, 40]) {
+    const { p, camera } = setup([[0, layout]]);
+    Object.assign(camera.props, { sideSize: width, sideShape: shape });
+    const result = recordingRectsAt(camera, 1, W, H, 16 / 10);
+    const live = pipRect(layout, 6, W, H, camera.props.pipSize, camera.props.pipShape, { size: width, shape });
+    assert.deepEqual(result.cam, live);
+    assert.ok(inside(result.screen));
+    assert.ok(Math.abs(result.screen.w / result.screen.h - 16 / 10) < 1e-9);
+    assert.ok(layout === 7 ? result.cam.x + result.cam.w < result.screen.x : result.screen.x + result.screen.w < result.cam.x);
+    assert.equal(layoutClipFor(p, Object.values(p.clips).find(c=>c.recordingPart==='screen'), 1), camera);
+    camera.props.sideSize = 'medium';
+    assert.deepEqual(recordingRectsAt(camera, 1, W, H, 16 / 10).cam, sideRects(layout, W, H, 16 / 10, shape, 'medium').cam);
+  }
+});

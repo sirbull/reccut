@@ -2,7 +2,7 @@
 // som i Final Cut Pro.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { memo } from 'preact/compat';
+import { createPortal, memo } from 'preact/compat';
 import {
   AudioLines,
   Captions,
@@ -57,10 +57,10 @@ import {
   valueAt,
   removeKeyframe,
 } from '../../shared/model.js';
-import { groupLead, groupMembers, moveClip, positionMove, positionTrim, recordingEditId, removeTransition, rollEdit, setTransition, slideClip, slipClip, splitClip, syncRecordingTracks, trimClip } from '../../shared/ops.js';
+import { groupLead, mediaClip, moveClip, positionMove, positionTrim, recordingEditId, removeTransition, rollEdit, setTransition, slideClip, slipClip, splitClip, syncRecordingTracks, trimClip } from '../../shared/ops.js';
 import {
   beginTransient,
-  commit,
+  commitClipEdit as commit,
   endTransient,
   getTime,
   getWave,
@@ -77,13 +77,18 @@ import {
   snapping,
   timeSig,
   tool,
-  updateTransient,
+  updateClipEdit as updateTransient,
   waveVersion,
   selectedComponent,
   busyMedia,
+  editingGroup,
+  enterGroup,
+  exitGroup,
+  inEditingGroup,
+  clipSelection,
 } from './store.js';
 import { fileUrl, scrubAudio, seek, showTimeline, sourceProject } from './playback.js';
-import { IconButton } from '../ui.jsx';
+import { Button, IconButton } from '../ui.jsx';
 import * as commands from './commands.js';
 import { prefs, setPrefs } from '../prefs.js';
 import { fadePath, formatVolumeDb, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from './volume.js';
@@ -361,6 +366,8 @@ export function Timeline() {
     const hit = el?.dataset.hit;
     const T = timeAt(e.clientX);
     const proj = project.value;
+    const hitClip = proj.clips[el?.dataset.clip || el?.dataset.id];
+    if (hitClip && !inEditingGroup(hitClip)) return;
 
     if (hit === 'ruler' || hit === 'marker') {
       if (hit === 'marker') {
@@ -454,12 +461,14 @@ export function Timeline() {
 
     if (e.metaKey || e.ctrlKey || e.shiftKey) {
       const set = new Set(selection.value);
-      set.has(clipId) ? set.delete(clipId) : set.add(clipId);
+      const ids = clipSelection(clipId, e.altKey);
+      const remove = ids.every((id) => set.has(id));
+      ids.forEach((id) => remove ? set.delete(id) : set.add(id));
       selection.value = [...set];
       return;
     }
-    // Et klikk velger hele gruppen. Option (Alt) velger bare ett klipp.
-    if (!selection.value.includes(clipId)) selection.value = e.altKey || clip.slideshowParent || clip.slideshowForeground ? [clipId] : groupMembers(proj, clipId);
+    // Inne i gruppen velges medlemmene som vanlige klipp.
+    if (!selection.value.includes(clipId)) selection.value = clipSelection(clipId, e.altKey);
     if (clip.type === 'caption' && (getTime() < clip.start || getTime() >= clip.start + clip.dur)) seek(clip.start);
 
     const base = { x: e.clientX, y: e.clientY, T, clip: deepClone(clip), moved: false };
@@ -570,7 +579,9 @@ export function Timeline() {
       for (const el of contentRef.current.querySelectorAll('[data-hit="clip"]')) {
         const b = el.getBoundingClientRect();
         const c = p.clips[el.dataset.clip];
-        if (c && !p.lanes?.[c.lane]?.locked && b.right - r.left > box.left && b.left - r.left < box.right && b.bottom - r.top > box.top && b.top - r.top < box.bottom) hits.add(c.id);
+        if (c && inEditingGroup(c) && !p.lanes?.[c.lane]?.locked && b.right - r.left > box.left && b.left - r.left < box.right && b.bottom - r.top > box.top && b.top - r.top < box.bottom) {
+          clipSelection(c.id, e.altKey).forEach((id) => hits.add(id));
+        }
       }
       if (hits.size !== selection.value.length || selection.value.some((id) => !hits.has(id))) selection.value = [...hits];
       return;
@@ -728,7 +739,7 @@ export function Timeline() {
         }
       } else {
         // Flere klipp: flytt bare de frie i tid. Klipp gruppert med et klipp i hovedsporet blir der videoen er.
-        const anchored = new Set(d.originalProject.primary.map((id) => d.originalProject.clips[id].group).filter(Boolean));
+        const anchored = new Set(d.originalProject.primary.map((id) => d.originalProject.clips[id].group).filter((g) => g && g !== editingGroup.value));
         updateTransient((p) => {
           for (const o of d.originals) if (o.lane !== 0 && !anchored.has(o.group) && p.clips[o.id]) p.clips[o.id].start = Math.max(0, o.start + dt);
           syncRecordingTracks(p);
@@ -761,6 +772,8 @@ export function Timeline() {
     e.preventDefault();
     const el = e.target.closest('[data-hit]');
     const clipId = el?.dataset.clip;
+    const hitClip = project.value.clips[clipId || el?.dataset.id];
+    if (hitClip && !inEditingGroup(hitClip)) return;
     if (el?.dataset.hit === 'marker') {
       const id = await window.api.popupMenu([{ id: 'del', label: 'Delete Marker' }]);
       if (id === 'del') commit((p) => (p.markers = p.markers.filter((m) => m.id !== el.dataset.id)));
@@ -795,7 +808,7 @@ export function Timeline() {
       return;
     }
     if (clipId) {
-      if (!selection.value.includes(clipId)) selection.value = [clipId];
+      if (!selection.value.includes(clipId)) selection.value = clipSelection(clipId);
       await commands.clipContextMenu(clipId, timeAt(e.clientX));
       return;
     }
@@ -813,7 +826,8 @@ export function Timeline() {
       if (skimRef.current) skimRef.current.style.display = 'none';
       const T = timeAt(e.clientX);
       const over = Object.values(project.value.clips).find((c) => c.lane === row.lane && c.type !== 'gap' && T >= c.start && T < c.start + c.dur)?.id;
-      if (hoverRef.current?.id !== over) hoverRef.current = { id: over, since: performance.now() };
+      // The first dragover may be over empty space, where both IDs are undefined.
+      if (!hoverRef.current || hoverRef.current.id !== over) hoverRef.current = { id: over, since: performance.now() };
       // dragover kommer hele tiden mens pekeren står stille, så ingen egen timer trengs.
       const held = over && performance.now() - hoverRef.current.since > REPLACE_HOLD_MS;
       const replace = held ? mediaDropPreview(project.value, item, row.lane, T, over) : [];
@@ -822,7 +836,7 @@ export function Timeline() {
         .map((clip) => ({ ...clip, row: rows.find((r) => r.lane === clip.lane) }))
         .filter((clip) => clip.row);
       e.dataTransfer.dropEffect = clips.length ? 'copy' : 'none';
-      setGhost(clips.length ? { kind: 'media', replace: replace.length > 0, clips } : null);
+      setGhost(clips.length ? { kind: 'media', replace: replace.length > 0, clips, pointer: { x: e.clientX, y: e.clientY } } : null);
     } else if (item && ['transition', 'effect', 'afx', 'apreset', 'frameFx', 'redact', 'adjustment'].includes(item.kind)) {
       skim.value = null;
       if (skimRef.current) skimRef.current.style.display = 'none';
@@ -863,6 +877,12 @@ export function Timeline() {
       showTimeline();
     }}>
       <TimelineToolbar />
+      {editingGroup.value && <div class="tl-group-edit" role="status">
+        <Link2 size={14} />
+        <b>Editing group</b>
+        <span>Select a clip to edit it. Esc to finish.</span>
+        <Button class="small" onClick={exitGroup}>Done</Button>
+      </div>}
       <VolumePreview />
       <div class="tl-body">
       <TrackHeaders rows={rows} p={p} scrollRef={scrollRef} />
@@ -872,6 +892,16 @@ export function Timeline() {
           ref={contentRef}
           style={{ width, height: height + RULER_H + 40 }}
           onPointerDown={onPointerDown}
+          onDblClick={(e) => {
+            if (tool.value !== 'select' && tool.value !== 'position') return;
+            // Pointer capture fra drag-håndteringen kan gjøre selve tidslinjen til e.target.
+            const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-hit]');
+            if (el?.dataset.hit === 'clip') {
+              const clip = project.value.clips[el.dataset.clip];
+              if (clip?.group && inEditingGroup(clip)) enterGroup(clip.id);
+            } else if (!el && editingGroup.value) exitGroup();
+            else if (!el && rowAt(e.clientY).kind === 'caption' && !project.value.lanes?.[CAPTION_LANE]?.locked) commands.addCaption(timeAt(e.clientX));
+          }}
           onPointerMove={onPointerMove}
           onPointerLeave={() => {
             if (bladeRef.current) bladeRef.current.style.display = 'none';
@@ -890,6 +920,7 @@ export function Timeline() {
           }}
           onDrop={onDrop}
         >
+          {ghost?.kind === 'media' && dragItem && <MediaDragPreview item={dragItem} ghost={ghost} media={p.media} z={z} />}
           <Ruler width={width} />
           {rangeEl}
           {marquee && <div class="tl-marquee" style={{ left: marquee.left, top: marquee.top, width: marquee.right - marquee.left, height: marquee.bottom - marquee.top }} />}
@@ -933,7 +964,7 @@ export function Timeline() {
                   data-hit="transition"
                   data-id={id}
                   data-edge={edge}
-                  class={`tl-transition${selectedTransition.value === transitionSelection(id, edge) ? ' selected' : ''}`}
+                  class={`tl-transition${selectedTransition.value === transitionSelection(id, edge) ? ' selected' : ''}${!inEditingGroup(p.clips[id]) ? ' group-outside' : ''}`}
                   style={{ left: tx(a), width: Math.max(10, (b - a) * z), top: row.y, height: h }}
                   title={`${label}, ${(b - a).toFixed(2)} s. Drag to move it, or drag the handles to change duration.`}
                 >
@@ -954,7 +985,7 @@ export function Timeline() {
               const row = rows.find((r) => r.lane === c.lane);
               if (!xf || !row) return null;
               return (
-                <div key={`ax${c.id}`} data-hit="axfade" data-id={c.id} class={`tl-axfade${selectedTransition.value === `ax:${c.id}` ? ' selected' : ''}`} title={`Audio crossfade, ${c.axfade.toFixed(2)} s`} style={{ left: tx(xf.a), width: Math.max(8, (xf.b - xf.a) * z), top: row.y + 2, height: row.h - 4 }}>
+                <div key={`ax${c.id}`} data-hit="axfade" data-id={c.id} class={`tl-axfade${selectedTransition.value === `ax:${c.id}` ? ' selected' : ''}${!inEditingGroup(c) ? ' group-outside' : ''}`} title={`Audio crossfade, ${c.axfade.toFixed(2)} s`} style={{ left: tx(xf.a), width: Math.max(8, (xf.b - xf.a) * z), top: row.y + 2, height: row.h - 4 }}>
                   <svg viewBox="0 0 100 40" preserveAspectRatio="none">
                     <path d="M0 4 C 50 4, 50 36, 100 36" />
                     <path d="M0 36 C 50 36, 50 4, 100 4" />
@@ -1177,7 +1208,7 @@ const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0,
   const visual = isVisual(clip) && !['title', 'redact', 'adjustment'].includes(clip.type);
   const busy = media ? busyMedia.value.get(media.id) : null;
   const colorTag = CLIP_COLORS.find((c) => c.id === clip.colorLabel);
-  const cls = ['tl-clip', `t-${clip.type}`, busy && 'busy', colorTag && 'labeled', selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped', media?.offline && 'offline', audioComponents(clip, media).length > 0 && audioComponents(clip, media).every((c) => c.off) && 'audio-off'].filter(Boolean).join(' ');
+  const cls = ['tl-clip', `t-${clip.type}`, !inEditingGroup(clip) && 'group-outside', busy && 'busy', colorTag && 'labeled', selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped', media?.offline && 'offline', audioComponents(clip, media).length > 0 && audioComponents(clip, media).every((c) => c.off) && 'audio-off'].filter(Boolean).join(' ');
   const label = clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? `${redactLabel(clip)} (redact)` : clip.type === 'caption' ? clip.props.text || 'Caption' : clip.name || media?.name || clip.type;
   const narrow = w < 24;
   const thumbStream = clip.recordingPart === 'camera' ? media?.streams?.camera : media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
@@ -1200,7 +1231,7 @@ const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0,
           {clip.ramp ? <span class="badge speed" title="Speed ramp">Ramp</span> : speed !== 1 && <span class="badge speed">{speed === 0 ? 'Freeze' : `${Math.round(speed * 100)}%`}</span>}
           {clip.solo && <span class="badge solo">S</span>}
           {clip.group && (
-            <span class="badge group" title="Grouped. Option click to select one clip.">
+            <span class="badge group" title="Grouped. Double click to edit the group. Option click to select one clip.">
               <Link2 size={9} strokeWidth={2.6} />
             </span>
           )}
@@ -1225,16 +1256,37 @@ const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0,
   );
 });
 
-function Filmstrip({ clip, stream, x, w, h, z, media }) {
-  const { left, width: vw } = view.value;
+// The native drag icon stays small; only the timeline shows a floating clip.
+// Keep it outside the scroller so it can follow the pointer above its target.
+function MediaDragPreview({ item, ghost, media, z }) {
+  const sources = item.clips || (item.ids || [item.id]).map((id) => ({ id }));
+  const source = sources[0];
+  const m = media[source?.id];
+  const clip = useMemo(() => m ? mediaClip(m, source.opts || {}) : null, [m, item]);
+  if (!clip || clip.type === 'audio') return null;
+  const stream = m.streams?.screen || m.streams?.main || m.streams?.camera;
+  const h = Math.max(54, Math.min(96, ghost.clips[0].row.h));
+  const w = Math.min(Math.max(48, clip.dur * z), Math.max(48, window.innerWidth - 24));
+  const left = Math.max(8, Math.min(window.innerWidth - w - 8, ghost.pointer.x - w + 12));
+  const top = Math.max(8, Math.min(window.innerHeight - h - 8, ghost.pointer.y - h - 18));
+  return createPortal(
+    <div class={`tl-clip t-${clip.type} media-drag-preview`} style={{ left, top, width: w, height: h }} aria-hidden="true">
+      <div class="clip-label"><span class="name">{m.name}</span>{sources.length > 1 && <span class="badge">+{sources.length - 1}</span>}</div>
+      <Filmstrip clip={clip} stream={stream} x={0} w={w} h={h - 18} z={w / clip.dur} media={m} viewport={{ left: 0, width: w }} />
+    </div>, document.body,
+  );
+}
+
+function Filmstrip({ clip, stream, x, w, h, z, media, viewport }) {
+  const { left, width: vw } = viewport || view.value;
   const tileW = Math.round((h * 16) / 9);
-  const files = stream.thumbs.files;
-  const interval = stream.thumbs.interval;
-  const offset = stream.offset || 0;
+  const files = media?.kind === 'image' ? [stream?.proxy || media.path].filter(Boolean) : stream?.thumbs?.files || [];
+  const interval = stream?.thumbs?.interval || 1;
+  const offset = stream?.offset || 0;
   const tiles = [];
   const from = Math.max(0, Math.floor((left - x) / tileW) - 1);
   const to = Math.min(Math.ceil(w / tileW), Math.ceil((left + vw - x) / tileW) + 1);
-  for (let i = from; i < to; i++) {
+  for (let i = from; files.length && i < to; i++) {
     const tSrc = sourceTime(clip, clip.start + ((i + 0.5) * tileW) / z) - offset;
     const idx = media?.kind === 'image' ? 0 : Math.max(0, Math.min(files.length - 1, Math.floor(tSrc / interval)));
     tiles.push(<img key={i} src={fileUrl(files[idx])} style={{ left: i * tileW, width: tileW, height: h }} draggable={false} />);
@@ -1390,7 +1442,7 @@ function AudioBand({ clip, row, media, z, selected }) {
   // Fargekoden følger med til lyddelen når den er utvidet.
   const colorTag = CLIP_COLORS.find((c) => c.id === clip.colorLabel);
   return (
-    <div class={`tl-audioband${selected ? ' selected' : ''}${colorTag ? ' labeled' : ''}`} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y + row.h - h, height: h, ...(colorTag ? { '--label': colorTag.color } : {}) }}>
+    <div class={`tl-audioband${selected ? ' selected' : ''}${colorTag ? ' labeled' : ''}${!inEditingGroup(clip) ? ' group-outside' : ''}`} data-hit="clip" data-clip={clip.id} style={{ left: x, width: w, top: row.y + row.h - h, height: h, ...(colorTag ? { '--label': colorTag.color } : {}) }}>
       {comps.length > 1 ? (
         // Én stripe per lydkomponent. Klikk velger komponenten, V slår den av og på.
         comps.map((c, i) => {

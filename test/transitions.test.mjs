@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newProject, makeClip, transitionWindow, computeFrame, computeAudio, transitionSelection, parseTransitionSelection, nearestEdit } from '../src/shared/model.js';
+import { newProject, makeClip, transitionWindow, computeFrame, computeAudio, transitionSelection, parseTransitionSelection, nearestEdit, canMotionBlur } from '../src/shared/model.js';
+import { shutterSamples } from '../src/shared/render.js';
 import { addMediaClip, removeTransition, setTransition, splitClip } from '../src/shared/ops.js';
 import { frameEffectPlacement, libraryDropTarget, resizedTransitionDuration } from '../src/shared/libraryDrop.js';
 
@@ -171,4 +172,27 @@ test('nearestEdit picks the cut, opening or closing edge closest to the playhead
   assert.deepEqual(nearestEdit(p, 15.9), { id: b, edge: 'end' }, 'playhead at the end of the last clip fades out');
   assert.deepEqual(nearestEdit(p, 30), { id: b, edge: 'end' });
   assert.equal(nearestEdit(newProject('Empty'), 3), null);
+});
+
+test('motion blur follows the transition to the renderer and survives a type change', () => {
+  const p = setup();
+  const b = p.primary[1];
+  setTransition(p, b, 'circle', 2);
+  p.clips[b].transition.motionBlur = true;
+  setTransition(p, b, 'wipe', 1);
+  const { transition } = computeFrame(p, 8).layers[0];
+  assert.equal(transition.motionBlur, true);
+  assert.equal(transition.dur, 1);
+  assert.equal(canMotionBlur('wipe', p.clips[b]), true);
+  assert.equal(canMotionBlur('dissolve', p.clips[b]), false, 'nothing moves in a dissolve');
+  assert.equal(canMotionBlur('wipe', { type: 'adjustment' }), false, 'effects read the picture below them');
+});
+
+test('shutter samples are centred on the frame, stay inside the transition and scale with travel', () => {
+  const mid = shutterSamples(0.5, 0.2, 1920);
+  assert.equal(mid.length, 32);
+  assert.ok(Math.abs(mid.reduce((a, b) => a + b) / mid.length - 0.5) < 1e-9);
+  assert.ok(Math.min(...mid) > 0.4 && Math.max(...mid) < 0.6);
+  assert.equal(shutterSamples(0.5, 0.001, 640).length, 2, 'a slow transition needs few samples');
+  assert.ok(shutterSamples(0, 0.2, 1920).every((t) => t >= 0 && t <= 0.1));
 });

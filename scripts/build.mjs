@@ -2,6 +2,7 @@
 import * as esbuild from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
+import { buildLicenses } from './build-licenses.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const out = path.join(root, 'build');
@@ -20,6 +21,8 @@ const common = {
 };
 
 const builds = [
+  { ...common, entryPoints: [path.join(root, 'src/shared/subtitleAudio.mjs')], outfile: path.join(out, 'subtitleAudio.cjs'), format: 'cjs', platform: 'node', target: 'node24' },
+  { ...common, entryPoints: [path.join(root, 'src/shared/designTemplates.js')], outfile: path.join(out, 'designTemplates.cjs'), format: 'cjs', platform: 'node', target: 'node24' },
   { ...common, entryPoints: [path.join(root, 'src/renderer/help/Handbook.jsx')], outfile: path.join(out, 'help.js'), format: 'esm', platform: 'browser' },
   { ...common, entryPoints: [path.join(root, 'src/renderer/app.jsx')], outfile: path.join(out, 'app.js'), format: 'esm', platform: 'browser' },
   {
@@ -32,15 +35,20 @@ const builds = [
   },
   // Lydeffektene i avspillingen (AudioWorklet).
   { ...common, entryPoints: [path.join(root, 'src/renderer/audiofx-worklet.js')], outfile: path.join(out, 'audiofx-worklet.js'), format: 'iife', platform: 'browser' },
+  { ...common, entryPoints: [path.join(root, 'src/worker/segment.js')], outfile: path.join(out, 'segment.js'), format: 'esm', platform: 'browser' },
   { ...common, entryPoints: [path.join(root, 'src/worker/transcribe.js')], outfile: path.join(out, 'transcribe.js'), format: 'esm', platform: 'browser' },
 ];
 
 function copyStatic() {
-  for (const f of ['index.html', 'help.html', 'export.html', 'transcribe.html']) {
+  for (const f of ['index.html', 'help.html', 'export.html', 'transcribe.html', 'segment.html']) {
     const src = fs.existsSync(path.join(root, 'src/renderer', f)) ? path.join(root, 'src/renderer', f) : path.join(root, 'src/worker', f);
     fs.copyFileSync(src, path.join(out, f));
   }
   fs.copyFileSync(path.join(root, 'src/renderer/help/handbook.css'), path.join(out, 'handbook.css'));
+  const licenses=path.join(root,'assets/licenses');
+  fs.cpSync(path.join(root,'assets/emoji'),path.join(out,'emoji'),{recursive:true});
+  if(fs.existsSync(licenses))fs.cpSync(licenses,path.join(out,'licenses'),{recursive:true});
+  buildLicenses({ root, out: path.join(out, 'licenses') });
   // Bilder til hjelpen.
   const help = path.join(root, 'assets/help');
   const helpOut = path.join(out, 'help');
@@ -56,7 +64,7 @@ function copyStatic() {
   const ortOut = path.join(out, 'ort');
   fs.mkdirSync(ortOut, { recursive: true });
   for (const f of fs.readdirSync(ort)) {
-    if (/^ort-wasm-simd-threaded(\.jsep)?\.(wasm|mjs)$/.test(f)) fs.copyFileSync(path.join(ort, f), path.join(ortOut, f));
+    if (/^ort-wasm-simd-threaded(\.(jsep|asyncify|jspi))?\.(wasm|mjs)$/.test(f)) fs.copyFileSync(path.join(ort, f), path.join(ortOut, f));
   }
 }
 

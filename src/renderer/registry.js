@@ -20,13 +20,25 @@ import {
   tool,
   undo,
   sequenceSettingsOpen,
+  editingGroup,
+  exitGroup,
 } from './editor/store.js';
 import * as commands from './editor/commands.js';
 import * as playback from './editor/playback.js';
 import { toast } from './ui.jsx';
 import { prefs, setPrefs } from './prefs.js';
 import { CLIP_COLORS, RAMP_PRESETS } from '../shared/model.js';
+import * as design from './design/store.js';
+import { quickExportPNG } from './design/export.js';
+import { removeBackground } from './design/cutout.js';
+import { startRefine, refineSession } from './design/refine.js';
+import { fillTextWithImage } from './design/masks.js';
+import { openSaveStyle, openSaveTemplate, importTemplate } from './design/library.js';
+import { feedPreview, showSafeZones, canFeedPreview, toggleFeedPreview, toggleSafeZones } from './design/tools.js';
+import { chooseImage, pasteImage, copyLayers } from './design/assets.js';
 import { toggleViewerFullscreen } from './editor/fullscreen.js';
+import { LAYOUTS, modifierInfo, settings as recordSettings } from './recorder/settings.js';
+import { addFiles, roomActions } from './export/state.js';
 
 const api = window.api;
 export const isMac = api.platform === 'darwin';
@@ -37,8 +49,21 @@ export const paletteOpen = signal(false);
 // Mens en ny hurtigtast tas opp i Settings, registrerer ikke menyen tastene, så alle tastetrykk når fram.
 export const recordingShortcut = signal(false);
 
+// Hvert rom har egne kommandoer og taster. ALL er bare det som gjelder hele appen: prosjekt, rom, innstillinger og hjelp.
+const RECORD = ['record'];
 const EDIT = ['edit'];
-const ALL = ['record', 'edit', 'export'];
+const EXPORT = ['export'];
+const DESIGN = ['design'];
+const EDIT_DESIGN = ['edit', 'design'];
+const ALL = ['record', 'edit', 'export', 'design'];
+
+export const inRoom = (cmd, r = room.value) => (cmd.rooms || EDIT).includes(r);
+
+// Opptakstastene registreres i hovedprosessen med modifikatoren fra Record (src/main/shortcuts.js). Her vises de bare.
+const recordCommand = (id, label, group, key, run, extra) => ({
+  id: `record:${id}`, label, menu: 'Record', group, rooms: RECORD, menuOnly: true, allowWhileTyping: true, help: 'recording', run, ...extra,
+  get keys() { return key && `${modifierInfo().value}+${key}`; },
+});
 
 function setTool(t) {
   tool.value = t;
@@ -54,6 +79,10 @@ function toggleSignal(sig, pref, on, off) {
 function deselectAll() {
   if (document.fullscreenElement) {
     toggleViewerFullscreen();
+    return;
+  }
+  if (editingGroup.value) {
+    exitGroup();
     return;
   }
   selection.value = [];
@@ -96,33 +125,33 @@ export const COMMANDS = [
   { id: 'history', label: 'Project History…', menu: 'File', keys: 'Shift+Alt+CmdOrCtrl+H', rooms: ALL, run: () => (commands.historyOpen.value = true), help: 'history', keywords: 'versions autosave auto save backup restore revert earlier older crash', desc: 'Go back to an earlier version of the project. Reccut saves a copy every few minutes and when you close it.' },
   { id: 'package', label: 'Package Project…', menu: 'File', keys: 'Alt+Shift+CmdOrCtrl+P', rooms: ALL, run: () => (commands.packageOpen.value = true), help: 'package', keywords: 'collect files archive reduce consolidate backup hand over export project media', desc: 'Copy the project and every file it uses into one folder, for archiving or handing over. Unused and disabled material can be left out.' },
   { id: 'revealProject', label: isMac ? 'Reveal Project in Finder' : 'Show Project in Explorer', menu: 'File', keys: 'Shift+CmdOrCtrl+R', rooms: ALL, run: () => projectPath.value && api.reveal(projectPath.value), help: 'projects' },
-  { id: 'newSequence', label: 'New Sequence', menu: 'File', group: 'sequence', keys: 'Alt+CmdOrCtrl+N', rooms: ALL, run: () => commands.newSequence(), help: 'projects', keywords: 'timeline add another version cut edit', desc: 'Add an empty timeline to the project. All sequences share the same media. Double click a sequence in the Media browser to open it.' },
-  { id: 'duplicateSequence', label: 'Duplicate Sequence', menu: 'File', group: 'sequence', rooms: ALL, run: () => commands.duplicateSequence(), help: 'projects', keywords: 'copy timeline version clone', desc: 'Make a copy of the open sequence and open it, for example to make a vertical or shorter version.' },
-  { id: 'sequenceSettings', label: 'Sequence Settings…', menu: 'File', group: 'sequence', keys: 'CmdOrCtrl+J', rooms: ALL, run: () => (sequenceSettingsOpen.value = {}), help: 'projects', keywords: 'project properties format resolution size frame rate fps width height aspect', desc: 'Change the size and frame rate of the open sequence. Clips scale to fit the new size.' },
-  { id: 'import', label: 'Import Media', menu: 'File', group: 'media', keys: 'CmdOrCtrl+I', register: true, rooms: ALL, run: () => ((room.value = 'edit'), commands.importDialog()), help: 'import', desc: 'Import video, audio and images. Choose to copy them into the project folder or leave them in place.' },
+  { id: 'newSequence', label: 'New Sequence…', menu: 'File', group: 'sequence', keys: 'Alt+CmdOrCtrl+N', run: () => commands.newSequence(), help: 'projects', keywords: 'timeline add another version cut edit', desc: 'Choose a name, resolution and frame rate, then create an empty timeline in the project. All sequences share the same media. Double click a sequence in the Media browser to open it.' },
+  { id: 'duplicateSequence', label: 'Duplicate Sequence', menu: 'File', group: 'sequence', run: () => commands.duplicateSequence(), help: 'projects', keywords: 'copy timeline version clone', desc: 'Make a copy of the open sequence and open it, for example to make a vertical or shorter version.' },
+  { id: 'sequenceSettings', label: 'Sequence Settings…', menu: 'File', group: 'sequence', keys: 'CmdOrCtrl+J', run: () => (sequenceSettingsOpen.value = {}), help: 'projects', keywords: 'project properties format resolution size frame rate fps width height aspect', desc: 'Change the size and frame rate of the open sequence. Clips scale to fit the new size.' },
+  { id: 'import', label: 'Import Media', menu: 'File', group: 'media', keys: 'CmdOrCtrl+I', register: true, run: () => commands.importDialog(), help: 'import', desc: 'Import video, audio and images. Choose to copy them into the project folder or leave them in place.' },
   { id: 'optimize', label: 'Optimize Media', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+O', run: () => commands.optimizeMedia(), help: 'optimize', desc: 'Convert the selected clips to a high quality format that is smooth to edit. Runs in the background.' },
   { id: 'syncAudio', label: 'Synchronize Audio', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+G', run: () => commands.autoSyncAudio(), help: 'sync', keywords: 'auto sync audio merge external microphone recorder', desc: 'In the browser: merge audio files into the video clips they belong to. On the timeline: place audio clips under the matching video.' },
   { id: 'removeSync', label: 'Remove Synchronized Audio', menu: 'File', group: 'media', keys: 'Shift+Alt+CmdOrCtrl+G', run: () => commands.removeSyncedAudio(), help: 'sync', desc: 'Remove merged audio from the selected clips and switch the camera audio back on.' },
   { id: 'importTemplate', label: 'Import Title Template', menu: 'File', group: 'media', keys: 'Shift+Alt+CmdOrCtrl+I', run: () => commands.importTitleTemplate(), help: 'templates', keywords: 'after effects reccut-title lower third custom' },
   { id: 'templateKit', label: 'Get the Template Kit', menu: 'Help', group: 'help', keys: 'Shift+Alt+CmdOrCtrl+K', rooms: ALL, run: () => commands.downloadTemplateKit(), help: 'templates', keywords: 'after effects script jsx lower third design' },
   { id: 'relink', label: 'Relink File', menu: 'File', group: 'media', keys: 'Alt+CmdOrCtrl+L', run: () => { const id = commands.browserTargets()[0]; return id ? commands.relinkDialog(id) : toast('Select a clip in the browser or on the timeline first.'); }, help: 'offline', keywords: 'missing offline media find reconnect', desc: 'Point the selected media to a new file, for example when it is missing or has been moved.' },
-  { id: 'export', label: 'Easy Export', menu: 'File', group: 'export', keys: 'CmdOrCtrl+E', register: true, allowWhileTyping: true, rooms: ALL, run: () => (commands.exportOpen.value = true), help: 'export', keywords: 'quick export project presets video', desc: 'Open the simple project export dialog with presets, format, resolution and destination.' },
-  { id: 'exportFrame', label: 'Export Frame…', menu: 'File', group: 'export', keys: 'Shift+CmdOrCtrl+E', register: true, allowWhileTyping: true, rooms: ALL, run: commands.openFrameExport, help: 'export-frame', keywords: 'still image picture snapshot screenshot png jpeg jpg webp alpha transparent transparency mask chroma key', desc: 'Save the timeline frame at the playhead as an image. Choose its size, format, location and alpha channel.' },
+  { id: 'export', label: 'Easy Export', menu: 'File', group: 'export', keys: 'CmdOrCtrl+E', register: true, allowWhileTyping: true, run: () => (commands.exportOpen.value = true), help: 'export', keywords: 'quick export project presets video', desc: 'Open the simple project export dialog with presets, format, resolution and destination.' },
+  { id: 'exportFrame', label: 'Export Frame…', menu: 'File', group: 'export', keys: 'Shift+CmdOrCtrl+E', register: true, allowWhileTyping: true, run: commands.openFrameExport, help: 'export-frame', keywords: 'still image picture snapshot screenshot png jpeg jpg webp alpha transparent transparency mask chroma key', desc: 'Save the timeline frame at the playhead as an image. Choose its size, format, location and alpha channel.' },
   { id: 'prefs', label: 'Settings', menu: isMac ? 'App' : 'File', group: 'prefs', keys: 'CmdOrCtrl+,', register: true, rooms: ALL, run: () => (commands.prefsOpen.value = true), help: 'preferences' },
 
   /* Edit */
-  { id: 'undo', label: 'Undo', menu: 'Edit', help: 'selection-clipboard', keys: 'CmdOrCtrl+Z', register: true, text: 'undo', run: undo, enabled: canUndo },
-  { id: 'redo', label: 'Redo', menu: 'Edit', help: 'selection-clipboard', keys: 'Shift+CmdOrCtrl+Z', register: true, text: 'redo', run: redo, enabled: canRedo },
-  { id: 'cut', label: 'Cut', menu: 'Edit', help: 'selection-clipboard', group: 'clip', keys: 'CmdOrCtrl+X', register: true, text: 'cut', run: commands.cutSelection },
-  { id: 'copy', label: 'Copy', menu: 'Edit', help: 'selection-clipboard', group: 'clip', keys: 'CmdOrCtrl+C', register: true, text: 'copy', run: commands.copySelection },
-  { id: 'paste', label: 'Paste', menu: 'Edit', help: 'selection-clipboard', group: 'clip', keys: 'CmdOrCtrl+V', register: true, text: 'paste', run: commands.paste },
+  { id: 'undo', label: 'Undo', menu: 'Edit', help: 'selection-clipboard', keys: 'CmdOrCtrl+Z', register: true, text: 'undo', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.designUndo() : undo(), enabled: () => room.value === 'design' ? design.canDesignUndo() : canUndo() },
+  { id: 'redo', label: 'Redo', menu: 'Edit', help: 'selection-clipboard', keys: 'Shift+CmdOrCtrl+Z', register: true, text: 'redo', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.designRedo() : redo(), enabled: () => room.value === 'design' ? design.canDesignRedo() : canRedo() },
+  { id: 'cut', label: 'Cut', menu: 'Edit', help: 'selection-clipboard', group: 'clip', keys: 'CmdOrCtrl+X', register: true, text: 'cut', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? copyLayers(true) : commands.cutSelection() },
+  { id: 'copy', label: 'Copy', menu: 'Edit', help: 'selection-clipboard', group: 'clip', keys: 'CmdOrCtrl+C', register: true, text: 'copy', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? copyLayers() : commands.copySelection() },
+  { id: 'paste', label: 'Paste', menu: 'Edit', help: 'selection-clipboard', group: 'clip', keys: 'CmdOrCtrl+V', register: true, text: 'paste', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? pasteImage() : commands.paste() },
   { id: 'pasteEffects', label: 'Paste Effects', menu: 'Edit', group: 'attrs', keys: 'Alt+CmdOrCtrl+V', run: commands.pasteEffects, help: 'paste-attributes', keywords: 'copy effects paste attributes apply same look settings', desc: 'Paste all effects, color, transform, masks, volume and audio effects from the copied clip into the selected clips.' },
   { id: 'pasteAttributes', label: 'Paste Attributes…', menu: 'Edit', group: 'attrs', keys: 'Shift+CmdOrCtrl+V', run: commands.openPasteAttributes, help: 'paste-attributes', keywords: 'copy effects paste attributes choose which', desc: 'Choose which attributes of the copied clip to paste into the selected clips.' },
   { id: 'removeEffects', label: 'Remove Effects', menu: 'Edit', group: 'attrs', keys: 'Alt+CmdOrCtrl+X', run: commands.removeEffects, help: 'paste-attributes', keywords: 'clear reset effects audio effects masks' },
   { id: 'removeAttributes', label: 'Remove Attributes…', menu: 'Edit', group: 'attrs', keys: 'Shift+CmdOrCtrl+X', run: commands.openRemoveAttributes, help: 'paste-attributes', keywords: 'clear reset attributes choose' },
-  { id: 'delete', label: 'Delete', menu: 'Edit', group: 'clip', keys: 'Backspace', also: ['Delete'], run: () => commands.deleteSelection(true), help: 'timeline', desc: 'Delete the selection. Clips in the storyline close the gap.' },
+  { id: 'delete', label: 'Delete', menu: 'Edit', group: 'clip', keys: 'Backspace', also: ['Delete'], rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.deleteSelection() : commands.deleteSelection(true), help: 'timeline', desc: 'Delete the selection. Clips in the storyline close the gap.' },
   { id: 'deleteGap', label: 'Delete and Leave Gap', menu: 'Edit', group: 'clip', keys: 'Shift+Backspace', also: ['Shift+Delete'], run: () => commands.deleteSelection(false), help: 'timeline' },
-  { id: 'selectAll', label: 'Select All', menu: 'Edit', help: 'selection-clipboard', group: 'select', keys: 'CmdOrCtrl+A', register: true, text: 'selectAll', run: commands.selectAll, desc: 'Select all clips, or all media when the browser is in use.' },
+  { id: 'selectAll', label: 'Select All', menu: 'Edit', help: 'selection-clipboard', group: 'select', keys: 'CmdOrCtrl+A', register: true, text: 'selectAll', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.selectAll() : commands.selectAll(), desc: 'Select all clips, or all media when the browser is in use.' },
   { id: 'deselectAll', label: 'Deselect All', menu: 'Edit', help: 'selection-clipboard', group: 'select', keys: 'Shift+CmdOrCtrl+A', run: deselectAll },
   { id: 'selectClip', label: 'Select Clip at Playhead', menu: 'Edit', help: 'selection-clipboard', group: 'select', keys: 'C', run: commands.selectClipAtPlayhead },
   { id: 'append', label: 'Append to Storyline', menu: 'Edit', group: 'add', keys: 'E', run: () => commands.addBrowserSelection('append'), help: 'adding', desc: 'Add the browser selection to the end of the storyline.' },
@@ -152,6 +181,72 @@ export const COMMANDS = [
   { id: 'ungroup', label: 'Ungroup', menu: 'Edit', group: 'group', keys: 'Shift+CmdOrCtrl+G', run: commands.ungroupSelected, help: 'grouping' },
   { id: 'checkUpdates', label: 'Check for Updates…', menu: 'Help', group: 'about', rooms: ALL, run: () => import('./updates.js').then((m) => m.checkForUpdates(true)), help: 'updates', keywords: 'update new version download github release' },
   { id: 'findCommand', label: 'Quick Search', menu: 'Help', group: 'search', keys: 'Ctrl+Space', also: ['CmdOrCtrl+K'], rooms: ALL, anywhere: true, run: () => (paletteOpen.value = !paletteOpen.value), help: 'search', keywords: 'find command palette console fx effects tools search everything' },
+
+  /* Design */
+  { id: 'design:removeBackground', label: 'Remove Background', run: () => removeBackground(), enabled: () => design.selectedLayers().some(l => l.type === 'image'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:refineMask', label: 'Refine Mask…', run: startRefine, enabled: () => design.selectedLayers().some(l => l.type === 'image' && l.cutout?.enabled), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:fillTextImage', label: 'Fill Text with Image', run: fillTextWithImage, enabled: () => { const l=design.selectedLayers();return l.length===2&&l.some(l=>l.type==='image')&&l.some(l=>l.type==='text'); }, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:saveStyle', label: 'Save Style…', run: openSaveStyle, enabled: () => design.selectedLayers().length > 0, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:saveTemplate', label: 'Save as Template…', run: openSaveTemplate, enabled: () => Boolean(design.currentDesign.value), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id:'design:openImage',label:'Open Image…',run:()=>import('./design/assets.js').then(m=>m.chooseOpenImage()),menu:'Design',rooms:DESIGN,help:'design' },
+  ...[['variant','Make Variant','makeVariant'],['cropCanvas','Crop Canvas','startCanvasCrop']].map(([id,label,method])=>({id:`design:${id}`,label,run:()=>import('./design/tools.js').then(m=>m[method]()),enabled:()=>Boolean(design.currentDesign.value),menu:'Design',rooms:DESIGN,help:'design'})),
+  ...[['preview','Preview','feedPreview'],['safeZones','Show Safe Zones','showSafeZones'],['compare','Compare Variants','compareOpen'],['resize','Resize…','resizeOpen'],['exportSizes','Export All Sizes…','batchExportOpen']].map(([id,label,state])=>({id:`design:${id}`,label,run:()=>import('./design/tools.js').then(m=>m[state].value=!m[state].value),enabled:()=>Boolean(design.currentDesign.value),menu:'Design',rooms:DESIGN,help:'design'})),
+  ...[['left','Rotate Canvas Left'],['right','Rotate Canvas Right'],['horizontal','Flip Canvas Horizontally'],['vertical','Flip Canvas Vertically']].map(([action,label])=>({id:`design:canvas:${action}`,label,run:()=>import('./design/tools.js').then(m=>m.transformCanvas(action)),enabled:()=>Boolean(design.currentDesign.value),menu:'Design',rooms:DESIGN,help:'design'})),
+  { id: 'design:suggestions', label: 'Design Suggestions', run: () => import('./design/suggest.js').then(m => m.openSuggestions()), menu: 'Design', rooms: DESIGN, help: 'design', keywords: 'thumbnail automatic frames titles suggestions' },
+  { id: 'design:importTemplate', label: 'Import Design Template…', run: importTemplate, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:new', label: 'New Design…', run: () => (design.newDesignOpen.value = true), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:placeEmbedded', label: 'Place Embedded…', run: () => chooseImage(true), enabled: () => Boolean(design.currentDesign.value), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:placeLinked', label: 'Place Linked…', run: () => chooseImage(false), enabled: () => Boolean(design.currentDesign.value), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:export', label: 'Export As…', keys: 'Alt+Shift+CmdOrCtrl+W', run: () => (design.exportDesignOpen.value = true), enabled: () => Boolean(design.currentDesign.value) && !refineSession.value, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:quickExport', label: 'Quick Export as PNG', run: quickExportPNG, enabled: () => Boolean(design.currentDesign.value) && !refineSession.value, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:transform', label: 'Free Transform', keys: 'CmdOrCtrl+T', run: () => (design.tool.value = 'select'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:select', label: 'Move Tool', keys: 'V', run: () => (design.tool.value = 'select'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:direct', label: 'Direct Selection Tool', keys: 'A', run: () => (design.tool.value = 'direct'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:pen', label: 'Pen Tool', keys: 'P', run: () => (design.tool.value = 'pen'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:anchorPoint', label: 'Anchor Point Tool', keys: 'Shift+C', run: () => (design.tool.value = 'anchor'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:deleteAnchor', label: 'Delete Anchor Point Tool', keys: '-', run: () => (design.tool.value = 'deleteAnchor'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:zoomTool', label: 'Zoom Tool', keys: 'Z', run: () => (design.tool.value = 'zoom'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:text', label: 'Type Tool', keys: 'T', run: () => (design.tool.value = 'text'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:shape', label: 'Shape Tool', keys: 'U', run: () => (design.tool.value = 'shape'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:cycleShape', label: 'Next Shape Tool', keys: 'Shift+U', run: design.cycleShape, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:crop', label: 'Crop Tool', keys: 'C', run: () => import('./design/tools.js').then(m => m.startCanvasCrop()), enabled: () => Boolean(design.currentDesign.value), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:group', label: 'Group Layers', keys: 'CmdOrCtrl+G', run: () => design.groupSelection(), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:ungroup', label: 'Ungroup Layers', keys: 'Shift+CmdOrCtrl+G', run: () => design.groupSelection(true), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:pasteInPlace', label: 'Paste in Place', keys: 'Shift+CmdOrCtrl+V', run: () => pasteImage(true), menu: 'Design', rooms: DESIGN, help: 'design' },
+  ...[['left', 'Left Edges'], ['center', 'Horizontal Centers'], ['right', 'Right Edges'], ['top', 'Top Edges'], ['middle', 'Vertical Centers'], ['bottom', 'Bottom Edges']].map(([mode, label]) => ({ id: `design:align:${mode}`, label: `Align ${label}`, run: () => design.alignSelection(mode), enabled: () => design.selectedLayers().length > 0, menu: 'Design', rooms: DESIGN, help: 'design' })),
+  ...[['x', 'Horizontal'], ['y', 'Vertical']].map(([axis, label]) => ({ id: `design:distribute:${axis}`, label: `Distribute ${label} Spacing`, run: () => design.distributeSelection(axis), enabled: () => design.selectedLayers().length >= 3, menu: 'Design', rooms: DESIGN, help: 'design' })),
+  { id: 'design:feedPreview', label: 'Feed Preview', keys: 'F', run: toggleFeedPreview, enabled: canFeedPreview, checked: () => feedPreview.value, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:safeZones', label: 'Safe Zones', keys: 'G', run: toggleSafeZones, enabled: () => Boolean(design.currentDesign.value), checked: () => showSafeZones.value, menu: 'Design', rooms: DESIGN, help: 'design' },
+  ...[['rulers', 'Rulers', 'designRulers', 'CmdOrCtrl+R', 'ruler measure pixels coordinates'], ['grid', 'Grid', 'designGrid', "CmdOrCtrl+'", 'grid lines layout squares'], ['smartGuides', 'Smart Guides', 'designSmartGuides', 'CmdOrCtrl+U', 'snap snapping align guides magnetic']].map(([id, label, key, keys, keywords]) => ({ id: `design:${id}`, label, keys, keywords, menu: 'Window', group: 'show', run: () => setPrefs({ [key]: !prefs.value[key] }), checked: () => Boolean(prefs.value[key]), rooms: DESIGN, help: 'design' })),
+  { id: 'design:hand', label: 'Hand Tool', keys: 'H', run: () => (design.tool.value = 'hand'), menu: 'Design', rooms: DESIGN, help: 'design' },
+
+  { id: 'design:duplicate', label: 'Duplicate Layer', keys: 'CmdOrCtrl+J', run: design.duplicateSelection, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:clear', label: 'Deselect', keys: 'CmdOrCtrl+D', also: ['Escape'], run: () => { design.selection.value = []; design.tool.value = 'select'; }, menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:zoomIn', label: 'Zoom In', keys: 'CmdOrCtrl+Plus', run: () => design.setZoom((design.zoom.value === 'fit' ? design.viewScale.value : design.zoom.value) * 1.25), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:zoomOut', label: 'Zoom Out', keys: 'CmdOrCtrl+-', run: () => design.setZoom((design.zoom.value === 'fit' ? design.viewScale.value : design.zoom.value) / 1.25), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:zoomFit', label: 'Fit on Screen', keys: 'CmdOrCtrl+0', run: () => design.setZoom('fit'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:zoom100', label: '100%', run: () => design.setZoom(1), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:moveLeft1', label: 'Move Left 1 px', keys: 'Left', run: () => design.moveSelection(-1, 0), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:moveLeft10', label: 'Move Left 10 px', keys: 'Shift+Left', run: () => design.moveSelection(-10, 0), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:moveRight1', label: 'Move Right 1 px', keys: 'Right', run: () => design.moveSelection(1, 0), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:moveRight10', label: 'Move Right 10 px', keys: 'Shift+Right', run: () => design.moveSelection(10, 0), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:moveUp1', label: 'Move Up 1 px', keys: 'Up', run: () => design.moveSelection(0, -1), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:moveUp10', label: 'Move Up 10 px', keys: 'Shift+Up', run: () => design.moveSelection(0, -10), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:moveDown1', label: 'Move Down 1 px', keys: 'Down', run: () => design.moveSelection(0, 1), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:moveDown10', label: 'Move Down 10 px', keys: 'Shift+Down', run: () => design.moveSelection(0, 10), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:up', label: 'Bring Forward', keys: 'CmdOrCtrl+]', run: () => design.orderSelection('up'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:down', label: 'Send Backward', keys: 'CmdOrCtrl+[', run: () => design.orderSelection('down'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:front', label: 'Bring to Front', keys: 'Shift+CmdOrCtrl+]', run: () => design.orderSelection('front'), menu: 'Design', rooms: DESIGN, help: 'design' },
+  { id: 'design:back', label: 'Send to Back', keys: 'Shift+CmdOrCtrl+[', run: () => design.orderSelection('back'), menu: 'Design', rooms: DESIGN, help: 'design' },
+
+  /* Record */
+  recordCommand('toggle', 'Start or Stop Recording', 'record', '0'), // run settes i app.jsx, der opptaket avsluttes.
+  recordCommand('pause', 'Pause or Resume', 'record', '8', () => import('./recorder/engine.js').then((m) => m.togglePause())),
+  ...LAYOUTS.map((l) => recordCommand(`layout:${l.n}`, l.label, 'layout', l.noKey ? null : l.n, () => import('./recorder/engine.js').then((m) => m.setLayout(l.n)), { checked: () => recordSettings.value.layout === l.n })),
+
+  /* Export */
+  { id: 'export:start', label: 'Export', menu: 'Export', keys: 'CmdOrCtrl+E', register: true, allowWhileTyping: true, rooms: EXPORT, run: () => roomActions.start(), help: 'export', desc: 'Export the selected project or file with the settings in the Export room.' },
+  { id: 'export:addFiles', label: 'Import Files to Convert', menu: 'Export', keys: 'CmdOrCtrl+I', register: true, rooms: EXPORT, run: () => api.openMediaDialog().then(addFiles), help: 'export' },
 
   /* Mark */
   { id: 'setIn', label: 'Set Range Start', menu: 'Mark', keys: 'I', run: () => commands.setRange('in'), help: 'range' },
@@ -211,6 +306,7 @@ export const COMMANDS = [
   { id: 'roomRecord', label: 'Record', menu: 'View', keys: 'CmdOrCtrl+1', register: true, rooms: ALL, run: () => (room.value = 'record'), checked: () => room.value === 'record', help: 'recording' },
   { id: 'roomEdit', label: 'Edit', menu: 'View', keys: 'CmdOrCtrl+2', register: true, rooms: ALL, run: () => (room.value = 'edit'), checked: () => room.value === 'edit', help: 'editing' },
   { id: 'roomExport', label: 'Export Room', menu: 'View', keys: 'CmdOrCtrl+3', register: true, rooms: ALL, run: () => (room.value = 'export'), checked: () => room.value === 'export', help: 'export' },
+  { id: 'roomDesign', label: 'Design', menu: 'View', rooms: ALL, run: () => (room.value = 'design'), checked: () => room.value === 'design', help: 'design' },
   { id: 'toggleBrowser', label: 'Media Browser', menu: 'View', group: 'panels', run: () => {
     const visible = !prefs.value.editorBrowserVisible;
     setPrefs({ editorBrowserVisible: visible });
@@ -242,7 +338,7 @@ export const COMMANDS = [
   { id: 'viewerFullscreen', label: 'Toggle Preview Full Screen', menu: 'View', group: 'screen', keys: 'Shift+CmdOrCtrl+F', run: () => toggleViewerFullscreen(), help: 'playback' },
 
   /* Playback */
-  { id: 'play', label: 'Play or Pause', menu: 'Playback', keys: 'Space', run: playback.toggle, help: 'playback' },
+  { id: 'play', label: 'Play or Pause', menu: 'Playback', keys: 'Space', rooms: ['edit', 'export'], run: () => room.value === 'export' ? roomActions.togglePlay() : playback.toggle(), help: 'playback' },
   { id: 'playReverse', label: 'Play Reverse', menu: 'Playback', keys: 'Shift+Space', run: playback.playReverse, help: 'playback' },
   { id: 'shuttleBack', label: 'Play Backward (faster each press)', menu: 'Playback', group: 'jkl', keys: 'J', run: () => playback.shuttle(-1), help: 'playback' },
   { id: 'stop', label: 'Stop', menu: 'Playback', group: 'jkl', keys: 'K', run: () => playback.shuttle(0), help: 'playback' },
@@ -373,7 +469,7 @@ function codeMatches(k, e) {
 export function commandForEvent(e, currentRoom, { includeRegistered = false } = {}) {
   for (const cmd of COMMANDS) {
     if (cmd.menuOnly || (cmd.register && !includeRegistered)) continue;
-    if (!(cmd.rooms || EDIT).includes(currentRoom)) continue;
+    if (!inRoom(cmd, currentRoom)) continue;
     for (const k of parsedKeys(cmd)) {
       if (!codeMatches(k, e)) continue;
       if (k.meta !== e.metaKey || k.ctrl !== e.ctrlKey || k.alt !== e.altKey) continue;
@@ -408,7 +504,10 @@ export function runCommand(id) {
   const cmd = typeof id === 'string' ? byId.get(id) : id;
   if (!cmd) return false;
   const rooms = cmd.rooms || EDIT;
-  if (!rooms.includes(room.value)) room.value = 'edit';
+  if (!rooms.includes(room.value)) {
+    if (room.value === 'design') return false;
+    room.value = rooms[0];
+  }
   if (cmd.enabled && !cmd.enabled()) return false;
   Promise.resolve()
     .then(() => cmd.run())
@@ -418,10 +517,15 @@ export function runCommand(id) {
 
 /* Menylinjen */
 
-const MENU_ORDER = isMac ? ['App', 'File', 'Edit', 'Mark', 'Clip', 'Tools', 'Playback', 'View', 'Window', 'Help'] : ['File', 'Edit', 'Mark', 'Clip', 'Tools', 'Playback', 'View', 'Help'];
+const MENU_ORDER = [...(isMac ? ['App'] : []), 'File', 'Edit', 'Record', 'Export', 'Mark', 'Clip', 'Tools', 'Playback', 'Design', 'View', 'Window', 'Help'];
+
+// Menylinjen følger rommet. Tekstkommandoene står alltid der, ellers virker ikke Cmd C og Cmd V i tekstfelt på Mac.
+const inMenu = (cmd) => inRoom(cmd) || Boolean(cmd.text);
 
 function itemFor(cmd) {
   const accel = keysFor(cmd)[0];
+  // Utenfor rommet sitt er dette bare den vanlige tekstkommandoen, så tastene ikke når klipp eller lag.
+  if (cmd.text && !inRoom(cmd) && !recordingShortcut.value) return { role: cmd.text, label: cmd.label, accelerator: accel };
   const it = { id: cmd.id, label: cmd.menuLabel || cmd.label, accelerator: accel, register: Boolean(cmd.register) && !recordingShortcut.value };
   if (cmd.checked) it.checked = Boolean(cmd.checked());
   if (cmd.enabled) it.enabled = Boolean(cmd.enabled());
@@ -436,20 +540,11 @@ export function menuTemplate() {
       out.push({ label: 'Reccut', submenu: [{ role: 'about', label: 'About Reccut' }, { separator: true }, itemFor(byId.get('prefs')), { separator: true }, { role: 'hide', label: 'Hide Reccut' }, { role: 'hideOthers', label: 'Hide Others' }, { separator: true }, { role: 'quit', label: 'Quit Reccut' }] });
       continue;
     }
-    if (name === 'Window') {
-      out.push({ label: 'Window', role: 'windowMenu', submenu: [
-        { role: 'minimize', label: 'Minimize' },
-        { role: 'zoom', label: 'Zoom' },
-        { separator: true },
-        { role: 'front', label: 'Bring All to Front' },
-      ] });
-      continue;
-    }
     const items = [];
     let lastGroup;
     const subs = new Map();
     for (const cmd of COMMANDS) {
-      if (cmd.menu !== name || cmd.hidden) continue;
+      if (cmd.menu !== name || cmd.hidden || !inMenu(cmd)) continue;
       if (isMac && cmd.id === 'prefs') continue;
       if (cmd.submenu) {
         if (!subs.has(cmd.submenu)) {
@@ -476,8 +571,11 @@ export function menuTemplate() {
     }
     if (name === 'View') items.push({ separator: true }, { role: 'togglefullscreen', label: 'Enter Full Screen' });
     if (name === 'File' && !isMac) items.push({ separator: true }, { role: 'quit', label: 'Quit' });
+    if (name === 'Help' && !isMac) items.push({ separator: true }, { role: 'about', label: 'About Reccut' });
+    if (name === 'Window' && isMac) items.push({ separator: true }, { role: 'minimize', label: 'Minimize' }, { role: 'zoom', label: 'Zoom' }, { separator: true }, { role: 'front', label: 'Bring All to Front' });
+    if (!items.length) continue;
     // På Mac gir rollen help et søkefelt i Hjelp-menyen som finner og åpner menyvalg.
-    out.push({ label: name, ...(name === 'Help' ? { role: 'help' } : {}), submenu: items.filter((x, i, a) => !(x.separator && (i === 0 || a[i - 1]?.separator))) });
+    out.push({ label: name, ...(name === 'Help' ? { role: 'help' } : name === 'Window' && isMac ? { role: 'windowMenu' } : {}), submenu: items.filter((x, i, a) => !(x.separator && (i === 0 || a[i - 1]?.separator))) });
   }
   return out;
 }

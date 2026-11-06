@@ -15,7 +15,7 @@ This plan is written for implementing agents. Follow it task by task. Do not red
 3. No new npm dependencies, except the background removal model files in phase 0. `@huggingface/transformers`, `immer`, `preact`, `@preact/signals` and `lucide-preact` are already installed.
 4. Keep the code style of the file you are in: short comments, plain names, no classes where the codebase uses functions, Preact function components, signals for state, `immer` `produce` for project changes.
 5. New code comments in English. Existing Norwegian comments stay as they are.
-6. User-visible text in English, short, plain sentences. Never use em-dashes in UI text, help text or docs. Use a colon, comma or full stop instead.
+6. User-visible text in English, short, plain sentences. In the Design room, names of tools, panels, commands and settings follow the Photoshop terms in section 5.8. Never use em-dashes in UI text, help text or docs. Use a colon, comma or full stop instead.
 7. Pure logic goes in `src/shared/design*.js` with no DOM access, so it can be tested with `node --test`. Functions that need text measurement take a `measure(text, font)` argument (same pattern as `captionLayout(project, clip, measure)` in `src/shared/render.js`).
 8. Every task that adds logic adds or extends a test in `test/`. Run `npm test` before you finish a task. All tests must pass, including the existing ones.
 9. Run `npm run build` before you finish a task. It must succeed without errors.
@@ -77,6 +77,7 @@ Generative AI fill, curved text on a path, a Bezier pen tool, a history panel, s
 | D9 | Placeholder title text in templates and suggestions is the project name. AI title suggestions are an optional button that only works when the AI agent is configured, and it says that the transcript is sent to that service. |
 | D10 | Plain images opened without video become a new design in the open project. |
 | D11 | Rendering uses Canvas 2D only. One function draws a design, used by the editor canvas, thumbnails and export. |
+| D12 | Design has its own shortcut set, like a separate program inside Reccut. Design commands use `rooms: DESIGN` only, so they may reuse keys that Edit uses (T, V, B, ⌘G, arrows and so on) without conflict. `conflictsFor()` in `registry.js` already compares keys per room. Only the room switch commands (Record, Edit, Export, Design) and app level commands (`rooms: ALL`: save, open, settings, Quick Search) are shared. Edit shortcuts never fire in Design and Design shortcuts never fire in Edit. |
 
 ---
 
@@ -298,7 +299,7 @@ Folder layout in a project folder:
   3. Add an `Asset` with `origin: 'placed'`.
   4. Add an image layer that fits the design (`contain`, centered).
   5. All in one `designCommit`.
-- The place dialog has a small choice "Copy into project" / "Leave in place", defaulting to `prefs.importCopy`, and a checkbox "Remember this choice" that writes `importCopy`.
+- The choice is made with the two commands **Place Embedded…** (copy) and **Place Linked…** (leave in place), as in Photoshop (section 5.8). Dropping files on the canvas uses the default from `prefs.importCopy`; holding Alt while dropping does the opposite. The Layers panel shows a small link icon on linked image layers.
 - Unsupported or unreadable files: a toast naming the file, nothing is added.
 - `getImage(layer)` returns a cached `ImageBitmap` (or `HTMLImageElement`) for `layer.asset` or `layer.media`. Cache key: absolute path plus file modified time if available, otherwise path. Large images (longest side over 4096) get a downscaled preview bitmap for the editor canvas. Export always uses the full image.
 - Missing files: an image layer whose file cannot be loaded draws a gray checkerboard with "Missing file" and shows a warning in the layer panel with a "Locate…" button (`api.openFileDialog`), which updates the asset path for every layer using it.
@@ -324,6 +325,50 @@ Per layer, in this order:
 7. `clip: true`: the layer is composited with `source-atop` against an accumulation of the layer directly below. Implement by drawing the base layer and its clipped layers on a group canvas first, then compositing that group with the base layer's blend and opacity.
 
 Same function in the editor canvas, the template thumbnails and export, so they always match. Export draws at `scale = 1` on a canvas the exact design size (or `OffscreenCanvas`) and encodes with `convertToBlob` / `toBlob`.
+
+### 5.8 Language and terminology (applies to every task)
+
+Everything in the Design room is in English: labels, buttons, menus, tooltips, toasts, errors, help text, layer default names and template names. Use the names Photoshop uses, so it feels familiar. The data model keeps the field names from section 5.2; only the labels the user sees follow this table. When a task below uses another word for one of these things, the label in this table wins.
+
+| Thing | Label in the UI | Photoshop-style shortcut (Design room only, see D12) |
+|---|---|---|
+| Layer list | **Layers** panel | |
+| Right panel | **Properties** panel | |
+| Select and move | **Move Tool** | V |
+| Text | **Type Tool**; text layers are **type layers** | T |
+| Shapes | **Rectangle Tool**, **Ellipse Tool**, **Polygon Tool**, **Line Tool**, **Custom Shape Tool** (star, arrow) | U, Shift+U cycles |
+| Crop | **Crop Tool** | C |
+| Pan / zoom | **Hand Tool** / **Zoom Tool** | H (and hold Space) / Z |
+| Mask painting | **Brush Tool** / **Eraser Tool** | B / E |
+| Pick a color from the canvas | **Eyedropper Tool** | I |
+| Swap black and white while painting a mask | Switch Foreground and Background Colors | X |
+| Transform handles | **Free Transform** | CmdOrCtrl+T |
+| Duplicate | **Duplicate Layer** | CmdOrCtrl+J |
+| Select all / none | **Select All** / **Deselect** | CmdOrCtrl+A / CmdOrCtrl+D |
+| Groups | **Group Layers** / **Ungroup Layers** | CmdOrCtrl+G / Shift+CmdOrCtrl+G |
+| Clip to the layer below | **Create Clipping Mask** / **Release Clipping Mask** | Alt+CmdOrCtrl+G |
+| Arrange | **Bring to Front**, **Bring Forward**, **Send Backward**, **Send to Back** | Shift+CmdOrCtrl+], CmdOrCtrl+], CmdOrCtrl+[, Shift+CmdOrCtrl+[ |
+| Shape mask (`layer.mask`) | **Vector Mask** (Add Vector Mask, Delete Vector Mask, Invert, Feather) | |
+| Background removal result (`layer.cutout`) | **Layer Mask**, made by **Remove Background**; painting it is "Edit Layer Mask"; Feather and **Shift Edge** as in Select and Mask | |
+| Effects (`shadows`, `stroke`, `outline`) | **Layer Style** with **Drop Shadow**, **Outer Glow**, **Stroke**. The sticker outline (`outline`) is shown as **Stroke** with Position: Outside on image layers. | |
+| Shadow fields | **Blend Mode, Opacity, Angle, Distance, Spread, Size** (store `x, y` in the model, show Angle and Distance; Size is `blur`) | |
+| Stroke fields | **Size, Position (Outside, Inside, Center), Fill Type (Color, Gradient)** | |
+| Fill | **Color Fill** / **Gradient Fill**; gradient styles **Linear, Radial, Freeform** | |
+| Blend modes | Normal, Darken, Multiply, Color Burn, Lighten, Screen, Color Dodge, Overlay, Soft Light, Hard Light, Difference, Exclusion, Hue, Saturation, Color, Luminosity (Photoshop order, with separators between the groups) | |
+| Opacity | **Opacity** (%) | |
+| Image adjustments | **Brightness/Contrast**, **Hue/Saturation**, **Black & White**, **Gaussian Blur** | |
+| Text settings | **Character** (font family, font style/weight, size, **Tracking**, **Leading**, All Caps) and **Paragraph** (alignment) sections | |
+| Placing files | **Import Image…** is the main button in Add Content and the empty state. Its menu offers **Import Embedded…** (copies the file into the project, D4), **Import Linked…** (leaves it where it is) and **Open as New Design…**. The Design menu retains **Place Embedded…** and **Place Linked…** as familiar commands. A linked file that cannot be found shows a **Relink…** button. | |
+| Saved styles | **Styles** panel, **New Style…** | |
+| Saved colors | **Swatches** | |
+| Templates | **Templates** (in the New Design dialog, like presets in New Document) | |
+| Design size | **Canvas Size…** (keeps content size, adds or crops space) and **Image Size…** (scales everything) | Alt+CmdOrCtrl+C / Alt+CmdOrCtrl+I |
+| Rotate / flip the whole design | **Rotate Canvas** 90° Clockwise / Counter Clockwise, **Flip Canvas Horizontal / Vertical** | |
+| Export | **Export As…** and **Quick Export as PNG** | Alt+Shift+CmdOrCtrl+W for Export As |
+| Zoom | **Fit on Screen**, **100%**, Zoom In, Zoom Out | CmdOrCtrl+0, CmdOrCtrl+1, CmdOrCtrl+=, CmdOrCtrl+- |
+| Guides | **Smart Guides**, **Snap** | |
+
+Every shortcut in this table must pass `conflictsFor()` against Design and `ALL` commands. Check this especially for the Cmd/Ctrl ones. New Design gets no shortcut, because CmdOrCtrl+N is New Project for the whole app. If a key in this table conflicts with an `ALL` command, leave it out and write it in the log. Do not move an `ALL` command.
 
 ### 5.7 Project format compatibility
 
@@ -420,6 +465,7 @@ Files: `src/renderer/app.jsx`, `src/renderer/registry.js`, `src/renderer/design/
 4. `design/store.js`: signals `currentDesignId`, `selection` (array of layer ids), `tool` (`'select' | 'text' | 'shape' | 'hand'`), `zoom` (`'fit'` or a number), plus `designCommit`, design transient helpers, `designUndo`, `designRedo`, `canDesignUndo`, `canDesignRedo` (section 5.4). When the project changes identity (another project opened), reset stacks, selection and `currentDesignId`.
 5. `editor/store.js` `undo()` and `redo()`: keep current `designs` and `designAssets` (section 5.4). Test it.
 6. `registry.js` `undo`/`redo` commands route by room.
+6b. Keep Design separate from Edit (D12). Today `runCommand()` in `registry.js` (line 407) switches to Edit when a command does not belong to the current room. Menu accelerators (`register: true`) go through `handleMenu` in `app.jsx` and then `runCommand`. Without a change, pressing an Edit shortcut such as CmdOrCtrl+C or CmdOrCtrl+E in Design would throw the user into Edit. Change `runCommand` so that when `room.value === 'design'` and the command's rooms do not include `'design'`, it does nothing and returns `false`. Record and Export keep today's behaviour. Registered commands that Design needs as well (Undo, Redo, Cut, Copy, Paste, Select All, Delete) get `rooms` that include `'design'` and route by room inside `run`. Test: with `room` set to `'design'`, `runCommand('tool:blade')` returns `false` and `room` stays `'design'`; `runCommand('undo')` calls the design undo.
 7. `DesignRoom.jsx`: layout with three columns (left panel 260 px, canvas, right panel 300 px) and the layer panel at the bottom of the right column. Empty state when the project has no designs: big "New Design" button and the size template grid.
 8. Check `commandForEvent` usage: commands without `rooms` default to `EDIT`, so timeline shortcuts do not fire in Design. Verify that Backspace, arrows, Space and letter keys do nothing in Design yet.
 
@@ -449,7 +495,7 @@ Files: `src/renderer/design/Canvas.jsx`, `src/shared/designRender.js` (first ver
 6. Snapping: to design edges and center, and to other layers' edges and centers, within 6 screen pixels. Show the guide lines while dragging. Hold Cmd/Ctrl to disable snapping.
 7. Each drag is one undo step (design transient).
 8. Zoom: Cmd/Ctrl + scroll, Cmd/Ctrl + `+`/`-`, Cmd/Ctrl+0 fit, Cmd/Ctrl+1 100%. Pan: Space + drag, or scroll. Register these as commands with `rooms: DESIGN`.
-9. Delete/Backspace deletes the selection. Cmd/Ctrl+D duplicates. Cmd/Ctrl+A selects all unlocked layers. Escape clears selection.
+9. Delete/Backspace deletes the selection. CmdOrCtrl+J is Duplicate Layer. CmdOrCtrl+A is Select All (unlocked layers). CmdOrCtrl+D and Escape are Deselect. CmdOrCtrl+T shows Free Transform handles on the selection (they show on select anyway; the command exists for familiarity). Labels and keys follow section 5.8.
 
 Tests (`test/design.test.mjs`): resize math for a rotated layer (dragging the bottom right handle of a 30° rotated layer keeps the opposite corner fixed in design space), aspect lock, center resize, rotation snapping, snapping to the nearest candidate within the threshold. Put this math in `design.js` as pure functions (`resizeLayer(layer, handle, dx, dy, { keepAspect, fromCenter })`, `snapMove(...)`) and test them there.
 
@@ -469,18 +515,18 @@ Files: `src/renderer/design/FramePicker.jsx`, `assets.js`.
 
 1. A panel (left panel tab "Video") with its own `createPlayer` instance (copy the setup from `ExportRoom.jsx` line 80), showing the current sequence.
 2. A scrubber with a filmstrip (reuse the existing thumbnail strip data from media if available; otherwise just a plain slider) and the timecode. Left/Right arrow keys step one frame when the picker has focus, Shift+arrow steps one second.
-3. A "Use This Frame" button: captures the frame at the design's aspect in full sequence resolution through the path from task 0.4 into `Designs/Frames/<project> <timecode>.png`, then adds an asset (`origin: 'frame'`) and an image layer that covers the design (`fit: 'cover'`), placed at the bottom of the stack (above the background). The button shows a spinner while the export job runs.
+3. A "Use This Frame" button: captures the complete frame in full sequence resolution through the path from task 0.4 into `Designs/Frames/<project> <timecode>.png`, then adds an asset (`origin: 'frame'`) and an image layer fitted inside the design without cropping, with its original aspect ratio (`fit: 'contain'`), placed at the bottom of the stack (above the background). The button shows a spinner while the export job runs.
 4. Empty timeline or audio only: the picker shows "Add video to the timeline in Edit to pick a frame. You can still place your own images." and the button is disabled.
 5. Also allow picking from any video media in the project (dropdown "Sequence / <media name>"): render that media alone using `mediaPreviewProject(m)` from `src/renderer/editor/playback.js`.
 
-Acceptance: picking a frame in a 1080p project for a 1280×720 design gives a sharp layer; for a 1080×1920 design the layer covers it with a center crop that can be moved; deleting the source clip afterwards leaves the design intact.
+Acceptance: picking a frame in a 1080p project for a 1280×720 design gives a sharp layer; for a 1080×1920 design the whole frame remains visible and can be moved and scaled; deleting the source clip afterwards leaves the design intact.
 
 ### Task 1.7: Placing images
 
 Files: `assets.js`, `DesignRoom.jsx`, `Canvas.jsx`.
 
-1. "Place Image…" button and command (Shift+CmdOrCtrl+P in Design, check for conflicts): `api.openMediaDialog` or `api.openFileDialog` with image filters (png, jpg, jpeg, webp, gif, bmp, svg, heic if supported by Chromium on the platform, psd).
-2. Copy choice (section 5.5) in a small `Modal` before placing, unless "Remember this choice" was set.
+1. Two commands and a split button, **Place Embedded…** (copies into the project) and **Place Linked…** (leaves the file where it is), as in section 5.8. The main part of the button uses the default from `prefs.importCopy`. No default shortcuts. Both open `api.openMediaDialog` or `api.openFileDialog` with image filters (png, jpg, jpeg, webp, gif, bmp, svg, heic if supported by Chromium on the platform, psd).
+2. Copy or link follows the command used (section 5.5). There is no extra dialog.
 3. Drop files on the canvas: place at the drop point. Use `src/renderer/fileDrop.js` helpers to get paths.
 4. Paste an image from the clipboard (Cmd/Ctrl+V when the canvas has focus and the clipboard holds an image): write it to `Designs/Assets/Pasted <date>.png` with `api.writeBinary` and place it (always copied).
 5. "From Project" tab in the left panel: image media from Edit, click to add as `layer.media` (D5). Video media shows "Use the Video tab to pick a frame".
@@ -663,7 +709,10 @@ Make a classic tutorial thumbnail: frame background darkened (brightness -0.3), 
 ### Task 3.7: Shortcuts and help
 
 1. All Design commands in `registry.js` with `rooms: DESIGN`, `menu` entries in a new "Design" menu or under existing menus, and `help: 'design'`.
-2. Tool shortcuts: V select, T text, U shape (cycles shapes with Shift+U), H hand, C crop. Check they do not collide with Design commands.
+2. Tool shortcuts: V select, T text, U shape (cycles shapes with Shift+U), H hand, C crop. Check they do not collide with other Design commands. Collisions with Edit commands are fine (D12).
+3. Shortcuts with Cmd/Ctrl are menu accelerators when `register: true`, and menu accelerators work in every room. Design commands with Cmd/Ctrl keys that Edit also uses (for example CmdOrCtrl+G, CmdOrCtrl+D, CmdOrCtrl+]) must therefore NOT use `register: true`; they are handled by `commandForEvent` with the room check. The exceptions are Undo, Redo, Copy, Cut, Paste, Select All and Delete, which stay registered and route by room inside `run` (section 5.4, task 1.2 step 6b). Use the keys and labels from section 5.8.
+4. The keyboard shortcut editor (Settings and `src/renderer/keyboard.js`) shows Design commands as their own group "Design", so users see the two shortcut sets separately. Customizing a Design shortcut only checks for conflicts among Design and `ALL` commands (already the behaviour of `conflictsFor`). Test: assigning T to a Design command reports no conflict with an Edit command on T; assigning CmdOrCtrl+S reports the conflict with Save.
+5. Add every Design shortcut to the help article and to Quick Search (they appear automatically when they are in `COMMANDS` with a `help` id).
 
 ### Phase 3 unusual use
 
@@ -879,3 +928,429 @@ Tests added:
 Manual checks done:
 Not done / open questions:
 ```
+
+### First implementation scope and validation environment
+Date: 2026-11-02
+Scope: a usable phase 1, plus the quiet capture path from 0.4 and initial Canvas capability checks from 0.3. Phases 2 to 8 and model preparation 0.1/0.2 are not implemented. No model, npm dependency or version change was added.
+Baseline: all 333 existing tests passed before changes.
+Environment: the ordinary `npm start` attempt aborted in the existing `uiohook-napi` native recording hook. UI checks then ran in the actual Electron app launched by `npm start`, with an untracked temporary Node preload disabling only that hook and redirecting userData to `/tmp/reccut-design-qa-profile`. The installed app, recording source code and normal launcher were not changed for this workaround. Test projects, fixtures and screenshots were kept under `/tmp/reccut-design-workflow`. UI actions were exercised through Chromium's debugging protocol against this Electron instance. Native recording and a normal launch with the hook active remain unverified.
+Decisions: D1 remains open. Design has no room shortcut and the Video Inspector retains Cmd/Ctrl 4. The plan also assigns Cmd/Ctrl 1 to both Record and 100% zoom. Record keeps its existing key; Design Actual Size uses Alt Cmd/Ctrl 1. The help documents this. Size cards are labelled as starting sizes, not service upload requirements. YouTube, Vimeo and Apple help pages were checked; the remaining service-specific recommendations need a separate publication review.
+
+### 0.3 Initial Canvas capability checks
+Date: 2026-11-02
+Files changed: none for the scratch checks.
+Tests added: real Electron scratch-canvas checks and `test/design-render.test.mjs`.
+Manual checks done: `letterSpacing` increases measured width; the full brightness/contrast/saturation/hue/blur/grayscale filter string is accepted; RTL direction is retained; JPEG and WebP `convertToBlob` return the requested MIME types. Unicode text with emoji and Æøå was edited through the actual canvas textarea and undone. Arabic and Hebrew draw calls completed without exceptions.
+Not done / open questions: detailed visual review of RTL typography and outside outlines at both 20 and 60 px is deferred with phase 2. Background models 0.1 and 0.2 are deferred in full.
+
+### 0.4 Quiet full-resolution frame capture
+Date: 2026-11-02
+Files changed: `src/main/main.js`, `src/renderer/editor/ExportDialog.jsx`, `src/renderer/design/assets.js`.
+Tests added: `test/design-assets.test.mjs` covers completion arriving before the start IPC response and listener cleanup.
+Manual checks done: the existing export worker produced an independent 1920x1080 PNG, detected within approximately 0.3 s, without the Export finished toast. Also captured source-video time 0.500 s, verified by the picker timecode and the saved asset name. Existing export completion already carried its job id; added the quiet flag and suppressed the desktop notification for these jobs.
+Not done / open questions: camera recording capture is not part of the performed workflow.
+
+### 1.1 Data model and project format
+Date: 2026-11-02
+Files changed: `src/shared/design.js`, `src/shared/model.js`, `src/main/projects.js`, `src/renderer/editor/store.js`.
+Tests added: `test/design.test.mjs`, `test/design-files.test.mjs`: defaults, bad numbers, unknown and duplicate layer ids, rotated hit testing, cover/contain, missing fields in legacy projects, missing assets, saved relative paths and relocated project folders.
+Manual checks done: old files without Design fields load in automated filesystem tests; package reopening in Electron resolves design assets from their new relative locations. Design data stays at project level, outside SEQUENCE_FIELDS.
+Not done / open questions: reopening a new project in an older installed Reccut version has not been checked.
+
+### 1.2 Room shell and separate history
+Date: 2026-11-02
+Files changed: `src/renderer/app.jsx`, `src/renderer/registry.js`, `src/renderer/design/DesignRoom.jsx`, `src/renderer/design/store.js`, `src/renderer/editor/store.js`, `src/renderer/styles/app.css`.
+Tests added: `test/design-state.test.mjs`: isolation of both undo/redo histories, transient commit/cancel, project reopening including the same id, locked layers, and timeline hover previews and transient cancellation preserving new designs.
+Manual checks done: Design opens through the title bar; menu commands and Quick Search route to the correct room. Shortcut conflict inspection found no conflicts for the new Design commands. Real canvas and layer UI rendered at 1280x800 and at the normal desktop size. Opening the packaged project reset Design history.
+Not done / open questions: room and zoom shortcuts differ from the plan as documented above. Normal launch is subject to the native-hook issue above.
+
+### 1.3 New Design dialog and design list
+Date: 2026-11-02
+Files changed: `src/renderer/design/NewDesignDialog.jsx`, `src/renderer/design/DesignRoom.jsx`, `src/shared/design.js`.
+Tests added: every size preset, 1x1, 8192x8192, custom dimensions, creation order, invalid dimensions and center-based canvas resizing in `test/design.test.mjs`.
+Manual checks done: created a thumbnail through the real dialog. Created 1x1, 8192x8192, 100x2000 and 333x777 designs in Electron without renderer errors. The list has shared-renderer previews, inline rename, duplicate, confirmed delete and resize.
+Not done / open questions: each list action is implemented but rename, duplicate, delete and aspect-lock fields have not all received individual native-pointer workflow checks.
+
+### 1.4 Canvas selection and transforms
+Date: 2026-11-02
+Files changed: `src/renderer/design/Canvas.jsx`, `src/shared/design.js`, `src/shared/designRender.js`, `src/renderer/design/store.js`, `src/renderer/registry.js`, `src/renderer/styles/app.css`.
+Tests added: rotated resize at all four corners, aspect lock, center resizing, minimum size, rotation snapping, nearest guide, hit testing, ordering, draw order/alpha, crop/contain geometry and hidden-text rendering.
+Manual checks done: real pointer drag draws a rectangle; undo removes the entire gesture in one step. The canvas fits to the viewport and supports selection, marquee, transforms, guides, zoom and pan. Extreme design sizes do not allocate a design-sized editor canvas.
+Not done / open questions: rotated handle combinations, all modifier combinations and multi-selection scaling need a longer manual ergonomics pass. The phase 3 300-layer/60 fps budget has not been measured.
+
+### 1.5 Text and rectangle tools
+Date: 2026-11-02
+Files changed: `src/shared/designText.js`, `src/shared/designRender.js`, `src/renderer/design/Canvas.jsx`, `src/renderer/design/store.js`.
+Tests added: `test/design-text.test.mjs`: wrapping, explicit newlines, Unicode, emoji, long words, empty text, manual font size, uppercase, autofit and overflow at the 6 px minimum.
+Manual checks done: a title was created and rendered with an Arial font at thumbnail size. Double-click editing with Æøå and emoji commits in one undo step. Native pointer rectangle drawing and undo work.
+Not done / open questions: at the minimum font size, impossible-to-fit text is clipped, as documented in Help. Advanced rich text and effects are phase 2.
+
+### 1.6 Independent frame picker
+Date: 2026-11-02
+Files changed: `src/renderer/design/FramePicker.jsx`, `src/renderer/design/assets.js`.
+Tests added: capture completion race and independent PNG registration in `test/design-assets.test.mjs`.
+Manual checks done: a generated 1080p source was placed on the timeline; the actual Video panel captured a frame. Selecting a source video separately and scrubbing to 0.500 s also captured correctly. Deleting the original timeline clip did not change the design. The worker completed without renderer errors or a normal export toast.
+Not done / open questions: the slider has no filmstrip. Offline-media test-card capture and the camera-on recording workflow remain untested.
+
+### 1.7 Image assets and placement
+Date: 2026-11-02
+Files changed: `src/renderer/design/assets.js`, `src/renderer/design/DesignRoom.jsx`, `src/renderer/design/Canvas.jsx`, `src/main/main.js`.
+Tests added: `test/design-assets.test.mjs`: CORS-safe decoding, unique copies, no Edit media registration, corrupt/unsupported/zero-size images and ignoring results after a project change. Copy IPC has an optional unique-name mode used only by Design, preserving existing Edit import behavior.
+Manual checks done: copied assets go into Designs/Assets, do not appear in Edit, and export correctly. Native file drop opened the copy-choice dialog and placed the picture. A corrupt PNG added no asset. A 10000x5000 PNG placed in approximately 188 ms in this simple solid-image fixture, retained its original dimensions, and used a 4096x2048 preview. This is a functional large-image check, not a general performance guarantee.
+Not done / open questions: real clipboard paste, PSD/SVG flattening, missing-file Locate, From Project and leave-in-place imports need more native UI checks. These paths are implemented. HEIC is excluded from the file filter because platform decoding was not verified. Remembered copy choice is stored in prefs; clipboard images always create a project-owned PNG.
+
+### 1.8 Basic layer panel
+Date: 2026-11-02
+Files changed: `src/renderer/design/LayersPanel.jsx`, `src/renderer/design/store.js`, `src/shared/design.js`, `src/renderer/styles/app.css`.
+Tests added: z-order preservation and locked-layer protection in the geometry/state tests.
+Manual checks done: layers show in reverse stacking order with shared-renderer previews and type icons; title and image layers appeared correctly in the running app. Reorder, visibility, locks, range/toggle selection, rename and context menu actions are implemented.
+Not done / open questions: drag reordering and every native context-menu entry still need an individual UI pass.
+
+### 1.9 Basic properties
+Date: 2026-11-02
+Files changed: `src/renderer/design/Properties.jsx`, `src/renderer/editor/Inspector.jsx`, `src/renderer/design/store.js`.
+Tests added: Design transients and shared changes in `test/design-state.test.mjs`.
+Manual checks done: position, size, opacity, text and design sections render; the canvas showed the selected font, size and fill. Existing FontSelect is reused, and loadSystemFonts is exported. Shared properties apply to unlocked layers, and native slider/number-field drags use one transient undo step.
+Not done / open questions: every numeric field and slider has not been independently dragged by hand.
+
+### 1.10 Design image export
+Date: 2026-11-02
+Files changed: `src/shared/designExport.js`, `src/renderer/design/ExportDesignDialog.jsx`, `src/main/design.js`, `src/main/main.js`, `src/main/preload.js`.
+Tests added: `test/design-export.test.mjs` and `test/design-files.test.mjs`: bounded quality search, impossible limits, invalid/empty/emoji/long/reserved filenames and concurrent exclusive output creation.
+Manual checks done: the real export dialog saved a 1280x720 JPEG under 2 MB. A separate 333x777 transparent PNG was reloaded: its corner alpha is 0 and the white rectangle alpha is 255. JPEG/WebP encoders return the expected MIME types. A first integration run exposed a tainted canvas; fixed by setting crossOrigin before the media URL, with a regression test. Missing images block export with a clear message. Original image pixels are used for export, not the downscaled preview.
+Not done / open questions: WebP export dialog, read-only destination and full-disk behavior need additional native checks. UTF-8 filenames are capped at 200 bytes so long emoji names remain valid on common filesystems.
+
+### 1.11 Design assets in project packages
+Date: 2026-11-02
+Files changed: `src/shared/package.js`, `src/main/packager.js`, `src/renderer/ProjectDialogs.jsx`, `test/package.test.mjs`, `test/packager.test.mjs`.
+Tests added: preserve Design-only Edit media, prevent trimming referenced sources, remove unused design assets optionally, include disabled cutout masks, copy original/external/frame/cutout assets, rewrite paths, preserve subfolders and report fonts. Real filesystem tests remove original assets after packaging.
+Manual checks done: the real Package Project dialog produced an archive with design files. Moved the package directory, opened it in Electron, loaded every design asset from the moved folder and verified no missing flags and an empty Design undo history.
+Not done / open questions: font installation on another machine and camera-recording bundles in this particular Design workflow have not been checked.
+
+### 9.1 Help and feature documentation for the implemented scope
+Date: 2026-11-02
+Files changed: `src/renderer/help/articles.js`, `docs/FEATURES.md`, this progress log.
+Tests added: existing help metadata, links, search and command-reference checks cover the Design article.
+Manual checks done: documented shipped controls, independent histories, file handling, export, packaging, shortcut decisions and the later phases. UI copy is English. No application version bump or dependency change was made.
+Not done / open questions: background removal, model bundling, advanced effects, groups, crop, masks, templates, suggestions, feed tools, standalone canvas operations, distribution builds and the full phase 9 review remain outside this first implementation. Do not mark the final checklist complete on the basis of this log.
+
+### First-round validation result
+Date: 2026-11-02
+Checks: `npm test` passed all 367 tests, with no failures or skipped tests. `npm run build` succeeded. `git diff --check` passed. The final build is the normal production bundle, without the temporary QA entry point. No new npm dependencies or application version change were made. Distribution packaging (`dist:mac`) was not run. Test results apply to the shared workspace state at this time; unrelated tracking work was also present and was left intact.
+
+
+### 1.6 Follow-up: keep the whole captured frame
+Date: 2026-11-02
+Files changed: `src/renderer/design/assets.js`, `test/design-assets.test.mjs`, `src/renderer/help/articles.js`, `docs/FEATURES.md`, this log.
+Reason: the user reported that a square video inserted into a 16:9 thumbnail cropped out the subject's face. This request supersedes the original phase 1.6 cover/center-crop default.
+Change: capture still saves the complete source-resolution PNG. Placement now uses contain geometry and a layer box matching the source aspect ratio, centered inside the design. For a 1080x1080 frame in a 1280x720 thumbnail, the layer is 720x720 at (280, 0). Its full crop remains (0, 0, 1, 1), so the whole frame is visible and the layer can be moved and scaled normally. Existing saved compositions are not automatically rewritten; selecting their image layer and changing Image > Fit to contain reveals the full saved image.
+Tests added: four capture regressions for square, portrait, matching 16:9 and wider frames. They verify original capture dimensions, complete source crop, aspect-correct layer geometry, movement and undo.
+Manual checks done: in the actual Electron app, captured a 1080x1080 test video with blue and red markers at the top and bottom into a 16:9 design. Both edge markers remained visible on the editor canvas, the saved layer was 720x720 with contain fit, and dragging the layer preserved its aspect ratio and full source crop. Used the same isolated QA profile/native-hook workaround documented above.
+Validation: all 371 tests passed. Production build and whitespace checks passed. No version change.
+Not done / open questions: this does not undo cropping already applied on the Edit timeline. Use a source video in the picker when the sequence itself is intentionally cropped.
+
+
+### Phase 1 completion
+Date: 2026-11-02
+Status: tasks 1.1 through 1.11 are implemented and functionally verified for the development build. The complete acceptance matrix and remaining environment/release limitations are in [DESIGN-PHASE1-QA.md](DESIGN-PHASE1-QA.md). This does not complete the model spikes, later Design phases or the final distribution review.
+Tests: all 384 tests pass, none skipped. Production build and whitespace checks pass. No dependencies or version change.
+Manual/application checks: all preset dialogs, custom sizes, list actions and undo; 32 rotated/flipped handle combinations; center/aspect modifiers and rotation; selection, Smart Guides, zoom/pan; on-canvas Unicode type and rectangles; placement, PSD/SVG, native drop and clipboard, relink and shared Edit images; layer selection, native reordering and context actions; every phase 1 property category; empty/audio/offline video cases; synthetic screen/camera recording, trim, capture and export; transparency pixels, exact renderer comparison, size limits and a read-only destination; history, unsaved Save As, moved packages with original files unavailable and both undo histories.
+Environment: the native keyboard-hook crash remains an existing startup issue, so the temporary QA-only hook workaround was used. Existing Edit ResizeObserver notifications were reproduced without any designs and documented separately. No distinct older installed release was available; both found apps were 0.9.0. Physical devices, other operating systems and distribution builds remain release checks.
+
+### 1.1 Completion: persistence and history
+Date: 2026-11-02
+Files changed: `src/renderer/editor/store.js`, `src/renderer/design/assets.js`, state and asset tests.
+Checks: old-file load/save, folder reset during project switches, base folders for unsaved projects, Save As, reopen, snapshot restoration and moved asset paths passed. Snapshot restoration clears stale Design history while preserving room-specific undo semantics.
+Open: none for phase 1 implementation; optional older-version run unavailable as described in the matrix.
+
+### 1.2 Completion: command isolation
+Date: 2026-11-02
+Files changed: `src/renderer/registry.js`, `src/renderer/design/store.js`, `test/design-commands.test.mjs`.
+Checks: Design refuses Edit-only commands and native menu actions; shared clipboard/delete/history commands route by room; Mac/Windows key conflicts, room buttons and native arrow movement passed. Timeline-specific sequence settings no longer conflict with Duplicate Layer in Design. D1 remains intentionally unresolved; 100% has no shortcut because Record owns Cmd/Ctrl 1.
+Open: none beyond the planned shortcut decision.
+
+### 1.3 Completion: new designs and list
+Date: 2026-11-02
+Files changed: `src/renderer/design/DesignRoom.jsx`, `NewDesignDialog.jsx`.
+Checks: every preset, 333x777 custom, aspect lock, swap, validation, rename, duplicate, confirmed delete, Canvas Size and undo passed in the running application.
+Open: none for phase 1.
+
+### 1.4 and 1.5 Completion: canvas and tools
+Date: 2026-11-02
+Files changed: `src/renderer/design/Canvas.jsx`, `src/renderer/design/store.js`, `src/shared/designRender.js`, render/state tests.
+Checks: all eight handles on rotated images with four flip combinations, fixed anchors, one-step undo, aspect/center modifiers, snapped rotation, guides and bypass, selection/marquee, native arrow movement, Hand Tool, Space-pan, wheel zoom/scroll, Unicode type editing, empty-type deletion and Shift-square drawing passed. Missing images use a bounded checkerboard. Select All includes hidden unlocked layers and excludes locked ones.
+Open: phase 3 performance budgets are outside this scope.
+
+### 1.6 Completion: independent video picker
+Date: 2026-11-02
+Files changed: `src/renderer/design/FramePicker.jsx`, `assets.js`, `src/shared/design.js`, design/asset tests.
+Checks: existing thumbnail reuse, slider, frame/second stepping, native source aspect, full-frame placement, original-resolution capture, offline warning/card and disabled empty/audio states passed. The picker schedules canvas resizing outside ResizeObserver delivery. User-requested uncropped placement supersedes the old cover default in the task text.
+Open: physical camera permissions were not exercised; a synthetic camera passed the real recording/import/capture pipeline.
+
+### 1.7 Completion: embedded/linked placement and clipboard
+Date: 2026-11-02
+Files changed: `src/renderer/design/assets.js`, `DesignRoom.jsx`, `LayersPanel.jsx`, `src/main/design.js`, `main.js`, `preload.js`, asset/files tests.
+Checks: Place Embedded/Linked, preference/Alt drop behaviour, link indicators, native clipboard PNG, same-project layer Cut/Copy/Paste, PSD flattening, SVG, From Project, relink, corrupt files and a 50 MP JPEG passed. The installed Electron 45 clipboard API uses asynchronous ClipboardItems, with a tested main-process adapter.
+Open: HEIC decoding is unsupported in the checked environment and excluded conditionally. Cross-project layer clipboard transfer remains phase 3.
+
+### 1.8 and 1.9 Completion: Layers and Properties
+Date: 2026-11-02
+Files changed: `src/renderer/design/LayersPanel.jsx`, `Properties.jsx`, UI styles.
+Checks: range/toggle selection, rename, visibility, locks, native drag order and context actions passed. Position/size/rotation, flips, opacity, font/weight/size, Tracking/Leading, caps, autofit, paragraph settings, fill, mixed selection, design settings and image fit/reset crop updated live and undid in one step. Labels follow section 5.8.
+Open: none for phase 1.
+
+### 1.10 Completion: Export As and Quick PNG
+Date: 2026-11-02
+Files changed: `src/renderer/design/export.js`, `ExportDesignDialog.jsx`, shared export/files tests.
+Checks: the real dialog exported JPEG below 2 MB and transparent PNG/WebP. PNG matched the shared renderer exactly. JPEG flattened transparency correctly. Quick PNG retained the canvas background. Unique/emoji names and a read-only destination passed. Custom scale mode and limits have explicit validation.
+Open: physical disk-full simulation was not required for phase 1; it remains in phase 7's test list.
+
+### 1.11 Completion: packaging and handoff
+Date: 2026-11-02
+Files changed: packaging implementation from the first round, extended application validation and this acceptance matrix.
+Checks: actual recording bundle, independent frame, embedded asset, Design-only Edit image and Arial font report packaged through the UI. Originals and the recording directory were made unavailable, the package was moved and reopened, all images decoded, media remained online and Design history was empty. Filesystem tests also cover cutout masks, unused assets, relative paths and trim protection.
+Open: font installation on another machine and cross-platform distribution builds belong to release review.
+
+
+### QA cleanup note
+Date: 2026-11-02
+The real system clipboard was used for the native clipboard tests. Restoring its original snapshot failed because Electron 45 does not accept read-only ClipboardItems directly in clipboard.write(). The QA process closed before conversion to new writable ClipboardItems, so the original content could not be recovered. The user was informed. This affects test cleanup, not the production layer-copy adapter, which uses writeText, or image paste, which only reads ClipboardItems.
+
+### Phase 2 and 3 completion
+Date: 2026-11-03
+Status: tasks 2.1 through 2.6 and 3.1 through 3.7 are implemented. All 410 automated tests, the normal build and whitespace checks pass. Detailed application checks, performance measurements and boundaries are recorded in [DESIGN-PHASE2-3-QA.md](DESIGN-PHASE2-3-QA.md). Phases 4 through 8 and background-removal model preparation remain open. No version or dependency change.
+
+### 2.1 Completion: fills and gradients
+Date: 2026-11-03
+Files changed: shared design/gradient renderers, `StyleControls.jsx`, Properties and Gradient Editor.
+Checks: shared field math, local rotated coordinates, alpha, one/32 stops, freeform/radial fields, design background and one-step gradient dragging pass. Preview allocation is bounded for extreme aspect ratios.
+Open: none for the required fill controls.
+
+### 2.2 Completion: strokes
+Date: 2026-11-03
+Files changed: design normalization, effect bounds, renderer and Properties.
+Checks: Inside/Center/Outside native pixels, outline-only shapes, text outside contour, zero alpha, zero/500 px widths, dash/join controls and margin tests pass. Effect bounds are separate from geometry bounds used by transform handles.
+Open: none.
+
+### 2.3 Completion: shadows and glow
+Date: 2026-11-03
+Files changed: shadow normalization/presets, renderer and Layer Styles controls.
+Checks: ordered shadow bitmaps, margin/spread tests, native overlapping shadow colors, add/remove/undo, zero/500 px blur and zoom-invariant blur pass. Canvas blur uses backing-pixel units, so blur is scaled with bitmap resolution.
+Open: image spread remains intentionally disabled until phase 4's alpha morphology.
+
+### 2.4 Completion: blend modes and adjustments
+Date: 2026-11-03
+Files changed: renderer, Properties and style tests.
+Checks: all native blend options, independent filter components and reset, opacity isolation and darkened-frame workflow pass.
+Open: optional film Look selector skipped because the existing film module exposes RGB/LUT generation rather than a canvas/ImageData application function. No second color pipeline was added.
+
+### 2.5 Completion: shapes
+Date: 2026-11-03
+Files changed: pure local shape geometry, normalization, Canvas, shape menu and Properties.
+Checks: polygon/star point counts and bounds, radius clamps, persistence, native arrow/star/ellipse and stroke-only line/arrow defaults pass. Existing mask geometry uses a different centered pixel format, so local fractional polygon/star points remain in design.js.
+Open: none.
+
+### 2.6 Completion: rich text
+Date: 2026-11-03
+Files changed: `designText.js`, renderer, Properties, font checks and Layers warnings.
+Checks: paired/escaped/unmatched/consecutive stars, word/grapheme wrapping, uppercase expansion, tracking/autofit, empty/long text, line backgrounds, emoji, Arabic and missing-font fallback pass. Unknown local font names are checked against fallback metrics because Chromium's fonts.check can accept undeclared families.
+Open: none for phase 2.
+
+### 3.1 Completion: groups
+Date: 2026-11-03
+Files changed: pure grouping/transforms, Design store, Canvas, Layers and Properties.
+Checks: contiguous topmost placement and relative order, whole-group/member selection, collapse/name, aggregate numeric transforms and flips, rotation/non-uniform scaling, locked-group refusal, native group drag/drop, undo and ungrouped positions pass. Scaling rotated members preserves their rotation without skew.
+Open: none.
+
+### 3.2 Completion: align and distribute
+Date: 2026-11-03
+Files changed: pure geometry helpers, Design actions and Properties.
+Checks: six alignments, single-layer canvas target, rotated axis-aligned bounds and equal horizontal/vertical gaps pass.
+Open: none.
+
+### 3.3 Completion: clipboard
+Date: 2026-11-03
+Files changed: Design asset copy/paste and tests, registry.
+Checks: layers with absolute asset paths, embedded files copied into a distinct receiving project, linked references, group remapping, relative centers, Paste in Place, plain text, PNG placement and one-step history pass. All clipboard testing used memory or mocked IPC. The system clipboard was untouched.
+Open: none for the planned clipboard formats.
+
+### 3.4 Completion: crop
+Date: 2026-11-03
+Files changed: `designCrop.js`, crop session, Canvas and Properties.
+Checks: dimmed full source, image repositioning, handles, ratios, native Enter/Escape, apply/cancel, rotated/flipped geometry and one-step undo pass. Drafts stay outside project history until Apply and cancel on a stale layer/project. Reset Crop restores Contain. Initial frame placement still retains the whole source.
+Open: none.
+
+### 3.5 Completion: layered PSD and SVG
+Date: 2026-11-03
+Files changed: shared editor import entry points, Design layered-import dialog and asset placement.
+Checks: selected layers versus one image, real PSD transparency/source placement, real layered SVG, grouped placement, per-file unique asset directories and one-step undo pass. SVG thumbnail allocation is bounded. Existing PSD decoder limitations are unchanged.
+Open: no new decoder features are part of this phase.
+
+### 3.6 Completion: performance
+Date: 2026-11-03
+Files changed: bounded bitmap cache, Canvas draw scheduling/allocation, Layers row memoization and CSS containment.
+Checks: immutable identity plus multiple pixel scales, invalidation and bounded storage pass. On Apple M1 Pro with 300 mixed layers, real pointer dragging measured median 8.3 ms and 95th percentile 10 ms, with no interval over 25 ms. Full UI trace, 120 consecutive updates and 50 rapid undos passed. Detailed timings are in the QA report.
+Open: cross-platform distribution performance remains a release check.
+
+### 3.7 Completion: shortcuts and help
+Date: 2026-11-03
+Files changed: registry, keyboard scope, Settings and Design help article.
+Checks: V/T/U/Shift+U/H/C, groups, Paste in Place, align/distribute metadata, Design category and Mac/Windows room-aware conflicts pass. Crop owns Enter/Escape while open. Existing Edit shortcuts and Cmd/Ctrl+1 remain assigned as before.
+Open: none for phase 3. Next implementation phase is background removal and masks, with the phase 0 model preparation as a prerequisite.
+
+
+## Phase 4–5 completion log — 2026-11-03
+
+Scope: tasks 4.1–4.4 and 5.1–5.4, with the bundled-model prerequisites 0.1–0.2. Phases 6 and later are not implemented. Detailed evidence and remaining platform/performance limits: [DESIGN-PHASE4-5-QA.md](DESIGN-PHASE4-5-QA.md).
+
+### 0.1 Model selection
+Files: `src/main/designModels.js`, `scripts/fetch-models.mjs`, package resource configuration.
+
+Checks: read model licenses; tested five input classes with the patched BiRefNet-lite 1024 WebGPU export and MODNet; CPU BiRefNet-lite 512 was tested on a person. Original onnx-community BiRefNet-lite could not load on this M1 Pro GPU because its shader storage-buffer requirement exceeded the device limit. ISNet was excluded for its AGPL license. Chosen MIT models are pinned by revision and every shipped file by SHA-256; original license files ship with them. Primary inference measured 2.31–3.45 seconds after model initialization. CPU fallback measured 6.43 seconds, exceeding the approximate five-second target; first use also incurs model load time. These limits are explicit in the QA report.
+
+### 0.2 Bundled worker
+Files: segment worker/html, build script, main/preload IPC, model fetch script, package config and `scripts/before-pack.cjs`.
+
+Checks: actual hidden worker with local media protocol, progress/cancel and queued jobs. Remote loading/cache disabled and CSP excludes HTTP(S). A fresh worker completed inference with networking offline and zero remote requests. Mac ARM64 application built with both model resource directories and local ORT runtimes. ONNX files are explicitly classified as data during macOS signing because the signer's binary detector crashed parsing their protobuf content; executable signing remains enabled. No additional npm dependencies.
+
+### 4.1 Remove Background and camera shortcut
+Files: `cutout.js`, `FramePicker.jsx`, Properties, assets/export, main/preload.
+
+Checks: full-resolution independent masks, original image unchanged, feather/edge shift, progress/Cancel. Automated cancellation covers deletion, undo, project switch, explicit cancel and consecutive starts, including completion before the start IPC response. Native camera capture produced a full 600×400 frame and mask without modifying timeline/media state. Person, product, code, landscape, transparent PNG, 1×1 and 12000×100 inputs completed without crashes.
+
+Deviation: immutable PNGs use reserved unique names `reccut-cutout-<id>.png`, preventing overwrite and allowing cleanup to distinguish generated masks from user originals. Friendly names remain in asset metadata.
+
+### 4.2 Refine brush and file lifetime
+Files: `refine.js`, Canvas, Design history store, `designCleanup.js`, project save.
+
+Checks: native Erase/Restore, one new PNG per stroke, undo/redo resolves previous mask files. Actual pointer painting on a rotated, flipped and cropped image landed at the expected source pixel. Pure tests cover all fit modes and inverse transforms. Cleanup runs after successful atomic project save, retains undo/redo, persistent snapshots and neighboring-document references, and never removes external/original files; filesystem tests cover these protections and discarded late results.
+
+### 4.3 Sticker outline and shadows
+Files: pure alpha morphology in `designMasks.js` (re-exported from `design.js`), common renderer and StyleControls.
+
+Checks: separable dilation/erosion against a reference, soft alpha/borders/narrow images; outline follows the final cutout and shape mask. Image shadow spread is now enabled. Native tiny-canvas pixel assertions passed. Masked PNG with 10 px white outline, feather/shift and spread shadow matched the shared renderer exactly (maximum channel difference zero).
+
+### 4.4 Shape masks and clipping
+Files: Properties, Canvas mask handles, `masks.js`, Layers, common renderer.
+
+Checks: rectangle/ellipse/polygon data, feather/invert, hidden/orphan clipping rules, isolated clipping group with base opacity applied once. Native pixel checks verify clipping, hidden bases, inversion and final outline. Fill Text With Image groups the two selected layers, matches their geometry and is undoable. Pure tests cover group ordering.
+
+### 5.1 Saved styles
+Files: `library.js`, `LibraryPanel.jsx`, prefs, shared template/style module.
+
+Checks: appearance-only deep copies and relative text size, same-type application in one undo step, rename/delete/update actions, persistence errors, limit 500. Native panel with 500 styles rendered one page of 24 saved cards plus 15 built-ins and refused style 501.
+
+### 5.2 Built-in text styles
+Files: `designTemplates.js`, library previews.
+
+Checks: all 15 specified styles, safe generic font stacks, common renderer previews, native application and undo. Saved image styles have a generated preview when no project image is available.
+
+### 5.3 Templates
+Files: `designTemplates.js`, `library.js`, `LibraryPanel.jsx`, native `designLibrary.js`, main/preload/build.
+
+Checks: 22 built-ins (12 wide, 6 tall, 4 square); every template stays within wide/tall/square and 3000×3000 canvases. Placeholder resolution, source path rejection, newer versions, unknown-layer warnings, oversized data and excessive layer counts tested. Native save/load, duplicate-name suffix, JSON rejection, version-2 rejection, import/export and card previews passed. Templates are stored atomically in userData/design-templates; project images become placeholders, not external file references.
+
+### 5.4 Brand kit
+Files: `brand.js`, `BrandColors.jsx`, fill/shadow/outline/gradient controls, native design library.
+
+Checks: maximum 20 unique colors, shared swatches in Design color controls, logo selection/copy into userData and independent project copy when applying a template. Replacing My Logo left existing project images readable. Logo image cache reloads when switching projects.
+
+### Verification status
+All 432 automated tests pass; production build passes. Development and packaged Mac ARM64 checks are recorded in the QA report. This completes implementation of phases 4 and 5, with the documented CPU timing and cross-platform/release QA limitations. Version remains 0.9.0; no release, version bump or publication was performed.
+
+## Phase 6 completion log — 2026-11-03
+
+Scope: tasks 6.1–6.3 are implemented. Phase 7, phase 8 and the final cross-platform/release review remain outstanding. Verification details: [DESIGN-PHASE6-QA.md](DESIGN-PHASE6-QA.md).
+
+### 6.1 Frame candidates and scoring
+Date: 2026-11-03
+Files changed: `src/shared/thumbScore.js`, `designSuggest.js`, `src/renderer/design/frameSampler.js`, `suggest.js`, `src/renderer/player.js`.
+Tests added: score ordering, normalized metrics, distributed bounded sampling, fades/transitions, camera visibility, spacing, deadline/cancellation and fresh-decoder snapshots.
+Manual checks done: actual square 3-second video (60 samples, 2.00 s), actual 3-hour video (61 samples, 1.17 s), 3-hour/120-clip sequence (180 samples, 3.52 s), black video, camera recording with network offline, separate-time pixel hashes, and missing-media timeout (14.005 s). Private preview players leave the timeline and Video picker alone. Unused decoder retention is disabled only for sampling.
+Not done / open questions: long-video fixture is H.264 256×144 at 1 fps. Higher-resolution/long-GOP/RAW sources may produce partial results within the budget. Cross-platform measurements remain part of release QA.
+
+### 6.2 Title candidates
+Date: 2026-11-03
+Files changed: `thumbScore.js`, `designSuggest.js`, `suggest.js`, Suggestions dialog.
+Tests added: source priority, default sequence exclusion, Norwegian and English stop words, frequent phrases, case-insensitive uniqueness, length bounds, provider availability, transcript scope, provider changes and AI error recovery.
+Manual checks done: Norwegian caption titles, no-caption project, no AI button while unconfigured, named-provider disclosure before any call, explicit Send Transcript and simulated offline-provider error retaining local suggestions. Provider and transcript checks run again before sending.
+Not done / open questions: no actual provider was contacted during QA. Completion request cancellation is limited by the existing API; late responses are discarded, but an already-sent request cannot be recalled.
+
+### 6.3 Suggestions grid and editable creation
+Date: 2026-11-03
+Files changed: `SuggestionsDialog.jsx`, `suggest.js`, DesignRoom, LibraryPanel, assets/library helpers, registry, CSS, help article and FEATURES.
+Tests added: atomic creation from an empty Design room, full-quality source dimensions/crop, one-step undo, failed capture without a partial design, stale-session disposal, project/room/timeline changes. Existing capture tests still cover early completion before the start response.
+Manual checks done: 24 cards for six frames × four templates, offline title candidates, shuffle, new editable design, full square image preserved inside a wide canvas, unchanged timeline/media, undo/redo, rapid reopen/cancel and project/room switch. Production packaged ARM64 app launched with an isolated profile and rendered 24 cards with no test helpers.
+Not done / open questions: no remaining implementation items in phase 6. Generic feed preview, readability/safe zones, variants, multi-size export and video/thumbnail export pairing belong to phase 7 and are not included here.
+
+### Phase 6 validation
+All 451 automated tests pass. Production build and Mac ARM64 application packaging/start pass. No dependencies or version number changed. Final production bundles do not expose the temporary QA helper. Detailed limits and measurements are recorded in DESIGN-PHASE6-QA.md.
+
+## Phase 7–8 completion log — 2026-11-03
+
+Implementation now covers phases 1–8. Help/features documentation is current. The Mac build/review checks below pass; cross-platform and public-release checks remain qualified as documented in [DESIGN-PHASE7-8-QA.md](DESIGN-PHASE7-8-QA.md).
+
+### 7.1 Feed preview
+Date: 2026-11-03
+Files changed: Design Preview component, toolbar/view state and CSS.
+Tests added: common renderer remains covered; native CSS geometry and rendered preview checks.
+Manual checks done: actual 360/246/168 px previews and 328 px phone image, duration badge, light/dark backgrounds, visually inspected generic layouts. Whole design fits the preview tile. Minimum-width toolbar was checked and its overflow fixed with wrapping.
+Not done / open questions: no branded UI or platform-specific layout guarantee is included.
+
+### 7.2 Safe zones and readability
+Date: 2026-11-03
+Files changed: design preset/pure helpers, Canvas overlays, Readability panel.
+Tests added: known contrast pairs, small and portrait text size, safe-zone intersection, hidden/empty layers.
+Manual checks done: actual 1.0:1 gray-on-gray fill warning, small-text and lower-right overlay warnings, Check Readability and Select. Guides are view state and do not enter design export.
+Not done / open questions: checks are heuristic, on demand and use white under transparency. Outlines/shadows can improve legibility beyond the sampled fill.
+
+### 7.3 Variants
+Date: 2026-11-03
+Files changed: pure duplication/family helpers, tools state, Compare view, design list.
+Tests added: independent layer/group IDs, copied appearance, shared assets/family IDs and persistence.
+Manual checks done: three variants compared, favorite marker changed, every variant retained.
+Not done / open questions: none for the planned behavior.
+
+### 7.4 Resize and export to many sizes
+Date: 2026-11-03
+Files changed: pure content resize, size/export dialogs, common image encoder.
+Tests added: every built-in layout across wide/tall/square targets, with anchors and rotated unanchored content; source/crop/mask preservation.
+Manual checks done: two sizes created in one undo step; actual batch dialog saved six dimension-named PNGs; slash/emoji names handled safely. Read-only directory and real ENOSPC on a filled temporary disk image produced clear errors and no partial image.
+Not done / open questions: cross-platform filesystem/runtime checks remain release QA.
+
+### 7.5 Thumbnail with video export
+Date: 2026-11-03
+Files changed: Export room/Easy Export choice, snapshot helper, main/preload exact-basename JPEG writer.
+Tests added: pre-export snapshot, early completion, job matching, cancellation, listener cleanup, disk errors, Unicode paths and preserving an existing JPEG.
+Manual checks done: actual MP4/JPEG pair; subsequent red edit did not change the queued green JPEG snapshot. Export-room choice/picker was available.
+Not done / open questions: a same-name existing JPEG is preserved and reported rather than overwritten; a thumbnail failure retains the completed video.
+
+### 8.1 Open Image
+Date: 2026-11-03
+Files changed: asset helpers, empty-room drop, dialog/button and command.
+Tests added: exact displayed dimensions, one layer, transparent background, Edit-media separation, independent undo and oversize rejection.
+Manual checks done: EXIF orientation-6 fixture opened at 3024×4032; native empty-room drop and Open Image dialog created correctly sized designs. Original source remained intact.
+Not done / open questions: HEIC and every camera format are not part of the supported dialog/test matrix. No OS image associations were added.
+
+### 8.2 Canvas operations
+Date: 2026-11-03
+Files changed: pure crop/rotation/reflection/anchor functions, Canvas draft interaction, Properties, Canvas Size anchor grid and commands.
+Tests added: all nine anchors, locked/hidden layer translation, preserved source masks/crop, rotation/flip round trips and transformed anchors.
+Manual checks done: full orientation-fixture background-removal/gradient/square-crop/transparent-PNG workflow; actual pointer crop 400×300 to 300×200, Enter and Undo; Cancel; pixel-matrix rotation/flip checks and nine-point grid UI.
+Not done / open questions: backgrounds reflow to the new canvas; image/mask sources remain nondestructive.
+
+### 9.1 Help and features
+Date: 2026-11-03
+Files changed: Design handbook article and FEATURES.
+Checks: commands/help metadata tests pass; articles now cover preview, readability, variants, sizes, paired export and standalone canvas operations.
+Open: none for implementation documentation.
+
+### 9.2 Review status
+- [x] All 466 tests pass; production build succeeds.
+- [x] Actual dist:mac pipeline produced an ARM64 app and DMG; packaged app starts; code signature and DMG checksum verified.
+- [x] No new dependencies in this round. Bundled model licenses and manifest remain as recorded in phase 4.
+- [x] Prior phase reports record old-project compatibility, independent histories, moved project packaging and the 300-layer performance budget. Their tests still pass.
+- [x] New product strings use English and no em-dashes. New unusual-use checks and results are recorded above.
+- [ ] Cross-platform/installer/notarization release matrix and exhaustive interaction combinations noted in previous QA reports remain unverified; no universal or public-release approval is claimed.
+
+No version bump or publication was performed. The current app version remains 0.9.0, read by About through app.getVersion().
