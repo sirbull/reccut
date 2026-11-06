@@ -43,7 +43,7 @@ function regionAt(p, clip, T) {
     return { cx: g.cx, cy: g.cy, w: ext(0), h: ext(1), a: g.rot };
   }
   const g = shapeAt(clip, 'track.', 'rect', T, W, H);
-  const m = clipMatrix(clip, T, W, H);
+  const m = clipMatrix(clip, T, W, H, p);
   const c = m.transformPoint(new DOMPoint(g.cx, g.cy));
   const k = Math.hypot(m.a, m.b);
   return { cx: c.x, cy: c.y, w: g.w * k, h: g.h * k, a: g.rot + Math.atan2(m.b, m.a) };

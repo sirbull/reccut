@@ -12,6 +12,8 @@ import { applyProcessor } from './editor/ProcessorEffects.jsx';
 import { aiChatOpen, aiDraft } from './Extensions.jsx';
 import * as commands from './editor/commands.js';
 import { prefs, setPrefs } from './prefs.js';
+import { KeystrokesConsent, KeystrokesRows, keystrokesConsent, keystrokesNeedsDownload } from './recorder/KeystrokesAddon.jsx';
+import { keystrokes, refreshKeystrokes } from './recorder/engine.js';
 
 const api = window.api;
 export const openPlugins = signal([]); // ids, last is on top
@@ -29,7 +31,18 @@ export const BUILTIN = [
     icon: HIGGSFIELD_ICON,
   },
 ];
-export const allPlugins = computed(() => [...BUILTIN, ...plugins.value]);
+// Listed like a plugin, but it is a separate download with its own install and remove.
+const KEYSTROKES_ICON =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8"/></svg>';
+const KEYSTROKES = {
+  id: 'keystrokes',
+  addon: true,
+  room: 'record',
+  name: 'Keystroke Add-on',
+  description: 'Show the shortcuts you press in your recordings. A separate download that is not part of Reccut.',
+  icon: KEYSTROKES_ICON,
+};
+export const allPlugins = computed(() => [...BUILTIN, KEYSTROKES, ...plugins.value]);
 // Each section has its own plugins. Processors work on video clips, so they belong to Edit.
 const ROOM_NAMES = { record: 'Record', edit: 'Edit', export: 'Export', design: 'Design' };
 export const pluginRoom = (p) => p.room || 'edit';
@@ -189,6 +202,15 @@ function ExportDialog({ id }) {
 export function openPlugin(id) {
   openPlugins.value = [...openPlugins.value.filter((x) => x !== id), id];
 }
+// Opens a plugin from a list. The Keystroke Add-on shows its warning first, until it is installed.
+async function openFromList(p) {
+  if (p.addon && (await keystrokesNeedsDownload())) {
+    keystrokesConsent.value = true;
+    return;
+  }
+  openPlugin(p.id);
+  commands.prefsOpen.value = false;
+}
 
 // The icon is an SVG the plugin brings; as an <img> it cannot run anything.
 export function PluginIcon({ plugin, size = 18 }) {
@@ -237,7 +259,7 @@ export function PluginsButton() {
               key={p.id}
               class="plugin-item"
               onClick={() => {
-                openPlugin(p.id);
+                openFromList(p);
                 setOpen(false);
               }}
             >
@@ -304,6 +326,7 @@ export function PluginWindows() {
         </Modal>
       )}
       {exportingPlugin.value && <ExportDialog id={exportingPlugin.value} />}
+      <KeystrokesConsent />
     </>
   );
 }
@@ -342,7 +365,7 @@ function PluginWindow({ plugin, z }) {
         {hasSettings(plugin) && <IconButton icon={Settings2} title={`${plugin.name} settings`} onClick={() => openPluginSettings(plugin.id)} />}
         <IconButton icon={X} title="Close" onClick={() => (openPlugins.value = openPlugins.value.filter((x) => x !== plugin.id))} />
       </header>
-      <div class="plugin-body">{plugin.id === 'higgsfield' ? <HiggsfieldTool /> : <ProcessorTool plugin={plugin} />}</div>
+      <div class="plugin-body">{plugin.id === 'higgsfield' ? <HiggsfieldTool /> : plugin.addon ? <KeystrokesRows /> : <ProcessorTool plugin={plugin} />}</div>
     </div>
   );
 }
@@ -604,6 +627,7 @@ export function PluginsPane({ designSettings }) {
   const open = settingsFocus.value;
   useEffect(() => {
     reload();
+    refreshKeystrokes();
   }, []);
   useEffect(() => {
     if (!open || open === 'image-sources') return;
@@ -642,20 +666,21 @@ export function PluginsPane({ designSettings }) {
     section.scrollIntoView({ block: 'start', behavior: 'smooth' });
     section.querySelector('summary')?.focus({ preventScroll: true });
   };
+  const addon = keystrokes.value;
   const pluginCard = p => (
     <div class="plugin-settings-card" key={p.id} id={`plugin-${p.id}`}>
       <div class="processor-row">
         <PluginIcon plugin={p} size={22} />
         <div class="plugin-settings-description">
           <b>{p.name}</b>
-          <small>{p.builtin ? 'Built in' : `Version ${p.version || 1}`}{p.author ? ` · by ${p.author}` : ''}</small>
+          <small>{p.builtin ? 'Built in' : p.addon ? (addon?.version ? `Version ${addon.version}` : 'Optional download') : `Version ${p.version || 1}`}{p.author ? ` · by ${p.author}` : ''}</small>
           {p.description && <p class="hint">{p.description}</p>}
         </div>
         <div class="extension-actions">
-          <Button class="small" onClick={() => { openPlugin(p.id); commands.prefsOpen.value = false; }}>Open</Button>
+          <Button class="small" onClick={() => openFromList(p)}>{p.addon && (!addon?.installed || addon.damaged) ? 'Download…' : 'Open'}</Button>
           {hasSettings(p) && <Button class={`small${open === p.id ? ' active' : ''}`} icon={Settings2} onClick={() => (settingsFocus.value = open === p.id ? null : p.id)} aria-expanded={open === p.id}>Settings</Button>}
           {p.kind && <Button class="small" onClick={() => (exportingPlugin.value = p.id)} title="Save it as a file others can install">Share…</Button>}
-          {!p.builtin && <Button class="small" onClick={() => remove(p)}>Remove</Button>}
+          {!p.builtin && !p.addon && <Button class="small" onClick={() => remove(p)}>Remove</Button>}
         </div>
       </div>
       {open === p.id && <PluginSettings key={`${p.id}:${p.version || 1}`} plugin={p} />}
@@ -674,7 +699,7 @@ export function PluginsPane({ designSettings }) {
         const list = allPlugins.value.filter(p => pluginRoom(p) === w.id);
         return <PluginWorkspace key={w.id} workspace={w} active={w.id === activeRoom} focused={focusedRoom === w.id} count={list.length}>
           {w.id === 'design' && <div class="plugin-workspace-guide"><b>Connect once, use in your designs</b><p>Openverse works without an account. Add more photo sources below using your own API key or sign-in. Find connected photos in Design → Add Content → Stock Photos. Set up online templates separately at the end of this section.</p></div>}
-          {w.id !== 'design' && list.length > 0 && <p class="hint">Open these tools from the Plugins button in {w.name}. Use Settings to choose their defaults.</p>}
+          {w.id !== 'design' && list.length > 0 && <p class="hint">Open these tools from the Plugins button in {w.name}.{list.some(hasSettings) && ' Use Settings to choose their defaults.'}</p>}
           {list.map(pluginCard)}
           {w.id === 'design' && designSettings}
           {!list.length && w.id !== 'design' && <p class="plugin-workspace-empty">No {w.name.toLowerCase()} plugins are installed. {w.id === 'record' ? 'Screen, camera and audio options are available in the Record workspace.' : w.id === 'export' ? 'Video format and quality options are available in the Export workspace.' : 'Install a plugin below to add a clip-processing tool.'}</p>}

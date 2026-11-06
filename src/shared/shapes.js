@@ -1,7 +1,7 @@
 // Former for masker og sladding: rektangel, avrundet, ellipse og fri form (punkter).
 // Alle mål kan ha nøkkelbilder, også punktene i en fri form, så formene kan animeres.
 // En form ligger i klippets eget rom: den følger klippet når det flyttes, skaleres eller roteres.
-import { uid, valueAt } from './model.js';
+import { recordingRectsAt, sourceTime, uid, valueAt } from './model.js';
 
 export const MASK_SHAPES = [
   { id: 'rect', label: 'Rectangle' },
@@ -20,8 +20,21 @@ export const MASK_MODES = [
 // så de kan bruke de samme nøkkelbildene som alt annet.
 export const maskKey = (id, prop) => `mask.${id}.${prop}`;
 
+// Flaten klippet fyller: PiP-rammen for kameraklipp, ellers hele bildet.
+export function clipBox(clip, T, W, H, project) {
+  const screen = clip.props?.pipAnchor && project?.media?.[clip.mediaId]?.streams?.screen;
+  if (!screen) return { x: 0, y: 0, w: W, h: H };
+  return recordingRectsAt(clip, sourceTime(clip, T), W, H, screen.width && screen.height ? screen.width / screen.height : 16 / 9).cam;
+}
+
+// Ankerpunktet: det klippet roteres og skaleres rundt. anchorX og anchorY er avstanden fra midten av flaten.
+export function clipPivot(clip, T, W, H, project) {
+  const b = clipBox(clip, T, W, H, project);
+  return { x: b.x + b.w / 2 + (valueAt(clip, 'anchorX', T) || 0), y: b.y + b.h / 2 + (valueAt(clip, 'anchorY', T) || 0) };
+}
+
 // Matrisen fra klippets rom til bildet, samme som drawClip bruker.
-export function clipMatrix(clip, T, W, H) {
+export function clipMatrix(clip, T, W, H, project) {
   const m = new DOMMatrix();
   if (clip.type === 'redact' || clip.type === 'adjustment') return m;
   const x = valueAt(clip, 'x', T) || 0;
@@ -29,7 +42,8 @@ export function clipMatrix(clip, T, W, H) {
   const sc = valueAt(clip, 'scale', T) ?? 1;
   const rot = valueAt(clip, 'rotation', T) || 0;
   if (!(x || y || sc !== 1 || rot)) return m;
-  return m.translate(W / 2 + x, H / 2 + y).rotate(rot).scale(sc, sc).translate(-W / 2, -H / 2);
+  const P = clipPivot(clip, T, W, H, project);
+  return m.translate(P.x + x, P.y + y).rotate(rot).scale(sc, sc).translate(-P.x, -P.y);
 }
 
 /**
@@ -185,10 +199,10 @@ function tempCanvas(w, h) {
  * (forhåndsvisningens skala eller eksportens matrise). Hver maske kan utvides eller krympes
  * (expand), få myk kant (feather), gjennomsiktighet og inverteres. Gir false om ingen maske finnes.
  */
-export function paintMask(g, clip, T, W, H, base, cw, ch) {
+export function paintMask(g, clip, T, W, H, base, cw, ch, project) {
   const masks = maskList(clip);
   if (!masks.length) return false;
-  const M = base.multiply(clipMatrix(clip, T, W, H));
+  const M = base.multiply(clipMatrix(clip, T, W, H, project));
   const k = Math.hypot(M.a, M.b) || 1;
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.globalAlpha = 1;

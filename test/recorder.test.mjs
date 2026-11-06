@@ -217,6 +217,7 @@ test('initialization and device changes outside Record never open camera or micr
 test('leaving Record cancels a microphone test and releases its devices', async () => {
   const s = setup();
   await s.engine.initSources();
+  s.engine.notice.value = null; // The stub has no screens, which gives the permission notice.
   const testing = s.engine.testMic();
   await flush();
   assert.equal(s.engine.micTest.value, 'recording');
@@ -305,4 +306,15 @@ test('release animation keeps painting then stops, and leaving Record cancels pe
   assert.equal(s.frames.size, 0);
   s.receive({ type: 'cursor', x: 0.6, y: 0.7 });
   assert.equal(s.frames.size, 0, 'inactive recorder must not render from global input');
+});
+
+test('an empty screen list on macOS explains the missing permission, and the notice clears when screens return', async () => {
+  let list = [];
+  const s = setup({ apiOverrides: { listScreens: async () => list } });
+  await s.engine.refreshScreens();
+  assert.equal(s.engine.notice.value?.kind, 'screen');
+  assert.equal(s.engine.notice.value.action, 'Open Settings');
+  list = [{ id: 'screen:1', kind: 'screen', name: 'Main Display', width: 1920, height: 1080 }];
+  await s.engine.refreshScreens();
+  assert.equal(s.engine.notice.value, null);
 });

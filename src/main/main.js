@@ -17,6 +17,7 @@ const {
   shell,
   systemPreferences,
 } = require('electron');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -616,23 +617,24 @@ ipcMain.handle('rec:recover', async (_e, dir) => {
   try {
     partial = JSON.parse(await fs.promises.readFile(path.join(dir, 'recording.partial.json'), 'utf8'));
   } catch {}
-  const out = { version: 1, createdAt: new Date(partial.t0 || Date.now()).toISOString(), recovered: true, fps: 30, layouts: [[0, 6]], cursor: [], zooms: [], ...partial };
+  const out = { version: 1, id: crypto.randomUUID(), name: path.basename(dir), createdAt: new Date(partial.t0 || Date.now()).toISOString(), recovered: true, fps: 30, layouts: [[0, 6]], cursor: [], zooms: [], ...partial };
   delete out.savedAt;
   // Zoom som var på da det stoppet, avsluttes ved siste kjente tid.
   const end = Math.max(0, ...(out.cursor || []).map((c) => c[0]), ...(out.keys || []).map((k) => k[0]));
   out.zooms = (out.zooms || []).map(([a, b]) => [a, b ?? end]);
+  // Før filene skrives, så dataene i filene har riktige tider.
+  removePauses(out, out.pauses);
   const sources = [];
   out.formatWarnings = [];
   for (const f of await fs.promises.readdir(dir)) {
     const m = f.match(/^(screen|camera)\.raw\.(\w+)$/);
     if (!m) continue;
     const key = m[1];
-    const result = await finalizeRecordingStream(dir, { ...(partial[key] || {}), raw: f, file: partial[key]?.file || `${key}.${m[2]}`, offset: partial[key]?.offset || 0 });
+    const result = await finalizeRecordingStream(dir, { ...(partial[key] || {}), raw: f, file: partial[key]?.file || `${key}.${m[2]}`, offset: partial[key]?.offset || 0 }, undefined, { ...out, part: key });
     out[key] = result.stream;
     if (result.warning) out.formatWarnings.push(result.warning);
     if (result.stream.file !== f) sources.push(f);
   }
-  removePauses(out, out.pauses);
   await fs.promises.writeFile(path.join(dir, 'recording.json'), JSON.stringify(out, null, 1));
   for (const file of sources) await fs.promises.unlink(path.join(dir, file)).catch(() => {});
   await fs.promises.unlink(path.join(dir, 'recording.partial.json')).catch(() => {});
@@ -651,13 +653,13 @@ ipcMain.handle('rec:finish', async (_e, meta) => {
   const events = input.endSession() || { cursor: [], zooms: [] };
   if (keySession) events.keys = keySession.keys;
   stopKeystrokes();
-  const out = removePauses({ version: 1, createdAt: new Date().toISOString(), ...meta, ...events }, meta.pauses);
+  const out = removePauses({ version: 1, id: crypto.randomUUID(), name: path.basename(dir), createdAt: new Date().toISOString(), ...meta, ...events }, meta.pauses);
   const sources = [];
   out.formatWarnings = [];
   for (const key of ['screen', 'camera']) {
     const s = meta[key];
     if (!s) continue;
-    const result = await finalizeRecordingStream(dir, s);
+    const result = await finalizeRecordingStream(dir, s, undefined, { ...out, part: key });
     out[key] = result.stream;
     if (result.warning) out.formatWarnings.push(result.warning);
     if (result.stream.file !== s.raw) sources.push(s.raw);
@@ -683,6 +685,7 @@ ipcMain.handle('media:importSequence', async (_e, file, fps, outDir) => {
 });
 ipcMain.handle('decoders:locate', (_e, tool) => decoders.locate(tool, win));
 ipcMain.handle('media:importRecording', (_e, dir) => media.recordingMedia(dir, notifyAnalyzed));
+ipcMain.handle('media:recordingPaths', (_e, files) => media.recordingPaths(files));
 ipcMain.handle('media:reanalyze', async (_e, items) => {
   // Kjøres når et prosjekt åpnes, slik at bufrede analyser hentes inn igjen.
   for (const m of items) {
@@ -1060,7 +1063,7 @@ async function mixForTranscription({ sources, duration }, ctx) {
 
 // Talemodellene for teksting lagres på disk, slik at de bare lastes ned én gang.
 function modelCachePath(key) {
-  const hash = require('crypto').createHash('sha1').update(key).digest('hex');
+  const hash = crypto.createHash('sha1').update(key).digest('hex');
   return path.join(app.getPath('userData'), 'models', hash);
 }
 ipcMain.handle('modelcache:get', async (_e, key) => {

@@ -10,6 +10,7 @@ const raw = require('./raw');
 const motion = require('./motion');
 const tsdemux = require('./tsdemux');
 const decoders = require('./decoders');
+const { findRecording, loadRecording } = require('./recording');
 
 const VIDEO_EXT = new Set(['.mp4', '.m4v', '.mov', '.qt', '.webm', '.mkv', '.avi', '.divx', '.mts', '.m2ts', '.ts', '.wmv', '.asf', '.flv', '.f4v', '.mpg', '.mpeg', '.m2v', '.vob', '.mod', '.3gp', '.3g2', '.mxf', '.ogv', '.dv', '.y4m', '.rm', '.rmvb', '.h264', '.264', '.avc', '.h265', '.265', '.hevc', '.m1v', '.mpv', '.vc1', '.ivf', '.obu', '.nut', '.ogm', '.xvid', '.evo', '.trp', '.tp', '.m2t', '.f4p', '.bik', '.smk', '.nsv', '.amv', '.mjpeg', '.mjpg', '.dav', '.vro', '.wtv', '.dvr-ms', '.gxf', '.r3d', '.braw']);
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.m4a', '.m4b', '.aac', '.flac', '.ogg', '.oga', '.opus', '.weba', '.aif', '.aiff', '.aifc', '.wma', '.caf', '.mka', '.ac3', '.eac3', '.dts', '.amr', '.ape', '.wv', '.au', '.mp2', '.spx', '.tta', '.w64', '.rf64', '.mpc', '.ra', '.voc', '.snd', '.gsm', '.m4r', '.3ga', '.dsf', '.dff', '.thd', '.truehd', '.mlp', '.shn', '.tak', '.ofr', '.awb', '.qcp', '.sln', '.adts', '.mp1', '.m2a', '.oma', '.aa3', '.xa', '.vqf']);
@@ -113,8 +114,19 @@ async function importFiles(files, notify) {
   const failed = [];
   const missing = [];
   const out = { items: result, failed, missing };
+  const recordings = new Set();
   for (const file of files) {
     let kind = kindOf(file);
+    // Skjerm og kamera fra samme opptak blir ett opptak, også når bare den ene filen er valgt.
+    const recording = kind === 'image' ? null : await findRecording(file);
+    if (recording) {
+      if (recordings.has(recording.id)) continue;
+      recordings.add(recording.id);
+      const media = await recordingMedia(recording.target, notify).catch((err) => (console.error('Recording import failed', file, err), null));
+      if (media) result.push(media);
+      else failed.push(path.basename(file));
+      continue;
+    }
     // Kamera-RAW-video (BRAW, R3D, N-RAW, ARRIRAW): FFmpeg kan ikke dekode det, så produsentens verktøy brukes.
     const rawTool = decoders.toolFor(file, false);
     if (rawTool) {
@@ -203,6 +215,16 @@ async function importFiles(files, notify) {
     }
   }
   return { items: result, failed, missing };
+}
+
+// Filene som må følge med når disse kopieres inn: hele opptaket, ikke bare den valgte filen.
+async function recordingPaths(files) {
+  const out = new Set();
+  for (const file of files) {
+    const recording = kindOf(file) === 'image' ? null : await findRecording(file);
+    for (const p of recording?.paths || [file]) out.add(p);
+  }
+  return [...out];
 }
 
 async function animatedFallback(file) {
@@ -387,18 +409,18 @@ function scheduleAnalysis(media, notify) {
   }
 }
 
-// Gjør om en ferdig opptaksmappe til en mediapost.
-async function recordingMedia(dir, notify) {
-  const rec = JSON.parse(await fs.promises.readFile(path.join(dir, 'recording.json'), 'utf8'));
+// Gjør om et ferdig opptak til en mediapost. target: opptaksmappen, eller en fil med opptaksdata.
+async function recordingMedia(target, notify) {
+  const { rec, name, files, loose } = await loadRecording(target);
   const streams = {};
   for (const key of ['screen', 'camera']) {
     const s = rec[key];
-    if (!s) continue;
-    const file = path.join(dir, s.file);
+    const file = files[key];
+    if (!file) continue;
     const info = await ff.probe(file);
     streams[key] = {
       path: file,
-      offset: s.offset || 0,
+      offset: s?.offset || 0,
       duration: info.duration,
       hasVideo: info.hasVideo,
       hasAudio: info.hasAudio,
@@ -411,8 +433,9 @@ async function recordingMedia(dir, notify) {
   }
   const duration = Math.max(...Object.values(streams).map((s) => s.offset + s.duration), 0.1);
   const base = streams.screen || streams.camera;
-  return makeMedia(dir, 'recording', streams, notify, {
-    name: path.basename(dir),
+  return makeMedia(target, 'recording', streams, notify, {
+    name,
+    ...(loose ? { loose } : {}),
     duration,
     fps: rec.fps || 30,
     width: base?.width || 1920,
@@ -716,4 +739,4 @@ function extensions() {
   return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT, ...raw.RAW_EXT, '.psb', '.reccut-title'].map((e) => e.slice(1));
 }
 
-module.exports = { browseDir, browseThumb, browsePlaces, scheduleMotion, isOffline, relink, scheduleOptimize, reverseStream, scheduleReverse, extensions, imageExtensions, readableImage, importFiles, recordingMedia, kindOf, cacheRoot, newId };
+module.exports = { browseDir, browseThumb, browsePlaces, scheduleMotion, isOffline, relink, scheduleOptimize, reverseStream, scheduleReverse, extensions, imageExtensions, readableImage, importFiles, recordingMedia, recordingPaths, kindOf, cacheRoot, newId };

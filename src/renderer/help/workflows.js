@@ -295,7 +295,7 @@ Create or open a project first. Check the Record room before a long take; its se
 
 ## Grant permissions
 
-On macOS, allow screen recording, camera and microphone access in the system's Privacy & Security settings. If you use the Keystroke Add-on, macOS also asks to allow Input Monitoring for Reccut. Reccut provides permission controls in the recording interface. After changing system permissions, restart Reccut if the source or input tracking is still unavailable. On Windows, check camera and microphone access for desktop apps in system settings.
+On macOS, allow screen recording, camera and microphone access in the system's Privacy & Security settings. If you use the Keystroke Add-on, macOS also asks to allow Input Monitoring for Reccut. Reccut provides permission controls in the recording interface. After changing system permissions, restart Reccut if the source or input tracking is still unavailable. If the Screen list only shows **No screen** after an update, even though Reccut is switched on under Screen Recording, remove Reccut from that list with the minus button, add it again and restart. On Windows, check camera and microphone access for desktop apps in system settings.
 
 If the preview is black, check the selected source and screen permission before changing export settings.
 

@@ -639,6 +639,10 @@ input[type='color'].color::-webkit-color-swatch {
   color: #1c1c1e;
   animation: none;
 }
+/* The warning can open from Settings and over plugin windows, and must stay on top of both. */
+.modal-backdrop:has(.keys-consent) {
+  z-index: 300;
+}
 .keys-facts {
   margin: 8px 0 12px;
   padding-left: 18px;
@@ -4229,6 +4233,21 @@ kbd.keycap {
 }
 .shape-editor .shape-handle.point {
   cursor: grab;
+}
+.transform-box .transform-outline {
+  fill: none;
+  stroke: var(--yellow);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}
+.transform-box .transform-anchor {
+  fill: none;
+  stroke: var(--yellow);
+  pointer-events: all;
+  cursor: move;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}
+.transform-box .transform-anchor-hit {
+  stroke: none;
 }
 .mask-add {
   display: flex;

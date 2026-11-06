@@ -56,7 +56,7 @@ import { beginTransient, commit, endPreview, projectPath, renameProject, endTran
 import { groupPositionClips, groupVisuals, setGroupOpacity, setGroupPosition } from '../../shared/groupSettings.js';
 import { seek } from './playback.js';
 import { setKeyframe } from './keyframes.js';
-import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, setComponentMono, toggleComponent } from './commands.js';
+import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, shownInspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, setComponentMono, toggleComponent } from './commands.js';
 import { prefs } from '../prefs.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { attachToTrack, deleteTrack, detach, removeTrackingKeyframes, trackArea, trackForward, trackRedaction, tracksFor } from './track.js';
@@ -173,6 +173,10 @@ function ClipInspector({ clip, clips = [clip], group = false }) {
   const tab = tabs.find((t) => t.id === inspectorTab.value) ? inspectorTab.value : tabs[0]?.id;
   const title = group ? `Group · ${clips.length} clips` : multi ? `${clips.length} clips selected` : clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? redactLabel(clip) : clip.type === 'caption' ? 'Caption' : clip.type === 'gap' ? 'Gap' : clip.name || media?.name || 'Clip';
   const ids = clips.map((c) => c.id).join();
+  useLayoutEffect(() => {
+    shownInspectorTab.value = tab;
+    return () => { shownInspectorTab.value = null; };
+  }, [tab]);
   useLayoutEffect(() => {
     if (!multi || (group && tab === 'video')) return;
     mirror.from = clip.id;
@@ -342,10 +346,12 @@ function setProp(clip, patch) {
   commit((q) => Object.assign(q.clips[clip.id].props, patch));
 }
 
+const ANIMATED_PROPS = ['opacity', 'x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY'];
+
 function AnimationPresets({ clip }) {
   const p = project.value;
   const [preset, setPreset] = useState('fadeIn');
-  const animated = ['opacity', 'x', 'y', 'scale', 'rotation'].some((k) => clip.kf?.[k]?.length);
+  const animated = ANIMATED_PROPS.some((k) => clip.kf?.[k]?.length);
   return (
     <Section title="Animation">
       <div class="anim-row">
@@ -359,7 +365,7 @@ function AnimationPresets({ clip }) {
           class="link small-link"
           onClick={() =>
             commit((q) => {
-              for (const k of ['opacity', 'x', 'y', 'scale', 'rotation']) delete q.clips[clip.id].kf[k];
+              for (const k of ANIMATED_PROPS) delete q.clips[clip.id].kf[k];
             })
           }
         >
@@ -398,7 +404,9 @@ function VideoTab({ clip }) {
         <Param clip={clip} prop="y" label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} />
         <Param clip={clip} prop="scale" label="Scale" min={10} max={400} scale={100} unit="%" />
         <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
-        <p class="hint">Drag the clip in the viewer to move it. Alt/Option-click a property name or diamond to choose an expression.</p>
+        <Param clip={clip} prop="anchorX" label="Anchor X" min={-p.width} max={p.width} unit="px" slider={false} />
+        <Param clip={clip} prop="anchorY" label="Anchor Y" min={-p.height} max={p.height} unit="px" slider={false} />
+        <p class="hint">While this tab is open, drag in the viewer to move the clip, drag the corners to scale, the round handle to rotate and the crosshair to move the anchor point. Scale and rotation pivot around the anchor point, which is measured from the center of {clip.props.pipAnchor ? 'the PiP' : 'the clip'}. Alt/Option-click a property name or diamond to choose an expression.</p>
       </Section>}
       {(clip.type === 'video' || clip.type === 'recording') && <TrackSection clip={clip} />}
       {clip.type !== 'adjustment' && clip.lane > 0 && <FollowSection clip={clip} />}

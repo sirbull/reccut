@@ -1,12 +1,30 @@
 // Show keystrokes: an optional add-on that the user downloads after reading what it does.
 import { useEffect, useState } from 'preact/hooks';
+import { signal } from '@preact/signals';
 import { Keyboard } from 'lucide-preact';
-import { Button, Modal, Row, Toggle } from '../ui.jsx';
+import { Button, Modal, Row, Toggle, toast } from '../ui.jsx';
 import { saveSettings, settings } from './settings.js';
 import * as engine from './engine.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
+const recordingNow = () => engine.recording.value || engine.countdown.value > 0 || engine.finishing.value;
+
+// One warning for the whole app, so the Overlays row and the plugin list open the same dialog.
+export const keystrokesConsent = signal(false);
+export function KeystrokesConsent() {
+  if (!keystrokesConsent.value) return null;
+  return <ConsentDialog onClose={() => (keystrokesConsent.value = false)} onInstalled={() => {
+    saveSettings({ showKeys: true });
+    toast('The Keystroke Add-on is installed. Show keystrokes is on under Overlays in Record.', { kind: 'success' });
+  }} />;
+}
+// True when the plugin list should go straight to the warning. While recording, the add-on's
+// window opens instead, with the download button disabled.
+export async function keystrokesNeedsDownload() {
+  const s = await engine.refreshKeystrokes();
+  return s.supported && (!s.installed || s.damaged) && !recordingNow();
+}
 
 export const ADDON_FACTS = [
   'The add-on reads the keyboard for the whole computer while you record, also in other apps. It uses the same system feature as keyloggers, so security software may warn about it.',
@@ -16,7 +34,7 @@ export const ADDON_FACTS = [
   'It is a separate file from the Reccut release on GitHub, checked with a checksum before every start. It does not write files or use the network. You can remove it at any time.',
 ];
 
-export function ConsentDialog({ onClose, onInstalled }) {
+function ConsentDialog({ onClose, onInstalled }) {
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -57,9 +75,8 @@ export function ConsentDialog({ onClose, onInstalled }) {
 export function KeystrokesRows() {
   const s = settings.value;
   const status = engine.keystrokes.value;
-  const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
-  const recording = engine.recording.value || engine.countdown.value > 0 || engine.finishing.value;
+  const recording = recordingNow();
 
   useEffect(() => {
     engine.refreshKeystrokes();
@@ -96,7 +113,7 @@ export function KeystrokesRows() {
       <Row label={label}>
         {ready
           ? <Toggle checked={Boolean(s.showKeys)} disabled={recording} onChange={(v) => saveSettings({ showKeys: v })} />
-          : <Button class="small" disabled={recording || busy} onClick={() => setConsent(true)}>{status.damaged ? 'Reinstall Add-on…' : 'Get Add-on…'}</Button>}
+          : <Button class="small" disabled={recording || busy} onClick={() => (keystrokesConsent.value = true)}>{status.damaged ? 'Reinstall Add-on…' : 'Get Add-on…'}</Button>}
       </Row>
       {status.damaged && <p class="hint warn">The Keystroke Add-on was changed after it was installed, so Reccut will not start it. Reinstall or remove it.</p>}
       {ready && s.showKeys && status.permission === 'denied' && (
@@ -113,9 +130,8 @@ export function KeystrokesRows() {
           ? <>The Keystroke Add-on reads the keyboard only while you record, and saves shortcuts with {isMac ? 'Cmd or Ctrl' : 'Ctrl, Alt or Win'} in the recording. Normal typing never leaves the add-on. Reccut's own shortcuts are never shown. {status.outdated && 'A newer add-on comes with this version of Reccut. '}</>
           : <>Keystrokes need an optional add-on that reads the keyboard while you record. Reccut does not include it, so the app itself never reads your keyboard. </>}
         {status.installed && <button type="button" class="link-btn" disabled={recording || busy} onClick={remove}>Remove add-on</button>}
-        {ready && status.outdated && <> <button type="button" class="link-btn" disabled={recording || busy} onClick={() => setConsent(true)}>Update add-on</button></>}
+        {ready && status.outdated && <> <button type="button" class="link-btn" disabled={recording || busy} onClick={() => (keystrokesConsent.value = true)}>Update add-on</button></>}
       </p>
-      {consent && <ConsentDialog onClose={() => setConsent(false)} onInstalled={() => saveSettings({ showKeys: true })} />}
     </>
   );
 }

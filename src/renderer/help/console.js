@@ -69,6 +69,8 @@ const PARAMS = [
   ['video', 'y', 'Position Y', 'move vertical'],
   ['video', 'scale', 'Scale', 'size zoom resize'],
   ['video', 'rotation', 'Rotation', 'rotate angle'],
+  ['video', 'anchorX', 'Anchor X', 'anchor point pivot origin center'],
+  ['video', 'anchorY', 'Anchor Y', 'anchor point pivot origin center'],
   ['color', 'exposure', 'Exposure', 'brightness light'],
   ['color', 'contrast', 'Contrast', ''],
   ['color', 'highlights', 'Highlights', 'bright areas'],

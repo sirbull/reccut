@@ -407,13 +407,17 @@ Choose a countdown of 3, 5 or 10 seconds under Recording. The numbers are shown 
 - The layout buttons, or the shortcuts shown on them (1–8), switch between camera full screen, screen only, the camera in a corner and camera and screen side by side (7 and 8). To use these keys from another app, enable **Allow shortcuts in other apps** under **Record → Shortcuts**.
 - Choose the camera shape (circle, square or 16:9), size and mirroring.
 - Turn on **Show PiP on screen** under Camera to see the camera over the app you are demonstrating. It follows the recording's position, size and shape, including when recording a screen area. Clicks pass through to the app underneath. It appears while Reccut is in the background and hides when you return. Use the layout shortcuts with **3–6** to switch corners. This is available for display and area capture. On macOS and Linux, the on-screen camera can also appear in the screen file; leave it off if you need a clean screen file for later editing.
-- **Show keystrokes** needs the optional **Keystroke Add-on**. Reccut itself never reads the keyboard outside its own window. Click **Get Add-on** to read what the add-on does before it is downloaded: it reads the keyboard for the whole computer while you record, only shortcuts with Cmd, Ctrl, Alt or Win (plus Esc and the F keys) leave it, and they are saved in the recording so you can change them in Edit. It runs only while you record, and **Keys** in the recording controls shows when it is active. Reccut's own shortcuts are never shown. Remove the add-on under Overlays.
+- **Show keystrokes** needs the optional **Keystroke Add-on**. Reccut itself never reads the keyboard outside its own window. Click **Get Add-on**, or choose it under **Plugins** in Record, to read what the add-on does before it is downloaded: it reads the keyboard for the whole computer while you record, only shortcuts with Cmd, Ctrl, Alt or Win (plus Esc and the F keys) leave it, and they are saved in the recording so you can change them in Edit. It runs only while you record, and **Keys** in the recording controls shows when it is active. Reccut's own shortcuts are never shown. Remove the add-on under Overlays.
 - **Cursor zoom** zooms in on the mouse pointer. Press the recording shortcut with **M** to turn it on and off.
 - The recording is saved in the Recordings folder of the open project and added to its media. If the timeline is empty, it is also placed on the timeline.
 
 Everything is saved as separate files, so in the editor you can still change the layout, camera shape, overlays and the level of the microphone and system audio.
 
 Screen recordings with a camera are added as two clips: the screen on **V1** and **PiP** on **V2** (or the next available video track). They are linked, so moving, trimming, cutting or changing the speed keeps them in sync. Click PiP to select only the camera. Microphone and system audio stay on the screen clip.
+
+To place the camera freely, select **PiP** and open **Video**. Drag it in the viewer, or use the handles to scale and rotate it. The anchor point starts in the middle of the PiP, and follows it when the layout changes.
+
+Every recording file carries its own recording data: which part it is, how the two files line up, the layout, size and cursor events. Importing either file brings in the whole recording, with screen and camera in sync and placed as you recorded them, even if the files were moved or renamed. Keep both files in the same folder. WAV and Ogg files cannot carry this data, so keep their names if you move them.
 
 If your camera image is too dark, select the **PiP** clip and open **Color → Camera Color** (also in **Recording**). Raise **Exposure** to brighten it, or adjust **Contrast**, **Saturation** and **Temperature**. All color and effect controls on this clip affect only the camera, including when it fills the screen. Changes are saved in the project and included in the export. **Reset Camera Color** restores the four simple controls, including their keyframes.
 
@@ -1283,7 +1287,7 @@ Native OFX and Adobe plugins cannot be loaded directly. CorridorKey needs an ada
 Select a clip and its properties appear in the inspector on the right. The icons at the top switch between the parts of the clip, and you only see the ones that fit the clip:
 
 - **Text** for titles and lower thirds: the text, template, colors, font and animation.
-- **Video** ({{key:inspector:video}}): opacity, position, scale, rotation, crop, animation presets and fades.
+- **Video** ({{key:inspector:video}}): opacity, position, scale, rotation, anchor point, crop, animation presets and fades. While this tab is open, the selected clip has handles in the viewer: drag a corner to scale, the round handle to rotate (Shift for 15° steps) and the crosshair to move the **anchor point**. Scale and rotation pivot around the anchor point. Dragging the crosshair leaves the picture where it is. **Anchor X** and **Anchor Y** have keyframe diamonds, so the anchor point can be animated.
 - **Color** ({{key:inspector:color}}): looks, light, color and color wheels.
 - **Effects** ({{key:inspector:effects}}): the effects on the clip.
 - **Audio** ({{key:inspector:audio}}): levels, audio components, volume, fades and the audio format.

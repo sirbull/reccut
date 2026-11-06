@@ -3,7 +3,7 @@
 // rotasjon, skala, form) er plassen i forhold til objektet slik det var da klippet ble festet,
 // og flyttes, roteres og skaleres med objektet når det tegnes. Brukes likt i visning og eksport.
 import { sourceTime, valueAt } from './model.js';
-import { clipMatrix } from './shapes.js';
+import { clipMatrix, clipPivot } from './shapes.js';
 import { stabilizeAt } from './stabilize.js';
 
 export function containRect(sw, sh, W, H) {
@@ -23,7 +23,7 @@ export function streamOf(p, v) {
 // Fra kildebildet (brøkdeler av bredden) til prosjektets bilde ved tid T, slik render.js tegner klippet.
 export function videoMatrix(p, v, st, T) {
   const full = containRect(st.width, st.height, p.width, p.height);
-  let m = clipMatrix(v, T, p.width, p.height);
+  let m = clipMatrix(v, T, p.width, p.height, p);
   const stab = v.type === 'video' ? stabilizeAt(v, st.motion, sourceTime(v, T)) : null;
   if (stab) {
     const mx = full.x + full.w / 2;
@@ -74,9 +74,10 @@ export function followed(p, clip, T) {
   if (!F) return clip;
   const W = p.width;
   const H = p.height;
-  const q = F.transformPoint(new DOMPoint(W / 2 + (valueAt(clip, 'x', T) || 0), H / 2 + (valueAt(clip, 'y', T) || 0)));
+  const P = clipPivot(clip, T, W, H, p);
+  const q = F.transformPoint(new DOMPoint(P.x + (valueAt(clip, 'x', T) || 0), P.y + (valueAt(clip, 'y', T) || 0)));
   const s = Math.hypot(F.a, F.b);
-  const props = { ...clip.props, x: q.x - W / 2, y: q.y - H / 2, rotation: (valueAt(clip, 'rotation', T) || 0) + (Math.atan2(F.b, F.a) * 180) / Math.PI };
+  const props = { ...clip.props, x: q.x - P.x, y: q.y - P.y, rotation: (valueAt(clip, 'rotation', T) || 0) + (Math.atan2(F.b, F.a) * 180) / Math.PI };
   delete props.follow;
   const kf = { ...clip.kf }, expressions = { ...clip.expressions };
   for (const prop of ['x', 'y', 'rotation']) delete expressions[prop];

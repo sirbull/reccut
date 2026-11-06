@@ -145,6 +145,14 @@ export function syncFrame() {
 
 /* Kilder */
 
+// Ad hoc-signerte versjoner får ny identitet i macOS, så en gammel tillatelse kan stå på uten å virke.
+const screenPermissionNotice = () => ({
+  kind: 'screen',
+  text: 'Reccut is not allowed to record the screen. Allow it in System Settings and restart the app. If Reccut is already on, remove it with the minus button and add it again.',
+  action: 'Open Settings',
+  onAction: () => api.openPermissionSettings('screen'),
+});
+
 export async function refreshScreens() {
   try {
     screens.value = await api.listScreens();
@@ -154,6 +162,9 @@ export async function refreshScreens() {
   if (!screens.value.some((s) => s.id === settings.value.screenId)) {
     saveSettings({ screenId: screens.value[0]?.id ?? '' });
   }
+  // Uten tillatelse er listen tom, og useScreen stopper før den kan varsle.
+  if (!screens.value.length && api.platform === 'darwin') notice.value = screenPermissionNotice();
+  else if (screens.value.length && notice.value?.kind === 'screen') notice.value = null;
 }
 
 export async function refreshDevices() {
@@ -212,7 +223,7 @@ export async function useScreen() {
     console.error(err);
     notice.value =
       api.platform === 'darwin'
-        ? { kind: 'screen', text: 'Reccut is not allowed to record the screen. Allow it in System Settings and restart the app.', action: 'Open Settings', onAction: () => api.openPermissionSettings('screen') }
+        ? screenPermissionNotice()
         : { kind: 'screen', text: 'Could not start screen capture.' };
   }
   updateSize();

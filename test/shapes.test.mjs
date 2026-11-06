@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeClip, setKeyframe, valueAt } from '../src/shared/model.js';
-import { addMask, maskKey, maskList, removeMask, setMaskShape, shapeAt } from '../src/shared/shapes.js';
+import { addMask, clipMatrix, clipPivot, maskKey, maskList, removeMask, setMaskShape, shapeAt } from '../src/shared/shapes.js';
 
 test('punktene i en fri form glir mellom nøkkelbilder', () => {
   const c = makeClip('image', { start: 0, dur: 4 });
@@ -105,4 +105,38 @@ test('kutting deler opp media i brukte deler og flytter klippene', () => {
   q.clips[c.id] = c;
   q.primary = [c.id];
   assert.equal(trimProject(q).trimmed.length, 0);
+});
+
+// Node har ikke DOMMatrix: bare det clipMatrix bruker, som i nettleseren.
+class Matrix2D {
+  constructor(a = 1, b = 0, c = 0, d = 1, e = 0, f = 0) { Object.assign(this, { a, b, c, d, e, f }); }
+  mul(a, b, c, d, e, f) { return new Matrix2D(this.a * a + this.c * b, this.b * a + this.d * b, this.a * c + this.c * d, this.b * c + this.d * d, this.a * e + this.c * f + this.e, this.b * e + this.d * f + this.f); }
+  translate(x, y) { return this.mul(1, 0, 0, 1, x, y); }
+  scale(x, y) { return this.mul(x, 0, 0, y, 0, 0); }
+  rotate(deg) { const r = (deg * Math.PI) / 180; return this.mul(Math.cos(r), Math.sin(r), -Math.sin(r), Math.cos(r), 0, 0); }
+  transformPoint({ x, y }) { return { x: this.a * x + this.c * y + this.e, y: this.b * x + this.d * y + this.f }; }
+}
+
+test('ankerpunktet står stille når klippet skaleres og roteres, og kan animeres', (t) => {
+  globalThis.DOMMatrix = Matrix2D;
+  globalThis.DOMPoint = class { constructor(x, y) { this.x = x; this.y = y; } };
+  t.after(() => { delete globalThis.DOMMatrix; delete globalThis.DOMPoint; });
+  const c = makeClip('image', { start: 0, dur: 4 });
+  const at = (T) => {
+    const P = clipPivot(c, T, 1000, 1000);
+    return clipMatrix(c, T, 1000, 1000).transformPoint(new DOMPoint(P.x, P.y));
+  };
+  c.props.anchorX = -300;
+  c.props.anchorY = 200;
+  c.props.scale = 2;
+  c.props.rotation = 45;
+  const q = at(0);
+  assert.ok(Math.abs(q.x - 200) < 1e-9 && Math.abs(q.y - 700) < 1e-9);
+  // Uten skala og rotasjon flytter ikke ankeret bildet.
+  c.props.scale = 1;
+  c.props.rotation = 0;
+  assert.equal(clipMatrix(c, 0, 1000, 1000).e, 0);
+  setKeyframe(c, 'anchorX', 0, 0);
+  setKeyframe(c, 'anchorX', 2, 100);
+  assert.equal(clipPivot(c, 1, 1000, 1000).x, 550);
 });

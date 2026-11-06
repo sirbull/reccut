@@ -9,7 +9,7 @@ import { drawTestCard } from './testcard.js';
 import { drawTemplate, findTemplate } from './titletemplates.js';
 import { stabilizeAt } from './stabilize.js';
 import { imageRectAt } from './imageMotion.js';
-import { clipMatrix, maskList, paintMask, shapeAt, shapeCorners, shapePath } from './shapes.js';
+import { clipMatrix, clipPivot, maskList, paintMask, shapeAt, shapeCorners, shapePath } from './shapes.js';
 import {
   DEFAULT_CAPTION_STYLE,
   FONTS,
@@ -405,10 +405,11 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmaske
   const sc = valueAt(clip, 'scale', T) ?? 1;
   const rot = valueAt(clip, 'rotation', T) || 0;
   if (x || y || sc !== 1 || rot) {
-    ctx.translate(W / 2 + x, H / 2 + y);
+    const P = clipPivot(clip, T, W, H, project);
+    ctx.translate(P.x + x, P.y + y);
     if (rot) ctx.rotate((rot * Math.PI) / 180);
     ctx.scale(sc, sc);
-    ctx.translate(-W / 2, -H / 2);
+    ctx.translate(-P.x, -P.y);
   }
 
   const s = sourceTime(clip, T);
@@ -529,7 +530,7 @@ function drawAdjustment(ctx, project, clip, T, alpha) {
     g.drawImage(src.img, 0, 0, src.w, src.h, 0, 0, W, H);
   });
   const { c: mask, g: mg } = scratchCanvas(6, w, h);
-  if (maskList(clip).length) paintMask(mg, clip, T, W, H, new DOMMatrix([sx, 0, 0, sy, 0, 0]), w, h);
+  if (maskList(clip).length) paintMask(mg, clip, T, W, H, new DOMMatrix([sx, 0, 0, sy, 0, 0]), w, h, project);
   else { mg.fillStyle = '#fff'; mg.fillRect(0, 0, w, h); }
   pg.setTransform(1, 0, 0, 1, 0, 0);
   pg.globalCompositeOperation = 'destination-in';
@@ -678,7 +679,7 @@ function drawMasked(ctx, project, clip, T, getSource, alphaMul) {
   const content = shadow > 0 ? { ...clip, props: { ...clip.props, shadow: 0 }, kf: { ...clip.kf, shadow: [] } } : clip;
   drawClip(lg, project, content, T, getSource, 1 / visualOpacity(clip, T), true);
   const { c: M, g: mg } = scratchCanvas(3, cw, ch);
-  paintMask(mg, clip, T, project.width, project.height, base, cw, ch);
+  paintMask(mg, clip, T, project.width, project.height, base, cw, ch, project);
   lg.setTransform(1, 0, 0, 1, 0, 0);
   lg.globalCompositeOperation = 'destination-in';
   lg.drawImage(M, 0, 0, cw, ch, 0, 0, cw, ch);
@@ -688,7 +689,7 @@ function drawMasked(ctx, project, clip, T, getSource, alphaMul) {
   ctx.globalAlpha = visualOpacity(clip, T) * alphaMul;
   ctx.filter = 'none';
   // Restore the project transform for consistent shadow size in preview and export.
-  ctx.setTransform(base.multiply(clipMatrix(clip, T, project.width, project.height)));
+  ctx.setTransform(base.multiply(clipMatrix(clip, T, project.width, project.height, project)));
   compositeLayer(ctx, L, cw, ch, shadow, project.height, shadowStyle(clip, T, project.height));
   ctx.restore();
 }

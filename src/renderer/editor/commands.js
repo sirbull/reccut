@@ -119,6 +119,8 @@ export function openFrameExport() {
 }
 export const projectsOpen = signal(false);
 export const inspectorTab = signal(null);
+// Fanen som faktisk vises: inspectorTab gjelder ikke når klippet ikke har den fanen.
+export const shownInspectorTab = signal(null);
 export const captionEditRequest = signal(null);
 export const newProjectOpen = signal(false);
 export const prefsOpen = signal(false);

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { Activity, Maximize2, Minimize2, Settings2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-preact';
 import { deepClone, formatTimecode, isVisual, kfTime, valueAt } from '../../shared/model.js';
 import { captionLayout, wrapText } from '../../shared/render.js';
-import { clipMatrix, maskList, shapeAt } from '../../shared/shapes.js';
+import { clipBox, clipMatrix, clipPivot, maskList, shapeAt } from '../../shared/shapes.js';
 import { followMatrix } from '../../shared/follow.js';
 import { beginTransient, browserPlayhead, commit, endTransient, getTime, playing, project, selectedClips, room, selectedTransition, selection, skim, timeSig, updateTransient } from './store.js';
 import * as playback from './playback.js';
@@ -143,6 +143,7 @@ export function Viewer() {
         {pen && sel?.id === pen.clipId && <PenOverlay clip={sel} canvasRef={canvasRef} />}
         {sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} label="Redaction. Drag to move, drag the handles to resize." />}
         {sel && sel.type !== 'redact' && trackArea.value === sel.id && !pen && <ShapeEditor clip={sel} prefix="track." shape="rect" smooth={false} canvasRef={canvasRef} label="Tracking area. Put it over what the clip should follow." />}
+        {draggable && sel.type !== 'redact' && sel.type !== 'caption' && commands.shownInspectorTab.value === 'video' && !pen && !editMask && trackArea.value !== sel.id && <TransformBox clip={sel} canvasRef={canvasRef} />}
         {editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
       </div>
       {prefs.value.videoScopesVisible && !fullscreen && <VideoScopes sourceRef={canvasRef} onClose={() => setPrefs({ videoScopesVisible: false })} />}
@@ -189,7 +190,7 @@ function putValue(c, prop, v, T) {
 
 // Klippets rom i bildet, med levende kobling til et spor (se follow.js).
 function viewMatrix(p, clip, T) {
-  const M = clipMatrix(clip, T, p.width, p.height);
+  const M = clipMatrix(clip, T, p.width, p.height, p);
   const F = followMatrix(p, clip, T);
   return F ? F.multiply(M) : M;
 }
@@ -230,6 +231,120 @@ function drawRedactBox(e, clip, canvas, p) {
   };
   canvas.addEventListener('pointermove', move);
   canvas.addEventListener('pointerup', up);
+}
+
+/* Transform i bildet: hjørnene skalerer, det runde håndtaket roterer, og krysset flytter ankerpunktet.
+   Krysset flytter ikke bildet: posisjonen justeres, så klippet blir stående der det er. */
+
+export function TransformBox({ clip, canvasRef }) {
+  const p = project.value;
+  const T = timeSig.value;
+  const [box, setBox] = useState(null);
+  useEffect(() => {
+    const cv = canvasRef.current;
+    const measure = () => setBox({ left: cv.offsetLeft, top: cv.offsetTop, width: cv.offsetWidth, height: cv.offsetHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(cv);
+    return () => ro.disconnect();
+  }, []);
+  if (!box || T < clip.start || T > clip.start + clip.dur) return null;
+  const W = p.width;
+  const H = p.height;
+  const k = box.width / W;
+  const Tc = clipTime(clip);
+  const M = viewMatrix(p, clip, Tc);
+  const F = followMatrix(p, clip, Tc);
+  const view = (x, y) => {
+    const q = M.transformPoint(new DOMPoint(x, y));
+    return [q.x, q.y];
+  };
+  const b = clipBox(clip, Tc, W, H, p);
+  const P = clipPivot(clip, Tc, W, H, p);
+  const corners = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]].map(([x, y]) => view(x, y));
+  const [ax, ay] = view(P.x, P.y);
+  // Det runde håndtaket står rett utenfor toppen av rammen, i samme retning som klippet er rotert.
+  const [tx, ty] = [(corners[0][0] + corners[1][0]) / 2, (corners[0][1] + corners[1][1]) / 2];
+  const [bx, by] = [(corners[2][0] + corners[3][0]) / 2, (corners[2][1] + corners[3][1]) / 2];
+  const len = Math.hypot(tx - bx, ty - by) || 1;
+  const rx = tx + ((tx - bx) / len) * (24 / k);
+  const ry = ty + ((ty - by) / len) * (24 / k);
+  const r = 5.5 / k;
+  const arm = 11 / k;
+
+  const drag = (e, kind) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget;
+    const svg = el.ownerSVGElement;
+    el.setPointerCapture(e.pointerId);
+    // Punkter regnes uten levende kobling, så de kan sammenlignes med klippets egne verdier.
+    const toFrame = (ev) => {
+      const s = svg.getBoundingClientRect();
+      const q = new DOMPoint(((ev.clientX - s.left) / s.width) * W, ((ev.clientY - s.top) / s.height) * H);
+      return F ? F.inverse().transformPoint(q) : q;
+    };
+    const M0 = clipMatrix(clip, Tc, W, H, p);
+    const inv0 = M0.inverse();
+    const a0 = M0.transformPoint(new DOMPoint(P.x, P.y));
+    const start = toFrame(e);
+    const from = { scale: valueAt(clip, 'scale', Tc) ?? 1, rotation: valueAt(clip, 'rotation', Tc) || 0, anchorX: valueAt(clip, 'anchorX', Tc) || 0, anchorY: valueAt(clip, 'anchorY', Tc) || 0 };
+    const startDist = Math.hypot(start.x - a0.x, start.y - a0.y) || 1;
+    const startAngle = Math.atan2(start.y - a0.y, start.x - a0.x);
+    beginTransient();
+    const move = (ev) => {
+      const now = toFrame(ev);
+      updateTransient((q) => {
+        const c = q.clips[clip.id];
+        if (kind === 'scale') {
+          putValue(c, 'scale', Math.max(0.01, Math.round(from.scale * (Math.hypot(now.x - a0.x, now.y - a0.y) / startDist) * 1000) / 1000), Tc);
+        } else if (kind === 'rotate') {
+          const v = from.rotation + ((Math.atan2(now.y - a0.y, now.x - a0.x) - startAngle) * 180) / Math.PI;
+          putValue(c, 'rotation', ev.shiftKey ? Math.round(v / 15) * 15 : Math.round(v * 10) / 10, Tc);
+        } else {
+          // Det nye ankeret i klippets rom. Posisjonen settes slik at det havner under musen, og da står bildet stille.
+          const l = inv0.transformPoint(now);
+          const nx = Math.round(from.anchorX + l.x - P.x);
+          const ny = Math.round(from.anchorY + l.y - P.y);
+          putValue(c, 'anchorX', nx, Tc);
+          putValue(c, 'anchorY', ny, Tc);
+          putValue(c, 'x', Math.round(now.x - (P.x + nx - from.anchorX)), Tc);
+          putValue(c, 'y', Math.round(now.y - (P.y + ny - from.anchorY)), Tc);
+        }
+      });
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      endTransient(true);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
+
+  return (
+    <svg class="shape-editor transform-box" style={{ left: box.left, top: box.top, width: box.width, height: box.height }} viewBox={`0 0 ${W} ${H}`}>
+      <path d={`M${corners.map((q) => q.join(',')).join('L')}Z`} class="transform-outline" style={{ strokeWidth: 1.5 / k }} />
+      <line x1={tx} y1={ty} x2={rx} y2={ry} class="transform-outline" style={{ strokeWidth: 1.5 / k }} />
+      {corners.map(([x, y], i) => (
+        <rect key={i} x={x - r} y={y - r} width={r * 2} height={r * 2} class="shape-handle" style={{ strokeWidth: 1 / k, cursor: i % 2 ? 'nesw-resize' : 'nwse-resize' }} onPointerDown={(e) => drag(e, 'scale')}>
+          <title>Drag to scale from the anchor point.</title>
+        </rect>
+      ))}
+      <circle cx={rx} cy={ry} r={r} class="shape-handle" style={{ strokeWidth: 1 / k, cursor: 'grab' }} onPointerDown={(e) => drag(e, 'rotate')}>
+        <title>Drag to rotate around the anchor point. Hold Shift for 15° steps.</title>
+      </circle>
+      <g class="transform-anchor" onPointerDown={(e) => drag(e, 'anchor')}>
+        <title>Anchor point. Drag to move it without moving the clip.</title>
+        <circle cx={ax} cy={ay} r={arm} class="transform-anchor-hit" />
+        <circle cx={ax} cy={ay} r={r} style={{ strokeWidth: 1.5 / k }} />
+        <path d={`M${ax - arm},${ay}H${ax + arm}M${ax},${ay - arm}V${ay + arm}`} style={{ strokeWidth: 1.5 / k }} />
+      </g>
+    </svg>
+  );
 }
 
 /* Formredigering i bildet, felles for sladding og masker. Tegnes som SVG i bildets koordinater.

@@ -170,6 +170,17 @@ test('the release check never mistakes the add-on for an installer', () => {
   assert.equal(module.exports.pickAsset(assets.slice(0, 2), 'win32', 'x64'), undefined);
 });
 
+test('the add-on is listed in Record and only the warning dialog can install it', () => {
+  const plugins = fs.readFileSync('src/renderer/Plugins.jsx', 'utf8');
+  assert.match(plugins, /id: 'keystrokes',\s+addon: true,\s+room: 'record'/);
+  assert.match(plugins, /\[\.\.\.BUILTIN, KEYSTROKES, /);
+  for (const file of fs.readdirSync('src/renderer', { recursive: true })) {
+    if (!/\.(js|jsx)$/.test(file)) continue;
+    const calls = fs.readFileSync(path.join('src/renderer', file), 'utf8').match(/installKeystrokes/g)?.length || 0;
+    assert.equal(calls, file.endsWith('KeystrokesAddon.jsx') ? 1 : 0, file);
+  }
+});
+
 test('the installer and the app source contain no keyboard hook', () => {
   const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.ok(!pkg.build.files.some((f) => f.startsWith('native')), 'native helpers are not packaged');

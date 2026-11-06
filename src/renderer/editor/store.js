@@ -723,7 +723,7 @@ export async function importPaths(paths, placement, opts = {}) {
   const folders = projectFolders.value;
   if (copy && folders?.own) {
     try {
-      paths = await api.copyIntoProject(paths, folders.media);
+      paths = await api.copyIntoProject(await api.recordingPaths(paths), folders.media);
     } catch (err) {
       reportFailed([`the files (${err.message})`]);
       return [];

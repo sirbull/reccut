@@ -85,6 +85,8 @@ export function separateRecordingCamera(project, id) {
   delete camera.transition;
   delete camera.transitionOut;
   camera.expanded = false;
+  // Ankerpunktet regnes fra midten av PiP-rammen. Eldre PiP-klipp beholder midten av bildet, så de ikke flytter seg.
+  camera.props.pipAnchor = true;
   camera.props.showKeys = false;
   camera.props.showClicks = false;
   camera.props.cursorZoom = false;

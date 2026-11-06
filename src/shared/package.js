@@ -81,11 +81,12 @@ export function reduceProject(src, opts = {}) {
 /**
  * Filene som må kopieres for hvert medium: { mediaId, kind, name, sources: [{ key, path }], dir }.
  * Opptak er en mappe (skjerm, kamera og recording.json), så hele mappen tas med.
+ * Løse opptak (loose) er filer med opptaksdata, og kopieres som andre filer.
  */
 export function mediaFiles(p, { includeOptimized = false } = {}) {
   const out = [];
   for (const m of Object.values(p.media)) {
-    if (m.kind === 'recording') {
+    if (m.kind === 'recording' && !m.loose) {
       const outside = (file) => file && !file.replaceAll('\\', '/').startsWith(m.path.replaceAll('\\', '/').replace(/\/$/, '') + '/');
       const sources = Object.entries(m.streams || {}).filter(([, st]) => outside(st.path)).map(([key, st]) => ({ key, path: st.path, field: 'path' }));
       out.push({ mediaId: m.id, kind: m.kind, name: m.name, dir: m.path, sources });
