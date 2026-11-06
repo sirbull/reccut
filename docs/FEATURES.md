@@ -7,7 +7,7 @@ Record, edit and export video in one app, for Mac, Windows and Linux. The app is
 ## Recording
 
 * Screen at native resolution, **a single app window**, webcam or external camera, internal or external microphone. Audio interfaces and HDMI capture devices such as Elgato Cam Link work too, with input channel, output, camera format and microphone delay in Settings → Audio & Video
-* **Start from any app**: Control Option 0 (Ctrl Shift 0 on Windows) starts and stops recording even when Reccut is in the background or in Edit. The same keys with 8 pause and resume. Pauses are removed from the video, and pointer zoom and layout carry over.
+* **Start and stop recording**: Control Option 0 (Ctrl Shift 0 on Windows) starts and stops recording. The same keys with 9 pause and resume. By default these keys work in the Record room while Reccut has focus; enable **Allow shortcuts in other apps** under **Record → Shortcuts** to use them in the background. Pauses are removed from the video, and pointer zoom and layout carry over.
 * **You can see that you are recording, without it ending up in the video**: a small control bar with time, microphone level, Pause and Stop floats above other apps and is hidden from the recording (macOS and Windows). The menu bar icon on macOS shows a red dot and the time, and on Windows the system tray icon turns red. Reccut can tuck itself away while you record and come back when the recording is saved.
 * **Microphone check**: shows whether it is silent, weak, good or clipping, and Test records four seconds and plays them back.
 * **Recordings rescue themselves**: they are written to disk as you go (WebM, remuxed to MP4 when you stop), and if the app or the computer crashes, Reccut offers to recover the recording on the next launch, with layout and pointer movement.
@@ -15,8 +15,8 @@ Record, edit and export video in one app, for Mac, Windows and Linux. The app is
 * **Countdown** of 3, 5 or 10 seconds before recording starts, in the preview and in the middle of the area on screen
 * **System audio** with one switch
 * The camera image as a circle, square or 16:9, in three sizes
-* Eight layouts you switch with a shortcut while recording: 1 camera, 2 screen, 3 to 6 picture in picture in each corner, 7 and 8 camera and screen side by side (7 has a shortcut; 8 is pause)
-* **Magnified pointer:** press the shortcut with 9 (Control Option 9 on Mac by default), and the pointer grows with an animation until you press it again
+* Eight layouts you switch with a shortcut while recording: 1 camera, 2 screen, 3 to 6 picture in picture in each corner, 7 and 8 camera and screen side by side
+* **Magnified pointer:** press the shortcut with M (Control Option M on Mac by default), and the pointer grows with an animation until you press it again
 * **Keystrokes on screen with an optional add-on:** Reccut itself never reads the keyboard outside its own window. To show shortcuts in the video, download the Keystroke Add-on under Record, Overlays. A dialog explains first that it reads the keyboard for the whole computer while you record, that only shortcuts with Cmd, Ctrl, Alt or Win (plus Esc and F keys) leave it, and that they are saved in the recording so they can be changed in Edit. It runs only while recording, shows a Keys label in the recording controls, is checked with SHA-256 before every start, and can be removed at any time. It is built from `native/keystrokes` and attached to each GitHub release, never put in the installer.
 * Screen and camera are saved separately, together with layout and pointer. Everything can therefore be changed afterwards.
 * A finished MP4 is made automatically in the background after recording (can be turned off), and the **Edit** button opens the recording in the editor
@@ -152,9 +152,10 @@ By default the shortcuts only work when Reccut is in focus, outside fields and d
 
 | Action | Mac (default) | Windows (default) |
 | --- | --- | --- |
-| Layout 1 to 7 | Ctrl Option 1 to 7 | Ctrl Shift 1 to 7 |
+| Layout 1 to 8 | Ctrl Option 1 to 8 | Ctrl Shift 1 to 8 |
 | Start and stop recording | Ctrl Option 0 | Ctrl Shift 0 |
-| Magnify the pointer on and off | Ctrl Option 9 | Ctrl Shift 9 |
+| Pause and resume recording | Ctrl Option 9 | Ctrl Shift 9 |
+| Magnify the pointer on and off | Ctrl Option M | Ctrl Shift M |
 
 ### Editing (like in Final Cut Pro)
 

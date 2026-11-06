@@ -95,9 +95,9 @@ test('Record menu shows the keys from the Record modifier and follows the layout
   const {registry:r,editor:e}=setup();e.room.value='record';
   const items=r.menuTemplate().find(m=>m.label==='Record').submenu.filter(i=>!i.separator);
   assert.equal(items.find(i=>i.id==='record:toggle').accelerator,'Control+Alt+0');
-  assert.equal(items.find(i=>i.id==='record:pause').accelerator,'Control+Alt+8');
+  assert.equal(items.find(i=>i.id==='record:pause').accelerator,'Control+Alt+9');
   assert.equal(items.find(i=>i.id==='record:layout:7').accelerator,'Control+Alt+7');
-  assert.equal(items.find(i=>i.id==='record:layout:8').accelerator,undefined);
+  assert.equal(items.find(i=>i.id==='record:layout:8').accelerator,'Control+Alt+8');
   assert.equal(items.find(i=>i.id==='record:layout:6').checked,true);
   assert.equal(items.every(i=>i.register===false),true,'the main process owns these keys');
   for(const cmd of r.COMMANDS.filter(c=>c.id.startsWith('record:')))assert.equal(cmd.menuOnly,true,cmd.id);

@@ -221,7 +221,7 @@ function TitleBar() {
         <div class="actions">
           {rec && <span class={`rec-timer${engine.paused.value ? ' paused' : ''}`}>{engine.paused.value ? 'Paused ' : ''}{formatDuration(engine.elapsed.value)}</span>}
           {rec && (
-            <button class="btn secondary" onClick={engine.togglePause} title={`${engine.paused.value ? 'Resume' : 'Pause'} (${mod.short}8)`}>
+            <button class="btn secondary" onClick={engine.togglePause} title={`${engine.paused.value ? 'Resume' : 'Pause'} (${mod.short}9)`}>
               {engine.paused.value ? 'Resume' : 'Pause'}
             </button>
           )}

@@ -103,7 +103,7 @@ function createRecordUI({ send, getMainWindow, modifierLabel }) {
       s === 'idle'
         ? { label: 'Start Recording', accelerator: `${mod}+0`, registerAccelerator: false, click: () => send('shortcut', { toggleRecord: true }) }
         : { label: s === 'countdown' ? 'Cancel' : 'Stop Recording', accelerator: `${mod}+0`, registerAccelerator: false, click: () => send('shortcut', { toggleRecord: true }) },
-      { label: s === 'paused' ? 'Resume' : 'Pause', enabled: s === 'recording' || s === 'paused', accelerator: `${mod}+8`, registerAccelerator: false, click: () => send('shortcut', { togglePause: true }) },
+      { label: s === 'paused' ? 'Resume' : 'Pause', enabled: s === 'recording' || s === 'paused', accelerator: `${mod}+9`, registerAccelerator: false, click: () => send('shortcut', { togglePause: true }) },
       { type: 'separator' },
       { label: 'Show Reccut', click: showMain },
     ]);

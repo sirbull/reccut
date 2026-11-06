@@ -241,8 +241,8 @@ export const COMMANDS = [
 
   /* Record */
   recordCommand('toggle', 'Start or Stop Recording', 'record', '0'), // run settes i app.jsx, der opptaket avsluttes.
-  recordCommand('pause', 'Pause or Resume', 'record', '8', () => import('./recorder/engine.js').then((m) => m.togglePause())),
-  ...LAYOUTS.map((l) => recordCommand(`layout:${l.n}`, l.label, 'layout', l.noKey ? null : l.n, () => import('./recorder/engine.js').then((m) => m.setLayout(l.n)), { checked: () => recordSettings.value.layout === l.n })),
+  recordCommand('pause', 'Pause or Resume', 'record', '9', () => import('./recorder/engine.js').then((m) => m.togglePause())),
+  ...LAYOUTS.map((l) => recordCommand(`layout:${l.n}`, l.label, 'layout', l.n, () => import('./recorder/engine.js').then((m) => m.setLayout(l.n)), { checked: () => recordSettings.value.layout === l.n })),
 
   /* Export */
   { id: 'export:start', label: 'Export', menu: 'Export', keys: 'CmdOrCtrl+E', register: true, allowWhileTyping: true, rooms: EXPORT, run: () => roomActions.start(), help: 'export', desc: 'Export the selected project or file with the settings in the Export room.' },

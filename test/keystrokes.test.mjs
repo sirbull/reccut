@@ -150,6 +150,12 @@ test('labels, protocol and Reccut shortcuts', () => {
   assert.equal(appShortcut('Control+Alt', '0', 1 | 2), true);
   assert.equal(appShortcut('Control+Alt', '0', 1), false);
   assert.equal(appShortcut('Command+Shift', '9', 8 | 4), true);
+  assert.equal(appShortcut('Control+Alt', '8', 1 | 2), true);
+  assert.equal(appShortcut('Control+Alt', 'M', 1 | 2), true);
+  assert.equal(appShortcut('Control+Shift', 'M', 1 | 4), true);
+  assert.equal(appShortcut('Command+Alt', 'M', 8 | 2), true);
+  assert.equal(appShortcut('Command+Shift', 'M', 8 | 4), true);
+  assert.equal(appShortcut('Control+Alt', 'M', 1), false);
   assert.equal(appShortcut('Control+Alt', 'S', 1 | 2), false);
 });
 

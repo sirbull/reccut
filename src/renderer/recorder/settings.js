@@ -7,13 +7,13 @@ const isMac = window.api.platform === 'darwin';
 
 export const MODIFIERS = isMac
   ? [
-      { value: 'Control+Alt', label: 'Ctrl + Option + 1 to 7', short: '⌃⌥' },
-      { value: 'Command+Alt', label: 'Cmd + Option + 1 to 7', short: '⌘⌥' },
-      { value: 'Command+Shift', label: 'Cmd + Shift + 1 to 7', short: '⌘⇧' },
+      { value: 'Control+Alt', label: 'Ctrl + Option + 1 to 8', short: '⌃⌥' },
+      { value: 'Command+Alt', label: 'Cmd + Option + 1 to 8', short: '⌘⌥' },
+      { value: 'Command+Shift', label: 'Cmd + Shift + 1 to 8', short: '⌘⇧' },
     ]
   : [
-      { value: 'Control+Shift', label: 'Ctrl + Shift + 1 to 7', short: 'Ctrl+Shift+' },
-      { value: 'Control+Alt', label: 'Ctrl + Alt + 1 to 7', short: 'Ctrl+Alt+' },
+      { value: 'Control+Shift', label: 'Ctrl + Shift + 1 to 8', short: 'Ctrl+Shift+' },
+      { value: 'Control+Alt', label: 'Ctrl + Alt + 1 to 8', short: 'Ctrl+Alt+' },
     ];
 
 export const CAMERA_HEIGHTS = [
@@ -48,8 +48,7 @@ export const LAYOUTS = [
   { n: 5, label: 'Bottom left', cls: 'screen', cam: 'bl' },
   { n: 6, label: 'Bottom right', cls: 'screen', cam: 'br' },
   { n: 7, label: 'Camera left', cls: 'screen', cam: 'side left' },
-  // ponytail: 8 is the pause shortcut, so this layout is click only.
-  { n: 8, label: 'Camera right', cls: 'screen', cam: 'side right', noKey: true },
+  { n: 8, label: 'Camera right', cls: 'screen', cam: 'side right' },
 ];
 
 const DEFAULTS = {

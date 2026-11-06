@@ -16,7 +16,7 @@ function setup() {
 
 test('background apps retain their keys by default; global recording requires opt-in', () => {
   const { state, keys, actions, shortcuts } = setup();
-  assert.equal(keys.size, 10);
+  assert.equal(keys.size, 11);
   keys.get('Control+Alt+1')();
   assert.deepEqual(actions, [{ layout: 1, keyboard: true }]);
   const queued = keys.get('Control+Alt+0');
@@ -48,7 +48,7 @@ test('inputs, composition and dialogs release native shortcuts; other app window
   state.otherWindowFocused = false;
   state.blocked = false;
   shortcuts.refresh();
-  assert.equal(keys.size, 10);
+  assert.equal(keys.size, 11);
 });
 
 test('the recording keys belong to the Record room: other rooms get none and stale bindings do nothing', () => {
@@ -68,10 +68,22 @@ test('the recording keys belong to the Record room: other rooms get none and sta
   assert.equal(actions.length, 0);
 });
 
-test('layout 7 is registered without a native hook; 8 remains pause and 9 toggles cursor zoom', () => {
-  const { keys, actions } = setup();
-  keys.get('Control+Alt+7')();
-  keys.get('Control+Alt+8')();
-  keys.get('Control+Alt+9')();
-  assert.deepEqual(actions, [{layout:7,keyboard:true},{togglePause:true,keyboard:true},'zoom']);
+test('all eight layouts, pause and cursor zoom have distinct keys with every recording modifier', () => {
+  const { state, keys, actions, shortcuts } = setup();
+  for (const modifier of ['Control+Alt', 'Command+Alt', 'Command+Shift', 'Control+Shift']) {
+    state.modifier = modifier;
+    shortcuts.refresh();
+    actions.length = 0;
+    assert.equal(keys.size, 11);
+    for (let n = 1; n <= 8; n++) keys.get(`${modifier}+${n}`)();
+    keys.get(`${modifier}+9`)();
+    keys.get(`${modifier}+M`)();
+    keys.get(`${modifier}+0`)();
+    assert.deepEqual(actions, [
+      ...Array.from({ length: 8 }, (_, i) => ({ layout: i + 1, keyboard: true })),
+      { togglePause: true, keyboard: true },
+      'zoom',
+      { toggleRecord: true, keyboard: true },
+    ], modifier);
+  }
 });

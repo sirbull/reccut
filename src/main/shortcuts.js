@@ -20,9 +20,9 @@ function createRecordingShortcuts({ globalShortcut, context, send, toggleZoom })
         })) failed.push(accelerator);
       };
       reg('0', () => send({ toggleRecord: true, keyboard: true }));
-      reg('8', () => send({ togglePause: true, keyboard: true }));
-      for (let n = 1; n <= 7; n++) reg(String(n), () => send({ layout: n, keyboard: true }));
-      reg('9', toggleZoom);
+      reg('9', () => send({ togglePause: true, keyboard: true }));
+      for (let n = 1; n <= 8; n++) reg(String(n), () => send({ layout: n, keyboard: true }));
+      reg('M', toggleZoom);
       return failed;
     },
   };

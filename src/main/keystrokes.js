@@ -53,7 +53,7 @@ function parseLine(line) {
 
 // Reccut's own recording shortcuts are never shown in the video.
 function appShortcut(modifier, name, mods) {
-  if (!modifier || !/^[0-9]$/.test(name)) return false;
+  if (!modifier || !/^[0-9M]$/.test(name)) return false;
   const parts = modifier.split('+');
   const want = (parts.includes('Control') ? MODS.ctrl : 0) | (parts.includes('Alt') ? MODS.alt : 0) |
     (parts.includes('Shift') ? MODS.shift : 0) | (parts.includes('Command') ? MODS.meta : 0);

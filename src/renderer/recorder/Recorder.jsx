@@ -79,11 +79,12 @@ export function Recorder({ active }) {
         </div>
         <div class="layout-row">
           {LAYOUTS.map((l) => (
-            <button key={l.n} class={`layout-btn${s.layout === l.n ? ' active' : ''}`} title={l.noKey ? l.label : `${mod.short}${l.n}`} onClick={() => engine.setLayout(l.n)}>
+            <button key={l.n} class={`layout-btn${s.layout === l.n ? ' active' : ''}`} title={`${mod.short}${l.n}`} onClick={() => engine.setLayout(l.n)}>
               <div class={`mini ${l.cls}`}>{l.cam && <div class={`cam ${l.cam} ${isSide(l.n) ? s.sideShape : s.pipShape}`} style={isSide(l.n) ? { width: `${s.sideSize}%` } : undefined} />}</div>
               <span>
                 <b>{l.n}</b> {l.label}
               </span>
+              <small class="layout-shortcut">{`${mod.short}${l.n}`}</small>
             </button>
           ))}
         </div>
@@ -231,7 +232,7 @@ export function Recorder({ active }) {
           <Row label={<><MousePointer2 size={14} /> Cursor zoom</>}>
             <Toggle checked={s.cursorZoom} onChange={(v) => set({ cursorZoom: v })} />
           </Row>
-          <p class="hint">Press <b>{mod.short}9</b> to zoom the cursor on and off while recording.</p>
+          <p class="hint">Press <b>{mod.short}M</b> to zoom the cursor on and off while recording.</p>
         </Section>
 
         <Section title="Recording">
@@ -298,7 +299,7 @@ export function Recorder({ active }) {
             <Select value={s.modifier} options={MODIFIERS} onChange={(v) => set({ modifier: v })} />
           </Row>
           <p class="hint">
-            <b>{mod.short}0</b> starts and stops recording. <b>{mod.short}8</b> pauses and resumes. {mod.short}1 camera, {mod.short}2 screen, {mod.short}3 to {mod.short}6 corners and {mod.short}9 cursor zoom.
+            <b>{mod.short}0</b> starts and stops recording. <b>{mod.short}9</b> pauses and resumes. {mod.short}1 camera, {mod.short}2 screen, {mod.short}3 to {mod.short}6 corners, {mod.short}7 camera left, {mod.short}8 camera right and {mod.short}M cursor zoom.
             {' '}By default, these keys work only in Reccut, outside input fields and dialogs. Enable “Allow shortcuts in other apps” to use them in the background; those combinations can then override shortcuts in other apps. You can always use the floating controls or tray menu to pause and stop.
             {failed.length > 0 && <span class="warn"> Used by another app: {failed.join(', ')}.</span>}
             {isMac && s.modifier === 'Command+Shift' && <span class="warn"> Cmd + Shift + 3, 4 and 5 are used by macOS for screenshots.</span>}
