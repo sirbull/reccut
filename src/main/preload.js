@@ -38,6 +38,10 @@ contextBridge.exposeInMainWorld('api', {
   pluginsInstall: invoke('plugins:install'),
   pluginsRemove: invoke('plugins:remove'),
   pluginsProcess: invoke('plugins:process'),
+  corridorKeyStatus: invoke('corridorkey:status'),
+  installCorridorKey: invoke('corridorkey:install'),
+  rotoStatus: invoke('roto:status'), rotoInstall: invoke('roto:install'), rotoDownloadModel: invoke('roto:downloadModel'), rotoRemoveModel: invoke('roto:removeModel'), rotoChooseModel: invoke('roto:chooseModel'), rotoRemove: invoke('roto:remove'),
+  rotoOpen: invoke('roto:open'), rotoCall: invoke('roto:call'), rotoCancel: invoke('roto:cancel'), rotoClose: invoke('roto:close'), rotoRender: invoke('roto:render'), onRotoProgress: on('roto:progress'),
   platform: process.platform,
   // Filstier for filer som dras inn i vinduet.
   pathForFile: (file) => webUtils.getPathForFile(file),

@@ -343,7 +343,7 @@ On a Mac the Help menu also has a search field. Type a word and macOS points to 
     section: 'Recording',
     title: 'Recording Screen and Camera',
     summary: 'Screen, camera and microphone are recorded separately, so everything can be changed afterwards.',
-    keywords: 'record capture webcam pip layout keystrokes keystroke add-on gaming wasd mouse clicks controller gamepad input overlay cursor zoom system audio area region crop part of screen countdown shortcut hotkey global pause resume window tray menu bar control bar crash recover microphone test level',
+    keywords: 'record capture webcam switch cameras multicam pip layout keystrokes keystroke add-on gaming wasd mouse clicks controller gamepad input overlay cursor zoom system audio area region crop part of screen countdown shortcut hotkey global pause resume window tray menu bar control bar crash recover microphone test level',
     body: `
 Choose a screen, a camera and a microphone in the Record room. Turn on system audio to record the sound from your computer.
 
@@ -385,6 +385,12 @@ Open **Settings → Audio & Video** for more:
 - **Output**: where Reccut plays sound. **System default** follows your computer.
 - **Resolution** and **Frame rate**: what Reccut asks the camera for. The line below shows what it really sends. Over HDMI the format is set on the camera.
 - **Delay microphone**: an HDMI camera shows the picture slightly after the sound. If your lips are out of sync in the recording, increase this in small steps.
+
+## Switch between cameras
+
+With more than one camera connected, the other cameras are listed under **Camera** in the Record room. Turn on the ones you want to switch to, then press **Control Option C** on a Mac or **Ctrl Shift C** on Windows to go to the next camera, before or during the recording. The cameras you turned on stay ready, so the switch happens at once.
+
+The recording keeps one camera file that shows the camera that was active at each moment. It is made at the size of the camera that was active when you started; a camera with another shape is cropped to fill the picture. **Mirror** and **Delay microphone** apply to all cameras, so an HDMI camera and a webcam can need different values.
 
 ## If Reccut or the computer crashes
 

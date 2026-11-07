@@ -790,8 +790,6 @@ export function positionTrim(project, id, edge, delta) {
 
 /* Hastighet */
 
-export const SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2, 4, 8, 20];
-
 // Endrer farten. Kildeområdet beholdes, så klippet blir lengre eller kortere på tidslinjen.
 export function setSpeed(project, id, speed) {
   id = recordingEditId(project, id);

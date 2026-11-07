@@ -1,7 +1,7 @@
 // Spilleren i redigeringen, koblet til prosjektet og spillhodet i tilstanden.
 // Mens du skummer (tidslinjen eller biblioteket), viser den det pekeren står over.
 import { computed, effect } from '@preact/signals';
-import { makeClip, mediaClipType, newProject, primaryAt } from '../../shared/model.js';
+import { makeClip, mediaClipType, newProject } from '../../shared/model.js';
 import { createPlayer, fileUrl } from '../player.js';
 import { browserPlayhead, getSourceTime, getTime, loadLut, loadMotion, motionVersion, playing, project, setSourceTime, setTime, skim, skimming, sourceMediaId } from './store.js';
 import { prefs } from '../prefs.js';
@@ -121,7 +121,3 @@ effect(() => {
   for (const m of Object.values(p.media)) if (m.cameraLut) loadLut(m.cameraLut);
 });
 
-export function currentClipAtPlayhead() {
-  const p = primaryAt(project.value, getTime());
-  return p?.clip || p?.b || null;
-}

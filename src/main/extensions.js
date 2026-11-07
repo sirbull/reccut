@@ -695,7 +695,7 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
     fs.mkdirSync(folder, { recursive: true });
     const output = path.join(folder, `result${plugin.outputExtension}`);
     const args = plugin.args.map((a) =>
-      a.replace(/\{(input|output|param:([\w-]+))\}/g, (_match, name, param) => (param ? values[param] : name === 'input' ? input : output)),
+      a.replace(/\{(input|output|ffmpeg|param:([\w-]+))\}/g, (_match, name, param) => (param ? values[param] : name === 'input' ? input : name === 'ffmpeg' ? ffmpegPath || 'ffmpeg' : output)),
     );
     try {
       if (ctx.isCanceled()) throw new Error('Canceled');
@@ -707,7 +707,14 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
           stdio: ['ignore', 'pipe', 'pipe'],
         });
         let log = '';
-        child.stdout.on('data', () => {});
+        // A processor may report "PROGRESS <done> <total>" lines on stdout.
+        let out = '';
+        child.stdout.on('data', (s) => {
+          const lines = (out + s).split('\n');
+          out = lines.pop().slice(-200);
+          const m = lines.map((l) => /^PROGRESS (\d+) (\d+)\s*$/.exec(l)).filter(Boolean).pop();
+          if (m && Number(m[2]) > 0) ctx.progress(0.05 + (0.9 * Math.min(Number(m[1]), Number(m[2]))) / Number(m[2]), `Processing with ${plugin.name}: ${m[1]} of ${m[2]} frames`);
+        });
         child.stderr.on('data', (s) => (log = (log + s).slice(-4000)));
         ctx.setCancel(() => child.kill('SIGKILL'));
         child.once('error', reject);

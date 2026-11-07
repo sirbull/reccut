@@ -51,6 +51,7 @@ const { createPipPreview } = require('./pip');
 const updates = require('./updates');
 const { InputTracker } = require('./input');
 const { createKeystrokes, comboLabel, appShortcut, pushPress, pausedPresses } = require('./keystrokes');
+const { createCorridorKey } = require('./corridorkey');
 
 const { createExtensionHost, readDocument } = require('./extensions');
 const { renderGraphic } = require('./graphics');
@@ -1261,7 +1262,40 @@ extensionHandler('plugins:export', async (id, opts) => {
   await fs.promises.writeFile(r.filePath, JSON.stringify(pkg, null, 2));
   return r.filePath;
 });
-extensionHandler('plugins:remove', (id) => extensions.removePlugin(id));
+extensionHandler('plugins:remove', async (id) => {
+  const list = extensions.removePlugin(id);
+  if (id === 'corridorkey') await corridorKey.remove(); // Several GB; it goes with the plugin.
+  return list;
+});
+// Roto Brush Add-on: downloaded only after the user has read what it is. See src/main/roto.js.
+require('./roto').registerRoto({
+  handle: extensionHandler,
+  roto: require('./roto').createRoto({
+    dir: path.join(app.getPath('userData'), 'addons', 'roto'),
+    cacheDir: path.join(app.getPath('userData'), 'Cache', 'Roto'),
+    ffmpegPath: ff.getFfmpegPath(),
+    fetchImpl: (url, opts) => net.fetch(url, { ...opts, headers: { 'User-Agent': `Reccut/${app.getVersion()}` } }),
+  }),
+  jobs,
+  media,
+  notifyAnalyzed,
+  outputDir: () => path.join(baseDir(), 'Processed'),
+  send: (ch, payload) => send(ch, payload),
+});
+// CorridorKey Add-on: downloaded only after the user has read what it is and needs.
+const corridorKey = createCorridorKey({
+  dir: path.join(app.getPath('userData'), 'addons', 'corridorkey'),
+  fetchImpl: (url, opts) => net.fetch(url, { ...opts, headers: { 'User-Agent': `Reccut/${app.getVersion()}` } }),
+});
+extensionHandler('corridorkey:status', () => corridorKey.status());
+extensionHandler('corridorkey:install', (opts) => {
+  if (opts?.consent !== true) throw new Error('CorridorKey is only installed after you accept what it is and its licence.');
+  const { done } = jobs.add({ kind: 'addon', title: 'Installing CorridorKey', queue: 'light', run: async (ctx) => {
+    const manifest = await corridorKey.install(ctx);
+    return extensions.installPlugin(manifest, { accepted: true });
+  } });
+  return done;
+});
 extensionHandler('plugins:process', (request) => {
   const { done } = jobs.add({ kind: 'processor', title: 'External video processor', queue: 'heavy', run: async (ctx) => {
     const result = await extensions.processFile({ id: request.id, input: request.input, params: request.params, outputDir: path.join(baseDir(), 'Processed') }, ctx);

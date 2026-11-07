@@ -64,7 +64,8 @@ function copyStatic() {
   const ortOut = path.join(out, 'ort');
   fs.mkdirSync(ortOut, { recursive: true });
   for (const f of fs.readdirSync(ort)) {
-    if (/^ort-wasm-simd-threaded(\.(jsep|asyncify|jspi))?\.(wasm|mjs)$/.test(f)) fs.copyFileSync(path.join(ort, f), path.join(ortOut, f));
+    // Bare variantene som transformers.js faktisk laster (wasm og WebGPU via asyncify).
+    if (/^ort-wasm-simd-threaded(\.asyncify)?\.(wasm|mjs)$/.test(f)) fs.copyFileSync(path.join(ort, f), path.join(ortOut, f));
   }
 }
 

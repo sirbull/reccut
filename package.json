@@ -69,9 +69,31 @@
           "en"
         ],
         "NSCameraUsageDescription": "Reccut uses your camera to include you in recordings.",
+        "NSCameraUseContinuityCameraDeviceType": true,
         "NSMicrophoneUsageDescription": "Reccut uses your microphone to record audio.",
         "NSScreenCaptureUsageDescription": "Reccut records your screen."
       }
+    },
+    "dmg": {
+      "background": "assets/dmg-background.png",
+      "iconSize": 96,
+      "window": {
+        "width": 660,
+        "height": 400
+      },
+      "contents": [
+        {
+          "x": 180,
+          "y": 200,
+          "type": "file"
+        },
+        {
+          "x": 480,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "win": {
       "target": [

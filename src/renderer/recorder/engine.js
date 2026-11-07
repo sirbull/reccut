@@ -39,7 +39,8 @@ let micMixer = null;
 let cameraRequest = 0;
 let micRequest = 0;
 const screenVideo = makeVideo();
-const cameraVideo = makeVideo();
+// Det aktive kameraet. nextCamera() bytter det med et av kameraene i spares.
+let cameraVideo = makeVideo();
 
 let canvas = null;
 let ctx = null;
@@ -64,6 +65,7 @@ function makeVideo() {
   v.autoplay = true;
   v.playsInline = true;
   v.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0';
+  v.addEventListener('resize', () => updateSize());
   document.body.appendChild(v);
   return v;
 }
@@ -229,30 +231,99 @@ export async function useScreen() {
   updateSize();
 }
 
+function openCamera(id) {
+  const { cameraHeight: height, cameraFps: fps } = settings.value;
+  return navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { deviceId: { exact: id }, width: { ideal: Math.round(height * 16 / 9) }, height: { ideal: height }, frameRate: { ideal: fps } },
+  });
+}
+
+function describeCamera(stream) {
+  const got = stream.getVideoTracks()[0].getSettings();
+  return `${got.width} × ${got.height}${got.frameRate ? `, ${+got.frameRate.toFixed(2)} fps` : ''}`;
+}
+
 export async function useCamera() {
   const request = ++cameraRequest;
-  const { cameraId: id, cameraHeight: height, cameraFps: fps } = settings.value;
+  const id = settings.value.cameraId;
   stop(cameraStream);
   cameraStream = null;
   cameraVideo.srcObject = null;
   cameraInfo.value = null;
+  useSpares();
   if (!id || (!roomActive && !recording.value)) return updateSize();
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { deviceId: { exact: id }, width: { ideal: Math.round(height * 16 / 9) }, height: { ideal: height }, frameRate: { ideal: fps } },
-    });
+    const stream = await openCamera(id);
     if (request !== cameraRequest) { stop(stream); return; }
     cameraStream = stream;
     cameraVideo.srcObject = cameraStream;
     await cameraVideo.play().catch(() => {});
-    const got = stream.getVideoTracks()[0].getSettings();
-    cameraInfo.value = `${got.width} × ${got.height}${got.frameRate ? `, ${+got.frameRate.toFixed(2)} fps` : ''}`;
+    cameraInfo.value = describeCamera(stream);
   } catch (err) {
     if (request !== cameraRequest) return;
     console.error(err);
     notice.value = { text: 'Could not start the camera. Check that no other app is using it.' };
   }
+  updateSize();
+}
+
+/* Bytte kamera under opptak. Kameraene brukeren har valgt står åpne, så byttet skjer med en gang. */
+const spares = new Map(); // deviceId -> { stream, video }
+let spareRequest = 0;
+
+// Det aktive kameraet og de andre som er slått på for bytte, i samme rekkefølge som i kameramenyen.
+export function cameraRing() {
+  const s = settings.value;
+  if (!s.cameraId) return [];
+  return cameras.value.filter((c) => c.id === s.cameraId || s.switchCameras.includes(c.id)).map((c) => c.id);
+}
+
+function releaseSpares() {
+  ++spareRequest;
+  for (const x of spares.values()) {
+    stop(x.stream);
+    x.video.remove();
+  }
+  spares.clear();
+}
+
+async function useSpares() {
+  releaseSpares();
+  const request = spareRequest;
+  if (!roomActive && !recording.value) return;
+  for (const id of cameraRing()) {
+    if (id === settings.value.cameraId) continue;
+    try {
+      const stream = await openCamera(id);
+      if (request !== spareRequest) { stop(stream); return; }
+      const video = makeVideo();
+      video.srcObject = stream;
+      video.play().catch(() => {});
+      spares.set(id, { stream, video });
+    } catch (err) {
+      console.warn('Could not open a camera for switching', err);
+    }
+  }
+}
+
+export function setSwitchCamera(id, on) {
+  const ids = settings.value.switchCameras.filter((x) => x !== id);
+  saveSettings({ switchCameras: on ? [...ids, id] : ids });
+  useSpares();
+}
+
+export function nextCamera() {
+  const ring = cameraRing();
+  const id = ring[(ring.indexOf(settings.value.cameraId) + 1) % ring.length];
+  const spare = spares.get(id);
+  if (ring.length < 2 || !spare || !cameraStream) return;
+  spares.delete(id);
+  spares.set(settings.value.cameraId, { stream: cameraStream, video: cameraVideo });
+  cameraStream = spare.stream;
+  cameraVideo = spare.video;
+  cameraInfo.value = describeCamera(cameraStream);
+  saveSettings({ cameraId: id, cameraWanted: id, switchCameras: ring.filter((x) => x !== id) });
   updateSize();
 }
 
@@ -298,6 +369,7 @@ function releaseDevices() {
   cameraStream = null;
   cameraVideo.srcObject = null;
   cameraInfo.value = null;
+  releaseSpares();
   releaseMic();
 }
 
@@ -327,8 +399,6 @@ function updateSize() {
     if (v.srcObject && !v.videoWidth) v.addEventListener('loadedmetadata', apply, { once: true });
   }
 }
-screenVideo.addEventListener('resize', updateSize);
-cameraVideo.addEventListener('resize', updateSize);
 
 /* Live forhåndsvisning med samme oppsett og overlegg som i den ferdige videoen. */
 
@@ -734,6 +804,40 @@ function planForTracks(tracks) {
 // Skjermbildet beskjæres til området før det tas opp, så resten av skjermen aldri lagres.
 // Med MediaStreamTrackProcessor skjer det uten å kopiere bildet; ellers via et lerret.
 let cropStop = null;
+let camStop = null;
+
+// Kamerafilen får bildet fra det aktive kameraet, så kameraene kan byttes under opptak.
+// ponytail: tegnes om til fast størrelse og kodes én gang til. Én fil per kamera hvis byttene skal kunne flyttes i editoren.
+function switchedTrack(w, h) {
+  const gen = new MediaStreamTrackGenerator({ kind: 'video' });
+  const writer = gen.writable.getWriter();
+  const g = new OffscreenCanvas(w, h).getContext('2d', { alpha: false });
+  const tracks = [cameraStream, ...[...spares.values()].map((x) => x.stream)].map((x) => x.getVideoTracks()[0]);
+  const readers = tracks.map((track) => new MediaStreamTrackProcessor({ track }).readable.getReader());
+  let writing = false;
+  readers.forEach(async (reader, i) => {
+    for (;;) {
+      const { value: frame, done } = await reader.read().catch(() => ({ done: true }));
+      if (done) return;
+      if (!writing && tracks[i] === cameraStream?.getVideoTracks()[0]) {
+        // Fyll bildet: et kamera med et annet format beskjæres i stedet for å få svarte kanter.
+        const k = Math.max(w / frame.displayWidth, h / frame.displayHeight);
+        const dw = frame.displayWidth * k;
+        const dh = frame.displayHeight * k;
+        g.drawImage(frame, (w - dw) / 2, (h - dh) / 2, dw, dh);
+        // Kameraene har hver sin klokke, så tidsstemplene settes her.
+        writing = true;
+        writer.write(new VideoFrame(g.canvas, { timestamp: Math.round(performance.now() * 1000) })).catch(() => {}).finally(() => (writing = false));
+      }
+      frame.close();
+    }
+  });
+  camStop = () => {
+    for (const r of readers) r.cancel().catch(() => {});
+    gen.stop();
+  };
+  return gen;
+}
 function croppedTrack(track, area, fps) {
   if (typeof MediaStreamTrackProcessor !== 'undefined' && typeof MediaStreamTrackGenerator !== 'undefined' && typeof VideoFrame !== 'undefined') {
     try {
@@ -887,9 +991,10 @@ async function beginRecording() {
     const bitrate = Math.round(clamp(w * h * s.fps * 0.1, 4e6, 60e6));
     recorders.push(await startRecorder('screen', tracks, bitrate));
   }
-  const camTracks = [...(cameraStream?.getVideoTracks() || []), ...micTracks()];
+  const { width = 1920, height = 1080, frameRate = 30 } = cameraStream?.getVideoTracks()[0]?.getSettings() ?? {};
+  const camVideo = !cameraStream ? [] : spares.size ? [switchedTrack(width - (width % 2), height - (height % 2))] : cameraStream.getVideoTracks();
+  const camTracks = [...camVideo, ...micTracks()];
   if (camTracks.length) {
-    const { width = 1920, height = 1080, frameRate = 30 } = cameraStream?.getVideoTracks()[0]?.getSettings() ?? {};
     recorders.push(await startRecorder('camera', camTracks, Math.round(clamp(width * height * frameRate * 0.1, 8e6, 60e6))));
   }
   recording.value = true;
@@ -920,6 +1025,8 @@ export async function stopRecording() {
     if (!roomActive) releaseDevices();
     cropStop?.();
     cropStop = null;
+    camStop?.();
+    camStop = null;
     syncFrame();
     for (const r of recorders) {
       await r.chain;
@@ -1026,6 +1133,7 @@ export async function initSources() {
     const before = systemMic();
     const patch = await refreshDevices();
     if ('cameraId' in patch) useCamera();
+    else if (!recording.value) useSpares();
     // 'default' keeps its id when the system switches input, so the stream must be reopened.
     if ('micId' in patch || (settings.value.micId === 'default' && systemMic() !== before)) useMic();
   });

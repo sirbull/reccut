@@ -162,12 +162,3 @@ export function stabilizeAt(clip, path, s) {
   return { x: lerp(c.cx), y: lerp(c.cy), a: lerp(c.ca), zoom: manual > 0 ? 1 + manual : c.zoom, auto: c.zoom, method: c.method };
 }
 
-// Hvor mye bildet rister: gjennomsnittlig forskjell mellom bevegelsen og den glatte banen (til tester og visning).
-export function shakiness(data) {
-  const d = prepare(data);
-  const sx = gaussian(d.X, d.fps * 0.5);
-  const sy = gaussian(d.Y, d.fps * 0.5);
-  let sum = 0;
-  for (let i = 0; i < d.X.length; i++) sum += Math.hypot(d.X[i] - sx[i], d.Y[i] - sy[i]);
-  return sum / Math.max(1, d.X.length);
-}

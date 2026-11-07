@@ -7,10 +7,7 @@ import { COMMANDS, helpOpen, isMac, paletteOpen, runCommand, shortcutText } from
 import { consoleSearch, runItem } from './console.js';
 import { selection } from '../editor/store.js';
 import { toast } from '../ui.jsx';
-import { searchHelp } from './search.js';
-import { ARTICLES } from './articles.js';
 
-export const searchAll = (query) => searchHelp(query, ARTICLES, COMMANDS);
 const snapshot = () => COMMANDS.filter((c) => !c.hidden && !c.menuOnly).map((c) => ({
   id: c.id, label: c.label, menu: c.menu, submenu: c.submenu, help: c.help,
   desc: c.desc || '', keywords: c.keywords || '', shortcut: shortcutText(c),

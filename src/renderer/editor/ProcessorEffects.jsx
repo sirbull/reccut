@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { Button, Section, Select, toast } from '../ui.jsx';
 import { commit, project } from './store.js';
+import { RotoBrushSection } from './RotoBrush.jsx';
 const api = window.api;
 
 // Runs an installed processor on a clip's full source and swaps the clip to the result, as one undo step.
@@ -12,6 +13,15 @@ export async function applyProcessor(clipId, processorId, params) {
     main = original?.streams?.main;
   if (clip?.type !== 'video' || !main) throw new Error('Choose a video clip.');
   const result = await api.pluginsProcess({ id: processorId, input: main.tsFallback ? main.proxy : main.path, params });
+  swapSource(clipId, snapshot, result);
+  return result.plugin;
+}
+// Swaps the clip to a processed copy of its source (result.media), as one undo step.
+// snapshot is the project from before processing started. Also used by Roto Brush.
+export function swapSource(clipId, snapshot, result) {
+  const clip = snapshot.clips[clipId],
+    original = snapshot.media[clip?.mediaId],
+    main = original?.streams?.main;
   const next = result.media;
   // Processors must preserve the full source timing; trims and speed changes keep their meaning.
   if (Math.abs(next.duration - original.duration) > Math.max(0.1, 2 / (main.fps || snapshot.fps)))
@@ -35,7 +45,6 @@ export async function applyProcessor(clipId, processorId, params) {
     p.media[m.id] = m;
     c.mediaId = m.id;
   });
-  return result.plugin;
 }
 export function ProcessorEffects({ clip }) {
   const [plugins, setPlugins] = useState([]),
@@ -72,6 +81,8 @@ export function ProcessorEffects({ clip }) {
     }
   };
   return (
+    <>
+    <RotoBrushSection clip={clip} />
     <Section title="External processing" open={false}>
       <p class="hint">
         Process the complete source with a local AI tool, then use the result on this clip. Install a processor under
@@ -93,5 +104,6 @@ export function ProcessorEffects({ clip }) {
         timing. Original audio is retained.
       </p>
     </Section>
+    </>
   );
 }

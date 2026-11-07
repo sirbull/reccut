@@ -16,7 +16,7 @@ function setup() {
 
 test('background apps retain their keys by default; global recording requires opt-in', () => {
   const { state, keys, actions, shortcuts } = setup();
-  assert.equal(keys.size, 11);
+  assert.equal(keys.size, 12);
   keys.get('Control+Alt+1')();
   assert.deepEqual(actions, [{ layout: 1, keyboard: true }]);
   const queued = keys.get('Control+Alt+0');
@@ -75,7 +75,7 @@ test('inputs, composition and dialogs release native shortcuts; other app window
   state.otherWindowFocused = false;
   state.blocked = false;
   shortcuts.refresh();
-  assert.equal(keys.size, 11);
+  assert.equal(keys.size, 12);
 });
 
 test('the recording keys belong to the Record room: other rooms get none and stale bindings do nothing', () => {
@@ -101,7 +101,7 @@ test('all eight layouts, pause and cursor zoom have distinct keys with every rec
     state.modifier = modifier;
     shortcuts.refresh();
     actions.length = 0;
-    assert.equal(keys.size, 11);
+    assert.equal(keys.size, 12);
     for (let n = 1; n <= 8; n++) keys.get(`${modifier}+${n}`)();
     keys.get(`${modifier}+9`)();
     keys.get(`${modifier}+M`)();

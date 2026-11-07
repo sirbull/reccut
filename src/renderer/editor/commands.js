@@ -62,7 +62,6 @@ import {
   selectedComponent,
   selectedTransition,
   selection,
-  clipSelection,
   editingGroup,
   inEditingGroup,
   sourceMediaId,
@@ -967,9 +966,6 @@ export function toggleSolo() {
   });
 }
 
-export function clearSolo() {
-  commit((q) => Object.values(q.clips).forEach((c) => delete c.solo));
-}
 
 export function liftSelected() {
   const ids = selection.value.filter((id) => project.value.clips[id]?.lane === 0);
@@ -1264,10 +1260,6 @@ export function ungroupSelected() {
   commit((q) => ungroupClips(q, ids));
 }
 
-// Klikk på et gruppert klipp velger hele gruppen.
-export function selectWithGroup(id) {
-  selection.value = clipSelection(id);
-}
 
 export function zoomAt(factor, T, offsetPx) {
   timelineView?.zoomAt?.(factor, T, offsetPx);

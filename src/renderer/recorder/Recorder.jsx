@@ -23,18 +23,21 @@ import { project, projectFolders } from '../editor/store.js';
 import * as editorCommands from '../editor/commands.js';
 import { GainControl, MicrophoneMixer } from './MicrophoneMixer.jsx';
 import { KeystrokesRows } from './KeystrokesAddon.jsx';
+import { PhoneCamera } from './PhoneCamera.jsx';
 import { meterDb } from './mixer.js';
 import { RECORDING_VIDEO_FORMATS, recordingAudioChoice, recordingAudioOptions } from '../../shared/recordingFormats.cjs';
 import { SIDE_LAYOUT, isSide } from '../../shared/model.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
+const ADD_PHONE = '__add-phone';
 
 
 export function Recorder({ active }) {
   const canvasRef = useRef(null);
   const [failed, setFailed] = useState([]);
   const [mixerOpen, setMixerOpen] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
   const s = settings.value;
   const side = isSide(s.layout);
   const mod = modifierInfo();
@@ -139,10 +142,18 @@ export function Recorder({ active }) {
             <Select
               value={s.cameraId}
               disabled={recording}
-              options={[{ value: '', label: 'No camera' }, ...engine.cameras.value.map((c) => ({ value: c.id, label: c.label }))]}
-              onChange={engine.chooseCamera}
+              options={[{ value: '', label: 'No camera' }, ...engine.cameras.value.map((c) => ({ value: c.id, label: c.label })), { value: ADD_PHONE, label: 'Use a Phone as Camera…' }]}
+              onChange={(v) => (v === ADD_PHONE ? setPhoneOpen(true) : engine.chooseCamera(v))}
             />
           </Row>
+          {s.cameraId && engine.cameras.value.length > 1 && <>
+            {engine.cameras.value.filter((c) => c.id !== s.cameraId).map((c) => (
+              <Row key={c.id} label={c.label}>
+                <Toggle checked={s.switchCameras.includes(c.id)} disabled={recording} onChange={(on) => engine.setSwitchCamera(c.id, on)} />
+              </Row>
+            ))}
+            <p class="hint">Turn on the cameras you want to switch to. <b>{mod.short}C</b> goes to the next one, also while you record.</p>
+          </>}
           <Row label={<><Mic size={14} /> Microphone</>} stacked>
             <Select
               value={s.micId}
@@ -299,7 +310,7 @@ export function Recorder({ active }) {
             <Select value={s.modifier} options={MODIFIERS} onChange={(v) => set({ modifier: v })} />
           </Row>
           <p class="hint">
-            <b>{mod.short}0</b> starts and stops recording. <b>{mod.short}9</b> pauses and resumes. {mod.short}1 camera, {mod.short}2 screen, {mod.short}3 to {mod.short}6 corners, {mod.short}7 camera left, {mod.short}8 camera right and {mod.short}M cursor zoom.
+            <b>{mod.short}0</b> starts and stops recording. <b>{mod.short}9</b> pauses and resumes. {mod.short}1 camera, {mod.short}2 screen, {mod.short}3 to {mod.short}6 corners, {mod.short}7 camera left, {mod.short}8 camera right, {mod.short}M cursor zoom and {mod.short}C next camera.
             {' '}By default, these keys work only in Reccut, outside input fields and dialogs. While you record, <b>{mod.short}0</b> and <b>{mod.short}9</b> also work from other apps, so you can always stop and pause. Enable “Allow shortcuts in other apps” to use all the keys in the background; those combinations can then override shortcuts in other apps.
             {failed.length > 0 && <span class="warn"> Used by another app: {failed.join(', ')}.</span>}
             {isMac && s.modifier === 'Command+Shift' && <span class="warn"> Cmd + Shift + 3, 4 and 5 are used by macOS for screenshots.</span>}
@@ -308,6 +319,7 @@ export function Recorder({ active }) {
         </Section>
       </aside>
       {mixerOpen && <MicrophoneMixer onClose={() => setMixerOpen(false)} />}
+      {phoneOpen && <PhoneCamera onClose={() => setPhoneOpen(false)} />}
     </div>
   );
 }

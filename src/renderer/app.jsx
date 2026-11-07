@@ -368,6 +368,7 @@ function App() {
         ? commandsBlocked()
         : !settings.value.backgroundShortcuts && !control)) return;
       if (a.layout) engine.setLayout(a.layout);
+      if (a.nextCamera) engine.nextCamera();
       if (a.toggleRecord) toggleRecording();
       if (a.togglePause) engine.togglePause();
     });

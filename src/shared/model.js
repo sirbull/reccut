@@ -575,10 +575,6 @@ export function kfEnd(clip) {
   return clip.in + clip.dur * kfRate(clip);
 }
 
-// Hvor i kildefilen klippet slutter.
-export function srcEnd(clip) {
-  return clip.in + srcLen(clip);
-}
 
 // Ferdige fartsramper som i Final Cut Pro.
 export const RAMP_PRESETS = [
@@ -1007,9 +1003,6 @@ export function clicksAt(clicks, s) {
 
 /* Tidslinjen */
 
-export function primaryClips(project) {
-  return project.primary.map((id) => project.clips[id]).filter(Boolean);
-}
 
 export function relayoutPrimary(project) {
   let t = 0;

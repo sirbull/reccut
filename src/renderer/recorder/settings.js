@@ -57,6 +57,8 @@ const DEFAULTS = {
   micId: null,
   // Siste valg brukeren gjorde. Enheten tas i bruk igjen når den kobles til på nytt.
   cameraWanted: null,
+  // Kameraer som står klare for bytte med snarveien, i tillegg til cameraId.
+  switchCameras: [],
   micWanted: null,
   cameraHeight: 1080,
   cameraFps: 30,

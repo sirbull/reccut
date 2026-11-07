@@ -11,8 +11,6 @@ import { toast } from '../ui.jsx';
 const api = window.api;
 const sep = api.platform === 'win32' ? '\\' : '/';
 
-export const LAYERED = /\.(psd|psb|svg)$/i;
-
 // Dialogen: { file, kind, width, height, thumb, layers: [{ index, name, group, visible, thumb }] }
 export const layerImport = signal(null);
 const queue = [];

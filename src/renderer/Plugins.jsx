@@ -14,6 +14,7 @@ import * as commands from './editor/commands.js';
 import { prefs, setPrefs } from './prefs.js';
 import { KeystrokesConsent, KeystrokesRows, keystrokesConsent, keystrokesNeedsDownload } from './recorder/KeystrokesAddon.jsx';
 import { keystrokes, refreshKeystrokes } from './recorder/engine.js';
+import { CorridorKeyConsent, corridorKeyConsent } from './CorridorKeyAddon.jsx';
 
 const api = window.api;
 export const openPlugins = signal([]); // ids, last is on top
@@ -42,7 +43,16 @@ const KEYSTROKES = {
   description: 'Show the shortcuts you press in your recordings. A separate download that is not part of Reccut.',
   icon: KEYSTROKES_ICON,
 };
-export const allPlugins = computed(() => [...BUILTIN, KEYSTROKES, ...plugins.value]);
+// Listed until it is installed; then it is an ordinary processor with id 'corridorkey'.
+const CORRIDORKEY = {
+  id: 'corridorkey-addon',
+  addon: true,
+  room: 'edit',
+  name: 'CorridorKey',
+  description: 'AI green and blue screen keying from Corridor Digital, running on this computer. A separate download of several GB that needs a strong graphics card.',
+  icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="M9 18c0-3 1-5 3-5s3 2 3 5"/><circle cx="12" cy="9.5" r="2"/></svg>',
+};
+export const allPlugins = computed(() => [...BUILTIN, KEYSTROKES, ...(plugins.value.some((p) => p.id === 'corridorkey') ? [] : [CORRIDORKEY]), ...plugins.value]);
 // Each section has its own plugins. Processors work on video clips, so they belong to Edit.
 const ROOM_NAMES = { record: 'Record', edit: 'Edit', export: 'Export', design: 'Design' };
 export const pluginRoom = (p) => p.room || 'edit';
@@ -204,6 +214,10 @@ export function openPlugin(id) {
 }
 // Opens a plugin from a list. The Keystroke Add-on shows its warning first, until it is installed.
 async function openFromList(p) {
+  if (p.id === CORRIDORKEY.id) {
+    corridorKeyConsent.value = true;
+    return;
+  }
   if (p.addon && (await keystrokesNeedsDownload())) {
     keystrokesConsent.value = true;
     return;
@@ -327,6 +341,7 @@ export function PluginWindows() {
       )}
       {exportingPlugin.value && <ExportDialog id={exportingPlugin.value} />}
       <KeystrokesConsent />
+      <CorridorKeyConsent />
     </>
   );
 }
@@ -666,8 +681,9 @@ export function PluginsPane({ designSettings }) {
     section.scrollIntoView({ block: 'start', behavior: 'smooth' });
     section.querySelector('summary')?.focus({ preventScroll: true });
   };
-  const addon = keystrokes.value;
-  const pluginCard = p => (
+  const pluginCard = p => {
+    const addon = p.id === CORRIDORKEY.id ? {} : keystrokes.value;
+    return (
     <div class="plugin-settings-card" key={p.id} id={`plugin-${p.id}`}>
       <div class="processor-row">
         <PluginIcon plugin={p} size={22} />
@@ -684,8 +700,10 @@ export function PluginsPane({ designSettings }) {
         </div>
       </div>
       {open === p.id && <PluginSettings key={`${p.id}:${p.version || 1}`} plugin={p} />}
+      {p.id === 'corridorkey' && <p class="hint">Removing CorridorKey also deletes its downloaded files (several GB).</p>}
     </div>
-  );
+    );
+  };
   return (
     <div class="plugins-settings">
       <div class="plugins-settings-intro">
