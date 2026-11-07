@@ -31,19 +31,20 @@ test('background apps retain their keys by default; global recording requires op
   assert.equal(actions.at(-1).toggleRecord, true);
 });
 
-test('a running recording can always be stopped and paused, but the other keys stay opt-in', () => {
+test('a running recording keeps all recording keys, including layouts, while Reccut is minimized', () => {
   const { state, keys, actions, shortcuts } = setup();
   state.focused = false; // Reccut minimizes when the recording starts.
   state.recording = true;
   shortcuts.refresh();
-  assert.deepEqual([...keys.keys()], ['Control+Alt+0', 'Control+Alt+9']);
+  assert.equal(keys.size, 12);
   keys.get('Control+Alt+9')();
+  keys.get('Control+Alt+4')();
   const queued = keys.get('Control+Alt+0');
   queued();
-  assert.deepEqual(actions, [{ togglePause: true, keyboard: true }, { toggleRecord: true, keyboard: true }]);
+  assert.deepEqual(actions, [{ togglePause: true, keyboard: true }, { layout: 4, keyboard: true }, { toggleRecord: true, keyboard: true }]);
   state.otherWindowFocused = true; // Clicking the control bar moves focus to it.
   shortcuts.refresh();
-  assert.equal(keys.size, 2);
+  assert.equal(keys.size, 12);
   state.focused = true;
   state.otherWindowFocused = false;
   state.blocked = true; // Typing in Reccut keeps its keys.
@@ -55,7 +56,7 @@ test('a running recording can always be stopped and paused, but the other keys s
   shortcuts.refresh();
   assert.equal(keys.size, 0, 'other apps get the keys back when the recording ends');
   queued();
-  assert.equal(actions.length, 2, 'late callbacks cannot act after the recording');
+  assert.equal(actions.length, 3, 'late callbacks cannot act after the recording');
 });
 
 test('inputs, composition and dialogs release native shortcuts; other app windows are isolated', () => {

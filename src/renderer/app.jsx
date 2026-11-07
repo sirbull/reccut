@@ -363,7 +363,7 @@ function App() {
     const offShortcut = api.onShortcut((a) => {
       // Tray/control-bar clicks are explicit actions. Keyboard callbacks must also
       // pass the renderer check in case focus changed before native IPC arrived.
-      const control = (a.toggleRecord || a.togglePause) && (engine.recording.value || engine.countdown.value > 0);
+      const control = engine.recording.value || engine.countdown.value > 0;
       if (a.keyboard && (document.hasFocus()
         ? commandsBlocked()
         : !settings.value.backgroundShortcuts && !control)) return;

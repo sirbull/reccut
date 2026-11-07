@@ -311,7 +311,7 @@ export function Recorder({ active }) {
           </Row>
           <p class="hint">
             <b>{mod.short}0</b> starts and stops recording. <b>{mod.short}9</b> pauses and resumes. {mod.short}1 camera, {mod.short}2 screen, {mod.short}3 to {mod.short}6 corners, {mod.short}7 camera left, {mod.short}8 camera right, {mod.short}M cursor zoom and {mod.short}C next camera.
-            {' '}By default, these keys work only in Reccut, outside input fields and dialogs. While you record, <b>{mod.short}0</b> and <b>{mod.short}9</b> also work from other apps, so you can always stop and pause. Enable “Allow shortcuts in other apps” to use all the keys in the background; those combinations can then override shortcuts in other apps.
+            {' '}By default, these keys work only in Reccut, outside input fields and dialogs. While you record, all these keys also work from other apps, so you can stop, pause and switch layouts. Enable “Allow shortcuts in other apps” to use them in the background when you are not recording; those combinations can then override shortcuts in other apps.
             {failed.length > 0 && <span class="warn"> Used by another app: {failed.join(', ')}.</span>}
             {isMac && s.modifier === 'Command+Shift' && <span class="warn"> Cmd + Shift + 3, 4 and 5 are used by macOS for screenshots.</span>}
             {!isMac && s.modifier === 'Control+Alt' && <span class="warn"> Ctrl + Alt is the same as AltGr on many European keyboards.</span>}
