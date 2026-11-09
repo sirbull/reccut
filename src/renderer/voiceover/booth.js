@@ -24,6 +24,7 @@ import {
 import { recordingPlan } from '../../shared/recordingFormats.cjs';
 import { audioSink, prefs, setPrefs } from '../prefs.js';
 import { boothOpen } from './state.js';
+import * as preview from './preview.js';
 
 export { boothOpen };
 const fileUrl = (p) => `media://file/${encodeURIComponent(p)}`;
@@ -64,7 +65,7 @@ export const cameraStream = signal(null);
 export const playingTake = signal(null);
 export const recordingKey = signal(null);
 
-const EMPTY = { script: null, pos: 0, takes: [], selected: {}, roomTone: null, roomTones: null, roomToneSkipped: false, placed: null };
+const EMPTY = { script: null, pos: 0, takes: [], selected: {}, skip: {}, roomTone: null, roomTones: null, roomToneSkipped: false, placed: null };
 export const vo = computed(() => ({ ...EMPTY, ...(project.value.voiceover || {}) }));
 export const blocks = computed(() => parseScript(vo.value.script?.text || '', { split: opt('voSplit') }));
 export const lines = computed(() => blocks.value.filter((b) => b.kind === 'line'));
@@ -263,6 +264,7 @@ export async function recordFree() {
 
 async function begin(key, { quick }) {
   if (status.value !== 'idle') return;
+  preview.stop();
   recordingKey.value = key;
   try {
     const count = quick ? 0 : Number(opt('voCountIn')) || 0;
@@ -440,6 +442,7 @@ async function saveTake(key, samples, blob) {
       return;
     }
     v.takes.push(take);
+    if (v.skip?.[key]) delete v.skip[key];
     if (key !== 'free') v.selected[key] = take.id;
     if (opt('voAutoAdvance') && key !== 'free' && line) {
       const list = lines.value;
@@ -549,6 +552,7 @@ export const needsRoomTone = computed(() => roomSetup.value || (!vo.value.roomTo
 
 export function selectTake(take) {
   setVo((v) => {
+    if (v.skip?.[take.key]) delete v.skip[take.key];
     v.selected[take.key] = take.id;
     const t = v.takes.find((x) => x.id === take.id);
     if (t) t.bad = false;
@@ -574,6 +578,43 @@ export function deleteTake(take) {
     if (v.selected[take.key] === take.id) delete v.selected[take.key];
   });
 }
+/* Studioets tidslinje */
+
+// Planen slik den blir sydd sammen, fra 0. Video legges tett, lyd får pauser.
+export const plan = computed(() => {
+  const v = vo.value;
+  const items = planAssembly(blocks.value, v, { start: 0, pacing: { ...DEFAULT_PACING, ...opt('voPacing') }, room: 'fill' });
+  const video = items.items.length > 0 && items.items.every((it) => it.take.video);
+  return video ? { ...planAssembly(blocks.value, v, { start: 0, pacing: { ...DEFAULT_PACING, ...opt('voPacing') }, room: 'tight' }), video } : { ...items, video };
+});
+
+// Endrer volum, fades, pause eller trim på et opptak. Brukes også mens det dras, så det lagres i bakgrunnen.
+export function setTake(id, patch) {
+  setVo((v) => {
+    const t = v.takes.find((x) => x.id === id);
+    if (!t) return;
+    for (const [k, val] of Object.entries(patch)) {
+      if (val == null) delete t[k];
+      else t[k] = val;
+    }
+    if ('in' in patch || 'out' in patch) {
+      t.in = Math.max(0, Math.min(t.in, t.duration - 0.05));
+      t.out = Math.min(t.duration, Math.max(t.out, t.in + 0.05));
+    }
+    const len = t.out - t.in;
+    if (t.fadeIn != null) t.fadeIn = Math.max(0, Math.min(t.fadeIn, len / 2));
+    if (t.fadeOut != null) t.fadeOut = Math.max(0, Math.min(t.fadeOut, len / 2));
+  });
+}
+// Sletter et klipp fra tidslinjen: linjen hoppes over, men opptakene beholdes og kan hentes tilbake.
+export function skipLine(key, on = true) {
+  setVo((v) => {
+    v.skip ||= {};
+    if (on) v.skip[key] = true;
+    else delete v.skip[key];
+  });
+}
+
 export function setTrim(take, edge, value) {
   setVo((v) => {
     const t = v.takes.find((x) => x.id === take.id);
@@ -643,7 +684,7 @@ export function stitch({ from = 0 } = {}) {
   const v = vo.value;
   const p = project.value;
   const seq = currentSequence(p).id;
-  const takes = blocks.value.filter((b) => b.kind === 'line' && b.index >= from).map((b) => chosenTake(v, b.key)).filter(Boolean);
+  const takes = blocks.value.filter((b) => b.kind === 'line' && b.index >= from && !v.skip?.[b.key]).map((b) => chosenTake(v, b.key)).filter(Boolean);
   if (!takes.length) return toast('There are no takes to put on the timeline yet.');
   const video = takes.every((t) => t.video);
   const previous = v.placed?.seq === seq ? v.placed.ids.filter((id) => p.clips[id]) : [];
@@ -664,8 +705,10 @@ export function stitch({ from = 0 } = {}) {
       if (!m) continue;
       const c = mediaClip(m, { in: it.in, dur: it.dur });
       c.name = `${it.block.speaker ? `${it.block.speaker}: ` : ''}${it.block.text}`.slice(0, 80);
-      c.props.aFadeIn = 0.02;
-      c.props.aFadeOut = 0.04;
+      // Justeringer fra studioets tidslinje: volum (dB) og fades.
+      c.props.volume = it.take.gain || 0;
+      c.props.aFadeIn = it.take.fadeIn ?? 0.02;
+      c.props.aFadeOut = it.take.fadeOut ?? 0.04;
       c.start = it.at;
       clips.push(c);
     }

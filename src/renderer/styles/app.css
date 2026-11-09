@@ -5588,3 +5588,36 @@ button.vo-take-name:hover { background: var(--bg-3); }
 .quick-rec-meter { height: 8px; }
 .quick-rec .vo-rec { height: 40px; }
 .quick-rec-hint { margin: 0; font-size: 11px; line-height: 1.4; }
+
+/* Voice Over Studio: tidslinjen. */
+.vt { flex: none; display: flex; flex-direction: column; border-top: 1px solid var(--line); background: var(--bg-1); }
+.vt-bar { display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-bottom: 1px solid var(--line); }
+.vt-bar .spacer, .vt-controls .spacer { flex: 1; }
+.vt-time { font-variant-numeric: tabular-nums; min-width: 92px; }
+.vt-scroll { height: 98px; overflow-x: auto; overflow-y: hidden; position: relative; }
+.vt-empty { margin: 0; padding: 30px 16px; text-align: center; }
+.vt-track { position: relative; height: 100%; margin-left: 12px; cursor: text; }
+.vt-ruler { position: absolute; left: 0; right: 0; top: 0; height: 18px; border-bottom: 1px solid var(--line-2); }
+.vt-ruler span { position: absolute; top: 2px; padding-left: 3px; border-left: 1px solid var(--line-2); font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.vt-gap { position: absolute; top: 24px; height: 70px; background: repeating-linear-gradient(135deg, transparent 0 5px, rgba(255, 255, 255, 0.03) 5px 10px); }
+.vt-clip { position: absolute; top: 24px; height: 70px; border-radius: 6px; background: var(--clip-audio); border: 1px solid rgba(0, 0, 0, 0.4); overflow: hidden; cursor: pointer; }
+.vt-clip.video { background: var(--clip-video); }
+.vt-clip.current { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35); }
+.vt-clip.on { border-color: var(--yellow); box-shadow: 0 0 0 1px var(--yellow); overflow: visible; }
+.vt-label { position: absolute; left: 0; right: 0; top: 0; height: 16px; padding: 1px 5px; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(0, 0, 0, 0.25); pointer-events: none; }
+.vt-wave { position: absolute; left: 0; top: 16px; pointer-events: none; }
+.vt-fades { position: absolute; left: 0; top: 16px; pointer-events: none; }
+.vt-fades polygon { fill: rgba(0, 0, 0, 0.35); }
+.vt-gain { position: absolute; right: 4px; bottom: 2px; font-size: 9px; color: var(--text); background: rgba(0, 0, 0, 0.35); padding: 0 3px; border-radius: 3px; pointer-events: none; }
+.vt-edge { position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; background: var(--yellow); opacity: 0.85; }
+.vt-edge.in { left: -1px; border-radius: 6px 0 0 6px; }
+.vt-edge.out { right: -1px; border-radius: 0 6px 6px 0; }
+.vt-fade { position: absolute; top: 12px; width: 10px; height: 10px; margin: 0 -5px; border-radius: 50%; background: #fff; border: 2px solid var(--yellow); cursor: ew-resize; z-index: 1; }
+.vt-playhead { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--red); pointer-events: none; z-index: 2; }
+.vt-playhead::before { content: ''; position: absolute; top: 0; left: -4px; border: 4px solid transparent; border-top: 6px solid var(--red); }
+.vt-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 6px 12px; border-top: 1px solid var(--line); color: var(--text-2); }
+.vt-name { color: var(--text); }
+.vt-ctl { display: flex; align-items: center; gap: 6px; }
+.vt-ctl .slider { width: 110px; }
+.vo-line.skipped .vo-words { text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, 0.25); }
+button.vo-badge { border: 0; cursor: pointer; }

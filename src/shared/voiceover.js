@@ -284,6 +284,34 @@ export function roomToneLevel(env) {
   return { floor: Math.round(floor * 10) / 10, quiet: percentile(env, 0.95) - floor < 12 };
 }
 
+// Toppnivå per 10 ms (0 til 1), til bølgeformen i studioets tidslinje.
+export function peaks(samples, rate, hop = 0.01) {
+  const n = Math.max(1, Math.round(rate * hop));
+  const out = new Float32Array(Math.ceil(samples.length / n));
+  for (let f = 0; f < out.length; f++) {
+    let m = 0;
+    for (let i = f * n, e = Math.min(samples.length, i + n); i < e; i++) {
+      const a = samples[i] < 0 ? -samples[i] : samples[i];
+      if (a > m) m = a;
+    }
+    out[f] = m;
+  }
+  return out;
+}
+
+// Forsterkning (dB) som løfter eller senker et klipp til en topp på target dB, begrenset til +-24 dB.
+export function normalizeGain(peakDb, target = -3) {
+  if (!(peakDb > -120)) return 0;
+  return Math.round(clamp(target - peakDb, -24, 24) * 10) / 10;
+}
+
+// Høyeste topp i et utsnitt av toppene (sekunder inn og ut), i dB.
+export function peakDbIn(pk, from, to, hop = 0.01) {
+  let m = 0;
+  for (let i = Math.max(0, Math.floor(from / hop)), e = Math.min(pk.length, Math.ceil(to / hop)); i < e; i++) if (pk[i] > m) m = pk[i];
+  return m > 0 ? 20 * Math.log10(m) : -120;
+}
+
 /* Sammensying */
 
 export const DEFAULT_PACING = { sentence: 0.35, paragraph: 0.8, section: 1.6 };
@@ -303,14 +331,17 @@ export function chosenTake(vo, key) {
  * Gir { items: [{ take, block, at, in, dur }], gaps: [{ at, dur }], end }.
  */
 export function planAssembly(blocks, vo, { start = 0, pacing = DEFAULT_PACING, room = false, from = 0 } = {}) {
-  const lines = blocks.filter((b) => b.kind === 'line' && b.index >= from);
+  // Linjer som er slettet fra tidslinjen (vo.skip) hoppes over, men opptakene beholdes.
+  const lines = blocks.filter((b) => b.kind === 'line' && b.index >= from && !vo?.skip?.[b.key]);
   const picked = lines.map((b) => ({ block: b, take: chosenTake(vo, b.key) })).filter((x) => x.take);
   const items = [],
     gaps = [];
   let t = start;
   picked.forEach(({ block, take }, i) => {
     const next = picked[i + 1]?.block;
-    const pause = !next ? 0 : next.section !== block.section ? pacing.section : next.para !== block.para ? pacing.paragraph : pacing.sentence;
+    const auto = !next ? 0 : next.section !== block.section ? pacing.section : next.para !== block.para ? pacing.paragraph : pacing.sentence;
+    // Pausen etter et klipp kan settes for hånd (take.pause), ellers følger den manuset.
+    const pause = !next ? 0 : take.pause != null ? Math.max(0, take.pause) : auto;
     let dur = Math.max(0.05, take.out - take.in);
     let rest = pause;
     if (room && pause > 0) {

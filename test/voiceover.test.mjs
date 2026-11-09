@@ -194,3 +194,19 @@ test('a room tone with sound in it never hides the voice, and is reported as not
   assert.equal(roomToneLevel(levelEnvelope(tone(rate, [[3, 0]]), rate)).quiet, true);
   assert.equal(roomToneLevel(levelEnvelope(tone(rate, [[2, 0], [1, 0.3]]), rate)).quiet, false);
 });
+
+test('the studio timeline: deleted lines are left out, a pause can be set by hand, and gain normalizes', async () => {
+  const { peaks, normalizeGain, peakDbIn } = await import('../src/shared/voiceover.js');
+  const blocks = parseScript('One.\n\nTwo.\n\nThree.');
+  const L = lines(blocks);
+  const take = (b, id, extra = {}) => ({ id, key: b.key, in: 0, out: 1, duration: 1, ...extra });
+  const vo = { takes: [take(L[0], 'a', { pause: 0.1 }), take(L[1], 'b'), take(L[2], 'c')], selected: {}, skip: { [L[1].key]: true } };
+  const plan = planAssembly(blocks, vo, { pacing: { sentence: 0.3, paragraph: 0.8, section: 2 } });
+  assert.deepEqual(plan.items.map((i) => [i.take.id, i.at]), [['a', 0], ['c', 1.1]]);
+  assert.equal(normalizeGain(-12), 9);
+  assert.equal(normalizeGain(-50), 24);
+  assert.equal(normalizeGain(-120), 0);
+  const pk = peaks(new Float32Array([0, 0.5, 0, 0, 0.25, 0]), 200, 0.01);
+  assert.deepEqual(Array.from(pk), [0.5, 0, 0.25]);
+  assert.ok(Math.abs(peakDbIn(pk, 0.02, 0.03) + 12.04) < 0.01);
+});

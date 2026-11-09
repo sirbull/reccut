@@ -1475,6 +1475,20 @@ Aim for peaks between -12 and -6 dB on the meter. The studio records 24-bit WAV 
 
 Turn on **Camera** to record video with each take. The takes are WebM files with the picture and the sound, and they are trimmed the same way.
 
+## The studio timeline
+
+At the bottom of the studio, the takes you keep are laid out in script order, the way they will be stitched, with the pauses between them. Press **Shift Space** or the play button to listen from the playhead, with room tone in the pauses. Click in the ruler or an empty spot to move the playhead.
+
+Click a clip to select it. The script jumps to its line.
+
+- Drag the **yellow edges** to trim the start or the end. The clips after it move along.
+- Drag the **round handles** at the top to fade in and out.
+- Under the timeline: **Volume** (with **Normalize** to a peak of -3 dB), **Fade in**, **Fade out**, **Pause after** (Auto follows the script), and exact **Start** and **End**.
+- **Delete** (or Backspace) removes the clip from the timeline. The takes are kept, the line is crossed out in the script, and clicking **deleted** on the line or **Restore Deleted** brings it back. Recording a new take of the line also brings it back.
+- Double click a clip to hear only that clip.
+
+Everything you adjust here goes with the clips when you stitch.
+
 ## Stitch to the timeline
 
 **Stitch to Timeline** (Cmd or Ctrl and Return in the studio) puts the chosen takes in script order, at the playhead or at the end. The pause after each line follows the script: a short pause after a sentence, a longer one after a paragraph and the longest before a new section. Change the pauses under **Stitch**.

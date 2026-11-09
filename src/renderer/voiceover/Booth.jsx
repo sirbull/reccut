@@ -34,6 +34,7 @@ import { chosenTake, orphanTakes, progress, readingTime, DEFAULT_PACING } from '
 import { formatDuration } from '../../shared/model.js';
 import * as booth from './booth.js';
 import { StudioIcon } from './StudioIcon.jsx';
+import { VoTimeline, deleteSelected, selected as vtSelected, togglePreview } from './VoTimeline.jsx';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -54,6 +55,7 @@ export const KEYS = [
   ['N', 'Next line without a take'],
   ['P', 'Play the chosen take'],
   ['S', 'Star the chosen take'],
+  ['⇧Space', 'Play the timeline'],
   ['M', 'Prompter view'],
   [`${MOD}↩`, 'Stitch takes to the timeline'],
 ];
@@ -79,8 +81,11 @@ function onBoothKey(e) {
     }
     return;
   }
-  if (k === ' ' || e.code === 'Space') booth.toggle();
+  if ((k === ' ' || e.code === 'Space') && e.shiftKey) togglePreview();
+  else if (k === ' ' || e.code === 'Space') booth.toggle();
+  else if (k === 'Escape' && !booth.busy() && vtSelected.value) vtSelected.value = null;
   else if (k === 'Escape') booth.busy() ? booth.cancel() : booth.closeBooth();
+  else if ((k === 'Backspace' || k === 'Delete') && !booth.busy() && vtSelected.value) deleteSelected();
   else if (mod && k === 'Enter') booth.stitch();
   else if (mod) handled = false;
   else if (k === 'r' || k === 'R') booth.retake();
@@ -126,6 +131,7 @@ export function VoiceoverBooth() {
         {!prompter && <SidePane />}
         {booth.needsRoomTone.value && <RoomToneSetup />}
       </div>
+      {!prompter && <VoTimeline />}
       {prompter && <PrompterBar />}
       {!booth.needsRoomTone.value && <KeyBar />}
     </div>
@@ -334,8 +340,9 @@ function Block({ b, current }) {
   const takes = booth.takesFor(b.key);
   const chosen = chosenTake(v, b.key);
   const rec = booth.recordingKey.value === b.key && booth.status.value === 'recording';
+  const skipped = Boolean(v.skip?.[b.key]);
   return (
-    <div class={`vo-block vo-line${current ? ' current' : ''}${chosen ? ' done' : ''}${rec ? ' rec' : ''}`} onClick={() => booth.goTo(b.index)}>
+    <div class={`vo-block vo-line${current ? ' current' : ''}${chosen ? ' done' : ''}${rec ? ' rec' : ''}${skipped ? ' skipped' : ''}`} onClick={() => booth.goTo(b.index)}>
       <span class="vo-num">{booth.lineNumber(b)}</span>
       <div class="vo-line-body">
         {(b.speaker || b.direction) && (
@@ -348,7 +355,12 @@ function Block({ b, current }) {
           <Spoken text={b.text} />
         </div>
       </div>
-      {takes.length > 0 && (
+      {skipped && (
+        <button class="vo-badge" title="Deleted from the timeline. Click to bring it back." onClick={(e) => (e.stopPropagation(), booth.skipLine(b.key, false))}>
+          deleted
+        </button>
+      )}
+      {takes.length > 0 && !skipped && (
         <span class={`vo-badge${chosen ? ' ok' : ''}`} title={`${takes.length} ${takes.length === 1 ? 'take' : 'takes'}${chosen?.star ? ', starred' : ''}`}>
           {chosen?.star ? <Star size={10} /> : chosen ? <Check size={10} /> : null}
           {takes.length}
