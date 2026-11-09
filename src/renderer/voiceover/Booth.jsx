@@ -153,6 +153,7 @@ function BoothHeader() {
         </span>
       )}
       <div class="spacer" />
+      <RoomTonePicker />
       <label class="vo-field" title="Microphone">
         <span>Mic</span>
         <Select value={booth.opt('voMic')} options={[{ value: '', label: 'System default' }, ...mics.map((m) => ({ value: m.id, label: m.label }))]} onChange={(id) => reopen({ voMic: id })} />
@@ -168,6 +169,25 @@ function BoothHeader() {
       {video && cams.length > 1 && <Select value={booth.opt('voCam')} options={[{ value: '', label: 'Default camera' }, ...cams.map((c) => ({ value: c.id, label: c.label }))]} onChange={(id) => reopen({ voCam: id })} />}
       <IconButton icon={X} title="Close the studio (Esc)" onClick={booth.closeBooth} />
     </header>
+  );
+}
+
+// Romlyd i toppen: velg hvilken som brukes, eller ta opp en ny.
+function RoomTonePicker() {
+  const list = booth.roomTones.value;
+  const active = booth.vo.value.roomTone;
+  return (
+    <div class="vo-field" title="Room tone used to find your voice and fill the pauses">
+      <span>Room tone</span>
+      {list.length > 0 ? (
+        <Select value={active?.id || ''} options={[...(active ? [] : [{ value: '', label: 'None' }]), ...[...list].reverse().map((t) => ({ value: t.id, label: `${booth.toneLabel(t)}${t.quiet === false ? ' (has sound)' : ''}` }))]} onChange={(id) => id && booth.useRoomTone(id)} />
+      ) : (
+        <span class="dim">None</span>
+      )}
+      <Button class="small" icon={Plus} onClick={booth.newRoomTone} disabled={booth.busy()} title="Record a new room tone: countdown from 3, then 5 seconds">
+        New
+      </Button>
+    </div>
   );
 }
 
@@ -524,17 +544,36 @@ function RecordSettings() {
 }
 
 function RoomTone() {
-  const tone = booth.vo.value.roomTone;
+  const active = booth.vo.value.roomTone;
+  const list = booth.roomTones.value;
   return (
     <div class="vo-section">
       <h4>Room tone</h4>
-      <p class="dim">Five seconds of the quiet room. It fills the pauses between lines and helps find where your voice starts.</p>
-      <div class="vo-transport-row">
-        <Button class="small" icon={Wind} onClick={() => (booth.roomSetup.value = true)} disabled={booth.busy()}>
-          {tone ? 'Record Again' : 'Record Room Tone'}
-        </Button>
-        {tone && <span class="dim">Floor {tone.floor} dB</span>}
-      </div>
+      <p class="dim">Five seconds of the quiet room. It fills the pauses between lines and helps find where your voice starts. Record a new one when the room or the microphone changes, and pick the one to use.</p>
+      <Button class="small" icon={Plus} onClick={booth.newRoomTone} disabled={booth.busy()}>
+        New Room Tone
+      </Button>
+      {list.length > 0 && (
+        <ul class="vo-takes vo-tones">
+          {[...list].reverse().map((t) => {
+            const on = active?.id === t.id;
+            const playing = booth.playingTake.value === t.id;
+            return (
+              <li key={t.id} class={`vo-take${on ? ' chosen' : ''}`}>
+                <div class="vo-take-row">
+                  <IconButton icon={playing ? Square : Play} size={13} title={playing ? 'Stop' : 'Listen'} onClick={() => (playing ? booth.stopPlayback() : booth.playTake({ ...t, in: 0, out: t.duration }))} />
+                  <button class="vo-take-name" onClick={() => booth.useRoomTone(t.id)} title={`${on ? 'In use' : 'Use this room tone'}. Noise floor ${t.floor} dB.`}>
+                    {booth.toneLabel(t)}
+                  </button>
+                  {on && <Check size={13} class="vo-ok" />}
+                  <IconButton icon={Trash2} size={13} title="Remove from the list (the file stays in the project)" onClick={() => booth.deleteRoomTone(t.id)} />
+                </div>
+                {t.quiet === false && <div class="vo-take-warn">Has sound in it</div>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

@@ -1424,7 +1424,9 @@ Open the studio with **Voice Over Studio** in the toolbar of Edit, the headset a
 
 ## First: room tone
 
-The first time you open the studio in a project, it asks for five seconds of room tone. Sit where you will record, click **Record Room Tone** (or press Space), and stay quiet. It counts down from 3, records 5 seconds and stops by itself. If it hears a voice or a knock, it asks you to try again. You can skip it and record it later under Room tone in the side panel. It opens over the editor with the script on the left and the recording tools on the right. Everything you do in the studio is saved in the project, so you can close it and continue later.
+The first time you open the studio in a project, it asks for five seconds of room tone. Sit where you will record, click **Record Room Tone** (or press Space), and stay quiet. It counts down from 3, records 5 seconds and stops by itself. If it hears a voice or a knock, it asks you to try again. You can skip it and record it later.
+
+Record a **new room tone** with **New** next to Room tone at the top, or **New Room Tone** in the side panel, for example when you move to another room or change the microphone. All room tones in the project are kept in a list. Choose the one to use in the Room tone menu at the top or click it in the list. It is used for new takes and for the pauses the next time you stitch. Listen to a room tone with the play button, and remove it from the list with the bin (the file stays in the project). It opens over the editor with the script on the left and the recording tools on the right. Everything you do in the studio is saved in the project, so you can close it and continue later.
 
 ## The script
 

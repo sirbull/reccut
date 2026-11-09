@@ -64,7 +64,7 @@ export const cameraStream = signal(null);
 export const playingTake = signal(null);
 export const recordingKey = signal(null);
 
-const EMPTY = { script: null, pos: 0, takes: [], selected: {}, roomTone: null, roomToneSkipped: false, placed: null };
+const EMPTY = { script: null, pos: 0, takes: [], selected: {}, roomTone: null, roomTones: null, roomToneSkipped: false, placed: null };
 export const vo = computed(() => ({ ...EMPTY, ...(project.value.voiceover || {}) }));
 export const blocks = computed(() => parseScript(vo.value.script?.text || '', { split: opt('voSplit') }));
 export const lines = computed(() => blocks.value.filter((b) => b.kind === 'line'));
@@ -397,7 +397,8 @@ async function saveTake(key, samples, blob) {
   const { peakDb, clipped } = peakInfo(samples);
   const line = blocks.value.find((b) => b.key === key);
   const n = vo.value.takes.filter((t) => t.key === key).length + 1;
-  const label = isTone ? 'Room tone' : key === 'free' ? `Free take ${n}` : `Line ${lineNumber(line)} take ${n}`;
+  const toneN = (vo.value.roomTones || (vo.value.roomTone ? [vo.value.roomTone] : [])).reduce((m, t) => Math.max(m, t.n || 1), 0) + 1;
+  const label = isTone ? `Room tone ${toneN}` : key === 'free' ? `Free take ${n}` : `Line ${lineNumber(line)} take ${n}`;
   const dir = await folder();
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
   const name = `${safe(project.value.name)} VO ${stamp} ${safe(label)}`;
@@ -432,7 +433,10 @@ async function saveTake(key, samples, blob) {
   setVo((v) => {
     if (isTone) {
       const { floor, quiet } = roomToneLevel(env);
-      v.roomTone = { id: take.id, mediaId: media.id, file, duration: fileDur, floor: Math.max(-100, floor), quiet, media };
+      const tone = { id: take.id, n: toneN, name: label, at: take.at, mediaId: media.id, file, duration: fileDur, floor: Math.max(-100, floor), quiet, media };
+      // Alle romlyder beholdes i en liste, og den nye blir den som brukes.
+      v.roomTones = [...(v.roomTones || (v.roomTone ? [v.roomTone] : [])), tone];
+      v.roomTone = tone;
       return;
     }
     v.takes.push(take);
@@ -499,6 +503,40 @@ export async function recordRoomTone(seconds = 5) {
     recordingKey.value = null;
   }
 }
+// Romlydene i prosjektet. Eldre prosjekter har bare én (roomTone).
+export const roomTones = computed(() => vo.value.roomTones || (vo.value.roomTone ? [vo.value.roomTone] : []));
+// Bytter romlyd underveis. Gjelder nye opptak (støygulvet) og neste sammensying (pausene).
+export function useRoomTone(id) {
+  const t = roomTones.value.find((x) => x.id === id);
+  if (!t) return;
+  setVo((v) => {
+    v.roomTones = roomTones.value;
+    v.roomTone = t;
+  });
+  roomSetup.value = false;
+}
+// Fjerner en romlyd fra listen (filen blir liggende i prosjektet). Var den i bruk, tas den nyeste av de andre.
+export function deleteRoomTone(id) {
+  setVo((v) => {
+    const list = roomTones.value.filter((x) => x.id !== id);
+    v.roomTones = list;
+    if (v.roomTone?.id === id) v.roomTone = list.at(-1) || null;
+    if (!list.length) v.roomToneSkipped = true;
+  });
+}
+export function newRoomTone() {
+  if (busy()) return toast('Stop the take first.');
+  roomSetup.value = true;
+}
+// Navn og tid, kort: klokkeslett i dag, ellers dato og klokkeslett.
+export function toneLabel(t) {
+  if (!t.at) return t.name || 'Room tone';
+  const d = new Date(t.at);
+  const today = d.toDateString() === new Date().toDateString();
+  const when = d.toLocaleString([], { ...(today ? {} : { day: 'numeric', month: 'short' }), hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${t.name || 'Room tone'} · ${when}`;
+}
+
 // Hopper over romlyden. Den kan tas opp senere fra panelet.
 export function skipRoomTone() {
   roomSetup.value = false;
