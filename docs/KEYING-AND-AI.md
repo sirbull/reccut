@@ -43,7 +43,7 @@ Choose the processor under **Effects → External processing** on a regular vide
 
 There is **no native OFX/Adobe host**, so installing an OFX bundle is not enough. **CorridorKey is available as an optional add-on** ([src/main/corridorkey.js](../src/main/corridorkey.js), [src/renderer/CorridorKeyAddon.jsx](../src/renderer/CorridorKeyAddon.jsx)). After the user has read what it needs and accepted its licence, Reccut downloads uv, the CorridorKey source at a fixed commit, the Python packages from its lock file and the green and blue screen weights, each checked against a known hash, and installs it as a processor plugin. Nothing of it ships with Reccut.
 
-It is reached from **AI keying with CorridorKey** under Keying & effect stack on video and recording clips ([src/renderer/editor/AiKeying.jsx](../src/renderer/editor/AiKeying.jsx)): **Get CorridorKey…** opens the consent dialog, and once installed **Key This Clip with CorridorKey…** selects the clip and opens the CorridorKey window. It is also listed under Green screen keying in the AI Models window and in Plugins.
+It is reached from **Plugins** only, like other processor plugins: choose CorridorKey there, read the facts and licence, install, then select a clip and apply it in the CorridorKey window.
 
 Licence: CorridorKey Licence 1.0, which is CC BY-NC-SA 4.0 with additional terms. Users may process images as part of a commercial project. Section 2c says that a commercial software package that wants to incorporate the tool needs a separate written agreement with Corridor Digital (contact@corridordigital.com). That must be clarified before Reccut is sold with this integration.
 

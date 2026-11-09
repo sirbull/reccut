@@ -3,8 +3,7 @@
 // modell (teksting, fjerne bakgrunn eller AI-stemmer), og fra Settings → AI.
 import { signal } from '@preact/signals';
 import { useEffect, useState } from 'preact/hooks';
-import { AudioWaveform, Captions, Check, Download, Loader2, Scissors, Sparkles, Trash2, X } from 'lucide-preact';
-import { corridorKeyConsent, corridorKeyStatus, refreshCorridorKey } from './CorridorKeyAddon.jsx';
+import { AudioWaveform, Captions, Check, Download, Loader2, Scissors, Trash2, X } from 'lucide-preact';
 import { Button, IconButton, Modal, Select } from './ui.jsx';
 import { prefs, setPrefs } from './prefs.js';
 import { modelAction, modelBytes, subtitleModels } from './subtitleModels.js';
@@ -67,12 +66,6 @@ const GROUPS = [
     use: 'Cuts people and objects out of images in Design, for thumbnails and cut outs.',
   },
   {
-    id: 'keying',
-    icon: Sparkles,
-    title: 'Green screen keying',
-    use: 'Removes green and blue screens from video with clean hair, motion blur and see-through edges. The color key in Effects works without it; this is for harder shots.',
-  },
-  {
     id: 'voices',
     icon: AudioWaveform,
     title: 'AI voices',
@@ -101,7 +94,6 @@ export function AiModelsDialog() {
     modelAction('subtitleModels');
     refreshBackground();
     refreshTts();
-    refreshCorridorKey();
   }, []);
   // Forslag ved første oppstart: det minste som dekker teksting og bakgrunn. AI-stemmer velges selv.
   const [gpuOk, setGpuOk] = useState(null);
@@ -166,17 +158,6 @@ export function AiModelsDialog() {
       remove: m.installed ? () => api.removeBackgroundModel(m.id).then((list) => (backgroundModels.value = list)) : null,
       cancel: () => api.cancelBackgroundModel(m.id),
     })),
-    keying: [
-      {
-        key: 'ck:corridorkey',
-        name: 'CorridorKey (Corridor Digital)',
-        detail: 'Needs Apple Silicon or an NVIDIA graphics card, and is slow: seconds per frame. Its own licence (CC BY-NC-SA 4.0 with extra terms) must be accepted before it is downloaded. Remove it from the Plugins list.',
-        size: corridorKeyStatus.value?.needed || 8 * 1024 ** 3,
-        installed: Boolean(corridorKeyStatus.value?.installed),
-        consent: true,
-        unsupported: corridorKeyStatus.value && !corridorKeyStatus.value.supported,
-      },
-    ],
     voices: [
       {
         key: 'tts:kokoro',
@@ -252,8 +233,6 @@ export function AiModelsDialog() {
               <li key={r.key} class={r.installed ? 'installed' : ''}>
                 {r.installed ? (
                   <Check size={14} class="ok" />
-                ) : r.consent ? (
-                  <span class="ai-models-spacer" />
                 ) : (
                   <input type="checkbox" checked={picked.has(r.key)} disabled={r.busy} onChange={() => toggle(r.key)} aria-label={`Download ${r.name}`} />
                 )}
@@ -261,7 +240,7 @@ export function AiModelsDialog() {
                   <b>{r.name}</b>
                   {r.detail && <span class="dim">{r.detail}</span>}
                 </div>
-                <span class="dim ai-models-size">{r.consent ? `about ${modelBytes(r.size)}` : modelBytes(r.size)}</span>
+                <span class="dim ai-models-size">{modelBytes(r.size)}</span>
                 {r.busy ? (
                   <span class="ai-models-busy">
                     <Loader2 size={13} class="spin" /> {Math.round((r.progress || 0) * 100)} %
@@ -269,18 +248,6 @@ export function AiModelsDialog() {
                   </span>
                 ) : r.installed ? (
                   r.remove && <IconButton icon={Trash2} size={13} title="Remove from this computer" onClick={r.remove} />
-                ) : r.consent ? (
-                  <Button
-                    class="small"
-                    disabled={r.unsupported}
-                    onClick={() => {
-                      aiModelsOpen.value = null;
-                      corridorKeyConsent.value = true;
-                    }}
-                    title="Read what it is, what it needs and its licence before anything is downloaded"
-                  >
-                    {r.unsupported ? 'Not available here' : 'Read and Install…'}
-                  </Button>
                 ) : (
                   <Button class="small" icon={Download} onClick={() => download(r.key)}>
                     Download

@@ -71,8 +71,3 @@ function ConsentDialog({ onClose }) {
     </Modal>
   );
 }
-
-// Status for CorridorKey, delt av chroma key og vinduet for KI-modeller.
-export const corridorKeyStatus = signal(null);
-export const refreshCorridorKey = () => api.corridorKeyStatus().then((s) => (corridorKeyStatus.value = s), () => {});
-window.addEventListener('reccut:processors-changed', refreshCorridorKey);
