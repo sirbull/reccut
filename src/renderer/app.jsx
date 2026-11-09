@@ -68,6 +68,7 @@ import { boothOpen, openBooth } from './voiceover/state.js';
 import { StudioIcon } from './voiceover/StudioIcon.jsx';
 import { QuickRecord } from './voiceover/QuickRecord.jsx';
 import { quickOpen } from './voiceover/quick.js';
+import { AiModelsDialog, aiModelsOpen, maybeAskFirstRun } from './AiModels.jsx';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -339,6 +340,11 @@ effect(() => {
 function App() {
   const r = room.value;
   const [fileHover, setFileHover] = useState(false);
+  const [started, setStarted] = useState(false);
+  // Første oppstart: når prosjektet er valgt, spør appen én gang om KI-modeller.
+  useEffect(() => {
+    if (started && !needsProject.value) setTimeout(maybeAskFirstRun, 600);
+  }, [started, needsProject.value]);
   useEffect(() => installFileDrop(window, {
     pathForFile: api.pathForFile,
     onFiles: commands.importDroppedFiles,
@@ -365,6 +371,7 @@ function App() {
       } finally {
         // Let Preact commit the restored project and paint before replacing the splash.
         requestAnimationFrame(() => requestAnimationFrame(() => api.startupStage?.('ready')));
+        setStarted(true);
       }
     })();
     // Nye versjoner sjekkes litt etter start, så det ikke sinker oppstarten.
@@ -429,6 +436,7 @@ function App() {
       <PluginWindows />
       {boothOpen.value && r === 'edit' && <VoiceoverBooth />}
       {quickOpen.value && r === 'edit' && <QuickRecord />}
+      {aiModelsOpen.value && !needsProject.value && <AiModelsDialog key={String(aiModelsOpen.value.focus)} />}
       {commands.prefsOpen.value && <SettingsWindow />}
       {helpOpen.value && <HelpCenter />}
       {paletteOpen.value && <CommandPalette />}

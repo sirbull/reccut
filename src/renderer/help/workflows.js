@@ -414,7 +414,7 @@ Animation presets are another starting point in the Video inspector. Applying a 
     summary: 'From speech recognition to readable subtitles and the right export mode.',
     keywords: 'captions subtitles whisper speech model automatic transcribe language generate srt vtt timing import export burn embedded',
     body: `
-Make sure the timeline contains audible speech. Automatic captions use a local speech model, separate from the chat model. Whisper Base is included. Download optional models in Settings → AI → Manage Models; recognition runs entirely on your computer.
+Make sure the timeline contains audible speech. Automatic captions use a local speech model, separate from the chat model. No speech model is included in the installer: the first time you make captions, Reccut asks you to download one (Whisper Base, about 81 MB, is a good start). You can also download and remove models in Settings → AI. Recognition runs entirely on your computer.
 
 ## Generate captions
 

@@ -345,8 +345,8 @@ module.exports = [
         "x64"
       ]
     },
-    "bundled": true,
-    "removable": false,
+    "bundled": false,
+    "removable": true,
     "recommended": false,
     "files": [
       {

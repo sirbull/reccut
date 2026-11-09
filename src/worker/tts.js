@@ -2,7 +2,7 @@
 // Modellen og stemmene leses fra disk via hovedprosessen (kontrollert ved nedlasting).
 // Uttalen (eSpeak NG i phonemizer.js) er et eget tillegg som lastes inn herfra.
 import { env, AutoTokenizer, StyleTextToSpeech2Model, Tensor } from '@huggingface/transformers';
-import { chunksForSpeech, fixPhonemesFor, languageById, normalizeEnglish, splitPunctuation, voiceLanguage } from '../shared/tts.js';
+import { blendVectors, chunksForSpeech, fixPhonemesFor, languageById, normalizeEnglish, parseVoice, splitPunctuation, voiceLanguage } from '../shared/tts.js';
 
 env.allowLocalModels = true;
 env.allowRemoteModels = false;
@@ -44,13 +44,20 @@ async function load({ repository, revision, addon }) {
   return loaded;
 }
 
-async function voice(id, { repository, revision }) {
+async function oneVoice(id, { repository, revision }) {
   if (voices.has(id)) return voices.get(id);
   const bytes = await window.worker.cacheMatch(`https://huggingface.co/${repository}/resolve/${revision}/voices/${id}.bin`);
   if (!bytes) throw new Error(`The voice ${id} is not installed.`);
   const data = new Float32Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
   voices.set(id, data);
   return data;
+}
+// En stemme, eller en blanding av flere ("bm_lewis:0.6,am_fenrir:0.4").
+async function voice(spec, opts) {
+  const parts = parseVoice(spec);
+  if (!parts) throw new Error('Unknown voice.');
+  const vectors = await Promise.all(parts.map((p) => oneVoice(p.id, opts)));
+  return parts.length === 1 ? vectors[0] : blendVectors(vectors, parts.map((p) => p.weight));
 }
 
 // Tekst til uttale (IPA). Tegnsetting beholdes, så modellen får med seg pausene.

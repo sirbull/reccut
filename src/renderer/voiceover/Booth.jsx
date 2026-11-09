@@ -40,7 +40,7 @@ import { formatDuration } from '../../shared/model.js';
 import * as booth from './booth.js';
 import { StudioIcon } from './StudioIcon.jsx';
 import { AiVoiceDialog, aiDialogOpen, openAiVoices } from './AiVoice.jsx';
-import { LANGUAGES, VOICES, languageById, voiceLabel } from '../../shared/tts.js';
+import { LANGUAGES, VOICES, isBlend, languageById, voiceLabel } from '../../shared/tts.js';
 import { PacingFields } from './Pacing.jsx';
 import { VoTimeline, deleteSelected, pausesOpen, selected as vtSelected, togglePreview } from './VoTimeline.jsx';
 
@@ -660,7 +660,7 @@ function Sound() {
           </label>
           <label class="vt-ctl">
             Voice
-            <Select value={p.ai.voice} options={VOICES.map((v) => ({ value: v.id, label: voiceLabel(v.id) }))} onChange={(voice) => booth.setAiVoice(p.id, { voice })} />
+            <Select value={p.ai.voice} options={[...(isBlend(p.ai.voice) ? [{ value: p.ai.voice, label: voiceLabel(p.ai.voice) }] : []), ...VOICES.map((v) => ({ value: v.id, label: voiceLabel(v.id) }))]} onChange={(voice) => booth.setAiVoice(p.id, { voice })} />
             <IconButton icon={booth.sampling.value === p.ai.voice ? Square : Play} size={13} title="Listen" onClick={() => booth.previewVoice(p.ai.voice, p.ai.speed || 1, booth.aiLanguage(p).id)} />
           </label>
           {booth.scriptLanguage.value && booth.scriptLanguage.value !== booth.aiLanguage(p).id && (

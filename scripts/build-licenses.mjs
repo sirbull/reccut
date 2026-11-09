@@ -71,8 +71,8 @@ export function buildLicenses({ root = projectRoot, out = path.join(root, 'build
     const licenseFile = model.files.find((file) => /^LICENSE(?:\.txt)?$/.test(file.file));
     if (!licenseFile) throw new Error(`Missing license reference for ${model.id}.`);
     add(model.id.replaceAll('/', '-'), model.id, model.license, `https://huggingface.co/${model.id}/tree/${model.revision}`,
-      'BiRefNet background-removal model weights; model terms are separate from the inference runtime.',
-      [`vendor/models/${model.id}/${licenseFile.file}`], model.revision);
+      'BiRefNet background-removal model weights, downloaded when the user asks for them; model terms are separate from the inference runtime.',
+      [model.licenseText], model.revision);
   }
   // RAW support depends on platform and SDK availability. Do not label its proprietary SDK as open source.
   components.push({ id: 'blackmagic-raw', name: 'Blackmagic RAW (when included)', version: '', license: 'Blackmagic RAW SDK agreement',

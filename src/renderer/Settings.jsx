@@ -1,6 +1,7 @@
 import {OnlineSettings} from './design/Online.jsx';
 import { LocalSubtitleModels } from './SubtitleModels.jsx';
 import { AiVoiceSettings } from './voiceover/AiVoice.jsx';
+import { openAiModels } from './AiModels.jsx';
 import { PacingFields, isDefaultPacing, resetPacing } from './voiceover/Pacing.jsx';
 // Innstillinger (Cmd ,), bygd som i Final Cut Pro: faner med ikoner øverst, og en kommandoeditor
 // for hurtigtaster. Alle valg lagres med en gang og gjelder hele appen.
@@ -79,6 +80,20 @@ function FolderRow({ label, value, onChoose, placeholder }) {
         <span>{shortPath(value) || placeholder}</span>
       </button>
     </Row>
+  );
+}
+
+// Alle KI-modellene samlet: hva de brukes til, og nedlasting eller fjerning.
+function AiModelsSection() {
+  return (
+    <Section title="AI Models" collapsible={false}>
+      <p class="hint">Captions, background removal and AI voices use models that run on your computer. They are not part of the installer: download the ones you need, and remove them when you no longer use them.</p>
+      <div class="row">
+        <Button class="small" onClick={() => ((commands.prefsOpen.value = false), openAiModels())}>
+          Choose AI Models…
+        </Button>
+      </div>
+    </Section>
   );
 }
 
@@ -547,7 +562,7 @@ export function SettingsWindow() {
           {current.id === 'export' && <ExportPane />}
           {current.id === 'design' && <OnlineSettings/>}
           {current.id === 'keyboard' && <KeyboardPane />}
-          {current.id === 'extensions' && <><LocalSubtitleModels/><AiVoiceSettings/><ExtensionsPane/><OnlineSettings/></>}
+          {current.id === 'extensions' && <><AiModelsSection/><LocalSubtitleModels/><AiVoiceSettings/><ExtensionsPane/><OnlineSettings/></>}
           {current.id === 'plugins' && <PluginsPane designSettings={<OnlineSettings/>}/>}
         </div>
       </div>

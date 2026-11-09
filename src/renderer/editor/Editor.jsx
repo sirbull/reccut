@@ -16,6 +16,7 @@ import { cancelLayerImport, finish as finishLayers, layerImport } from './layers
 import { Button, Modal, NumberField, Row, Section, Segmented, Select, Toggle, toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
 import { toggleViewerFullscreen } from './fullscreen.js';
+import { handleMissingModel } from '../AiModels.jsx';
 
 const api = window.api;
 
@@ -37,6 +38,8 @@ api.onTranscribeDone(({ segments, payload }) => {
   toast(`Added ${segments.length} captions. Read through them and fix any mistakes in the Captions tab.`, { kind: 'success', timeout: 9000 });
 });
 api.onTranscribeError(({ error, payload }) => {
+  // Mangler talemodellen, åpnes vinduet for KI-modeller i stedet for en feilmelding.
+  if (handleMissingModel(error)) return;
   if (error !== 'Canceled' && !payload?.agent) toast(`Auto captions failed: ${error}`, { kind: 'error', timeout: 10000 });
 });
 

@@ -14,6 +14,8 @@ const checkCanceled = (id) => { if (canceled.has(id)) throw new Error('Canceled'
 async function loadModel(payload, report) {
   const adapter = !payload.cpuOnly && !gpuFailed && navigator.gpu && await navigator.gpu.requestAdapter().catch(() => null);
   const useGPU = adapter && adapter.limits.maxStorageBuffersPerShaderStage >= 8;
+  // Bare den raske modellen er lastet ned, men maskinen har ikke WebGPU: den vanlige trengs.
+  if (!useGPU && payload.gpuOnly) throw new Error('MODEL_MISSING:background The fast model needs a graphics card with WebGPU. Download the standard background model in Settings → AI.');
   const id = useGPU ? payload.model : payload.fallback || payload.model;
   const root = mediaURL(payload.modelDir.replace(/[\\/]*$/, '/'));
   const key = `${root}:${id}:${useGPU ? 'gpu' : 'cpu'}`;

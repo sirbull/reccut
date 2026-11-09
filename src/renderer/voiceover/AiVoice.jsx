@@ -4,7 +4,8 @@ import { useEffect, useState } from 'preact/hooks';
 import { Download, Loader2, Play, Plus, Square } from 'lucide-preact';
 import { Button, IconButton, Modal, NumberField, Select, Slider } from '../ui.jsx';
 import { tasks } from '../editor/store.js';
-import { LANGUAGES, VOICES, languageById, voiceLanguage, voicesFor } from '../../shared/tts.js';
+import { LANGUAGES, VOICES, languageById, voiceLabel, voiceLanguage, voicesFor } from '../../shared/tts.js';
+import { CHARACTERS, TONES, filterStyles, styleEffects } from '../../shared/voiceStyles.js';
 import * as booth from './booth.js';
 
 const api = window.api;
@@ -14,12 +15,74 @@ export const openAiVoices = () => {
   aiDialogOpen.value = true;
 };
 
+// Ferdige stiler: mørke og lyse, filmatiske og vanlige. Lytt for å høre stilen med effektene.
+function StyleList({ lang, onAdd }) {
+  const [tone, setTone] = useState('');
+  const [character, setCharacter] = useState('');
+  const [gender, setGender] = useState('');
+  const list = filterStyles({ tone, character, gender });
+  const english = languageById(lang)?.english;
+  const chip = (value, set, current, label) => (
+    <button key={label} class={current === value ? 'active' : ''} onClick={() => set(current === value ? '' : value)}>
+      {label}
+    </button>
+  );
+  return (
+    <div class="ai-styles">
+      <div class="ai-filters">
+        <div class="segmented small">{TONES.map((t) => chip(t.value, setTone, tone, t.label))}</div>
+        <div class="segmented small">{CHARACTERS.map((c) => chip(c.value, setCharacter, character, c.label))}</div>
+        <div class="segmented small">{['Female', 'Male'].map((g) => chip(g, setGender, gender, g))}</div>
+      </div>
+      {!english && <p class="ai-note">The styles are built on English voices. In {languageById(lang).label} they keep their character, with an English accent.</p>}
+      <ul class="ai-style-grid">
+        {list.map((st) => {
+          const playing = booth.sampling.value === `style:${st.id}`;
+          const useLang = english ? st.lang : lang;
+          return (
+            <li key={st.id} class={`ai-style t-${st.tone}`}>
+              <div class="ai-style-head">
+                <b>{st.name}</b>
+                <span class="ai-tags">
+                  <span>{TONES.find((t) => t.value === st.tone).label}</span>
+                  <span>{CHARACTERS.find((c) => c.value === st.character).label}</span>
+                  <span>{st.gender}</span>
+                </span>
+              </div>
+              <p>{st.desc}</p>
+              <div class="ai-style-foot">
+                <span class="dim" title={voiceLabel(st.voice)}>
+                  {voiceLabel(st.voice)}, {st.speed.toFixed(2)}×
+                </span>
+                <div class="spacer" />
+                <IconButton icon={playing ? Square : Play} size={14} title={playing ? 'Stop' : 'Listen, with the effects'} onClick={() => booth.previewVoice(st.voice, st.speed, useLang, { fx: styleEffects(st), key: `style:${st.id}` })} />
+                <Button
+                  class="small"
+                  icon={Plus}
+                  onClick={() => {
+                    booth.addAiStyle(st.id, useLang);
+                    onAdd();
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+            </li>
+          );
+        })}
+        {!list.length && <li class="dim">No style matches all the filters.</li>}
+      </ul>
+    </div>
+  );
+}
+
 const mb = (b) => `${Math.round(b / 1e6)} MB`;
 
 export function AiVoiceDialog() {
   const t = booth.tts.value;
   const [speed, setSpeed] = useState(1);
   const [lang, setLang] = useState(() => booth.scriptLanguage.value || 'en-us');
+  const [tab, setTab] = useState('styles');
   useEffect(() => {
     booth.refreshTts();
   }, []);
@@ -65,11 +128,11 @@ export function AiVoiceDialog() {
               Language
               <Select value={lang} options={LANGUAGES.map((l) => ({ value: l.id, label: `${l.label}${l.voices ? '' : ' (with accent)'}${l.id === booth.scriptLanguage.value ? ', the script' : ''}` }))} onChange={setLang} />
             </label>
-            <label class="vt-ctl ai-speed" title="Speaking speed. Below 1 is slower, which often suits voice over.">
+            {tab === 'voices' && <label class="vt-ctl ai-speed" title="Speaking speed. Below 1 is slower, which often suits voice over.">
               Speed
               <Slider value={speed} min={0.5} max={1.5} step={0.01} center={1} onInput={setSpeed} />
               <NumberField value={speed} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={setSpeed} />
-            </label>
+            </label>}
           </div>
           {booth.scriptLanguage.value && booth.scriptLanguage.value !== lang && (
             <p class="ai-note">
@@ -84,8 +147,22 @@ export function AiVoiceDialog() {
               Kokoro has no voices made for {languageById(lang).label}. The words are pronounced in {languageById(lang).label}, but the voice comes from another language, so it has an accent. Listen to a few and pick the one you like. The first ones usually work best.
             </p>
           )}
-          <VoiceList voices={voicesFor(lang).own} lang={lang} speed={speed} onAdd={close} title={voicesFor(lang).own.length ? `Made for ${languageById(lang).label}` : null} />
-          <VoiceList voices={sortOther(voicesFor(lang).other, lang)} lang={lang} speed={speed} onAdd={close} title={voicesFor(lang).own.length ? 'Other voices, with an accent' : 'Voices from other languages'} collapsed={voicesFor(lang).own.length > 0} />
+          <div class="segmented ai-tabs">
+            <button class={tab === 'styles' ? 'active' : ''} onClick={() => setTab('styles')}>
+              Styles
+            </button>
+            <button class={tab === 'voices' ? 'active' : ''} onClick={() => setTab('voices')}>
+              Voices
+            </button>
+          </div>
+          {tab === 'styles' ? (
+            <StyleList lang={lang} onAdd={close} />
+          ) : (
+            <>
+              <VoiceList voices={voicesFor(lang).own} lang={lang} speed={speed} onAdd={close} title={voicesFor(lang).own.length ? `Made for ${languageById(lang).label}` : null} />
+              <VoiceList voices={sortOther(voicesFor(lang).other, lang)} lang={lang} speed={speed} onAdd={close} title={voicesFor(lang).own.length ? 'Other voices, with an accent' : 'Voices from other languages'} collapsed={voicesFor(lang).own.length > 0} />
+            </>
+          )}
           <p class="dim">
             Listening generates a short sample, which can take a few seconds the first time. Each voice is added as a person on its own track, with its own takes and sound. Change the voice and speed later under Sound.
           </p>

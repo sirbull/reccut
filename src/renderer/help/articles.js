@@ -19,7 +19,7 @@ Reccut uses Electron, Preact, Signals, Immer, Lucide, Tabler, PDF.js, Mediabunny
 
 FFmpeg is used as a separate command-line program under GPLv3 or later. Mediabunny is MPL 2.0. The MIT-licensed uiohook-napi wrapper contains the LGPL-licensed libuiohook native library. These licenses include source-code and distribution rights, beyond the notices shown in About.
 
-Whisper and the bundled BiRefNet models declare MIT licenses. OpenMoji graphics use CC BY-SA 4.0, and Unicode emoji data has its own license. When included, Blackmagic RAW libraries have separate proprietary SDK terms.
+Whisper and the BiRefNet models, which are downloaded when you ask for them, declare MIT licenses. OpenMoji graphics use CC BY-SA 4.0, and Unicode emoji data has its own license. When included, Blackmagic RAW libraries have separate proprietary SDK terms.
 
 ## Your recordings and artwork
 
@@ -1418,7 +1418,7 @@ When a clip follows a track in **Live** mode, the track controls position and ro
     section: 'Audio',
     title: 'Voice Over Studio: Narration and Talking Head',
     summary: 'Record a script line by line with retakes, read it as a teleprompter, and stitch the takes together on the timeline.',
-    keywords: 'ai voice text to speech tts kokoro narrator generate read aloud record audio quick microphone voice over studio voiceover narration narrator script teleprompter prompter talking head monologue dialogue retake takes pickup punch in stitch assemble room tone typeloom word pdf markdown fountain final draft read mirror',
+    keywords: 'ai voice style dark bright deep cinematic trailer narrator documentary text to speech tts kokoro narrator generate read aloud record audio quick microphone voice over studio voiceover narration narrator script teleprompter prompter talking head monologue dialogue retake takes pickup punch in stitch assemble room tone typeloom word pdf markdown fountain final draft read mirror',
     body: `
 Open the studio with **Voice Over Studio** in the toolbar of Edit, the headset and microphone button in the timeline toolbar, or {{key:voiceover}}.
 
@@ -1485,7 +1485,9 @@ Let an AI voice read the script. Click **Add AI Voice** (or the sparkle next to 
 
 Choose the **Language** first, so the words are pronounced right. Reccut suggests the language the script looks like it is written in. Kokoro has voices made for English (US and UK), Spanish, French, Italian, Brazilian Portuguese and Hindi, and English sounds best. Norwegian, Swedish, Danish, German, Dutch, Finnish, Polish and Portuguese (Portugal) are pronounced in that language, but read by a voice made for another language, so they have an accent. Listen to a few voices and pick the one you like.
 
-Pick a voice from the list. **Listen** plays a short sample, and **Speed** below 1 reads slower, which often suits voice over. Each AI voice is added as a person on its own track.
+**Styles** are ready made voices for different moods: dark or bright, cinematic or natural, calm or energetic, female or male. Trailer, Noir and Epic are deep and cinematic, with a little compression and hall. Deep Narrator, Documentary and Storyteller are natural narrators. Clear Guide, Calm Guide and Newsreader suit tutorials and updates. Bright Explainer, Upbeat Host and Fresh are light and lively. Many styles blend two voices into a new one. Filter the list, listen with the effects, and add the one you like. The style's effects are put under Sound for the person, where you can change them.
+
+Under **Voices** you find the 41 voices on their own. Pick a voice from the list. **Listen** plays a short sample, and **Speed** below 1 reads slower, which often suits voice over. Each AI voice is added as a person on its own track.
 
 - Press **Space** (or **Read line**) to let the voice read the selected line. **R** or **Read Again** makes a new take. **Read All Missing Lines** reads every line without a take, one after another, and Space or Esc stops it.
 - **Say it as** under the takes is what the voice reads. If it says a name, a number or an abbreviation wrong, write it the way it sounds. The script itself is not changed. Words in [brackets] are never read.

@@ -102,7 +102,7 @@ const RUNTIME_TOOLS = [
           signal.addEventListener('abort', abort, { once: true });
           off = [
             api.onTranscribeDone((e) => job.then((id) => e.id === id && resolve(e))),
-            api.onTranscribeError((e) => job.then((id) => e.id === id && reject(new Error(e.error)))),
+            api.onTranscribeError((e) => job.then((id) => e.id === id && reject(new Error(String(e.error).replace(/^MODEL_MISSING:\w+ /, ''))))),
             () => signal.removeEventListener('abort', abort),
           ];
         }).finally(() => off.forEach((f) => f()));

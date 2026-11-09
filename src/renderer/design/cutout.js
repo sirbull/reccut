@@ -1,3 +1,4 @@
+import { handleMissingModel } from '../AiModels.jsx';
 import { signal, effect } from '@preact/signals';
 import { project, projectEpoch } from '../editor/store.js';
 import { currentDesign, designCommit, historyNavigation, selection } from './store.js';
@@ -55,7 +56,7 @@ export async function removeBackground(layerId = selection.value[0], designId = 
     if(!valid(job)){api.discardDesignCutout?.(asset.path);return;}
     job.done=true;
     designCommit(p=>{const l=p.designs[job.designId]?.layers.find(l=>l.id===layerId);if(!l)return;p.designAssets[asset.id]=asset;l.cutout={asset:asset.id,enabled:true,feather:0,shift:0};});
-  } catch(err) { if(!job.canceled&&job.epoch===projectEpoch.value)toast(`Could not remove background: ${err.message}`,{kind:'error'}); }
+  } catch(err) { if(!job.canceled&&job.epoch===projectEpoch.value&&!handleMissingModel(err))toast(`Could not remove background: ${err.message}`,{kind:'error'}); }
   finally {
     clearTimeout(timeout);off();offTasks();
     if(running.get(layerId)===job){running.delete(layerId);const next={...backgroundJobs.value};delete next[layerId];backgroundJobs.value=next;}

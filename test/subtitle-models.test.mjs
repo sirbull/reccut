@@ -33,8 +33,9 @@ async function fixture(t, options = {}) {
 }
 
 test('catalog contains pinned timestamp-capable ONNX models, exact sizes and trusted checksums', () => {
-  assert.equal(catalog.filter(m => m.bundled).length, 1);
-  assert.equal(catalog.find(m => m.bundled).id, 'whisper-base');
+  // No model ships with the installer; they are downloaded when the user needs captions.
+  assert.equal(catalog.filter(m => m.bundled).length, 0);
+  assert.ok(catalog.every(m => m.removable));
   for (const m of catalog) {
     assert.match(m.version, /^[a-f0-9]{40}$/);
     assert.ok(m.supportedLanguages.includes('no'));
@@ -44,9 +45,10 @@ test('catalog contains pinned timestamp-capable ONNX models, exact sizes and tru
   assert.ok(!catalog.some(m => /parakeet|nb-whisper|large-v3$/.test(m.id)));
 });
 
-test('packaging bundles only Base, includes attribution, and treats its ONNX weights as data', () => {
+test('packaging bundles no AI model weights, and would still treat ONNX weights as data', () => {
   const pkg = require('../package.json'), hook = require('../scripts/before-pack.cjs');
-  assert.deepEqual(pkg.build.extraResources.filter(r => r.to.startsWith('subtitle-models')).map(r => r.to), ['subtitle-models/whisper-base']);
+  assert.deepEqual(pkg.build.extraResources.filter(r => /subtitle-models|models|kokoro|tts/.test(r.to)).map(r => r.to), []);
+  assert.ok(!/fetch-models/.test(Object.values(pkg.scripts).join(' ')));
   assert.equal(hook.modelResource('/tmp/Reccut.app/Contents/Resources/subtitle-models/whisper-base/onnx/encoder_model_quantized.onnx'), true);
 });
 
@@ -104,7 +106,7 @@ test('missing or same-sized corrupted installations are rejected and selection f
   assert.equal(restored.snapshot().active, 'whisper-base');
   assert.equal(restored.snapshot().models.find(m => m.id === 'whisper-small').status, 'failed');
   await fs.rm(path.join(f.manager.dir, 'whisper-base/config.json'));
-  await assert.rejects(restored.acquireActiveModel(), /Install Whisper Base/);
+  await assert.rejects(restored.acquireActiveModel(), /MODEL_MISSING:captions/);
   await restored.shutdown();
 });
 
@@ -212,4 +214,22 @@ test('existing verified WebGPU weights coexist with the bundled CPU fallback and
   assert.deepEqual(Buffer.from(await restored.readModelFile(key)), f.bytes);
   assert.equal(restored.snapshot().storageBytes, f.bytes.length * 14);
   lease.release(); await restored.shutdown();
+});
+
+test('without a bundled model, the first download becomes active, any installed model is used, and the last one can be removed', async t => {
+  const f = await fixture(t, {});
+  const models = f.models.map(m => ({ ...m, bundled: false, removable: true }));
+  const manager = f.make({ models }); await manager.ready;
+  assert.equal(manager.snapshot().active, null);
+  await assert.rejects(manager.acquireActiveModel(), /MODEL_MISSING:captions/);
+  await manager.downloadModel('whisper-small'); await manager.downloads.get('whisper-small')?.done;
+  assert.equal(manager.snapshot().active, 'whisper-small');
+  const lease = await manager.acquireActiveModel(); assert.equal(lease.model.id, 'whisper-small'); lease.release();
+  await manager.downloadModel('whisper-tiny'); await manager.downloads.get('whisper-tiny')?.done;
+  assert.equal(manager.snapshot().active, 'whisper-small', 'a later download does not take over');
+  await assert.rejects(manager.removeModel('whisper-small'), /Select another/);
+  await manager.removeModel('whisper-tiny');
+  await manager.removeModel('whisper-small');
+  assert.equal(manager.snapshot().active, null);
+  await manager.shutdown();
 });

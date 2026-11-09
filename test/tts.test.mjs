@@ -151,3 +151,24 @@ test('the language is chosen separately, suggested from the script, and Norwegia
   assert.equal(defaultVoiceFor('nb'), languageById('nb').near);
   assert.ok(LANGUAGES.every((l) => l.espeak && l.label));
 });
+
+test('voices can be blended, and every style uses real voices and valid effects', async () => {
+  const { parseVoice, blendVectors, isBlend } = await import('../src/shared/tts.js');
+  const { VOICE_STYLES, filterStyles, styleEffects, TONES, CHARACTERS } = await import('../src/shared/voiceStyles.js');
+  const { AUDIO_EFFECTS } = await import('../src/shared/audiofx.js');
+  assert.deepEqual(parseVoice('bm_lewis:3,am_fenrir:1'), [{ id: 'bm_lewis', weight: 0.75 }, { id: 'am_fenrir', weight: 0.25 }]);
+  assert.equal(parseVoice('nobody:1'), null);
+  assert.equal(parseVoice('bm_lewis:-1'), null);
+  assert.equal(isBlend('af_heart'), false);
+  assert.deepEqual(Array.from(blendVectors([new Float32Array([1, 0]), new Float32Array([0, 1])], [0.75, 0.25])), [0.75, 0.25]);
+  for (const st of VOICE_STYLES) {
+    assert.ok(parseVoice(st.voice), `${st.id} voice`);
+    assert.ok(TONES.some((t) => t.value === st.tone) && CHARACTERS.some((c) => c.value === st.character), st.id);
+    assert.ok(st.speed >= 0.5 && st.speed <= 1.5, st.id);
+    assert.ok(styleEffects(st).every((e) => AUDIO_EFFECTS[e.type]), `${st.id} effects`);
+  }
+  // Both dark and bright, cinematic and ordinary, female and male.
+  for (const tone of ['dark', 'bright']) for (const gender of ['Female', 'Male']) assert.ok(filterStyles({ tone, gender }).length, `${tone} ${gender}`);
+  assert.ok(filterStyles({ character: 'cinematic' }).length >= 3);
+  assert.ok(filterStyles({ character: 'natural' }).length >= 3);
+});

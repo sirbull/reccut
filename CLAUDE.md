@@ -24,3 +24,10 @@ Når vi lager en ny versjon av Reccut, må About-vinduet også vise det nye vers
 - Uttalen kommer fra phonemizer.js, som inneholder eSpeak NG (GPLv3). Den skal aldri pakkes inn i installasjonsfilen eller legges i `dependencies`. Den lastes ned fra npm når brukeren ber om AI-stemmer. Testen `test/tts.test.mjs` sjekker dette.
 - Alle filer er låst i [src/main/ttsCatalog.json](src/main/ttsCatalog.json): modellen og stemmene med fast revisjon og SHA-256, uttalepakken med npm sin sha512. Endres versjonen, må kontrollsummene regnes ut på nytt.
 - Ingenting lastes ned før brukeren trykker Download AI Voices, og manuset sendes aldri ut av maskinen.
+
+## KI-modeller lastes ned ved behov
+
+- Ingen modellvekter skal pakkes inn i installasjonsfilen: verken Whisper, BiRefNet eller Kokoro. `extraResources` skal ikke ha `subtitle-models` eller `models`, og `postinstall` og `dist` skal ikke laste ned modeller. Testene i `test/subtitle-models.test.mjs` og `test/tts.test.mjs` sjekker dette.
+- Første gang appen startes, spør den én gang hvilke modeller brukeren vil laste ned ([src/renderer/AiModels.jsx](src/renderer/AiModels.jsx)). Vinduet skal alltid si hva hver modell brukes til og hvor stor den er.
+- En funksjon som mangler modellen sin, kaster `MODEL_MISSING:<captions|background|voices>` og åpner det samme vinduet i stedet for å vise en feilmelding.
+- Lisenstekstene til modellene ligger i `assets/licenses`, så lisensoversikten kan bygges uten modellene.

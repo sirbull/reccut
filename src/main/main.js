@@ -795,17 +795,43 @@ ipcMain.handle('design:templates:save',(_e,data,id)=>getDesignLibrary().save(dat
 ipcMain.handle('design:templates:remove',(_e,id)=>getDesignLibrary().remove(id));
 ipcMain.handle('design:brand:logo',()=>getDesignLibrary().logo());
 ipcMain.handle('design:brand:setLogo',(_e,file)=>getDesignLibrary().setLogo(file));
-function startDesignSegment(payload) {
+// Modellene for å fjerne bakgrunn lastes ned når de trengs (Settings → AI eller spørsmålet i Design).
+const backgroundModels = require('./modelPacks').createModelPacks({
+  dir: path.join(app.getPath('userData'), 'background-models'),
+  models: require('./designModels').models,
+  fetchImpl: (url, opts) => net.fetch(url, { ...opts, headers: { 'User-Agent': `Reccut/${app.getVersion()}` } }),
+  onChange: () => backgroundModels.status().then((list) => send('background-models:changed', list)).catch(() => {}),
+});
+async function startDesignSegment(payload) {
   if (!payload || typeof payload.path !== 'string' || !path.isAbsolute(payload.path)) throw new Error('Choose a local image to remove its background.');
   const model = require('./designModels');
-  const modelDir = app.isPackaged ? path.join(process.resourcesPath, 'models') : path.join(__dirname, '..', '..', 'vendor', 'models');
+  // Bare modellene som er lastet ned, sendes til arbeidsvinduet. Mangler begge, spør appen om nedlasting.
+  const gpu = (await backgroundModels.installed(model.id)) ? model.id : null;
+  const cpu = (await backgroundModels.installed(model.fallback)) ? model.fallback : null;
+  if (!gpu && !cpu) throw new Error('MODEL_MISSING:background Download a background removal model in Settings → AI.');
   let result;
-  const task=jobs.add({ kind: 'segment', title: 'Removing background', queue: 'heavy', run: async (ctx) => { result=await jobs.runInWorker('segment', { path: payload.path, maxSide: Math.max(1, Math.min(2048, Number(payload.maxSide) || 1024)), model: model.id, fallback: model.fallback, modelDir }, ctx);return {width:result.width,height:result.height,model:result.model,device:result.device}; } });
+  const task=jobs.add({ kind: 'segment', title: 'Removing background', queue: 'heavy', run: async (ctx) => { result=await jobs.runInWorker('segment', { path: payload.path, maxSide: Math.max(1, Math.min(2048, Number(payload.maxSide) || 1024)), model: gpu || cpu, fallback: cpu, gpuOnly: !cpu, modelDir: backgroundModels.dir }, ctx);return {width:result.width,height:result.height,model:result.model,device:result.device}; } });
   return {id:task.id,done:task.done.then(()=>result)};
 }
-ipcMain.handle('design:segment', (_e, payload) => startDesignSegment(payload).done);
-ipcMain.handle('design:segmentStart', (_e, payload) => {
-  const { id, done } = startDesignSegment(payload);
+extensionHandler('background-models:list', () => backgroundModels.status());
+extensionHandler('background-models:download', async (id) => {
+  const m = require('./designModels').models.find((x) => x.id === id);
+  if (!m) throw new Error('Unknown model.');
+  const { done } = jobs.add({ kind: 'download', title: `Downloading background model (${m.label})`, queue: 'light', run: (ctx) => {
+    ctx.setCancel(() => backgroundModels.cancel(id));
+    return backgroundModels.install(id, (p) => ctx.progress(p, 'Downloading'));
+  } });
+  await done;
+  return backgroundModels.status();
+});
+extensionHandler('background-models:cancel', (id) => backgroundModels.cancel(id));
+extensionHandler('background-models:remove', async (id) => {
+  await backgroundModels.remove(id);
+  return backgroundModels.status();
+});
+ipcMain.handle('design:segment', async (_e, payload) => (await startDesignSegment(payload)).done);
+ipcMain.handle('design:segmentStart', async (_e, payload) => {
+  const { id, done } = await startDesignSegment(payload);
   done.then((result) => send('design:segmentDone', { id, result }), (err) => send('design:segmentDone', { id, error: String(err.message || err) }));
   return id;
 });
@@ -1252,7 +1278,9 @@ extensionHandler('tts:generate', async (payload) => {
   if (!(await tts.status()).installed) throw new Error('Download the AI voices first.');
   const text = String(payload?.text || '').slice(0, 5000);
   if (!text.trim()) throw new Error('There is no text to read.');
-  return jobs.runInWorker('tts', { text, voice: String(payload.voice || 'af_heart'), lang: String(payload.lang || ''), speed: Math.min(2, Math.max(0.5, Number(payload.speed) || 1)), repository: tts.repository, revision: tts.revision, addon: tts.PHONEMIZER_KEY });
+  const voice = String(payload.voice || 'af_heart');
+  if (!/^[a-z]{2}_[a-z]+(:\d+(\.\d+)?)?(,[a-z]{2}_[a-z]+(:\d+(\.\d+)?)?){0,3}$/.test(voice)) throw new Error('Unknown voice.');
+  return jobs.runInWorker('tts', { text, voice, lang: String(payload.lang || ''), speed: Math.min(2, Math.max(0.5, Number(payload.speed) || 1)), repository: tts.repository, revision: tts.revision, addon: tts.PHONEMIZER_KEY });
 });
 extensionHandler('ai:config', () => extensions.aiConfig());
 extensionHandler('subtitle-models:list', () => subtitleModels.listAvailableModels());

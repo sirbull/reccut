@@ -23,7 +23,7 @@ export const LANGUAGES = [
 ];
 export const languageById = (id) => LANGUAGES.find((l) => l.id === id) || null;
 // Språket en stemme er laget for.
-export const voiceLanguage = (voice) => LANGUAGES.find((l) => l.voices === String(voice)[0]) || LANGUAGES[0];
+export const voiceLanguage = (voice) => LANGUAGES.find((l) => l.voices === String(voice).trim()[0]) || LANGUAGES[0];
 export const hasOwnVoices = (lang) => Boolean(languageById(lang)?.voices);
 
 // Karakterene er fra Kokoro sin egen oversikt (A er best). Stemmene med best karakter står først.
@@ -72,11 +72,39 @@ export const VOICES = [
   V('pm_santa', 'Santa', 'Male', ''),
 ];
 export const DEFAULT_VOICE = 'af_heart';
-export const voiceById = (id) => VOICES.find((v) => v.id === id) || VOICES[0];
+export const voiceById = (id) => VOICES.find((v) => v.id === String(id).split(/[:,]/)[0]) || VOICES[0];
+
+// En stemme kan være en blanding av flere, som i Kokoro: "bm_lewis:0.6,am_fenrir:0.4".
+// Stilvektorene legges sammen etter vekt, og gir en ny stemme mellom dem.
+export function parseVoice(spec) {
+  const parts = String(spec || '')
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .map((p) => {
+      const [id, w] = p.split(':');
+      return { id, weight: w == null ? 1 : Number(w) };
+    });
+  if (!parts.length || parts.some((p) => !VOICES.some((v) => v.id === p.id) || !(p.weight > 0) || p.weight > 10)) return null;
+  const sum = parts.reduce((s, p) => s + p.weight, 0);
+  return parts.map((p) => ({ id: p.id, weight: p.weight / sum }));
+}
+export const isBlend = (spec) => (parseVoice(spec)?.length || 0) > 1;
 export const voiceLabel = (id) => {
+  const parts = parseVoice(id);
+  if (parts?.length > 1) return `Mix of ${parts.map((p) => `${voiceById(p.id).name} ${Math.round(p.weight * 100)} %`).join(' and ')}`;
   const v = voiceById(id);
   return `${v.name} (${voiceLanguage(v.id).label}, ${v.gender.toLowerCase()})`;
 };
+// Legger stilvektorene sammen etter vekt. vectors: Float32Array per stemme, like lange.
+export function blendVectors(vectors, weights) {
+  const out = new Float32Array(vectors[0].length);
+  vectors.forEach((v, i) => {
+    for (let k = 0; k < out.length; k++) out[k] += v[k] * weights[i];
+  });
+  return out;
+}
 // Stemmene for et språk: de som er laget for det først, deretter de andre (med aksent).
 export function voicesFor(lang) {
   const own = VOICES.filter((v) => voiceLanguage(v.id).id === lang);

@@ -26,7 +26,8 @@ import {
   planStudio,
 } from '../../shared/voiceover.js';
 import { presetEffects } from '../../shared/audiofx.js';
-import { DEFAULT_VOICE, PREVIEW_TEXT, detectLanguage, languageById, spokenText, voiceById, voiceLanguage } from '../../shared/tts.js';
+import { styleById, styleEffects } from '../../shared/voiceStyles.js';
+import { DEFAULT_VOICE, PREVIEW_TEXT, detectLanguage, languageById, parseVoice, spokenText, voiceById, voiceLanguage } from '../../shared/tts.js';
 import { recordingPlan } from '../../shared/recordingFormats.cjs';
 import { audioSink, prefs, setPrefs } from '../prefs.js';
 import { boothOpen } from './state.js';
@@ -656,23 +657,31 @@ export function setSpoken(key, text, who = personId.value) {
 export const scriptLanguage = computed(() => detectLanguage(vo.value.script?.text || ''));
 export const aiLanguage = (p) => languageById(p?.ai?.lang) || voiceLanguage(p?.ai?.voice);
 
-export function addAiPerson(voice = DEFAULT_VOICE, speed = 1, lang = voiceLanguage(voice).id) {
+export function addAiPerson(voice = DEFAULT_VOICE, speed = 1, lang = voiceLanguage(voice).id, { name: base = null, fx = [], style = null } = {}) {
   if (busy()) return toast('Stop the take first.');
   const list = people.value;
   const v = voiceById(voice);
   const used = new Set(list.map((p) => p.name.toLowerCase()));
-  let name = `${v.name} (AI)`;
-  for (let n = 2; used.has(name.toLowerCase()); n++) name = `${v.name} ${n} (AI)`;
-  // AI-stemmen er ren fra før, så den får ingen effekter som standard.
-  const p = { id: uid(), name, color: COLORS[list.length % COLORS.length], fx: [], gain: 0, ai: { voice: v.id, speed, lang } };
+  const stem = base || v.name;
+  let name = `${stem} (AI)`;
+  for (let n = 2; used.has(name.toLowerCase()); n++) name = `${stem} ${n} (AI)`;
+  // En vanlig AI-stemme er ren fra før og får ingen effekter. En stil har sine egne.
+  const p = { id: uid(), name, color: COLORS[list.length % COLORS.length], fx, gain: 0, ai: { voice: parseVoice(voice) ? voice : v.id, speed, lang, ...(style ? { style } : {}) } };
   setVo((x) => {
     x.people = [...listOf(x), p];
     x.person = p.id;
   });
-  toast(`${p.name} is added on a new track. Press Space to read a line, or Generate All.`, { timeout: 4500 });
+  toast(`${p.name} is added on a new track. Press Space to read a line, or Read All Missing Lines.`, { timeout: 4500 });
   return p;
 }
 export const setAiVoice = (id, patch) => editPerson(id, (p) => void (p.ai = { ...p.ai, ...patch }));
+
+// Legger til en ferdig stemmestil som en person: stemme eller blanding, fart og effekter.
+export function addAiStyle(styleId, lang = null) {
+  const st = styleById(styleId);
+  if (!st) return;
+  return addAiPerson(st.voice, st.speed, lang || st.lang, { name: st.name, fx: styleEffects(st), style: st.id });
+}
 
 let stopAll = false;
 // Leser linjen som er valgt, med AI-stemmen til personen som er valgt.
@@ -719,24 +728,36 @@ export function cancelGenerate() {
 
 // Prøvelytt en stemme før den legges til.
 let sampleCtx = null,
-  sampleSrc = null;
+  sampleSrc = null,
+  sampleFx = null;
 export const sampling = signal(null);
-export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice).id) {
+export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice).id, { fx = null, key = voice } = {}) {
   sampleSrc?.stop();
   sampleSrc = null;
-  if (sampling.value === voice) return (sampling.value = null);
-  sampling.value = voice;
+  if (sampling.value === key) return (sampling.value = null);
+  sampling.value = key;
   try {
     const { samples, rate } = await api.ttsGenerate({ text: PREVIEW_TEXT[lang] || PREVIEW_TEXT['en-us'], voice, speed, lang });
-    if (sampling.value !== voice) return;
+    if (sampling.value !== key) return;
     sampleCtx ||= new AudioContext();
     sampleCtx.setSinkId?.(audioSink.value).catch(() => {});
     const buf = sampleCtx.createBuffer(1, samples.length, rate);
     buf.copyToChannel(samples instanceof Float32Array ? samples : new Float32Array(samples), 0);
     sampleSrc = sampleCtx.createBufferSource();
     sampleSrc.buffer = buf;
-    sampleSrc.connect(sampleCtx.destination);
-    sampleSrc.onended = () => sampling.value === voice && (sampling.value = null);
+    // Med effekter (en stil): samme effektkode som avspilling og eksport.
+    let out = sampleCtx.destination;
+    if (fx?.length) {
+      await (sampleFx ||= sampleCtx.audioWorklet.addModule('audiofx-worklet.js').then(() => true, () => false));
+      if (await sampleFx) {
+        const node = new AudioWorkletNode(sampleCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
+        node.port.postMessage(fx);
+        node.connect(sampleCtx.destination);
+        out = node;
+      }
+    }
+    sampleSrc.connect(out);
+    sampleSrc.onended = () => sampling.value === key && (sampling.value = null);
     sampleSrc.start();
   } catch (err) {
     sampling.value = null;
