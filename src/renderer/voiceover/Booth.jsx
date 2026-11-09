@@ -42,6 +42,7 @@ import { StudioIcon } from './StudioIcon.jsx';
 import { AiVoiceDialog, aiDialogOpen, openAiVoices } from './AiVoice.jsx';
 import { LANGUAGES, VOICES, isBlend, languageById, voiceLabel } from '../../shared/tts.js';
 import { PacingFields } from './Pacing.jsx';
+import { piperById, piperFor, speakerLabel } from './piper.js';
 import { VoTimeline, deleteSelected, pausesOpen, selected as vtSelected, togglePreview } from './VoTimeline.jsx';
 
 const api = window.api;
@@ -652,7 +653,8 @@ function Sound() {
         Sound for {p.name}
       </h4>
       <p class="dim">Applies to all of {p.name}'s takes. You hear it in the studio timeline, and it goes with the clips when you stitch.</p>
-      {p.ai && (
+      {p.ai?.engine === 'piper' && <PiperSound p={p} />}
+      {p.ai && p.ai.engine !== 'piper' && (
         <>
           <label class="vt-ctl" title="The language the lines are read in">
             Language
@@ -694,6 +696,39 @@ function Sound() {
         Reset to Studio Voice
       </Button>
     </div>
+  );
+}
+
+// Lyd for en Piper-stemme: språket følger stemmen. Bytt til en annen nedlastet stemme for samme språk,
+// velg stemme i stemmesett med flere, og still farten.
+function PiperSound({ p }) {
+  const v = piperById(p.ai.voice);
+  if (!v) return null;
+  const installed = piperFor(v.lang).filter((x) => booth.tts.value.piper?.[x.id]?.installed || x.id === v.id);
+  const key = `piper:${v.id}:${p.ai.speaker || ''}`;
+  return (
+    <>
+      <p class="dim">
+        {languageById(v.lang)?.label} voice, {v.license}.
+      </p>
+      <label class="vt-ctl">
+        Voice
+        <Select value={v.id} options={installed.map((x) => ({ value: x.id, label: x.name }))} onChange={(voice) => booth.setAiVoice(p.id, { voice, speaker: piperById(voice).speakers[0] || '' })} />
+        <IconButton icon={booth.sampling.value === key ? Square : Play} size={13} title="Listen" onClick={() => booth.previewVoice(v.id, p.ai.speed || 1, v.lang, { engine: 'piper', speaker: p.ai.speaker || '', key })} />
+      </label>
+      {v.speakers.length > 0 && (
+        <label class="vt-ctl">
+          {v.id.includes('emotional') ? 'Emotion' : 'Speaker'}
+          <Select value={p.ai.speaker || v.speakers[0]} options={v.speakers.map((x) => ({ value: x, label: speakerLabel(v, x) }))} onChange={(speaker) => booth.setAiVoice(p.id, { speaker })} />
+        </label>
+      )}
+      <label class="vt-ctl" title="Speaking speed for new takes. Below 1 is slower.">
+        Speed
+        <Slider value={p.ai.speed || 1} min={0.5} max={1.5} step={0.01} center={1} onInput={(x) => booth.setAiVoice(p.id, { speed: x })} />
+        <NumberField value={p.ai.speed || 1} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={(x) => booth.setAiVoice(p.id, { speed: x })} />
+      </label>
+      <p class="dim">A new voice, speaker or speed is used for new takes. Read the lines again to hear it.</p>
+    </>
   );
 }
 

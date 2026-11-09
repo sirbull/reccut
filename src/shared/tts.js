@@ -287,3 +287,17 @@ export function splitPunctuation(text) {
   if (last < text.length) out.push({ match: false, text: text.slice(last) });
   return out;
 }
+
+// Piper: lydtegnene slås opp i stemmens tabell, med start (^), slutt ($) og pause (_) mellom hvert tegn,
+// som i Piper. Tegn tabellen ikke har, hoppes over.
+export function piperIds(ipa, map) {
+  const pad = map._ || [0];
+  const ids = [...(map['^'] || []), ...pad];
+  for (const ch of String(ipa)) {
+    const id = map[ch];
+    if (!id) continue;
+    ids.push(...id, ...pad);
+  }
+  ids.push(...(map.$ || []));
+  return ids;
+}

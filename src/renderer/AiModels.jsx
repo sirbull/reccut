@@ -5,11 +5,13 @@ import { signal } from '@preact/signals';
 import { useEffect, useState } from 'preact/hooks';
 import { AudioWaveform, Captions, Check, Download, Loader2, Scissors, Sparkles, Trash2, X } from 'lucide-preact';
 import { corridorKeyConsent, corridorKeyStatus, refreshCorridorKey } from './CorridorKeyAddon.jsx';
-import { Button, IconButton, Modal } from './ui.jsx';
+import { Button, IconButton, Modal, Select } from './ui.jsx';
 import { prefs, setPrefs } from './prefs.js';
 import { modelAction, modelBytes, subtitleModels } from './subtitleModels.js';
 import { tasks } from './editor/store.js';
-import { refreshTts, tts } from './voiceover/booth.js';
+import { refreshTts, scriptLanguage, tts } from './voiceover/booth.js';
+import { piperFor } from './voiceover/piper.js';
+import { LANGUAGES, languageById } from '../shared/tts.js';
 
 const api = window.api;
 
@@ -33,6 +35,16 @@ export function handleMissingModel(error) {
   };
   openAiModels(m[1], reasons[m[1]] || '');
   return true;
+}
+
+// Språket på maskinen, som forslag til stemmer (nb for norsk bokmål og nynorsk).
+function systemLanguage() {
+  const l = String(navigator.language || 'en-US').toLowerCase();
+  if (/^(nb|nn|no)\b/.test(l)) return 'nb';
+  if (l.startsWith('en-gb')) return 'en-gb';
+  if (l.startsWith('pt-br')) return 'pt-br';
+  const short = l.split('-')[0];
+  return LANGUAGES.some((x) => x.id === short) ? short : 'en-us';
 }
 
 // Første oppstart: spør én gang, etter at prosjektet er valgt.
@@ -64,7 +76,7 @@ const GROUPS = [
     id: 'voices',
     icon: AudioWaveform,
     title: 'AI voices',
-    use: 'Reads a script aloud in the Voice Over Studio, when you want a voice over without recording one yourself.',
+    use: 'Reads a script aloud in the Voice Over Studio, when you want a voice over without recording one yourself. Kokoro has many English voices and styles. For Norwegian, Swedish, Danish, German and other languages, download the voices made for that language.',
   },
 ];
 
@@ -84,6 +96,7 @@ export function AiModelsDialog() {
   const bg = backgroundModels.value;
   const t = tts.value;
   const [picked, setPicked] = useState(() => new Set());
+  const [voiceLang, setVoiceLang] = useState(() => scriptLanguage.value || systemLanguage());
   useEffect(() => {
     modelAction('subtitleModels');
     refreshBackground();
@@ -116,6 +129,7 @@ export function AiModelsDialog() {
       if (kind === 'sub') await modelAction('downloadSubtitleModel', id);
       if (kind === 'bg') await api.downloadBackgroundModel(id).then((list) => (backgroundModels.value = list));
       if (kind === 'tts') await api.ttsInstall().then(refreshTts);
+      if (kind === 'piper') await api.ttsPiperInstall(id).then(refreshTts);
     } catch {}
   };
   const downloadPicked = () => {
@@ -175,6 +189,21 @@ export function AiModelsDialog() {
         remove: t.installed ? () => api.ttsRemove().then(refreshTts) : null,
         cancel: () => api.ttsCancel(),
       },
+      // Stemmer laget for språket som er valgt (Piper), hver for seg.
+      ...piperFor(voiceLang).map((v) => {
+        const st = t.piper?.[v.id] || {};
+        return {
+          key: `piper:${v.id}`,
+          name: `${v.name} (${languageById(v.lang)?.label})`,
+          detail: `A voice made for ${languageById(v.lang)?.label}${v.gender ? `, ${v.gender.toLowerCase()}` : ''}${v.speakers.length ? `, with ${v.speakers.length} ${v.id.includes('emotional') ? 'emotions' : 'voices'}` : ''}. Licence ${v.license}.`,
+          size: v.sizeBytes,
+          installed: st.installed,
+          busy: st.downloading,
+          progress: st.progress,
+          remove: st.installed ? () => api.ttsPiperRemove(v.id).then(refreshTts) : null,
+          cancel: () => api.ttsPiperCancel(v.id),
+        };
+      }),
     ],
   };
   const total = [...picked].reduce((s, key) => s + (Object.values(rows).flat().find((r) => r.key === key)?.size || 0), 0);
@@ -209,6 +238,13 @@ export function AiModelsDialog() {
             <div>
               <b>{g.title}</b>
               <p>{g.use}</p>
+              {g.id === 'voices' && (
+                <label class="ai-models-lang">
+                  Voices for
+                  <Select value={voiceLang} options={LANGUAGES.filter((l) => piperFor(l.id).length || l.voices).map((l) => ({ value: l.id, label: l.label }))} onChange={setVoiceLang} />
+                </label>
+              )}
+              {g.id === 'captions' && <p class="dim">Whisper understands about 100 languages, Norwegian, Swedish, Danish, German and Spanish included. Larger models are more accurate, especially for Norwegian.</p>}
             </div>
           </header>
           <ul>

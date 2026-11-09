@@ -24,6 +24,7 @@ Når vi lager en ny versjon av Reccut, må About-vinduet også vise det nye vers
 - Uttalen kommer fra phonemizer.js, som inneholder eSpeak NG (GPLv3). Den skal aldri pakkes inn i installasjonsfilen eller legges i `dependencies`. Den lastes ned fra npm når brukeren ber om AI-stemmer. Testen `test/tts.test.mjs` sjekker dette.
 - Alle filer er låst i [src/main/ttsCatalog.json](src/main/ttsCatalog.json): modellen og stemmene med fast revisjon og SHA-256, uttalepakken med npm sin sha512. Endres versjonen, må kontrollsummene regnes ut på nytt.
 - Ingenting lastes ned før brukeren trykker Download AI Voices, og manuset sendes aldri ut av maskinen.
+- Språk som Kokoro ikke har egne stemmer for (norsk, svensk, dansk, tysk og flere), får Piper-stemmer fra `rhasspy/piper-voices`, låst under `piper` i `ttsCatalog.json`. Bare stemmer med åpen lisens (CC0, CC BY 4.0, Apache 2.0 eller MIT) skal inn i katalogen, aldri AGPL, ikke-kommersielle eller uklare. Testen i `test/tts.test.mjs` sjekker dette.
 
 ## KI-modeller lastes ned ved behov
 

@@ -27,6 +27,7 @@ import {
 } from '../../shared/voiceover.js';
 import { presetEffects } from '../../shared/audiofx.js';
 import { styleById, styleEffects } from '../../shared/voiceStyles.js';
+import { piperById } from './piper.js';
 import { DEFAULT_VOICE, PREVIEW_TEXT, detectLanguage, languageById, parseVoice, spokenText, voiceById, voiceLanguage } from '../../shared/tts.js';
 import { recordingPlan } from '../../shared/recordingFormats.cjs';
 import { audioSink, prefs, setPrefs } from '../prefs.js';
@@ -676,6 +677,25 @@ export function addAiPerson(voice = DEFAULT_VOICE, speed = 1, lang = voiceLangua
 }
 export const setAiVoice = (id, patch) => editPerson(id, (p) => void (p.ai = { ...p.ai, ...patch }));
 
+// En Piper-stemme som person: laget for ett språk, med egen uttale. speaker for stemmesett med flere stemmer.
+export function addPiperPerson(voiceId, speaker = '', speed = 1) {
+  const v = piperById(voiceId);
+  if (!v) return;
+  if (busy()) return toast('Stop the take first.');
+  const list = people.value;
+  const used = new Set(list.map((p) => p.name.toLowerCase()));
+  const stem = speaker ? `${v.name} ${speaker}` : v.name;
+  let name = `${stem} (AI)`;
+  for (let n = 2; used.has(name.toLowerCase()); n++) name = `${stem} ${n} (AI)`;
+  const p = { id: uid(), name, color: COLORS[list.length % COLORS.length], fx: [], gain: 0, ai: { engine: 'piper', voice: v.id, speaker, speed, lang: v.lang } };
+  setVo((x) => {
+    x.people = [...listOf(x), p];
+    x.person = p.id;
+  });
+  toast(`${p.name} is added on a new track. Press Space to read a line, or Read All Missing Lines.`, { timeout: 4500 });
+  return p;
+}
+
 // Legger til en ferdig stemmestil som en person: stemme eller blanding, fart og effekter.
 export function addAiStyle(styleId, lang = null) {
   const st = styleById(styleId);
@@ -688,14 +708,14 @@ let stopAll = false;
 export async function generate(key = current.value?.key, { advance = true } = {}) {
   const who = person.value;
   if (!who?.ai || !key || status.value !== 'idle') return;
-  if (!tts.value.installed) return toast('Download the AI voices first (Add AI Voice).');
+  if (who.ai.engine === 'piper' ? !tts.value.piper?.[who.ai.voice]?.installed : !tts.value.installed) return toast('Download this voice first (Add AI Voice).');
   const text = spokenFor(key, who.id);
   if (!text) return toast('This line has nothing to read.');
   preview.stop();
   status.value = 'generating';
   recordingKey.value = key;
   try {
-    const { samples, rate } = await api.ttsGenerate({ text, voice: who.ai.voice, speed: who.ai.speed || 1, lang: aiLanguage(who).id });
+    const { samples, rate } = await api.ttsGenerate({ text, voice: who.ai.voice, speed: who.ai.speed || 1, lang: aiLanguage(who).id, engine: who.ai.engine || 'kokoro', speaker: who.ai.speaker || '' });
     status.value = 'saving';
     await saveTake(key, samples instanceof Float32Array ? samples : new Float32Array(samples), null, { rate, ai: true, advance });
   } catch (err) {
@@ -731,13 +751,13 @@ let sampleCtx = null,
   sampleSrc = null,
   sampleFx = null;
 export const sampling = signal(null);
-export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice).id, { fx = null, key = voice } = {}) {
+export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice).id, { fx = null, key = voice, engine = 'kokoro', speaker = '' } = {}) {
   sampleSrc?.stop();
   sampleSrc = null;
   if (sampling.value === key) return (sampling.value = null);
   sampling.value = key;
   try {
-    const { samples, rate } = await api.ttsGenerate({ text: PREVIEW_TEXT[lang] || PREVIEW_TEXT['en-us'], voice, speed, lang });
+    const { samples, rate } = await api.ttsGenerate({ text: PREVIEW_TEXT[lang] || PREVIEW_TEXT['en-us'], voice, speed, lang, engine, speaker });
     if (sampling.value !== key) return;
     sampleCtx ||= new AudioContext();
     sampleCtx.setSinkId?.(audioSink.value).catch(() => {});

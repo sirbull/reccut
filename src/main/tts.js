@@ -55,7 +55,96 @@ function createTts({ dir, fetchImpl = globalThis.fetch, catalog = CATALOG, onCha
 
   async function status() {
     if (installed === null) await check();
-    return { installed, downloading: Boolean(download), progress: download?.progress ?? 0, sizeBytes: total, license: catalog.phonemizer.license };
+    const piper = {};
+    for (const v of catalog.piper?.voices || []) piper[v.id] = { installed: await piperInstalled(v), downloading: piperDownloads.has(v.id), progress: piperDownloads.get(v.id)?.progress ?? 0 };
+    return { installed, downloading: Boolean(download), progress: download?.progress ?? 0, sizeBytes: total, addonBytes: catalog.phonemizer.size, addon: await addonInstalled(), piper, license: catalog.phonemizer.license };
+  }
+
+  /* Uttaletillegget, delt av Kokoro og Piper */
+
+  async function addonInstalled() {
+    try {
+      await fs.stat(addonFile());
+      const mark = await fs.readFile(path.join(dir, 'addon.json'), 'utf8').then(JSON.parse, () => null);
+      const kokoro = await fs.readFile(path.join(dir, 'manifest.json'), 'utf8').then(JSON.parse, () => null);
+      return mark?.version === catalog.phonemizer.version || kokoro?.phonemizer === catalog.phonemizer.version;
+    } catch {
+      return false;
+    }
+  }
+  async function ensureAddon(signal) {
+    if (await addonInstalled()) return 0;
+    const tgz = await fetchBytes(catalog.phonemizer.tarball, signal);
+    if (sri(tgz) !== catalog.phonemizer.integrity) throw new Error('The pronunciation add-on did not match its checksum.');
+    const js = untarFile(tgz, catalog.phonemizer.entry);
+    if (!js) throw new Error('The pronunciation add-on is incomplete.');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(addonFile() + '.tmp', js);
+    await fs.rename(addonFile() + '.tmp', addonFile());
+    await fs.writeFile(path.join(dir, 'addon.json'), JSON.stringify({ version: catalog.phonemizer.version }));
+    return catalog.phonemizer.size;
+  }
+
+  /* Piper: én stemme per språk (norsk, svensk, dansk, tysk ...), lastet ned hver for seg */
+
+  const piperDownloads = new Map();
+  const piperVoice = (id) => (catalog.piper?.voices || []).find((v) => v.id === id) || null;
+  const piperRoot = (v) => path.join(dir, 'piper', v.id);
+  async function piperInstalled(v) {
+    try {
+      const mark = JSON.parse(await fs.readFile(path.join(piperRoot(v), 'verified.json'), 'utf8'));
+      if (mark.revision !== catalog.piper.revision) return false;
+      for (const f of v.files) if ((await fs.stat(path.join(piperRoot(v), path.basename(f.path)))).size !== f.size) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  async function installPiper(id, onProgress = () => {}) {
+    const v = piperVoice(id);
+    if (!v) throw new Error('Unknown voice.');
+    if (piperDownloads.has(id)) throw new Error('This voice is already downloading.');
+    const ctrl = new AbortController();
+    const d = { progress: 0, ctrl };
+    piperDownloads.set(id, d);
+    onChange();
+    const total = v.sizeBytes + ((await addonInstalled()) ? 0 : catalog.phonemizer.size);
+    let done = 0;
+    const step = (n) => {
+      done += n;
+      d.progress = Math.min(1, done / total);
+      onProgress(d.progress);
+    };
+    const staging = path.join(dir, `.staging-${crypto.randomBytes(4).toString('hex')}`);
+    try {
+      step(await ensureAddon(ctrl.signal));
+      await fs.mkdir(staging, { recursive: true });
+      for (const f of v.files) {
+        if (ctrl.signal.aborted) throw new Error('Canceled');
+        const buf = await fetchBytes(`https://huggingface.co/${catalog.piper.repository}/resolve/${catalog.piper.revision}/${f.path.split('/').map(encodeURIComponent).join('/')}`, ctrl.signal);
+        if (buf.length !== f.size || sha256(buf) !== f.sha256) throw new Error(`${path.basename(f.path)} did not match its checksum.`);
+        await fs.writeFile(path.join(staging, path.basename(f.path)), buf);
+        step(f.size);
+      }
+      await fs.writeFile(path.join(staging, 'verified.json'), JSON.stringify({ revision: catalog.piper.revision, installed: Date.now() }));
+      await fs.rm(piperRoot(v), { recursive: true, force: true });
+      await fs.mkdir(path.dirname(piperRoot(v)), { recursive: true });
+      await fs.rename(staging, piperRoot(v));
+    } finally {
+      await fs.rm(staging, { recursive: true, force: true }).catch(() => {});
+      piperDownloads.delete(id);
+      onChange();
+    }
+  }
+  function cancelPiper(id) {
+    piperDownloads.get(id)?.ctrl.abort(new Error('Canceled'));
+  }
+  async function removePiper(id) {
+    const v = piperVoice(id);
+    if (!v) return;
+    cancelPiper(id);
+    await fs.rm(piperRoot(v), { recursive: true, force: true });
+    onChange();
   }
 
   async function fetchBytes(url, signal) {
@@ -116,16 +205,24 @@ function createTts({ dir, fetchImpl = globalThis.fetch, catalog = CATALOG, onCha
   async function remove() {
     cancel();
     await fs.rm(path.join(dir, 'kokoro'), { recursive: true, force: true });
-    await fs.rm(addonFile(), { force: true });
     await fs.rm(path.join(dir, 'manifest.json'), { force: true });
+    // Uttaletillegget beholdes så lenge en Piper-stemme bruker det.
+    const piperLeft = (await Promise.all((catalog.piper?.voices || []).map(piperInstalled))).some(Boolean);
+    if (!piperLeft) {
+      await fs.rm(addonFile(), { force: true });
+      await fs.rm(path.join(dir, 'addon.json'), { force: true });
+    } else await fs.writeFile(path.join(dir, 'addon.json'), JSON.stringify({ version: catalog.phonemizer.version }));
     installed = false;
     onChange();
   }
 
   // Filer til arbeidsvinduet: modellfilene (som Transformers.js ber om med adressen sin) og uttalepakken.
   async function readModelFile(key) {
-    if (!(await status()).installed) return null;
-    if (key === PHONEMIZER_KEY) return new Uint8Array(await fs.readFile(addonFile()));
+    if (key === PHONEMIZER_KEY) return (await addonInstalled()) ? new Uint8Array(await fs.readFile(addonFile())) : null;
+    const piperFile = await readPiperFile(key);
+    if (piperFile) return piperFile;
+    if (installed === null) await check();
+    if (!installed) return null;
     let url;
     try {
       url = new URL(key);
@@ -140,7 +237,24 @@ function createTts({ dir, fetchImpl = globalThis.fetch, catalog = CATALOG, onCha
     return new Uint8Array(await fs.readFile(file(name)));
   }
 
-  return { status, install, cancel, remove, readModelFile, check, PHONEMIZER_KEY, repository: model.repository, revision: model.revision };
+  // Piper-filer: bare filene i katalogen, for stemmer som er lastet ned.
+  async function readPiperFile(key) {
+    if (!catalog.piper) return null;
+    let url;
+    try {
+      url = new URL(key);
+    } catch {
+      return null;
+    }
+    const prefix = `/${catalog.piper.repository}/resolve/${catalog.piper.revision}/`;
+    if (url.protocol !== 'https:' || url.hostname !== 'huggingface.co' || !url.pathname.startsWith(prefix)) return null;
+    const rel = decodeURIComponent(url.pathname.slice(prefix.length));
+    const v = (catalog.piper.voices || []).find((x) => x.files.some((f) => f.path === rel));
+    if (!v || !(await piperInstalled(v))) return null;
+    return new Uint8Array(await fs.readFile(path.join(piperRoot(v), path.basename(rel))));
+  }
+
+  return { status, install, cancel, remove, installPiper, cancelPiper, removePiper, piperVoice, readModelFile, check, PHONEMIZER_KEY, repository: model.repository, revision: model.revision, piper: catalog.piper };
 }
 
 module.exports = { createTts, untarFile, PHONEMIZER_KEY, CATALOG };

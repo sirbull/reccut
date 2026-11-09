@@ -1,7 +1,8 @@
 // AI-stemmer i Voice Over Studio: last ned Kokoro første gang, lytt til stemmene og legg en til som person.
 import { signal } from '@preact/signals';
 import { useEffect, useState } from 'preact/hooks';
-import { Download, Loader2, Play, Plus, Square } from 'lucide-preact';
+import { Download, Loader2, Play, Plus, Square, Trash2, X } from 'lucide-preact';
+import { piperFor, speakerLabel } from './piper.js';
 import { Button, IconButton, Modal, NumberField, Select, Slider } from '../ui.jsx';
 import { tasks } from '../editor/store.js';
 import { LANGUAGES, VOICES, languageById, voiceLabel, voiceLanguage, voicesFor } from '../../shared/tts.js';
@@ -86,23 +87,91 @@ export function AiVoiceDialog() {
   useEffect(() => {
     booth.refreshTts();
   }, []);
-  const job = tasks.value.find((x) => x.kind === 'download' && /AI voices/.test(x.title) && (x.state === 'running' || x.state === 'queued'));
   const close = () => {
     booth.sampling.value = null;
     aiDialogOpen.value = false;
   };
-  const install = () => api.ttsInstall().then(booth.refreshTts).catch((e) => e.message !== 'Canceled' && booth.refreshTts());
+  const native = piperFor(lang);
+  const kokoroOwn = Boolean(languageById(lang)?.voices);
+  const kokoroPart = !t.installed ? (
+    <KokoroSetup collapsed={!kokoroOwn && native.length > 0} lang={lang} />
+  ) : (
+    <>
+      {!kokoroOwn && (
+        <p class="ai-note">
+          {native.length ? `The Kokoro voices below are not made for ${languageById(lang).label}. They pronounce it, but with an accent.` : `Kokoro has no voices made for ${languageById(lang).label}. The words are pronounced in ${languageById(lang).label}, but the voice comes from another language, so it has an accent.`}
+        </p>
+      )}
+      <div class="segmented ai-tabs">
+        <button class={tab === 'styles' ? 'active' : ''} onClick={() => setTab('styles')}>
+          Styles
+        </button>
+        <button class={tab === 'voices' ? 'active' : ''} onClick={() => setTab('voices')}>
+          Voices
+        </button>
+      </div>
+      {tab === 'styles' ? (
+        <StyleList lang={lang} onAdd={close} />
+      ) : (
+        <>
+          <VoiceList voices={voicesFor(lang).own} lang={lang} speed={speed} onAdd={close} title={voicesFor(lang).own.length ? `Made for ${languageById(lang).label}` : null} />
+          <VoiceList voices={sortOther(voicesFor(lang).other, lang)} lang={lang} speed={speed} onAdd={close} title={voicesFor(lang).own.length ? 'Other voices, with an accent' : 'Voices from other languages'} collapsed={voicesFor(lang).own.length > 0} />
+        </>
+      )}
+    </>
+  );
   return (
-    <Modal title="AI Voices" onClose={close} width={620} class="ai-voices">
-      {!t.installed ? (
-        <div class="ai-setup">
-          <p>
-            Let an AI voice read the script. The voices come from <b>Kokoro</b>, an open model that runs on this computer. It is free, needs no account or key, and the script never leaves your computer.
+    <Modal title="AI Voices" onClose={close} width={680} class="ai-voices">
+      <div class="ai-pick">
+        <p class="dim">The voices run on this computer, are free and need no account. The script never leaves your computer. Choose the language of the script first.</p>
+        <div class="ai-pick-bar">
+          <label class="vt-ctl" title="The language of the script. The voice reads it with this pronunciation.">
+            Language
+            <Select value={lang} options={LANGUAGES.map((l) => ({ value: l.id, label: `${l.label}${l.id === booth.scriptLanguage.value ? ', the script' : ''}` }))} onChange={setLang} />
+          </label>
+          <label class="vt-ctl ai-speed" title="Speaking speed for new voices. Below 1 is slower, which often suits voice over. Styles have their own speed.">
+            Speed
+            <Slider value={speed} min={0.5} max={1.5} step={0.01} center={1} onInput={setSpeed} />
+            <NumberField value={speed} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={setSpeed} />
+          </label>
+        </div>
+        {booth.scriptLanguage.value && booth.scriptLanguage.value !== lang && (
+          <p class="ai-note">
+            The script looks like {languageById(booth.scriptLanguage.value).label}.{' '}
+            <button class="link" onClick={() => setLang(booth.scriptLanguage.value)}>
+              Use {languageById(booth.scriptLanguage.value).label}
+            </button>
           </p>
+        )}
+        {native.length > 0 && <PiperList lang={lang} speed={speed} onAdd={close} />}
+        {kokoroPart}
+        {t.installed && (
+          <button class="link" onClick={() => api.ttsRemove().then(booth.refreshTts)}>
+            Remove the Kokoro voices from this computer
+          </button>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// Kokoro er ikke lastet ned: hva det er og en knapp. Sammenslått når språket har egne Piper-stemmer.
+function KokoroSetup({ collapsed, lang }) {
+  const t = booth.tts.value;
+  const [open, setOpen] = useState(!collapsed);
+  const job = tasks.value.find((x) => x.kind === 'download' && /AI voices/.test(x.title) && (x.state === 'running' || x.state === 'queued'));
+  const install = () => api.ttsInstall().then(booth.refreshTts).catch(() => booth.refreshTts());
+  return (
+    <div class="ai-voice-group">
+      <button class="ai-voice-title" onClick={() => setOpen(!open)} aria-expanded={open}>
+        Kokoro voices <span class="dim">· {VOICES.length} voices and 17 styles, {mb(t.sizeBytes || 116e6)}</span>
+      </button>
+      {open && (
+        <div class="ai-setup">
           <ul class="dim">
-            <li>About {mb(t.sizeBytes || 115e6)} is downloaded once: the model, {VOICES.length} voices and a pronunciation add-on.</li>
-            <li>There are voices made for English (US and UK), Spanish, French, Italian, Brazilian Portuguese and Hindi, and English sounds best. Norwegian, Swedish, Danish, German, Dutch, Finnish and Polish are pronounced correctly, but read by a voice from another language, so they have an accent.</li>
-            <li>The pronunciation add-on (phonemizer.js) contains eSpeak NG, which is GPL software. It is not part of Reccut and is downloaded from npm and checked before use. The model is Apache 2.0.</li>
+            <li>Voices made for English (US and UK), Spanish, French, Italian, Brazilian Portuguese and Hindi, and ready made styles from dark and cinematic to bright and lively. English sounds best.</li>
+            <li>Other languages{languageById(lang)?.voices ? '' : `, like ${languageById(lang).label},`} are pronounced correctly but read with an accent. Use the voices made for the language above when there are any.</li>
+            <li>Includes a pronunciation add-on (phonemizer.js with eSpeak NG, GPL), downloaded from npm and checked before use. The model is Apache 2.0.</li>
           </ul>
           {job || t.downloading ? (
             <div class="ai-progress">
@@ -116,62 +185,70 @@ export function AiVoiceDialog() {
               </Button>
             </div>
           ) : (
-            <Button variant="primary" icon={Download} onClick={install}>
-              Download AI Voices
+            <Button variant={collapsed ? 'secondary' : 'primary'} icon={Download} onClick={install}>
+              Download Kokoro Voices
             </Button>
           )}
         </div>
-      ) : (
-        <div class="ai-pick">
-          <div class="ai-pick-bar">
-            <label class="vt-ctl" title="The language of the script. The voice reads it with this pronunciation.">
-              Language
-              <Select value={lang} options={LANGUAGES.map((l) => ({ value: l.id, label: `${l.label}${l.voices ? '' : ' (with accent)'}${l.id === booth.scriptLanguage.value ? ', the script' : ''}` }))} onChange={setLang} />
-            </label>
-            {tab === 'voices' && <label class="vt-ctl ai-speed" title="Speaking speed. Below 1 is slower, which often suits voice over.">
-              Speed
-              <Slider value={speed} min={0.5} max={1.5} step={0.01} center={1} onInput={setSpeed} />
-              <NumberField value={speed} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={setSpeed} />
-            </label>}
-          </div>
-          {booth.scriptLanguage.value && booth.scriptLanguage.value !== lang && (
-            <p class="ai-note">
-              The script looks like {languageById(booth.scriptLanguage.value).label}.{' '}
-              <button class="link" onClick={() => setLang(booth.scriptLanguage.value)}>
-                Use {languageById(booth.scriptLanguage.value).label}
-              </button>
-            </p>
-          )}
-          {!languageById(lang).voices && (
-            <p class="ai-note">
-              Kokoro has no voices made for {languageById(lang).label}. The words are pronounced in {languageById(lang).label}, but the voice comes from another language, so it has an accent. Listen to a few and pick the one you like. The first ones usually work best.
-            </p>
-          )}
-          <div class="segmented ai-tabs">
-            <button class={tab === 'styles' ? 'active' : ''} onClick={() => setTab('styles')}>
-              Styles
-            </button>
-            <button class={tab === 'voices' ? 'active' : ''} onClick={() => setTab('voices')}>
-              Voices
-            </button>
-          </div>
-          {tab === 'styles' ? (
-            <StyleList lang={lang} onAdd={close} />
-          ) : (
-            <>
-              <VoiceList voices={voicesFor(lang).own} lang={lang} speed={speed} onAdd={close} title={voicesFor(lang).own.length ? `Made for ${languageById(lang).label}` : null} />
-              <VoiceList voices={sortOther(voicesFor(lang).other, lang)} lang={lang} speed={speed} onAdd={close} title={voicesFor(lang).own.length ? 'Other voices, with an accent' : 'Voices from other languages'} collapsed={voicesFor(lang).own.length > 0} />
-            </>
-          )}
-          <p class="dim">
-            Listening generates a short sample, which can take a few seconds the first time. Each voice is added as a person on its own track, with its own takes and sound. Change the voice and speed later under Sound.
-          </p>
-          <button class="link" onClick={() => api.ttsRemove().then(booth.refreshTts)}>
-            Remove the AI voices from this computer
-          </button>
-        </div>
       )}
-    </Modal>
+    </div>
+  );
+}
+
+// Stemmer laget for språket (Piper). Hver lastes ned for seg, omtrent 63 MB.
+function PiperList({ lang, speed, onAdd }) {
+  const t = booth.tts.value;
+  const [speakers, setSpeakers] = useState({});
+  const voices = piperFor(lang);
+  return (
+    <div class="ai-voice-group">
+      <div class="ai-voice-title">
+        Voices made for {languageById(lang).label} <span class="dim">· download each one you want</span>
+      </div>
+      <ul class="ai-voice-list">
+        {voices.map((v) => {
+          const st = t.piper?.[v.id] || {};
+          const speaker = speakers[v.id] ?? v.speakers[0] ?? '';
+          const key = `piper:${v.id}:${speaker}`;
+          const playing = booth.sampling.value === key;
+          return (
+            <li key={v.id}>
+              {st.installed ? <IconButton icon={playing ? Square : Play} size={14} title={playing ? 'Stop' : 'Listen'} onClick={() => booth.previewVoice(v.id, speed, lang, { engine: 'piper', speaker, key })} /> : <span class="ai-models-spacer" />}
+              <b>{v.name}</b>
+              <span class="dim">{[v.gender, v.speakers.length ? `${v.speakers.length} voices` : '', v.license].filter(Boolean).join(', ')}</span>
+              {v.speakers.length > 0 && (
+                <Select value={speaker} options={v.speakers.map((s) => ({ value: s, label: speakerLabel(v, s) }))} onChange={(x) => setSpeakers({ ...speakers, [v.id]: x })} />
+              )}
+              <div class="spacer" />
+              {st.downloading ? (
+                <span class="ai-models-busy">
+                  <Loader2 size={13} class="spin" /> {Math.round((st.progress || 0) * 100)} %
+                  <IconButton icon={X} size={12} title="Cancel" onClick={() => api.ttsPiperCancel(v.id)} />
+                </span>
+              ) : st.installed ? (
+                <>
+                  <IconButton icon={Trash2} size={13} title="Remove this voice from the computer" onClick={() => api.ttsPiperRemove(v.id).then(booth.refreshTts)} />
+                  <Button
+                    class="small"
+                    icon={Plus}
+                    onClick={() => {
+                      booth.addPiperPerson(v.id, speaker, speed);
+                      onAdd();
+                    }}
+                  >
+                    Add
+                  </Button>
+                </>
+              ) : (
+                <Button class="small" icon={Download} onClick={() => api.ttsPiperInstall(v.id).then(booth.refreshTts).catch(() => booth.refreshTts())} title={`Download ${v.name}, about ${mb(v.sizeBytes)}`}>
+                  {mb(v.sizeBytes)}
+                </Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

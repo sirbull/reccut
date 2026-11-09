@@ -1268,6 +1268,21 @@ extensionHandler('tts:install', async () => {
   return tts.status();
 });
 extensionHandler('tts:cancel', () => tts.cancel());
+extensionHandler('tts:piperInstall', async (id) => {
+  const v = tts.piperVoice(String(id));
+  if (!v) throw new Error('Unknown voice.');
+  const { done } = jobs.add({ kind: 'download', title: `Downloading voice ${v.name}`, queue: 'light', run: (ctx) => {
+    ctx.setCancel(() => tts.cancelPiper(v.id));
+    return tts.installPiper(v.id, (p) => ctx.progress(p, 'Downloading'));
+  } });
+  await done;
+  return tts.status();
+});
+extensionHandler('tts:piperCancel', (id) => tts.cancelPiper(String(id)));
+extensionHandler('tts:piperRemove', async (id) => {
+  await tts.removePiper(String(id));
+  return tts.status();
+});
 extensionHandler('tts:remove', async () => {
   const { response } = await dialog.showMessageBox(win, { type: 'question', title: 'Remove the AI voices?', message: 'Remove the AI voices?', detail: 'The voice model and the pronunciation add-on are deleted from this computer. Takes you have generated stay in your projects. You can download the voices again later.', buttons: ['Cancel', 'Remove'], defaultId: 0, cancelId: 0, noLink: true });
   if (response === 1) await tts.remove();
@@ -1275,12 +1290,23 @@ extensionHandler('tts:remove', async () => {
 });
 // Én linje om gangen i et skjult arbeidsvindu. Gir lyd som Float32 (24 kHz, mono).
 extensionHandler('tts:generate', async (payload) => {
-  if (!(await tts.status()).installed) throw new Error('Download the AI voices first.');
   const text = String(payload?.text || '').slice(0, 5000);
   if (!text.trim()) throw new Error('There is no text to read.');
+  const speed = Math.min(2, Math.max(0.5, Number(payload?.speed) || 1));
+  // Piper: én stemme per språk. Bare stemmer fra katalogen som er lastet ned.
+  if (payload?.engine === 'piper') {
+    const v = tts.piperVoice(String(payload.voice));
+    const state = v && (await tts.status()).piper[v.id];
+    if (!v || !state?.installed) throw new Error('MODEL_MISSING:voices Download this voice first.');
+    const base = `https://huggingface.co/${tts.piper.repository}/resolve/${tts.piper.revision}/`;
+    const url = (ext) => base + v.files.find((f) => f.path.endsWith(ext)).path.split('/').map(encodeURIComponent).join('/');
+    const speaker = Math.max(0, v.speakers.indexOf(String(payload.speaker || '')));
+    return jobs.runInWorker('tts', { engine: 'piper', text, speed, model: url('.onnx'), config: url('.onnx.json'), speaker, addon: tts.PHONEMIZER_KEY });
+  }
+  if (!(await tts.status()).installed) throw new Error('MODEL_MISSING:voices Download the AI voices first.');
   const voice = String(payload.voice || 'af_heart');
   if (!/^[a-z]{2}_[a-z]+(:\d+(\.\d+)?)?(,[a-z]{2}_[a-z]+(:\d+(\.\d+)?)?){0,3}$/.test(voice)) throw new Error('Unknown voice.');
-  return jobs.runInWorker('tts', { text, voice, lang: String(payload.lang || ''), speed: Math.min(2, Math.max(0.5, Number(payload.speed) || 1)), repository: tts.repository, revision: tts.revision, addon: tts.PHONEMIZER_KEY });
+  return jobs.runInWorker('tts', { text, voice, lang: String(payload.lang || ''), speed, repository: tts.repository, revision: tts.revision, addon: tts.PHONEMIZER_KEY });
 });
 extensionHandler('ai:config', () => extensions.aiConfig());
 extensionHandler('subtitle-models:list', () => subtitleModels.listAvailableModels());

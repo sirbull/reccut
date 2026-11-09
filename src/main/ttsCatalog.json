@@ -244,5 +244,468 @@
   "size": 1369002,
   "entry": "package/dist/phonemizer.js",
   "license": "phonemizer.js is Apache-2.0 and contains eSpeak NG, which is GPL-3.0-or-later"
+ },
+ "piper": {
+  "repository": "rhasspy/piper-voices",
+  "revision": "cf910fb59f1d79ab3b625a63993a108751c6c25d",
+  "voices": [
+   {
+    "id": "no_NO-talesyntese-medium",
+    "lang": "nb",
+    "name": "Talesyntese",
+    "gender": "",
+    "license": "CC0",
+    "espeak": "nb",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "no/no_NO/talesyntese/medium/no_NO-talesyntese-medium.onnx",
+      "size": 63201294,
+      "sha256": "b763aebe02e72c4628c4074c4b8b448f05ffe523b975bfcd58e2c5d531270c13"
+     },
+     {
+      "path": "no/no_NO/talesyntese/medium/no_NO-talesyntese-medium.onnx.json",
+      "size": 4880,
+      "sha256": "b0eb0491fc8bf9843d2beac8acf8773b6cf59274316406b36ff579ae8a1909d5"
+     }
+    ],
+    "sizeBytes": 63206174
+   },
+   {
+    "id": "no_NO-nvcc-medium",
+    "lang": "nb",
+    "name": "NVCC",
+    "gender": "",
+    "license": "CC0",
+    "espeak": "nb",
+    "rate": 22050,
+    "speakers": [
+     "KNN",
+     "KSV",
+     "MMN",
+     "KON",
+     "MNN",
+     "MSV",
+     "MON",
+     "MNV",
+     "KMN",
+     "KNV"
+    ],
+    "files": [
+     {
+      "path": "no/no_NO/nvcc/medium/no_NO-nvcc-medium.onnx",
+      "size": 76770227,
+      "sha256": "3f51702946d9544898440a1a66906155661a9d680ee103130ff68f73360b512e"
+     },
+     {
+      "path": "no/no_NO/nvcc/medium/no_NO-nvcc-medium.onnx.json",
+      "size": 5397,
+      "sha256": "98410e911e5a9076ac4677a79b08b20f98c54f550c4388e29978f6bafa32b83d"
+     }
+    ],
+    "sizeBytes": 76775624
+   },
+   {
+    "id": "sv_SE-nst-medium",
+    "lang": "sv",
+    "name": "NST",
+    "gender": "",
+    "license": "CC0",
+    "espeak": "sv",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "sv/sv_SE/nst/medium/sv_SE-nst-medium.onnx",
+      "size": 63104526,
+      "sha256": "df011f56825a59dd1efc080c38a65a1ef70407e60f63050e9246f43a3d7e471e"
+     },
+     {
+      "path": "sv/sv_SE/nst/medium/sv_SE-nst-medium.onnx.json",
+      "size": 4157,
+      "sha256": "d45dd74cbb4eca58694bf04a97e243044092476f28a55ae26424f0653086980a"
+     }
+    ],
+    "sizeBytes": 63108683
+   },
+   {
+    "id": "da_DK-talesyntese-medium",
+    "lang": "da",
+    "name": "Talesyntese",
+    "gender": "",
+    "license": "CC0",
+    "espeak": "da",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "da/da_DK/talesyntese/medium/da_DK-talesyntese-medium.onnx",
+      "size": 63201294,
+      "sha256": "b9271efd25f7b8494bbd28d48dd675c8c119daa284f3ee488008935f515f1241"
+     },
+     {
+      "path": "da/da_DK/talesyntese/medium/da_DK-talesyntese-medium.onnx.json",
+      "size": 4878,
+      "sha256": "89fe13bd251406cc0088570d103ea7ac35823211d8466faf913268ab8506f41b"
+     }
+    ],
+    "sizeBytes": 63206172
+   },
+   {
+    "id": "de_DE-thorsten-medium",
+    "lang": "de",
+    "name": "Thorsten",
+    "gender": "Male",
+    "license": "CC0",
+    "espeak": "de",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx",
+      "size": 63221984,
+      "sha256": "fd270eb3d1ebf91d763f8a0f949b1b1bebdfefaea18c3aaf8577dd34536e064f"
+     },
+     {
+      "path": "de/de_DE/thorsten/medium/de_DE-thorsten-medium.onnx.json",
+      "size": 5460,
+      "sha256": "cf245c91668e74cb6716f38647ae3d6d9bac42965872596f65f9ab2b7d7221ed"
+     }
+    ],
+    "sizeBytes": 63227444
+   },
+   {
+    "id": "de_DE-kerstin-medium",
+    "lang": "de",
+    "name": "Kerstin",
+    "gender": "Female",
+    "license": "CC0",
+    "espeak": "de",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "de/de_DE/kerstin/medium/de_DE-kerstin-medium.onnx",
+      "size": 63221984,
+      "sha256": "c56d70475fb99248a20e60dafbcd107475e60d7e01deec18ba65201d288d015d"
+     },
+     {
+      "path": "de/de_DE/kerstin/medium/de_DE-kerstin-medium.onnx.json",
+      "size": 5459,
+      "sha256": "8e86846ab0c5c5403c25125e3a505841eec4a52eed7d2babf904990883f7e83d"
+     }
+    ],
+    "sizeBytes": 63227443
+   },
+   {
+    "id": "de_DE-thorsten_emotional-medium",
+    "lang": "de",
+    "name": "Thorsten (emotions)",
+    "gender": "Male",
+    "license": "CC0",
+    "espeak": "de",
+    "rate": 22050,
+    "speakers": [
+     "amused",
+     "angry",
+     "disgusted",
+     "drunk",
+     "neutral",
+     "sleepy",
+     "surprised",
+     "whisper"
+    ],
+    "files": [
+     {
+      "path": "de/de_DE/thorsten_emotional/medium/de_DE-thorsten_emotional-medium.onnx",
+      "size": 76745905,
+      "sha256": "c1764e652266cd6dcebf1b95c61973df5970a5f5272e94b655ff1ddf9a99d1ff"
+     },
+     {
+      "path": "de/de_DE/thorsten_emotional/medium/de_DE-thorsten_emotional-medium.onnx.json",
+      "size": 5031,
+      "sha256": "92895b9e99f7cfc13f4a9879da615c3d6e0baa4d660e26d7b685abdd27a6d1d3"
+     }
+    ],
+    "sizeBytes": 76750936
+   },
+   {
+    "id": "nl_NL-pim-medium",
+    "lang": "nl",
+    "name": "Pim",
+    "gender": "Male",
+    "license": "CC0",
+    "espeak": "nl",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "nl/nl_NL/pim/medium/nl_NL-pim-medium.onnx",
+      "size": 63221984,
+      "sha256": "1e1ed370c3b60ca734e525bdcd1f05f71b42bfb0a15693f1e89c012d72052d2a"
+     },
+     {
+      "path": "nl/nl_NL/pim/medium/nl_NL-pim-medium.onnx.json",
+      "size": 5461,
+      "sha256": "30e5689c492f27d9c6cb8e23de78087162d3205fa8e169c33fd80bd80cbb133b"
+     }
+    ],
+    "sizeBytes": 63227445
+   },
+   {
+    "id": "nl_NL-ronnie-medium",
+    "lang": "nl",
+    "name": "Ronnie",
+    "gender": "Male",
+    "license": "CC0",
+    "espeak": "nl",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "nl/nl_NL/ronnie/medium/nl_NL-ronnie-medium.onnx",
+      "size": 63221984,
+      "sha256": "c6b69203247c9ff9aaadf59ec51147fffb16bb2c2892eb92d5b75d2f9d096622"
+     },
+     {
+      "path": "nl/nl_NL/ronnie/medium/nl_NL-ronnie-medium.onnx.json",
+      "size": 5464,
+      "sha256": "65561cb497fde442608abad1f4eb6d7193e53edbc9ad374a5ae9ee4914fe2586"
+     }
+    ],
+    "sizeBytes": 63227448
+   },
+   {
+    "id": "nl_BE-nathalie-medium",
+    "lang": "nl",
+    "name": "Nathalie (Belgium)",
+    "gender": "Female",
+    "license": "CC0",
+    "espeak": "nl",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "nl/nl_BE/nathalie/medium/nl_BE-nathalie-medium.onnx",
+      "size": 63201294,
+      "sha256": "49cf48023861f9fd42e13a8632f068fee67d1ce244a6ee38f29595afbf0a6be4"
+     },
+     {
+      "path": "nl/nl_BE/nathalie/medium/nl_BE-nathalie-medium.onnx.json",
+      "size": 4879,
+      "sha256": "4704af2736022e910a3f32672480d5530dd39da5c2bcc079f315f604166ff0de"
+     }
+    ],
+    "sizeBytes": 63206173
+   },
+   {
+    "id": "fi_FI-harri-medium",
+    "lang": "fi",
+    "name": "Harri",
+    "gender": "Male",
+    "license": "CC0",
+    "espeak": "fi",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "fi/fi_FI/harri/medium/fi_FI-harri-medium.onnx",
+      "size": 63221984,
+      "sha256": "315cd970fc5e3dbae98998cbe9926527196c0a3ebdc7e02e21bd9e7325fd085b"
+     },
+     {
+      "path": "fi/fi_FI/harri/medium/fi_FI-harri-medium.onnx.json",
+      "size": 5456,
+      "sha256": "b1ed2261d1778ed9aa036cee0ef2811dfe01e8bd44cc2a9804063c7930097d04"
+     }
+    ],
+    "sizeBytes": 63227440
+   },
+   {
+    "id": "pl_PL-gosia-medium",
+    "lang": "pl",
+    "name": "Gosia",
+    "gender": "Female",
+    "license": "CC0",
+    "espeak": "pl",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "pl/pl_PL/gosia/medium/pl_PL-gosia-medium.onnx",
+      "size": 63201294,
+      "sha256": "38f66464240ed74f186e6b7dc13c6e3b22e023426299f25c2b3cc9dfa9373fbc"
+     },
+     {
+      "path": "pl/pl_PL/gosia/medium/pl_PL-gosia-medium.onnx.json",
+      "size": 4814,
+      "sha256": "1aefb31a9d53ffe44a8163ff73ec833acb7a6253848f6bb0403d8a66f9c7510d"
+     }
+    ],
+    "sizeBytes": 63206108
+   },
+   {
+    "id": "pl_PL-darkman-medium",
+    "lang": "pl",
+    "name": "Darkman",
+    "gender": "Male",
+    "license": "CC0",
+    "espeak": "pl",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "pl/pl_PL/darkman/medium/pl_PL-darkman-medium.onnx",
+      "size": 63221984,
+      "sha256": "cf757ee307e3a7c23d5d8f69934deab51683d01c1c6be376d3e13146020f1530"
+     },
+     {
+      "path": "pl/pl_PL/darkman/medium/pl_PL-darkman-medium.onnx.json",
+      "size": 5457,
+      "sha256": "0d98a67829a1b7ffbce7faacf4ea7bb7a7ce2ebc1598ad0289c0f6c1f352dbd0"
+     }
+    ],
+    "sizeBytes": 63227441
+   },
+   {
+    "id": "es_ES-davefx-medium",
+    "lang": "es",
+    "name": "Davefx (Spain)",
+    "gender": "Male",
+    "license": "CC0",
+    "espeak": "es",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "es/es_ES/davefx/medium/es_ES-davefx-medium.onnx",
+      "size": 63221984,
+      "sha256": "d2c9224e122321aac3c33343957fff4d0f465226cb74c66b0f520ca3f8c0dd07"
+     },
+     {
+      "path": "es/es_ES/davefx/medium/es_ES-davefx-medium.onnx.json",
+      "size": 5458,
+      "sha256": "531c4051502e1acbc10b42437f11679bfce9e3919e1796e51fabd73e01e7fd2e"
+     }
+    ],
+    "sizeBytes": 63227442
+   },
+   {
+    "id": "es_MX-claude-high",
+    "lang": "es",
+    "name": "Claude (Mexico)",
+    "gender": "",
+    "license": "Apache-2.0",
+    "espeak": "es-419",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "es/es_MX/claude/high/es_MX-claude-high.onnx",
+      "size": 63122309,
+      "sha256": "3ef40a71ea63852cd8ab7e6fa7d2ecdcfa67a0b47c9c48e3f10e02ee02083ea0"
+     },
+     {
+      "path": "es/es_MX/claude/high/es_MX-claude-high.onnx.json",
+      "size": 4963,
+      "sha256": "1afc81f703c0e4cb3b4d7c0dca096b8b54a98806807f0170cf5eb5557723c12d"
+     }
+    ],
+    "sizeBytes": 63127272
+   },
+   {
+    "id": "fr_FR-siwis-medium",
+    "lang": "fr",
+    "name": "Siwis",
+    "gender": "Female",
+    "license": "CC-BY-4.0",
+    "espeak": "fr",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx",
+      "size": 63221984,
+      "sha256": "b1d946fd68d0347155fa59bce0a018924abbef3c1561181db45ca463d83963ef"
+     },
+     {
+      "path": "fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx.json",
+      "size": 5458,
+      "sha256": "df814aa3dfedd00510a07144442cc0a220ff21e43d03c3b078444fc0be68fc37"
+     }
+    ],
+    "sizeBytes": 63227442
+   },
+   {
+    "id": "it_IT-serena-medium",
+    "lang": "it",
+    "name": "Serena",
+    "gender": "Female",
+    "license": "CC-BY-4.0",
+    "espeak": "it",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "it/it_IT/serena/medium/it_IT-serena-medium.onnx",
+      "size": 63516051,
+      "sha256": "fe4e26b2c1236e2a44d2e295cad564d94a0d8b0a9fca1ccdfd70dd4af3116eb5"
+     },
+     {
+      "path": "it/it_IT/serena/medium/it_IT-serena-medium.onnx.json",
+      "size": 5254,
+      "sha256": "14cb4995874138b2792ae07753b5540942124761af9ae6609f9b520f28837881"
+     }
+    ],
+    "sizeBytes": 63521305
+   },
+   {
+    "id": "pt_PT-tugão-medium",
+    "lang": "pt",
+    "name": "Tugão (Portugal)",
+    "gender": "Male",
+    "license": "CC0",
+    "espeak": "pt",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "pt/pt_PT/tugão/medium/pt_PT-tugão-medium.onnx",
+      "size": 63201294,
+      "sha256": "223a7aaca69a155c61897e8ada7c3b13bc306e16c72dbb9c2fed733e2b0927d4"
+     },
+     {
+      "path": "pt/pt_PT/tugão/medium/pt_PT-tugão-medium.onnx.json",
+      "size": 5026,
+      "sha256": "fe0918dfc0f1a89264a6eea4afe8e95d8e9fed3cc6c81b5c2f87fcb2b50c7320"
+     }
+    ],
+    "sizeBytes": 63206320
+   },
+   {
+    "id": "pt_BR-faber-medium",
+    "lang": "pt-br",
+    "name": "Faber (Brazil)",
+    "gender": "Male",
+    "license": "CC0",
+    "espeak": "pt-br",
+    "rate": 22050,
+    "speakers": [],
+    "files": [
+     {
+      "path": "pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx",
+      "size": 63201294,
+      "sha256": "858555e3a064209c57088fe6bd70c4c3dc54d03eaa00c45d5ecaf43a33f95aa7"
+     },
+     {
+      "path": "pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx.json",
+      "size": 4855,
+      "sha256": "7e694de195ae3fc36dd732c445eb04fb49b649854893cb5506b978f0d50a1d6f"
+     }
+    ],
+    "sizeBytes": 63206149
+   }
+  ]
  }
 }

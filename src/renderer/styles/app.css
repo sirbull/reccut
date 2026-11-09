@@ -5713,3 +5713,6 @@ button.vo-badge { border: 0; cursor: pointer; }
 .ai-keying .hint { margin: 0; }
 .ai-keying .btn { align-self: flex-start; }
 .ai-models-spacer { width: 13px; flex: none; }
+.ai-models-lang { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--text-2); }
+.ai-voice-list li .select { max-width: 170px; flex: none; }
+.ai-voice-list li > .dim { white-space: nowrap; }

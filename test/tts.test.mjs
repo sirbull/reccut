@@ -172,3 +172,48 @@ test('voices can be blended, and every style uses real voices and valid effects'
   assert.ok(filterStyles({ character: 'cinematic' }).length >= 3);
   assert.ok(filterStyles({ character: 'natural' }).length >= 3);
 });
+
+test('Piper voices cover the languages Kokoro lacks, with open licences, pinned files and eSpeak pronunciation', () => {
+  const piper = CATALOG.piper;
+  assert.match(piper.revision, /^[0-9a-f]{40}$/);
+  const allowed = new Set(['CC0', 'CC-BY-4.0', 'Apache-2.0', 'MIT']);
+  for (const v of piper.voices) {
+    assert.ok(allowed.has(v.license), `${v.id} licence ${v.license}`);
+    assert.ok(languageById(v.lang), `${v.id} language`);
+    assert.ok(v.espeak, `${v.id} eSpeak voice`);
+    assert.equal(v.files.length, 2);
+    assert.ok(v.files.every((f) => /^[0-9a-f]{64}$/.test(f.sha256) && f.size > 0 && !f.path.includes('..')));
+    assert.equal(v.sizeBytes, v.files.reduce((s, f) => s + f.size, 0));
+  }
+  for (const lang of ['nb', 'sv', 'da', 'de', 'nl', 'fi', 'pl', 'es', 'fr', 'it', 'pt']) assert.ok(piper.voices.some((v) => v.lang === lang), `a voice for ${lang}`);
+  assert.ok(!piper.voices.some((v) => /AGPL|GPL|NC/i.test(v.license)), 'no copyleft or non-commercial voices');
+});
+
+test('Piper ids follow Piper: start, a pause after every sound, end, and unknown sounds are skipped', async () => {
+  const { piperIds } = await import('../src/shared/tts.js');
+  const map = { '^': [1], $: [2], _: [0], h: [10], 'ˈ': [11], a: [12], ç: [13] };
+  assert.deepEqual(piperIds('hˈaç?', map), [1, 0, 10, 0, 11, 0, 12, 0, 13, 0, 2]);
+});
+
+test('a Piper voice downloads with the shared pronunciation add-on, and is served only once installed', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-'));
+  const f = fixture();
+  const onnx = Buffer.from('piper-onnx'), cfg = Buffer.from('{"espeak":{"voice":"nb"}}');
+  const rev = 'b'.repeat(40);
+  f.catalog.piper = { repository: 'rhasspy/piper-voices', revision: rev, voices: [{ id: 'no_NO-test-medium', lang: 'nb', name: 'Test', license: 'CC0', espeak: 'nb', speakers: [], sizeBytes: onnx.length + cfg.length, files: [{ path: 'no/no_NO/test/medium/no_NO-test-medium.onnx', size: onnx.length, sha256: sha256(onnx) }, { path: 'no/no_NO/test/medium/no_NO-test-medium.onnx.json', size: cfg.length, sha256: sha256(cfg) }] }] };
+  const base = `https://huggingface.co/rhasspy/piper-voices/resolve/${rev}/no/no_NO/test/medium/`;
+  f.bodies.set(base + 'no_NO-test-medium.onnx', onnx);
+  f.bodies.set(base + 'no_NO-test-medium.onnx.json', cfg);
+  const tts = createTts({ dir, fetchImpl: f.fetchImpl, catalog: f.catalog });
+  assert.equal(await tts.readModelFile(base + 'no_NO-test-medium.onnx'), null);
+  await tts.installPiper('no_NO-test-medium');
+  const s = await tts.status();
+  assert.equal(s.piper['no_NO-test-medium'].installed, true);
+  assert.equal(s.addon, true, 'the pronunciation add-on came along');
+  assert.equal(s.installed, false, 'Kokoro is not needed');
+  assert.deepEqual(Buffer.from(await tts.readModelFile(base + 'no_NO-test-medium.onnx')), onnx);
+  assert.ok(await tts.readModelFile(tts.PHONEMIZER_KEY));
+  assert.equal(await tts.readModelFile(base + 'other.onnx'), null);
+  await tts.removePiper('no_NO-test-medium');
+  assert.equal((await tts.status()).piper['no_NO-test-medium'].installed, false);
+});
