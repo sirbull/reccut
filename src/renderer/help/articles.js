@@ -1495,11 +1495,17 @@ Click a clip to select it. The script jumps to its line.
 
 - Drag the **yellow edges** to trim the start or the end. The clips after it move along.
 - Drag the **round handles** at the top to fade in and out.
-- Under the timeline: **Volume** (with **Normalize** to a peak of -3 dB), **Fade in**, **Fade out**, **Pause after** (Auto follows the script), and exact **Start** and **End**.
+- Under the timeline: **Volume** (with **Normalize** to a peak of -3 dB), **Fade in**, **Fade out**, **Pause after**, and exact **Start** and **End**.
 - **Delete** (or Backspace) removes the clip from the timeline. The takes are kept, the line is crossed out in the script, and clicking **deleted** on the line or **Restore Deleted** brings it back. Recording a new take of the line also brings it back.
 - Double click a clip to hear only that clip.
 
 Everything you adjust here goes with the clips when you stitch.
+
+## Space between clips
+
+**Pauses** above the studio timeline sets the default space between clips: **after a sentence** in the same paragraph, **after a paragraph** and **before a section** (a new heading or scene). The script decides which one is used. The same settings are in **Settings → Editing → Voice Over Studio**, together with the air kept before and after the voice when a take is trimmed.
+
+To change the space after one clip, select it and change **Pause after**. **Default** takes it back to the default, and **Use for all** makes that pause the new default for all pauses of the same kind. **Clear own pauses** in Pauses takes every clip back to the defaults.
 
 ## Stitch to the timeline
 

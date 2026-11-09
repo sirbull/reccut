@@ -1,5 +1,6 @@
 import {OnlineSettings} from './design/Online.jsx';
 import { LocalSubtitleModels } from './SubtitleModels.jsx';
+import { PacingFields, isDefaultPacing, resetPacing } from './voiceover/Pacing.jsx';
 // Innstillinger (Cmd ,), bygd som i Final Cut Pro: faner med ikoner øverst, og en kommandoeditor
 // for hurtigtaster. Alle valg lagres med en gang og gjelder hele appen.
 import { ExtensionsPane } from './Extensions.jsx';
@@ -168,6 +169,22 @@ function EditingPane() {
         <p class="hint">Applies to new transitions. Change it for one transition in the inspector.</p>
         {toggle('playheadAfterEdit', 'Move the playhead to the end of added clips')}
         <p class="hint">After Append, Insert, Connect and Overwrite (E, W, Q and D) the playhead jumps to the end of the new clip, ready for the next one.</p>
+      </Section>
+      <Section title="Voice Over Studio" collapsible={false}>
+        <p class="hint">The default space between clips when the takes are laid out and stitched. The script decides which one is used. A single clip can have its own pause in the studio.</p>
+        <PacingFields rows />
+        <Row label="Air before the voice">
+          <NumberField value={prefs.value.voPreRoll ?? 0.12} min={0} max={1} step={0.01} precision={2} unit="s" width={84} onChange={(v) => setPrefs({ voPreRoll: v })} />
+        </Row>
+        <Row label="Air after the voice">
+          <NumberField value={prefs.value.voPostRoll ?? 0.3} min={0} max={2} step={0.01} precision={2} unit="s" width={84} onChange={(v) => setPrefs({ voPostRoll: v })} />
+        </Row>
+        <p class="hint">Air is kept around the voice when a new take is trimmed.</p>
+        <div class="row">
+          <Button class="small" icon={RotateCcw} disabled={isDefaultPacing()} onClick={resetPacing}>
+            Reset Pauses
+          </Button>
+        </div>
       </Section>
     </>
   );

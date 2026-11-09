@@ -2,14 +2,16 @@
 // dra i kantene for å trimme og i hjørnene for fades, og juster volum og pause under.
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { Eye, EyeOff, Minus, Play, Plus, RotateCcw, Square, Trash2, UserPlus, Volume2, VolumeX, Wand2, Scissors, X } from 'lucide-preact';
+import { Timer, Eye, EyeOff, Minus, Play, Plus, RotateCcw, Square, Trash2, UserPlus, Volume2, VolumeX, Wand2, Scissors, X } from 'lucide-preact';
 import { Button, IconButton, NumberField, Slider } from '../ui.jsx';
 import { formatDuration } from '../../shared/model.js';
 import { normalizeGain, peakDbIn } from '../../shared/voiceover.js';
 import * as booth from './booth.js';
 import * as pv from './preview.js';
+import { PAUSES, PacingFields, isDefaultPacing, pacing, resetPacing, setPause } from './Pacing.jsx';
 
 export const selected = signal(null); // opptakets id
+export const pausesOpen = signal(false); // Pauses-vinduet over tidslinjen
 
 const clampPps = (v) => Math.max(6, Math.min(600, v));
 const HEAD = 168; // bredden på sporhodene
@@ -152,6 +154,7 @@ export function VoTimeline() {
           {plan.items.filter((i) => i.active).length} clips
           {skipped ? ` · ${skipped} deleted` : ''}
         </span>
+        <PausesButton />
         <Button class="small" icon={UserPlus} onClick={booth.addPerson} disabled={booth.busy()} title="Add a person on a new track, with their own takes and sound">
           Add Person
         </Button>
@@ -279,15 +282,7 @@ function ClipControls({ it }) {
         Fade out
         <NumberField value={take.fadeOut ?? 0.04} min={0} max={5} step={0.01} precision={2} unit="s" width={66} onChange={(x) => booth.setTake(take.id, { fadeOut: x })} />
       </label>
-      <label class="vt-ctl" title="Pause after this clip. Auto follows the script.">
-        Pause after
-        <NumberField value={take.pause ?? autoPause(it)} min={0} max={10} step={0.05} precision={2} unit="s" width={66} onChange={(x) => booth.setTake(take.id, { pause: x })} />
-        {take.pause != null && (
-          <button class="link" onClick={() => booth.setTake(take.id, { pause: null })}>
-            Auto
-          </button>
-        )}
-      </label>
+      <PauseControl it={it} />
       <label class="vt-ctl">
         Start
         <NumberField value={take.in} min={0} max={take.out - 0.05} step={0.01} precision={2} unit="s" width={66} onChange={(x) => booth.setTake(take.id, { in: x })} />
@@ -304,12 +299,89 @@ function ClipControls({ it }) {
   );
 }
 
-// Pausen etter et klipp slik planen har lagt den (inkludert opptakets egen romlyd).
-function autoPause(it) {
-  const items = booth.plan.value.items;
-  const next = items.find((x) => x.active && x.at > it.at + 1e-6);
-  if (!next) return 0;
-  return Math.round((next.at - it.at - (it.take.out - it.take.in)) * 100) / 100;
+// Hvilken standardpause som gjelder etter et klipp: setning, avsnitt eller seksjon (eller ingen, til slutt).
+function pauseKind(it) {
+  const next = booth.plan.value.items.find((x) => x.active && x.at > it.at + 1e-6);
+  if (!next) return null;
+  const a = it.block,
+    b = next.block;
+  return b.section !== a.section ? 'section' : b.para !== a.para ? 'paragraph' : 'sentence';
+}
+
+// Pausen etter klippet: følger standarden for setning, avsnitt eller seksjon, eller settes for hånd.
+// En pause satt for hånd kan gjøres til ny standard for alle pauser av samme slag.
+function PauseControl({ it }) {
+  const take = it.take;
+  const kind = pauseKind(it);
+  if (!kind) return <span class="vt-ctl dim">Last clip, no pause after</span>;
+  const def = pacing()[kind];
+  const label = PAUSES.find((p) => p.key === kind).label.toLowerCase();
+  return (
+    <label class="vt-ctl" title={`Pause after this clip. The default ${label} is ${def.toFixed(2)} s.`}>
+      Pause after
+      <NumberField value={take.pause ?? def} min={0} max={10} step={0.05} precision={2} unit="s" width={66} onChange={(x) => booth.setTake(take.id, { pause: x })} />
+      {take.pause != null ? (
+        <>
+          <button class="link" onClick={() => booth.setTake(take.id, { pause: null })} title={`Back to the default ${label}`}>
+            Default
+          </button>
+          <button
+            class="link"
+            onClick={() => {
+              setPause(kind, take.pause);
+              booth.setTake(take.id, { pause: null });
+            }}
+            title={`Use ${take.pause.toFixed(2)} s as the default ${label} for all clips`}
+          >
+            Use for all
+          </button>
+        </>
+      ) : (
+        <span class="dim">{label}</span>
+      )}
+    </label>
+  );
+}
+
+// Standardpausene, rett ved tidslinjen. Pauser satt for hånd på enkeltklipp kan nullstilles her.
+function PausesButton() {
+  const open = pausesOpen.value;
+  const setOpen = (v) => (pausesOpen.value = v);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => !ref.current?.contains(e.target) && setOpen(false);
+    window.addEventListener('pointerdown', close, true);
+    return () => window.removeEventListener('pointerdown', close, true);
+  }, [open]);
+  const manual = booth.vo.value.takes.filter((t) => t.pause != null);
+  return (
+    <div class="vt-pauses" ref={ref}>
+      <Button class={`small${open ? ' active' : ''}`} icon={Timer} onClick={() => setOpen(!open)} title="The default space between clips">
+        Pauses
+      </Button>
+      {open && (
+        <div class="vt-pop">
+          <b>Space between clips</b>
+          <p class="dim">The script decides which pause is used. Select a clip to give it its own pause.</p>
+          <div class="vo-grid">
+            <PacingFields />
+          </div>
+          <div class="vt-pop-actions">
+            <Button class="small" icon={RotateCcw} onClick={resetPacing} disabled={isDefaultPacing()}>
+              Reset
+            </Button>
+            {manual.length > 0 && (
+              <Button class="small" onClick={() => booth.setVo((v) => v.takes.forEach((t) => delete t.pause))} title="Clips with their own pause go back to the defaults">
+                Clear {manual.length} own {manual.length === 1 ? 'pause' : 'pauses'}
+              </Button>
+            )}
+          </div>
+          <p class="dim">Also in Settings, Editing.</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Sporhodet: navn (dobbeltklikk for å endre), demp, solo, skjul og fjern.

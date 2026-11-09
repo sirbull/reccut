@@ -37,7 +37,8 @@ import { AudioFxChain } from '../editor/AudioFxChain.jsx';
 import { formatDuration } from '../../shared/model.js';
 import * as booth from './booth.js';
 import { StudioIcon } from './StudioIcon.jsx';
-import { VoTimeline, deleteSelected, selected as vtSelected, togglePreview } from './VoTimeline.jsx';
+import { PacingFields } from './Pacing.jsx';
+import { VoTimeline, deleteSelected, pausesOpen, selected as vtSelected, togglePreview } from './VoTimeline.jsx';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -86,6 +87,7 @@ function onBoothKey(e) {
   }
   if ((k === ' ' || e.code === 'Space') && e.shiftKey) togglePreview();
   else if (k === ' ' || e.code === 'Space') booth.toggle();
+  else if (k === 'Escape' && pausesOpen.value) pausesOpen.value = false;
   else if (k === 'Escape' && !booth.busy() && vtSelected.value) vtSelected.value = null;
   else if (k === 'Escape') booth.busy() ? booth.cancel() : booth.closeBooth();
   else if ((k === 'Backspace' || k === 'Delete') && !booth.busy() && vtSelected.value) deleteSelected();
@@ -685,8 +687,6 @@ function RoomToneSetup() {
 }
 
 function Assemble() {
-  const pacing = { ...DEFAULT_PACING, ...booth.opt('voPacing') };
-  const setPace = (k, x) => setPrefs({ voPacing: { ...pacing, [k]: x } });
   const placed = booth.placedCount();
   const v = booth.vo.value;
   const done = booth.plan.value.items.some((i) => i.active);
@@ -695,12 +695,7 @@ function Assemble() {
     <div class="vo-section">
       <h4>Stitch</h4>
       <div class="vo-grid">
-        <span title="Pause after a sentence in the same paragraph">After a sentence</span>
-        <NumberField value={pacing.sentence} min={0} max={5} step={0.05} precision={2} unit="s" width={70} onChange={(x) => setPace('sentence', x)} />
-        <span>After a paragraph</span>
-        <NumberField value={pacing.paragraph} min={0} max={5} step={0.05} precision={2} unit="s" width={70} onChange={(x) => setPace('paragraph', x)} />
-        <span>Before a section</span>
-        <NumberField value={pacing.section} min={0} max={10} step={0.1} precision={1} unit="s" width={70} onChange={(x) => setPace('section', x)} />
+        <PacingFields />
         <span>Place</span>
         <Segmented size="small" value={booth.opt('voPlace')} onChange={(x) => setPrefs({ voPlace: x })} options={[{ value: 'playhead', label: 'At playhead' }, { value: 'end', label: 'At the end' }]} />
         {!video && (
