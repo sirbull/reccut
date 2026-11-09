@@ -1,7 +1,7 @@
 // Et lite vindu for å ta opp lyd uten mer: velg mikrofon, trykk Rec, stopp. Klippet legges i Media-biblioteket.
 import { useEffect, useRef } from 'preact/hooks';
-import { Check, Mic, Square, X } from 'lucide-preact';
-import { IconButton } from '../ui.jsx';
+import { Mic, Square, X } from 'lucide-preact';
+import { IconButton, Select } from '../ui.jsx';
 import { formatDuration } from '../../shared/model.js';
 import * as q from './quick.js';
 
@@ -19,7 +19,7 @@ export function QuickRecord() {
         e.preventDefault();
         e.stopPropagation();
         q.quickState.value === 'recording' ? q.stopQuick() : q.closeQuick();
-      } else if ((e.key === ' ' || e.key === 'Enter') && !e.target.closest?.('button')) {
+      } else if ((e.key === ' ' || e.key === 'Enter') && !e.target.closest?.('button, select')) {
         e.preventDefault();
         e.stopPropagation();
         q.toggleQuick();
@@ -48,17 +48,15 @@ export function QuickRecord() {
         <IconButton icon={X} size={14} title="Close (Esc)" onClick={q.closeQuick} disabled={st !== 'idle'} />
       </header>
       <div class="quick-rec-body">
-        <ul class="quick-rec-mics" role="listbox" aria-label="Input">
-          {mics.length === 0 && <li class="dim">Looking for microphones…</li>}
-          {mics.map((m) => (
-            <li key={m.id || 'default'}>
-              <button class={m.id === current ? 'on' : ''} role="option" aria-selected={m.id === current} disabled={st !== 'idle'} onClick={() => q.chooseQuickMic(m.id)}>
-                <span class="quick-rec-check">{m.id === current && <Check size={12} />}</span>
-                <span class="quick-rec-name">{m.label}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <label class="quick-rec-input">
+          <span>Input</span>
+          <Select
+            value={current}
+            disabled={st !== 'idle'}
+            options={mics.length ? mics.map((m) => ({ value: m.id, label: m.label })) : [{ value: current, label: 'Looking for microphones…' }]}
+            onChange={(id) => q.chooseQuickMic(id)}
+          />
+        </label>
         <div class="vo-meter quick-rec-meter">
           <div class={`vo-meter-peak${level > 0.95 ? ' hot' : level > 0.9 ? ' warm' : ''}`} style={{ width: `${level * 100}%` }} />
         </div>

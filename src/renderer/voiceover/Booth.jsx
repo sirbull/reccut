@@ -25,12 +25,15 @@ import {
   VideoOff,
   Wind,
   X,
+  UserPlus,
+  RotateCw,
 } from 'lucide-preact';
-import { Button, IconButton, NumberField, Segmented, Select, Toggle, toast } from '../ui.jsx';
+import { Button, IconButton, NumberField, Segmented, Select, Slider, Toggle, toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
 import { project } from '../editor/store.js';
 import { isTyping } from '../keyboard.js';
-import { chosenTake, orphanTakes, progress, readingTime, DEFAULT_PACING } from '../../shared/voiceover.js';
+import { chosenTake, isSkipped, orphanTakes, progress, readingTime, DEFAULT_PACING } from '../../shared/voiceover.js';
+import { AudioFxChain } from '../editor/AudioFxChain.jsx';
 import { formatDuration } from '../../shared/model.js';
 import * as booth from './booth.js';
 import { StudioIcon } from './StudioIcon.jsx';
@@ -96,7 +99,7 @@ function onBoothKey(e) {
   else if (k === 'n' || k === 'N') booth.goNextMissing();
   else if (k === 'p' || k === 'P') booth.playCurrent();
   else if (k === 's' || k === 'S') {
-    const t = booth.current.value && chosenTake(booth.vo.value, booth.current.value.key);
+    const t = booth.current.value && chosenTake(booth.vo.value, booth.current.value.key, booth.personId.value);
     if (t) booth.toggleStar(t);
   } else if (k === 'm' || k === 'M') setPrefs({ voPrompter: !booth.opt('voPrompter') });
   else if (k === '+' || k === '=') setPrefs({ voFont: Math.min(96, booth.opt('voFont') + 2) });
@@ -111,6 +114,7 @@ function onBoothKey(e) {
 export function VoiceoverBooth() {
   const ref = useRef(null);
   useEffect(() => {
+    booth.ensurePeople();
     booth.openInput();
     window.addEventListener('keydown', onBoothKey, true);
     const onDevices = () => booth.refreshDevices();
@@ -140,7 +144,7 @@ export function VoiceoverBooth() {
 
 function BoothHeader() {
   const v = booth.vo.value;
-  const { done, total } = progress(booth.blocks.value, v);
+  const { done, total } = progress(booth.blocks.value, v, booth.personId.value);
   const mics = booth.devices.value.mics;
   const cams = booth.devices.value.cams;
   const video = booth.opt('voVideo');
@@ -338,9 +342,9 @@ function Block({ b, current }) {
   if (b.kind === 'note') return <p class="vo-block vo-note">{b.text}</p>;
   const v = booth.vo.value;
   const takes = booth.takesFor(b.key);
-  const chosen = chosenTake(v, b.key);
+  const chosen = chosenTake(v, b.key, booth.personId.value);
   const rec = booth.recordingKey.value === b.key && booth.status.value === 'recording';
-  const skipped = Boolean(v.skip?.[b.key]);
+  const skipped = isSkipped(v, booth.personId.value, b.key);
   return (
     <div class={`vo-block vo-line${current ? ' current' : ''}${chosen ? ' done' : ''}${rec ? ' rec' : ''}${skipped ? ' skipped' : ''}`} onClick={() => booth.goTo(b.index)}>
       <span class="vo-num">{booth.lineNumber(b)}</span>
@@ -416,9 +420,14 @@ function Transport() {
       <button class={`vo-rec${recording ? ' on' : ''}${st === 'countin' || st === 'cue' ? ' wait' : ''}`} disabled={st === 'saving' || st === 'tone'} onClick={booth.toggle} title="Record / stop (Space)">
         {recording ? <Square size={18} /> : <span class="vo-rec-dot" />}
         <span>
-          {st === 'countin' ? `Starting in ${booth.countLeft.value}` : st === 'cue' ? 'Cue…' : recording ? formatDuration(booth.elapsed.value) : st === 'saving' ? 'Saving…' : st === 'tone' ? 'Room tone…' : cur ? `Record line ${booth.lineNumber(cur)}` : 'Record'}
+          {st === 'countin' ? `Starting in ${booth.countLeft.value}` : st === 'cue' ? 'Cue…' : recording ? formatDuration(booth.elapsed.value) : st === 'saving' ? 'Saving…' : st === 'tone' ? 'Room tone…' : cur ? `Record line ${booth.lineNumber(cur)}${booth.people.value.length > 1 ? ` as ${booth.person.value.name}` : ''}` : 'Record'}
         </span>
       </button>
+      <div class="vo-transport-row vo-person-row">
+        <span class="dim">Record as</span>
+        <Select value={booth.personId.value} options={booth.people.value.map((p) => ({ value: p.id, label: p.name }))} onChange={booth.choosePerson} disabled={recording} />
+        <IconButton icon={UserPlus} title="Add a person on a new track, with their own takes and sound" onClick={booth.addPerson} disabled={st !== 'idle'} />
+      </div>
       <div class="vo-transport-row">
         <Button class="small" icon={RotateCcw} onClick={booth.retake} disabled={st === 'saving' || st === 'tone'} title="Discard what is recording and start the line again (R)">
           Retake
@@ -444,7 +453,7 @@ function Takes() {
   const v = booth.vo.value;
   if (!cur) return null;
   const takes = booth.takesFor(cur.key);
-  const chosen = chosenTake(v, cur.key);
+  const chosen = chosenTake(v, cur.key, booth.personId.value);
   return (
     <div class="vo-section">
       <h4>
@@ -590,6 +599,37 @@ function RoomTone() {
   );
 }
 
+// Lyden til personen som er valgt: volum og effekter. Studio Voice er standard, så det høres
+// ut som voice over rett ut av boksen. Gjelder alle opptakene til personen, i studioet og når de syes inn.
+function Sound() {
+  const p = booth.person.value;
+  if (!p) return null;
+  const fx = p.fx || [];
+  return (
+    <div class="vo-section vo-sound">
+      <h4>
+        <span class="vt-dot" style={{ background: p.color }} />
+        Sound for {p.name}
+      </h4>
+      <p class="dim">Applies to all of {p.name}'s takes. You hear it in the studio timeline, and it goes with the clips when you stitch.</p>
+      <label class="vt-ctl">
+        Volume
+        <Slider value={p.gain || 0} min={-24} max={12} step={0.5} center={0} onInput={(x) => booth.setPersonGain(p.id, x)} />
+        <NumberField value={p.gain || 0} min={-24} max={12} step={0.5} precision={1} unit="dB" width={66} onChange={(x) => booth.setPersonGain(p.id, x)} />
+      </label>
+      <AudioFxChain
+        list={fx}
+        onSet={(list) => booth.setPersonFx(p.id, list)}
+        onLive={(id, patch) => booth.setPersonFx(p.id, fx.map((e) => (e.id === id ? { ...e, p: { ...e.p, ...patch } } : e)))}
+        hint="No effects: the takes sound as recorded. Add Studio Voice from the templates for the standard voice over sound."
+      />
+      <Button class="small" icon={RotateCw} onClick={() => booth.setPersonFx(p.id, booth.DEFAULT_FX())} title="Replace the effects with Studio Voice">
+        Reset to Studio Voice
+      </Button>
+    </div>
+  );
+}
+
 // Første steg når studioet åpnes: fem sekunder romlyd. Ett klikk, nedtelling fra 3, så tar det opp og stopper selv.
 function RoomToneSetup() {
   const st = booth.status.value;
@@ -649,8 +689,8 @@ function Assemble() {
   const setPace = (k, x) => setPrefs({ voPacing: { ...pacing, [k]: x } });
   const placed = booth.placedCount();
   const v = booth.vo.value;
-  const { done } = progress(booth.blocks.value, v);
-  const video = booth.lines.value.map((b) => chosenTake(v, b.key)).filter(Boolean).every((t) => t.video) && done > 0;
+  const done = booth.plan.value.items.some((i) => i.active);
+  const video = booth.plan.value.video;
   return (
     <div class="vo-section">
       <h4>Stitch</h4>
@@ -688,6 +728,7 @@ function SidePane() {
       <Meter />
       <Transport />
       <Takes />
+      <Sound />
       <Assemble />
       <RecordSettings />
       <RoomTone />

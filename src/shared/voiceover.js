@@ -316,47 +316,89 @@ export function peakDbIn(pk, from, to, hop = 0.01) {
 
 export const DEFAULT_PACING = { sentence: 0.35, paragraph: 0.8, section: 1.6 };
 
+// Personer: hver person har egne opptak, valg og effekter, og blir et eget spor.
+// Opptak og valg fra før det fantes personer hører til den første (p1).
+export const FIRST_PERSON = 'p1';
+export const personOf = (t) => t?.person || FIRST_PERSON;
+export const pickKey = (person, key) => (person === FIRST_PERSON ? key : `${person}|${key}`);
+export const isSkipped = (vo, person, key) => Boolean(vo?.skip?.[pickKey(person, key)]);
+
 // Valgt opptak for en linje: det brukeren har valgt, ellers stjernemerket, ellers det siste.
-export function chosenTake(vo, key) {
-  const takes = (vo?.takes || []).filter((t) => t.key === key && !t.bad);
-  const pick = vo?.selected?.[key];
+// person: bare den personens opptak. Uten person gjelder alle (eldre bruk).
+export function chosenTake(vo, key, person = null) {
+  const takes = (vo?.takes || []).filter((t) => t.key === key && !t.bad && (person == null || personOf(t) === person));
+  const pick = vo?.selected?.[pickKey(person ?? FIRST_PERSON, key)];
   return takes.find((t) => t.id === pick) || takes.filter((t) => t.star).at(-1) || takes.at(-1) || null;
 }
 
 /**
- * Plan for tidslinjen: linjene i manusrekkefølge med valgt opptak, etter hverandre.
- * Pausen etter en linje avhenger av hva som kommer etterpå: ny setning, nytt avsnitt eller ny seksjon.
- * room: pausen fylles først med opptakets egen romlyd så langt filen rekker.
- *   'fill': resten av pausen blir et tomrom (lyd). 'tight': resten droppes, så bildet aldri blir svart (video).
- * Gir { items: [{ take, block, at, in, dur }], gaps: [{ at, dur }], end }.
+ * Plan for tidslinjen med ett spor per person. Linjene ligger i manusrekkefølge i felles plasser,
+ * så to personer som leser samme linje ligger rett over hverandre (sammenligning), og en dialog
+ * flettes etter manuset. Plassen er så lang som det lengste opptaket blant personene som høres
+ * (active), og pausen etter følger manuset: ny setning, nytt avsnitt eller ny seksjon.
+ * room: 'fill' fyller pausen med opptakets egen romlyd så langt filen rekker, og resten blir et
+ * tomrom (gaps, der romlyden kan legges). 'tight' bruker bare det som finnes og lar aldri et tomrom
+ * stå igjen (video i hovedsporet).
+ * people: [{ id, active }]. Gir { items: [{ take, block, person, active, at, in, dur }], gaps, end }.
  */
-export function planAssembly(blocks, vo, { start = 0, pacing = DEFAULT_PACING, room = false, from = 0 } = {}) {
-  // Linjer som er slettet fra tidslinjen (vo.skip) hoppes over, men opptakene beholdes.
-  const lines = blocks.filter((b) => b.kind === 'line' && b.index >= from && !vo?.skip?.[b.key]);
-  const picked = lines.map((b) => ({ block: b, take: chosenTake(vo, b.key) })).filter((x) => x.take);
-  const items = [],
-    gaps = [];
+export function planStudio(blocks, vo, { start = 0, pacing = DEFAULT_PACING, room = false, from = 0, people = [{ id: FIRST_PERSON, active: true }] } = {}) {
+  const lines = blocks.filter((b) => b.kind === 'line' && b.index >= from);
+  const slots = [];
+  for (const block of lines) {
+    const takes = people.map((p) => ({ p, take: isSkipped(vo, p.id, block.key) ? null : chosenTake(vo, block.key, p.id) })).filter((x) => x.take);
+    if (takes.length) slots.push({ block, takes, live: takes.filter((x) => x.p.active) });
+  }
+  const live = slots.filter((s) => s.live.length);
+  const items = [];
+  const spans = [];
   let t = start;
-  picked.forEach(({ block, take }, i) => {
-    const next = picked[i + 1]?.block;
+  for (const slot of slots) {
+    const { block } = slot;
+    if (!slot.live.length) {
+      // Bare personer som ikke høres: vises der de hører hjemme, men tar ingen plass.
+      for (const { p, take } of slot.takes) items.push({ take, block, person: p.id, active: false, at: round3(t), in: take.in, dur: round3(Math.max(0.05, take.out - take.in)) });
+      continue;
+    }
+    const i = live.indexOf(slot);
+    const next = live[i + 1]?.block;
     const auto = !next ? 0 : next.section !== block.section ? pacing.section : next.para !== block.para ? pacing.paragraph : pacing.sentence;
-    // Pausen etter et klipp kan settes for hånd (take.pause), ellers følger den manuset.
-    const pause = !next ? 0 : take.pause != null ? Math.max(0, take.pause) : auto;
-    let dur = Math.max(0.05, take.out - take.in);
-    let rest = pause;
-    if (room && pause > 0) {
-      const more = Math.max(0, Math.min(pause, (take.duration ?? take.out) - take.out));
-      dur += more;
-      rest = room === 'tight' ? 0 : pause - more;
+    const manual = slot.live.map((x) => x.take.pause).filter((v) => v != null);
+    // Pausen etter en linje kan settes for hånd (take.pause), ellers følger den manuset.
+    const pause = !next ? 0 : manual.length ? Math.max(0, ...manual) : auto;
+    const len = Math.max(...slot.live.map((x) => Math.max(0.05, x.take.out - x.take.in)));
+    let advance = len + pause;
+    let longest = 0;
+    for (const { p, take } of slot.takes) {
+      const own = Math.max(0.05, take.out - take.in);
+      let dur = own;
+      if (room && p.active) {
+        const want = room === 'tight' ? pause : len - own + pause;
+        dur += Math.max(0, Math.min(want, (take.duration ?? take.out) - take.out));
+      }
+      items.push({ take, block, person: p.id, active: p.active, at: round3(t), in: take.in, dur: round3(dur) });
+      if (p.active) {
+        spans.push([t, t + dur]);
+        longest = Math.max(longest, dur);
+      }
     }
-    items.push({ take, block, at: round3(t), in: take.in, dur: round3(dur) });
-    t += dur;
-    if (rest > 0.001) {
-      gaps.push({ at: round3(t), dur: round3(rest) });
-      t += rest;
-    }
-  });
+    if (room === 'tight') advance = longest;
+    t += advance;
+  }
+  // Tomrom: der ingen som høres, snakker eller har egen romlyd.
+  const gaps = [];
+  spans.sort((a, b) => a[0] - b[0]);
+  let reach = start;
+  for (const [a, b] of spans) {
+    if (a - reach > 0.001) gaps.push({ at: round3(reach), dur: round3(a - reach) });
+    reach = Math.max(reach, b);
+  }
+  if (t - reach > 0.001 && live.length) gaps.push({ at: round3(reach), dur: round3(t - reach) });
   return { items, gaps, end: round3(t) };
+}
+
+// Én person (eldre bruk og tester).
+export function planAssembly(blocks, vo, opts = {}) {
+  return planStudio(blocks, vo, { ...opts, people: [{ id: FIRST_PERSON, active: true }] });
 }
 
 // Første ledige lydspor (under hovedsporet) for hele strekningen, så hele stemmen ligger på samme spor.
@@ -395,16 +437,16 @@ export function orphanTakes(blocks, vo) {
 }
 
 // Fremdrift i manuset: hvor mange linjer som har et brukbart opptak.
-export function progress(blocks, vo) {
+export function progress(blocks, vo, person = null) {
   const lines = blocks.filter((b) => b.kind === 'line');
-  const done = lines.filter((b) => chosenTake(vo, b.key)).length;
+  const done = lines.filter((b) => chosenTake(vo, b.key, person)).length;
   return { done, total: lines.length };
 }
 
 // Neste linje uten opptak etter (eller fra) en posisjon. Brukes av "hopp til neste som mangler".
-export function nextMissing(blocks, vo, from = -1) {
+export function nextMissing(blocks, vo, from = -1, person = null) {
   const lines = blocks.filter((b) => b.kind === 'line');
-  return (lines.find((b) => b.index > from && !chosenTake(vo, b.key)) || lines.find((b) => !chosenTake(vo, b.key)) || null)?.index ?? null;
+  return (lines.find((b) => b.index > from && !chosenTake(vo, b.key, person)) || lines.find((b) => !chosenTake(vo, b.key, person)) || null)?.index ?? null;
 }
 
 // Lesetid: omtrent 150 ord i minuttet for fortellerstemme.

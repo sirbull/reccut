@@ -933,6 +933,8 @@ export function createChain(sr) {
 const fx = (type, p = {}) => ({ type, p });
 export const AUDIO_PRESETS = [
   // Reparasjon
+  // Standard i Voice Over Studio: ren, varm og jevn stemme rett ut av boksen.
+  { id: 'studio-voice', label: 'Studio Voice', category: 'Repair', desc: 'A clean, warm and even voice over sound: rumble and light noise removed, presence, soft S sounds and steady level.', chain: [fx('highpass', { freq: 80 }), fx('denoise', { amount: 0.35 }), fx('eq', eqParams('podcast')), fx('deesser'), fx('compressor', { threshold: -20, ratio: 3, makeup: 4 }), fx('limiter', { ceiling: -1 })] },
   { id: 'voice-cleanup', label: 'Voice Clean Up', category: 'Repair', desc: 'Removes rumble and background noise, softens S sounds and evens out the level.', chain: [fx('highpass', { freq: 80 }), fx('denoise', { amount: 0.55 }), fx('deesser'), fx('compressor', { threshold: -22, ratio: 2.5, makeup: 3 }), fx('limiter', { ceiling: -1 })] },
   { id: 'podcast', label: 'Podcast Voice', category: 'Repair', desc: 'Warm, clear and present, with steady level.', chain: [fx('highpass', { freq: 90 }), fx('eq', eqParams('podcast')), fx('compressor', { threshold: -24, ratio: 3, makeup: 5 }), fx('deesser'), fx('limiter', { ceiling: -1 })] },
   { id: 'reduce-noise', label: 'Reduce Noise', category: 'Repair', desc: 'Removes steady hiss, fans and air conditioning.', chain: [fx('denoise', { amount: 0.85 })] },

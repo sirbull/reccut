@@ -210,3 +210,29 @@ test('the studio timeline: deleted lines are left out, a pause can be set by han
   assert.deepEqual(Array.from(pk), [0.5, 0, 0.25]);
   assert.ok(Math.abs(peakDbIn(pk, 0.02, 0.03) + 12.04) < 0.01);
 });
+
+test('two people: the same line lines up for comparing, a dialogue interleaves, and a muted person takes no time', async () => {
+  const { planStudio, chosenTake: pick } = await import('../src/shared/voiceover.js');
+  const blocks = parseScript('One.\n\nTwo.\n\nThree.');
+  const L = lines(blocks);
+  const pacing = { sentence: 0.3, paragraph: 0.5, section: 1 };
+  const t = (b, id, person, len) => ({ id, key: b.key, person, in: 0, out: len, duration: len });
+  // Both read every line: same slots, the slot is as long as the longest.
+  const both = { takes: [t(L[0], 'a1', 'p1', 1), t(L[0], 'b1', 'p2', 2), t(L[1], 'a2', 'p1', 1), t(L[1], 'b2', 'p2', 1)], selected: {} };
+  const people = [{ id: 'p1', active: true }, { id: 'p2', active: true }];
+  let plan = planStudio(blocks, both, { pacing, people });
+  assert.deepEqual(plan.items.map((i) => [i.take.id, i.at]), [['a1', 0], ['b1', 0], ['a2', 2.5], ['b2', 2.5]]);
+  // Mute B: A is tight again, B is still shown where it belongs.
+  plan = planStudio(blocks, both, { pacing, people: [{ id: 'p1', active: true }, { id: 'p2', active: false }] });
+  assert.deepEqual(plan.items.filter((i) => i.active).map((i) => [i.take.id, i.at]), [['a1', 0], ['a2', 1.5]]);
+  // Dialogue: A says line 1 and 3, B says line 2.
+  const dlg = { takes: [t(L[0], 'a1', 'p1', 1), t(L[1], 'b2', 'p2', 2), t(L[2], 'a3', 'p1', 1)], selected: {} };
+  plan = planStudio(blocks, dlg, { pacing, people });
+  assert.deepEqual(plan.items.map((i) => [i.take.id, i.person, i.at]), [['a1', 'p1', 0], ['b2', 'p2', 1.5], ['a3', 'p1', 4]]);
+  assert.deepEqual(plan.gaps, [{ at: 1, dur: 0.5 }, { at: 3.5, dur: 0.5 }]);
+  // Choices and deletes are per person; old choices belong to the first person.
+  const v = { takes: [t(L[0], 'x', undefined, 1), t(L[0], 'y', undefined, 1), t(L[0], 'z', 'p2', 1)], selected: { [L[0].key]: 'x' }, skip: { [`p2|${L[0].key}`]: true } };
+  assert.equal(pick(v, L[0].key, 'p1').id, 'x');
+  assert.equal(pick(v, L[0].key, 'p2').id, 'z');
+  assert.deepEqual(planStudio(blocks, v, { people }).items.map((i) => i.take.id), ['x']);
+});

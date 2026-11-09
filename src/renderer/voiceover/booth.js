@@ -20,7 +20,12 @@ import {
   roomToneFill,
   roomToneLevel,
   trimFor,
+  FIRST_PERSON,
+  personOf,
+  pickKey,
+  planStudio,
 } from '../../shared/voiceover.js';
+import { presetEffects } from '../../shared/audiofx.js';
 import { recordingPlan } from '../../shared/recordingFormats.cjs';
 import { audioSink, prefs, setPrefs } from '../prefs.js';
 import { boothOpen } from './state.js';
@@ -65,7 +70,7 @@ export const cameraStream = signal(null);
 export const playingTake = signal(null);
 export const recordingKey = signal(null);
 
-const EMPTY = { script: null, pos: 0, takes: [], selected: {}, skip: {}, roomTone: null, roomTones: null, roomToneSkipped: false, placed: null };
+const EMPTY = { script: null, pos: 0, takes: [], selected: {}, skip: {}, people: null, person: null, roomTone: null, roomTones: null, roomToneSkipped: false, placed: null };
 export const vo = computed(() => ({ ...EMPTY, ...(project.value.voiceover || {}) }));
 export const blocks = computed(() => parseScript(vo.value.script?.text || '', { split: opt('voSplit') }));
 export const lines = computed(() => blocks.value.filter((b) => b.kind === 'line'));
@@ -79,6 +84,73 @@ export function setVo(mutator) {
   const next = produce({ ...EMPTY, ...(project.value.voiceover || {}) }, mutator);
   project.value = { ...project.value, voiceover: next };
   scheduleSave();
+}
+
+/* Personer: hvert sitt spor, egne opptak, effekter og volum */
+
+const COLORS = ['#2f7a4d', '#2c5d99', '#8a4bb0', '#b0644b', '#4b9aa8', '#a8923b'];
+export const DEFAULT_FX = () => presetEffects('studio-voice');
+const firstPerson = () => ({ id: FIRST_PERSON, name: 'Voice 1', color: COLORS[0], fx: DEFAULT_FX(), gain: 0 });
+export const people = computed(() => (vo.value.people?.length ? vo.value.people : [{ ...firstPerson(), fx: null }]));
+export const personId = computed(() => (people.value.some((p) => p.id === vo.value.person) ? vo.value.person : people.value[0].id));
+export const person = computed(() => people.value.find((p) => p.id === personId.value));
+
+// Første gang studioet åpnes, får den første personen Studio Voice som standard lyd.
+export function ensurePeople() {
+  if (vo.value.people?.length) return;
+  setVo((v) => {
+    v.people = [firstPerson()];
+    v.person = FIRST_PERSON;
+  });
+}
+const listOf = (v) => (v.people?.length ? v.people : [firstPerson()]);
+function editPerson(id, fn) {
+  setVo((v) => {
+    v.people = listOf(v);
+    const p = v.people.find((x) => x.id === id);
+    if (p) fn(p, v);
+  });
+}
+export function addPerson() {
+  if (busy()) return toast('Stop the take first.');
+  const list = people.value;
+  const used = new Set(list.map((p) => p.name.toLowerCase()));
+  // Navn fra rollene i manuset, ellers Voice 2, Voice 3 ...
+  const speaker = [...new Set(lines.value.map((b) => b.speaker).filter(Boolean))].find((n) => !used.has(n.toLowerCase()));
+  let n = list.length + 1;
+  while (used.has(`voice ${n}`)) n++;
+  const p = { id: uid(), name: speaker || `Voice ${n}`, color: COLORS[list.length % COLORS.length], fx: DEFAULT_FX(), gain: 0 };
+  setVo((v) => {
+    v.people = [...listOf(v), p];
+    v.person = p.id;
+  });
+  toast(`${p.name} is added on a new track. New takes are recorded as ${p.name}.`, { timeout: 3500 });
+}
+export function choosePerson(id) {
+  if (status.value === 'recording') return;
+  setVo((v) => void (v.person = id));
+}
+export const renamePerson = (id, name) => editPerson(id, (p) => void (p.name = String(name).trim().slice(0, 40) || p.name));
+export const setPersonFx = (id, fx) => editPerson(id, (p) => void (p.fx = fx));
+export const setPersonGain = (id, gain) => editPerson(id, (p) => void (p.gain = gain));
+export const toggleMute = (id) => editPerson(id, (p) => void (p.muted = !p.muted));
+export const toggleHidden = (id) => editPerson(id, (p) => void (p.hidden = !p.hidden));
+// Solo: bare denne høres. Trykk igjen for å høre alle.
+export function toggleSolo(id) {
+  const others = people.value.filter((p) => p.id !== id);
+  const alone = others.every((p) => p.muted) && !people.value.find((p) => p.id === id)?.muted;
+  setVo((v) => {
+    v.people = listOf(v).map((p) => ({ ...p, muted: alone ? false : p.id !== id }));
+  });
+}
+// Fjerner personen fra studioet. Opptakene blir liggende i Media-biblioteket.
+export function removePerson(id) {
+  if (people.value.length < 2) return;
+  setVo((v) => {
+    v.people = listOf(v).filter((p) => p.id !== id);
+    v.takes = v.takes.filter((t) => personOf(t) !== id);
+    if (v.person === id) v.person = v.people[0].id;
+  });
 }
 
 /* Manus */
@@ -111,7 +183,13 @@ export function setSplit(split) {
 
 export function goTo(index) {
   if (status.value === 'recording') return;
-  setVo((v) => void (v.pos = index));
+  // En linje med en rolle som heter det samme som en person, tas opp som den personen.
+  const sp = blocks.value.find((b) => b.index === index)?.speaker?.toLowerCase();
+  const match = sp && people.value.find((p) => p.name.toLowerCase() === sp);
+  setVo((v) => {
+    v.pos = index;
+    if (match) v.person = match.id;
+  });
 }
 export function step(dir) {
   const list = lines.value;
@@ -128,7 +206,7 @@ export function stepSection(dir) {
   if (target) goTo(target.index);
 }
 export function goNextMissing() {
-  const i = nextMissing(blocks.value, vo.value, current.value?.index ?? -1);
+  const i = nextMissing(blocks.value, vo.value, current.value?.index ?? -1, personId.value);
   if (i == null) toast('Every line has a take.', { timeout: 2500 });
   else goTo(i);
 }
@@ -308,7 +386,7 @@ function previousTake() {
   const list = lines.value;
   const i = list.findIndex((b) => b.index === current.value?.index);
   for (let j = i - 1; j >= 0; j--) {
-    const t = chosenTake(vo.value, list[j].key);
+    const t = chosenTake(vo.value, list[j].key, personId.value);
     if (t) return t;
   }
   return null;
@@ -398,9 +476,10 @@ async function saveTake(key, samples, blob) {
   const trim = isTone ? { in: 0, out: duration, found: true } : trimFor(speech, duration, { preRoll: opt('voPreRoll'), postRoll: opt('voPostRoll') });
   const { peakDb, clipped } = peakInfo(samples);
   const line = blocks.value.find((b) => b.key === key);
-  const n = vo.value.takes.filter((t) => t.key === key).length + 1;
+  const who = person.value;
+  const n = vo.value.takes.filter((t) => t.key === key && personOf(t) === who.id).length + 1;
   const toneN = (vo.value.roomTones || (vo.value.roomTone ? [vo.value.roomTone] : [])).reduce((m, t) => Math.max(m, t.n || 1), 0) + 1;
-  const label = isTone ? `Room tone ${toneN}` : key === 'free' ? `Free take ${n}` : `Line ${lineNumber(line)} take ${n}`;
+  const label = isTone ? `Room tone ${toneN}` : `${people.value.length > 1 ? `${who.name} ` : ''}${key === 'free' ? `free take ${n}` : `line ${lineNumber(line)} take ${n}`}`.replace(/^./, (c) => c.toUpperCase());
   const dir = await folder();
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
   const name = `${safe(project.value.name)} VO ${stamp} ${safe(label)}`;
@@ -416,6 +495,7 @@ async function saveTake(key, samples, blob) {
   const take = {
     id: uid(),
     key,
+    person: who.id,
     mediaId: media.id,
     file,
     video,
@@ -442,8 +522,9 @@ async function saveTake(key, samples, blob) {
       return;
     }
     v.takes.push(take);
-    if (v.skip?.[key]) delete v.skip[key];
-    if (key !== 'free') v.selected[key] = take.id;
+    const pk = pickKey(take.person, key);
+    if (v.skip?.[pk]) delete v.skip[pk];
+    if (key !== 'free') v.selected[pk] = take.id;
     if (opt('voAutoAdvance') && key !== 'free' && line) {
       const list = lines.value;
       const i = list.findIndex((b) => b.key === key);
@@ -552,8 +633,9 @@ export const needsRoomTone = computed(() => roomSetup.value || (!vo.value.roomTo
 
 export function selectTake(take) {
   setVo((v) => {
-    if (v.skip?.[take.key]) delete v.skip[take.key];
-    v.selected[take.key] = take.id;
+    const pk = pickKey(personOf(take), take.key);
+    if (v.skip?.[pk]) delete v.skip[pk];
+    v.selected[pk] = take.id;
     const t = v.takes.find((x) => x.id === take.id);
     if (t) t.bad = false;
   });
@@ -569,24 +651,30 @@ export function markBad(take) {
     const t = v.takes.find((x) => x.id === take.id);
     if (!t) return;
     t.bad = !t.bad;
-    if (t.bad && v.selected[t.key] === t.id) delete v.selected[t.key];
+    if (t.bad && v.selected[pickKey(personOf(t), t.key)] === t.id) delete v.selected[pickKey(personOf(t), t.key)];
   });
 }
 export function deleteTake(take) {
   setVo((v) => {
     v.takes = v.takes.filter((x) => x.id !== take.id);
-    if (v.selected[take.key] === take.id) delete v.selected[take.key];
+    if (v.selected[pickKey(personOf(take), take.key)] === take.id) delete v.selected[pickKey(personOf(take), take.key)];
   });
 }
 /* Studioets tidslinje */
 
-// Planen slik den blir sydd sammen, fra 0. Video legges tett, lyd får pauser.
-export const plan = computed(() => {
+// Planen slik den blir sydd sammen, med ett spor per person. Personer som er dempet, høres ikke,
+// tar ikke plass og syes ikke inn. Én person med bare video legges tett (hovedsporet).
+export function studioPlan(start = 0, from = 0) {
   const v = vo.value;
-  const items = planAssembly(blocks.value, v, { start: 0, pacing: { ...DEFAULT_PACING, ...opt('voPacing') }, room: 'fill' });
-  const video = items.items.length > 0 && items.items.every((it) => it.take.video);
-  return video ? { ...planAssembly(blocks.value, v, { start: 0, pacing: { ...DEFAULT_PACING, ...opt('voPacing') }, room: 'tight' }), video } : { ...items, video };
-});
+  const list = people.value.map((p) => ({ id: p.id, active: !p.muted }));
+  const pacing = { ...DEFAULT_PACING, ...opt('voPacing') };
+  const fill = planStudio(blocks.value, v, { start, pacing, room: 'fill', from, people: list });
+  const live = fill.items.filter((it) => it.active);
+  const speakers = new Set(live.map((it) => it.person));
+  const video = live.length > 0 && speakers.size === 1 && live.every((it) => it.take.video);
+  return video ? { ...planStudio(blocks.value, v, { start, pacing, room: 'tight', from, people: list }), video } : { ...fill, video };
+}
+export const plan = computed(() => studioPlan(0));
 
 // Endrer volum, fades, pause eller trim på et opptak. Brukes også mens det dras, så det lagres i bakgrunnen.
 export function setTake(id, patch) {
@@ -607,11 +695,11 @@ export function setTake(id, patch) {
   });
 }
 // Sletter et klipp fra tidslinjen: linjen hoppes over, men opptakene beholdes og kan hentes tilbake.
-export function skipLine(key, on = true) {
+export function skipLine(key, on = true, who = personId.value) {
   setVo((v) => {
     v.skip ||= {};
-    if (on) v.skip[key] = true;
-    else delete v.skip[key];
+    if (on) v.skip[pickKey(who, key)] = true;
+    else delete v.skip[pickKey(who, key)];
   });
 }
 
@@ -626,7 +714,7 @@ export function setTrim(take, edge, value) {
 // Siste opptak av linjen markeres som dårlig, og linjen blir valgt, klar for et nytt forsøk.
 export function scrapLast() {
   const v = vo.value;
-  const last = [...v.takes].filter((t) => t.key !== 'free' && !t.bad).sort((a, b) => b.at - a.at)[0];
+  const last = [...v.takes].filter((t) => t.key !== 'free' && !t.bad && personOf(t) === personId.value).sort((a, b) => b.at - a.at)[0];
   if (!last) return;
   markBad(last);
   const b = blocks.value.find((x) => x.key === last.key);
@@ -634,7 +722,7 @@ export function scrapLast() {
   toast(`Take ${last.n} of line ${lineNumber(b)} is marked as not used. Press R to record it again.`, { timeout: 3500 });
 }
 
-export const takesFor = (key) => vo.value.takes.filter((t) => t.key === key);
+export const takesFor = (key, who = personId.value) => vo.value.takes.filter((t) => t.key === key && personOf(t) === who);
 
 /* Avspilling */
 
@@ -672,62 +760,83 @@ export function playTake(take, { tail = 0 } = {}) {
 }
 export function playCurrent() {
   if (playingTake.value) return stopPlayback();
-  const t = current.value && chosenTake(vo.value, current.value.key);
+  const t = current.value && chosenTake(vo.value, current.value.key, personId.value);
   if (t) playTake(t);
 }
 
 /* Sammensying på tidslinjen */
 
-// Syr valgte opptak sammen i manusrekkefølge. En tidligere sammensying i samme sekvens erstattes,
-// så nye retakes kan syes inn igjen. Video havner i hovedsporet, ren lyd på et eget lydspor.
+// Syr valgte opptak sammen i manusrekkefølge, ett spor per person som høres, med personens
+// effekter og volum. En tidligere sammensying i samme sekvens erstattes, så nye retakes kan syes
+// inn igjen. Én person med video havner i hovedsporet, ellers ligger lyd under og video over.
 export function stitch({ from = 0 } = {}) {
   const v = vo.value;
   const p = project.value;
   const seq = currentSequence(p).id;
-  const takes = blocks.value.filter((b) => b.kind === 'line' && b.index >= from && !v.skip?.[b.key]).map((b) => chosenTake(v, b.key)).filter(Boolean);
-  if (!takes.length) return toast('There are no takes to put on the timeline yet.');
-  const video = takes.every((t) => t.video);
+  const first = studioPlan(0, from);
+  if (!first.items.some((it) => it.active)) return toast('There are no takes to put on the timeline yet.');
+  const video = first.video;
   const previous = v.placed?.seq === seq ? v.placed.ids.filter((id) => p.clips[id]) : [];
   const prevStart = previous.length ? Math.min(...previous.map((id) => p.clips[id].start)) : null;
   const start = prevStart ?? (opt('voPlace') === 'end' ? (video ? p.clips[p.primary.at(-1)]?.start + p.clips[p.primary.at(-1)]?.dur || 0 : p.duration) : getTime());
-  const plan = planAssembly(blocks.value, v, { start, pacing: { ...DEFAULT_PACING, ...opt('voPacing') }, room: video ? 'tight' : 'fill', from });
+  const plan = studioPlan(start, from);
+  const byId = new Map(people.value.map((x) => [x.id, x]));
+  const live = plan.items.filter((it) => it.active);
   let placed = [];
-  let lane = 0;
   commit((d) => {
     if (previous.length) deleteClips(d, previous, { ripple: true });
     const mediaFor = (t) => {
       if (!d.media[t.mediaId] && t.media) d.media[t.mediaId] = t.media;
       return d.media[t.mediaId];
     };
-    const clips = [];
-    for (const it of plan.items) {
-      const m = mediaFor(it.take);
-      if (!m) continue;
-      const c = mediaClip(m, { in: it.in, dur: it.dur });
-      c.name = `${it.block.speaker ? `${it.block.speaker}: ` : ''}${it.block.text}`.slice(0, 80);
-      // Justeringer fra studioets tidslinje: volum (dB) og fades.
-      c.props.volume = it.take.gain || 0;
-      c.props.aFadeIn = it.take.fadeIn ?? 0.02;
-      c.props.aFadeOut = it.take.fadeOut ?? 0.04;
-      c.start = it.at;
-      clips.push(c);
-    }
+    const all = [];
+    const makeClips = (items) =>
+      items
+        .map((it) => {
+          const m = mediaFor(it.take);
+          if (!m) return null;
+          const who = byId.get(it.person);
+          const c = mediaClip(m, { in: it.in, dur: it.dur });
+          const role = who && people.value.length > 1 ? who.name : it.block.speaker;
+          c.name = `${role ? `${role}: ` : ''}${it.block.text}`.slice(0, 80);
+          // Justeringer fra studioet: volum per klipp pluss personens volum, fades og personens effekter.
+          c.props.volume = Math.round(((it.take.gain || 0) + (who?.gain || 0)) * 10) / 10;
+          c.props.aFadeIn = it.take.fadeIn ?? 0.02;
+          c.props.aFadeOut = it.take.fadeOut ?? 0.04;
+          const fx = who?.fx ?? DEFAULT_FX();
+          if (fx.length) c.props.afx = fx.map((e) => ({ ...e, id: Math.random().toString(36).slice(2, 8), p: { ...e.p } }));
+          c.start = it.at;
+          return c;
+        })
+        .filter(Boolean);
     if (video) {
       // Hovedsporet: klippene settes inn der sammensyingen begynner, og resten skyves til høyre.
+      const clips = makeClips(live);
       const T = previous.length ? start : opt('voPlace') === 'end' ? null : start;
       insertIntoPrimary(d, clips, T, { split: true });
+      all.push(...clips);
     } else {
-      lane = freeAudioLane(d.clips, plan.items[0]?.at ?? start, plan.end);
-      for (const c of clips) {
-        c.lane = lane;
-        d.clips[c.id] = c;
+      const from0 = live[0]?.at ?? start;
+      for (const who of people.value.filter((x) => !x.muted)) {
+        const clips = makeClips(live.filter((it) => it.person === who.id));
+        if (!clips.length) continue;
+        // Video legges over hovedsporet og lyd under, hver person på sitt eget spor.
+        const pic = clips.every((c) => c.type !== 'audio');
+        const lane = pic ? freeVideoLane(d.clips, from0, plan.end) : freeAudioLane(d.clips, from0, plan.end);
+        for (const c of clips) {
+          c.lane = lane;
+          d.clips[c.id] = c;
+        }
+        if (clips.length > 1) groupClips(d, clips.map((c) => c.id));
+        all.push(...clips);
       }
-      // Romlyd i pausene, på sporet under stemmen.
+      // Romlyd i pausene, på sporet under stemmene.
       const tone = v.roomTone && opt('voRoomFill') ? v.roomTone : null;
       const tm = tone && (d.media[tone.mediaId] || (tone.media && (d.media[tone.mediaId] = tone.media)));
       if (tm) {
         const pieces = roomToneFill(plan.gaps, tone.duration);
         const toneLane = freeAudioLane(d.clips, start, plan.end);
+        const toneClips = [];
         for (const piece of pieces) {
           const c = mediaClip(tm, { in: piece.in, dur: piece.dur });
           c.name = 'Room tone';
@@ -736,17 +845,27 @@ export function stitch({ from = 0 } = {}) {
           c.start = piece.at;
           c.lane = toneLane;
           d.clips[c.id] = c;
-          clips.push(c);
+          toneClips.push(c);
         }
+        if (toneClips.length > 1) groupClips(d, toneClips.map((c) => c.id));
+        all.push(...toneClips);
       }
-      if (clips.length > 1) groupClips(d, clips.map((c) => c.id));
     }
-    placed = clips.map((c) => c.id);
+    placed = all.map((c) => c.id);
   });
   setVo((x) => void (x.placed = { seq, ids: placed, start }));
   selection.value = placed;
   saveNow();
-  toast(`${plan.items.length} ${plan.items.length === 1 ? 'take is' : 'takes are'} on the timeline${video ? ' in the storyline' : ''}. Stitch again after retakes to replace them.`, { kind: 'success', timeout: 6000 });
+  const tracks = new Set(live.map((it) => it.person)).size;
+  toast(`${live.length} ${live.length === 1 ? 'take is' : 'takes are'} on the timeline${video ? ' in the storyline' : tracks > 1 ? ` on ${tracks} tracks` : ''}. Stitch again after retakes to replace them.`, { kind: 'success', timeout: 6000 });
+}
+
+// Første ledige spor over hovedsporet for hele strekningen.
+function freeVideoLane(clips, from, to) {
+  for (let lane = 1; lane < 50; lane++) {
+    if (!Object.values(clips).some((c) => c.lane === lane && c.start < to - 1e-6 && from < c.start + c.dur - 1e-6)) return lane;
+  }
+  return 50;
 }
 
 export function placedCount() {

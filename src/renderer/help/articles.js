@@ -1424,7 +1424,7 @@ Open the studio with **Voice Over Studio** in the toolbar of Edit, the headset a
 
 ## Just record audio
 
-For a quick recording without a script, click the **microphone** in the timeline toolbar, or {{key:recordAudio}}. A small window lists the microphones. Click one, then press **Rec** (or Space) and press again to stop. The recording is saved as 24-bit WAV in Recordings/Audio in the project folder and added to the Media browser as Audio 1, Audio 2 and so on. Nothing is trimmed. Esc stops a recording, or closes the window.
+For a quick recording without a script, click the **microphone** in the timeline toolbar, or {{key:recordAudio}}. A small window opens. Choose the microphone in the **Input** menu, then press **Rec** (or Space) and press again to stop. The recording is saved as 24-bit WAV in Recordings/Audio in the project folder and added to the Media browser as Audio 1, Audio 2 and so on. Nothing is trimmed. Esc stops a recording, or closes the window.
 
 ## Where the voice ends up
 
@@ -1475,6 +1475,18 @@ Aim for peaks between -12 and -6 dB on the meter. The studio records 24-bit WAV 
 
 Turn on **Camera** to record video with each take. The takes are WebM files with the picture and the sound, and they are trimmed the same way.
 
+## Sound: Studio Voice out of the box
+
+Every person starts with **Studio Voice**: rumble and light noise removed, warmth and presence, soft S sounds and an even level, so it sounds like voice over straight away. Adjust it under **Sound for** in the side panel. It works like Audio Effects on a clip: add effects or templates, turn each one on or off, change the order, adjust it or remove it. **Volume** sets the level for all of the person's takes, and **Reset to Studio Voice** starts over. You hear the changes in the studio timeline while it plays, and they go with the clips when you stitch.
+
+## More than one person
+
+Click **Add Person** to add another voice on its own track, with their own takes and their own sound. If the script has roles, the new person gets the next role name. Choose who is recording in **Record as** above the record button, or click a track. In a script with roles, going to a line switches to the person with that name.
+
+- Lines are laid out in script order in shared slots. When two people read the same lines, their takes line up so you can compare them line by line. In a dialogue, the lines interleave as in the script.
+- On each track: **mute** (not heard, not stitched, and takes no time), **S** (solo: hear only this person), the **eye** (hide the track) and **X** (remove the person from the studio; the files stay in the Media browser). Double click the name to rename.
+- Choices, deletes and adjustments are per person. Stitching puts each person on their own track.
+
 ## The studio timeline
 
 At the bottom of the studio, the takes you keep are laid out in script order, the way they will be stitched, with the pauses between them. Press **Shift Space** or the play button to listen from the playhead, with room tone in the pauses. Click in the ruler or an empty spot to move the playhead.
@@ -1515,7 +1527,7 @@ Open the **Audio Effects** browser ({{key:browser:audio}}). Click an effect or a
 
 Templates are ready made chains of effects that you can adjust afterwards.
 
-- **Fix and Enhance**: Voice Clean Up ({{key:audio:cleanup}}), Podcast Voice, Reduce Noise, Remove Hum (50 or 60 Hz), Remove Rumble, Even Out Levels, Broadcast Loud and Quiet Pauses.
+- **Fix and Enhance**: Studio Voice (the default in the Voice Over Studio), Voice Clean Up ({{key:audio:cleanup}}), Podcast Voice, Reduce Noise, Remove Hum (50 or 60 Hz), Remove Rumble, Even Out Levels, Broadcast Loud and Quiet Pauses.
 - **Space**: Small Room, Concert Hall, Cathedral, Canyon Echo, Slapback and Far Away.
 - **Creative and Lo-fi**: Telephone, Walkie-Talkie, Old Radio, Megaphone, Lo-fi Tape, Vinyl Record, 8-bit, Distorted, Blown Speaker, Robot, Alien, Underwater, Dreamy, Jet Flanger and Pulse.
 

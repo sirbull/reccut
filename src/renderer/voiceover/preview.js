@@ -11,6 +11,8 @@ export const time = signal(0);
 export const peaksVersion = signal(0);
 
 let ctx = null;
+let fxReady = null;
+const routes = new Map(); // person -> { gain, fx }
 const buffers = new Map(); // fil -> Promise<AudioBuffer>
 const peakCache = new Map(); // fil -> Float32Array
 let sources = [];
@@ -20,6 +22,8 @@ function audio() {
   if (!ctx) {
     ctx = new AudioContext({ latencyHint: 'interactive' });
     ctx.setSinkId?.(audioSink.value).catch(() => {});
+    // Samme effektkode som avspillingen i redigeringen og eksporten.
+    fxReady = ctx.audioWorklet.addModule('audiofx-worklet.js').then(() => true, () => false);
   }
   return ctx;
 }
@@ -47,7 +51,7 @@ export const peaksFor = (file) => peakCache.get(file) || null;
 const lin = (db) => Math.pow(10, (db || 0) / 20);
 
 // Ett klipp med volum og fades, med start midt i klippet når avspillingen starter senere.
-function schedule(buf, { at, in: inPoint, dur, gain = 0, fadeIn = 0, fadeOut = 0 }, from, t0) {
+function schedule(buf, { at, in: inPoint, dur, gain = 0, fadeIn = 0, fadeOut = 0 }, from, t0, out = null) {
   const c = audio();
   const offset = Math.max(0, from - at);
   if (offset >= dur) return;
@@ -67,9 +71,34 @@ function schedule(buf, { at, in: inPoint, dur, gain = 0, fadeIn = 0, fadeOut = 0
     g.gain.setValueAtTime(fo === when && offset > dur - fadeOut ? (level * (dur - offset)) / fadeOut : level, fo);
     g.gain.linearRampToValueAtTime(0, end);
   }
-  src.connect(g).connect(c.destination);
+  src.connect(g).connect(out || c.destination);
   src.start(when, inPoint + offset, dur - offset);
   sources.push(src);
+}
+
+// Ett spor per person: volum og effektkjede. Endres mens det spilles.
+async function route(person) {
+  const c = audio();
+  let r = routes.get(person.id);
+  if (!r) {
+    const gain = c.createGain();
+    r = { gain, fx: null };
+    if (await fxReady) {
+      r.fx = new AudioWorkletNode(c, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
+      gain.connect(r.fx).connect(c.destination);
+    } else gain.connect(c.destination);
+    routes.set(person.id, r);
+  }
+  r.gain.gain.value = lin(person.gain);
+  r.fx?.port.postMessage(person.fx || []);
+  return r;
+}
+export function setFx(id, list) {
+  routes.get(id)?.fx?.port.postMessage(list || []);
+}
+export function setGain(id, db) {
+  const r = routes.get(id);
+  if (r) r.gain.gain.value = lin(db);
 }
 
 export function stop() {
@@ -79,6 +108,11 @@ export function stop() {
     } catch {}
   }
   sources = [];
+  for (const r of routes.values()) {
+    r.gain.disconnect();
+    r.fx?.disconnect();
+  }
+  routes.clear();
   cancelAnimationFrame(raf);
   playing.value = false;
 }
@@ -87,7 +121,7 @@ export function stop() {
  * Spiller planen fra et tidspunkt. tone: romlyden ({ file, duration }) som fyller pausene, eller null.
  * onEnd kalles når slutten er nådd.
  */
-export async function play(plan, from = 0, { tone = null, onEnd } = {}) {
+export async function play(plan, from = 0, { tone = null, onEnd, people = [] } = {}) {
   stop();
   if (!plan.items.length) return;
   if (from >= plan.end - 0.01) from = 0;
@@ -96,17 +130,21 @@ export async function play(plan, from = 0, { tone = null, onEnd } = {}) {
   playing.value = true;
   let bufs;
   try {
-    bufs = await Promise.all(plan.items.map((it) => load(it.take.file)));
+    bufs = await Promise.all(plan.items.map((it) => (it.active === false ? null : load(it.take.file))));
   } catch {
     playing.value = false;
     return;
   }
   const toneBuf = tone ? await load(tone.file).catch(() => null) : null;
   if (!playing.value) return;
+  const outs = new Map();
+  for (const p of people) outs.set(p.id, (await route(p)).gain);
+  if (!playing.value) return;
   const t0 = c.currentTime + 0.06;
-  plan.items.forEach((it, i) =>
-    schedule(bufs[i], { at: it.at, in: it.in, dur: it.dur, gain: it.take.gain, fadeIn: it.take.fadeIn ?? 0.02, fadeOut: it.take.fadeOut ?? 0.04 }, from, t0)
-  );
+  plan.items.forEach((it, i) => {
+    if (it.active === false) return;
+    schedule(bufs[i], { at: it.at, in: it.in, dur: it.dur, gain: it.take.gain, fadeIn: it.take.fadeIn ?? 0.02, fadeOut: it.take.fadeOut ?? 0.04 }, from, t0, outs.get(it.person));
+  });
   if (toneBuf) for (const piece of roomToneFill(plan.gaps, tone.duration)) schedule(toneBuf, { ...piece, fadeIn: 0.04, fadeOut: 0.04 }, from, t0);
   const tick = () => {
     const t = from + Math.max(0, c.currentTime - t0);
@@ -125,6 +163,7 @@ export function close() {
   stop();
   ctx?.close().catch(() => {});
   ctx = null;
+  fxReady = null;
   buffers.clear();
   peakCache.clear();
 }

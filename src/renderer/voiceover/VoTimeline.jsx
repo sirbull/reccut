@@ -2,7 +2,7 @@
 // dra i kantene for å trimme og i hjørnene for fades, og juster volum og pause under.
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { Minus, Play, Plus, RotateCcw, Square, Trash2, Wand2, Scissors } from 'lucide-preact';
+import { Eye, EyeOff, Minus, Play, Plus, RotateCcw, Square, Trash2, UserPlus, Volume2, VolumeX, Wand2, Scissors, X } from 'lucide-preact';
 import { Button, IconButton, NumberField, Slider } from '../ui.jsx';
 import { formatDuration } from '../../shared/model.js';
 import { normalizeGain, peakDbIn } from '../../shared/voiceover.js';
@@ -12,20 +12,22 @@ import * as pv from './preview.js';
 export const selected = signal(null); // opptakets id
 
 const clampPps = (v) => Math.max(6, Math.min(600, v));
+const HEAD = 168; // bredden på sporhodene
 
 export function togglePreview() {
   if (pv.playing.value) return pv.stop();
   const plan = booth.plan.value;
   const tone = !plan.video && booth.opt('voRoomFill') ? booth.vo.value.roomTone : null;
-  pv.play(plan, pv.time.value, { tone });
+  pv.play(plan, pv.time.value, { tone, people: booth.people.value });
 }
+const playOne = (it) => pv.play({ items: [{ ...it, at: 0, active: true }], gaps: [], end: it.dur }, 0, { people: booth.people.value.filter((p) => p.id === it.person) });
 
 // Sletter valgt klipp fra tidslinjen (linjen hoppes over, opptakene beholdes).
 export function deleteSelected() {
   const it = booth.plan.value.items.find((x) => x.take.id === selected.value);
   if (!it) return false;
   pv.stop();
-  booth.skipLine(it.take.key, true);
+  booth.skipLine(it.take.key, true, it.person);
   selected.value = null;
   return true;
 }
@@ -99,6 +101,11 @@ export function VoTimeline() {
     for (const it of plan.items) pv.load(it.take.file).catch(() => {});
   }, [plan]);
   useEffect(() => () => pv.close(), []);
+  // Effekter og volum per person høres med en gang, også mens det spilles.
+  for (const p of booth.people.value) {
+    pv.setFx(p.id, p.fx || []);
+    pv.setGain(p.id, p.gain || 0);
+  }
   // Endres planen mens den spilles, stoppes avspillingen så det som høres stemmer med det som vises.
   const planRef = useRef(plan);
   useEffect(() => {
@@ -107,14 +114,14 @@ export function VoTimeline() {
   }, [plan]);
 
   const end = Math.max(plan.end, 1);
-  const pps = clampPps(((width - 40) / end) * zoom);
+  const pps = clampPps(((width - HEAD - 40) / end) * zoom);
   const t = pv.time.value;
   // Spillehodet følges når det går ut av synet.
   useEffect(() => {
     const el = scroller.current;
     if (!el || !pv.playing.value) return;
     const x = t * pps;
-    if (x > el.scrollLeft + el.clientWidth - 40 || x < el.scrollLeft) el.scrollLeft = Math.max(0, x - 40);
+    if (x > el.scrollLeft + el.clientWidth - HEAD - 40 || x < el.scrollLeft) el.scrollLeft = Math.max(0, x - 40);
   }, [t, pps]);
 
   const seek = (e) => {
@@ -131,6 +138,8 @@ export function VoTimeline() {
   for (let s = 0; s <= end; s += step) ticks.push(s);
   const sel = plan.items.find((x) => x.take.id === selected.value);
   const skipped = Object.keys(booth.vo.value.skip || {}).length;
+  const people = booth.people.value;
+  const W = end * pps + 40;
 
   return (
     <section class="vt">
@@ -140,9 +149,12 @@ export function VoTimeline() {
           {formatDuration(t)} <span class="dim">/ {formatDuration(plan.end)}</span>
         </span>
         <span class="dim">
-          {plan.items.length} {plan.items.length === 1 ? 'clip' : 'clips'}
+          {plan.items.filter((i) => i.active).length} clips
           {skipped ? ` · ${skipped} deleted` : ''}
         </span>
+        <Button class="small" icon={UserPlus} onClick={booth.addPerson} disabled={booth.busy()} title="Add a person on a new track, with their own takes and sound">
+          Add Person
+        </Button>
         <div class="spacer" />
         {skipped > 0 && (
           <Button class="small" icon={RotateCcw} onClick={() => booth.setVo((v) => void (v.skip = {}))} title="Bring back all deleted clips">
@@ -151,38 +163,52 @@ export function VoTimeline() {
         )}
         <IconButton icon={Minus} title="Zoom out" onClick={() => setZoom(Math.max(1, zoom / 1.5))} disabled={zoom <= 1} />
         <IconButton icon={Plus} title="Zoom in" onClick={() => setZoom(Math.min(40, zoom * 1.5))} />
-        <Button variant="primary" class="small" icon={Scissors} onClick={() => booth.stitch()} disabled={!plan.items.length || booth.busy()}>
+        <Button variant="primary" class="small" icon={Scissors} onClick={() => booth.stitch()} disabled={!plan.items.some((i) => i.active) || booth.busy()}>
           {booth.placedCount() ? 'Stitch Again' : 'Stitch to Timeline'}
         </Button>
       </div>
       <div class="vt-scroll" ref={scroller}>
-        {!plan.items.length ? (
-          <p class="dim vt-empty">The takes you keep show up here in script order, the way they will be stitched. Play them through, trim them and adjust them.</p>
-        ) : (
-          <div class="vt-track" style={{ width: `${end * pps + 40}px` }} onPointerDown={seek}>
-            <div class="vt-ruler">
+        <div class="vt-content" style={{ width: `${HEAD + W}px` }}>
+          <div class="vt-row vt-ruler-row">
+            <div class="vt-head vt-head-ruler" />
+            <div class="vt-lane vt-ruler" style={{ width: `${W}px` }} onPointerDown={seek}>
               {ticks.map((s) => (
                 <span key={s} style={{ left: `${s * pps}px` }}>
                   {formatDuration(s)}
                 </span>
               ))}
+              <div class="vt-playhead" style={{ left: `${t * pps}px` }} />
             </div>
-            {plan.gaps.map((g) => (
-              <div key={`g${g.at}`} class="vt-gap" style={{ left: `${g.at * pps}px`, width: `${g.dur * pps}px` }} title={`Pause ${g.dur.toFixed(2)} s`} />
-            ))}
-            {plan.items.map((it) => (
-              <Clip key={it.take.id} it={it} pps={pps} />
-            ))}
-            <div class="vt-playhead" style={{ left: `${t * pps}px` }} />
           </div>
-        )}
+          {people.map((p) => (
+            <div key={p.id} class={`vt-row${p.hidden ? ' hidden' : ''}${p.muted ? ' muted' : ''}${p.id === booth.personId.value ? ' active' : ''}`}>
+              <TrackHead p={p} />
+              <div class="vt-lane" style={{ width: `${W}px` }} onPointerDown={seek}>
+                {!p.hidden && (
+                  <>
+                    {plan.gaps.map((g) => (
+                      <div key={`g${g.at}`} class="vt-gap" style={{ left: `${g.at * pps}px`, width: `${g.dur * pps}px` }} title={`Pause ${g.dur.toFixed(2)} s`} />
+                    ))}
+                    {plan.items
+                      .filter((it) => it.person === p.id)
+                      .map((it) => (
+                        <Clip key={it.take.id} it={it} pps={pps} color={p.color} />
+                      ))}
+                  </>
+                )}
+                <div class="vt-playhead" style={{ left: `${t * pps}px` }} />
+              </div>
+            </div>
+          ))}
+          {!plan.items.length && <p class="dim vt-empty">The takes you keep show up here in script order, the way they will be stitched. Play them through, trim them and adjust them. Add a person to record another voice on its own track.</p>}
+        </div>
       </div>
       {sel && <ClipControls it={sel} />}
     </section>
   );
 }
 
-function Clip({ it, pps }) {
+function Clip({ it, pps, color }) {
   const take = it.take;
   const w = Math.max(4, it.dur * pps);
   const on = selected.value === take.id;
@@ -192,15 +218,16 @@ function Clip({ it, pps }) {
   const H = 54;
   return (
     <div
-      class={`vt-clip${on ? ' on' : ''}${current ? ' current' : ''}${take.video ? ' video' : ''}`}
-      style={{ left: `${it.at * pps}px`, width: `${w}px` }}
+      class={`vt-clip${on ? ' on' : ''}${current ? ' current' : ''}${take.video ? ' video' : ''}${it.active === false ? ' inactive' : ''}`}
+      style={{ left: `${it.at * pps}px`, width: `${w}px`, background: color }}
       title={`${booth.lineNumber(it.block)}. ${it.block.text}`}
       onPointerDown={(e) => {
         e.stopPropagation();
         selected.value = take.id;
         booth.goTo(it.block.index);
+        booth.choosePerson(it.person);
       }}
-      onDblClick={() => pv.play({ items: [{ ...it, at: 0 }], gaps: [], end: it.dur }, 0)}
+      onDblClick={() => playOne(it)}
     >
       <div class="vt-label">
         <b>{booth.lineNumber(it.block)}</b> {it.block.text}
@@ -235,9 +262,9 @@ function ClipControls({ it }) {
   return (
     <div class="vt-controls">
       <b class="vt-name">
-        {booth.lineNumber(it.block)}. Take {take.n}
+        {booth.people.value.length > 1 ? `${booth.people.value.find((p) => p.id === it.person)?.name}, ` : ''}line {booth.lineNumber(it.block)}, take {take.n}
       </b>
-      <IconButton icon={Play} size={14} title="Play this clip (double click)" onClick={() => pv.play({ items: [{ ...it, at: 0 }], gaps: [], end: it.dur }, 0)} />
+      <IconButton icon={Play} size={14} title="Play this clip (double click)" onClick={() => playOne(it)} />
       <label class="vt-ctl" title="Volume">
         Volume
         <Slider value={gain} min={-24} max={12} step={0.5} center={0} onInput={(x) => booth.setTake(take.id, { gain: x })} />
@@ -280,8 +307,48 @@ function ClipControls({ it }) {
 // Pausen etter et klipp slik planen har lagt den (inkludert opptakets egen romlyd).
 function autoPause(it) {
   const items = booth.plan.value.items;
-  const i = items.findIndex((x) => x.take.id === it.take.id);
-  const next = items[i + 1];
+  const next = items.find((x) => x.active && x.at > it.at + 1e-6);
   if (!next) return 0;
   return Math.round((next.at - it.at - (it.take.out - it.take.in)) * 100) / 100;
+}
+
+// Sporhodet: navn (dobbeltklikk for å endre), demp, solo, skjul og fjern.
+function TrackHead({ p }) {
+  const [editing, setEditing] = useState(false);
+  const many = booth.people.value.length > 1;
+  return (
+    <div class="vt-head" onPointerDown={() => booth.choosePerson(p.id)} title={`${p.name}: click to record as ${p.name} and adjust the sound`}>
+      <div class="vt-head-name">
+        <span class="vt-dot" style={{ background: p.color }} />
+        {editing ? (
+          <input
+            class="vt-rename"
+            value={p.name}
+            autoFocus
+            onBlur={(e) => {
+              booth.renamePerson(p.id, e.currentTarget.value);
+              setEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
+            }}
+          />
+        ) : (
+          <b class="vt-person" title="Double click to rename" onDblClick={() => setEditing(true)}>
+            {p.name}
+          </b>
+        )}
+      </div>
+      <div class="vt-head-tools">
+        <IconButton icon={p.muted ? VolumeX : Volume2} size={13} title={p.muted ? 'Muted: not heard and not stitched. Click to hear.' : 'Mute: not heard and not stitched'} active={p.muted} onClick={() => booth.toggleMute(p.id)} />
+        {many && (
+          <button class={`icon-btn vt-solo${!p.muted && booth.people.value.every((x) => x.id === p.id || x.muted) ? ' active' : ''}`} title="Solo: hear only this person" onClick={() => booth.toggleSolo(p.id)}>
+            S
+          </button>
+        )}
+        <IconButton icon={p.hidden ? EyeOff : Eye} size={13} title={p.hidden ? 'Show the track' : 'Hide the track'} active={p.hidden} onClick={() => booth.toggleHidden(p.id)} />
+        {many && <IconButton icon={X} size={13} title="Remove the person and their takes from the studio (the files stay in the Media browser)" onClick={() => booth.removePerson(p.id)} />}
+      </div>
+    </div>
+  );
 }
