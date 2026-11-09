@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   CircleAlert,
   CircleHelp,
+  Mic,
   Clapperboard,
   FolderOpen,
   ListChecks,
@@ -63,6 +64,8 @@ import { isTyping, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } fro
 import { installFileDrop } from './fileDrop.js';
 import { UpdateDialog } from './UpdateDialog.jsx';
 import { startUpdateChecks } from './updates.js';
+import { VoiceoverBooth } from './voiceover/Booth.jsx';
+import { boothOpen, openBooth } from './voiceover/state.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -204,6 +207,10 @@ function TitleBar() {
           <span class="sep" />
           <IconButton icon={Settings} title={`Settings (${isMac ? '⌘' : 'Ctrl+'},)`} onClick={() => (commands.prefsOpen.value = true)} />
           <IconButton icon={Plus} title={`Import media (${isMac ? '⌘' : 'Ctrl+'}I)`} onClick={() => commands.importDialog()} />
+          <button class="btn secondary" onClick={openBooth} title={`Voiceover Booth: record narration or a talking head from a script, with retakes, and stitch it to the timeline (${isMac ? '⌥⌘' : 'Ctrl+Alt+'}B)`}>
+            <Mic size={15} />
+            Voiceover
+          </button>
           <button class="btn primary" onClick={prepareProjectExport} title="Prepare project in Export">
             <Share size={15} />
             Export Project
@@ -418,6 +425,7 @@ function App() {
       {commands.historyOpen.value && <HistoryDialog />}
       {aiChatOpen.value && <AIChat key={project.value.id} />}
       <PluginWindows />
+      {boothOpen.value && r === 'edit' && <VoiceoverBooth />}
       {commands.prefsOpen.value && <SettingsWindow />}
       {helpOpen.value && <HelpCenter />}
       {paletteOpen.value && <CommandPalette />}

@@ -39,6 +39,7 @@ import { chooseImage, pasteImage, copyLayers } from './design/assets.js';
 import { toggleViewerFullscreen } from './editor/fullscreen.js';
 import { LAYOUTS, modifierInfo, settings as recordSettings } from './recorder/settings.js';
 import { addFiles, roomActions } from './export/state.js';
+import { openBooth } from './voiceover/state.js';
 
 const api = window.api;
 export const isMac = api.platform === 'darwin';
@@ -162,6 +163,7 @@ export const COMMANDS = [
   { id: 'addTitle', label: 'Add Title', menu: 'Edit', group: 'insertfx', mac: 'Ctrl+T', win: 'Alt+T', run: () => commands.addTitle('center'), help: 'titles' },
   { id: 'slideshow:create', label: 'Add Selected Photos as Slideshow…', menu: 'Edit', group: 'insertfx', run: () => commands.openSlideshow(), help: 'slideshow', keywords: 'slideshow photos images ken burns pan zoom blurry background bildeserie lysbilder', desc: 'Choose duration, transitions, image fit, motion and blurred photo backgrounds for the selected images in Media.' },
   { id: 'addLowerThird', label: 'Add Lower Third', menu: 'Edit', group: 'insertfx', mac: 'Shift+Ctrl+T', win: 'Shift+Alt+T', run: () => commands.addTitle('lt-bar'), help: 'lower-thirds', keywords: 'supring name super chyron', desc: 'Add an animated lower third at the playhead. Type the name and title in the inspector.' },
+  { id: 'voiceover', label: 'Voiceover Booth…', menu: 'Edit', group: 'insertfx', keys: 'Alt+CmdOrCtrl+B', run: openBooth, help: 'voiceover', keywords: 'voice over voiceover narration narrator record script teleprompter prompter talking head monologue dialogue retake takes stitch assemble typeloom read', desc: 'Record narration or a talking head line by line from a script, with retakes. Each take is trimmed where the voice starts, and the takes are stitched together on the timeline.' },
   { id: 'addCaption', label: 'Add Caption', menu: 'Edit', group: 'insertfx', keys: 'Alt+C', run: () => commands.addCaption(), help: 'captions' },
   { id: 'audio:cleanup', label: 'Clean Up Voice', menu: 'Clip', group: 'audiofx', keys: 'Alt+CmdOrCtrl+A', run: () => commands.applyAudioPreset('voice-cleanup'), help: 'audio-effects', keywords: 'audio enhance repair fix noise hum voice clean', desc: 'Adds high pass, noise reduction, de-esser, compressor and limiter to the selected clips.' },
   { id: 'audio:eq', label: 'Add Equalizer', menu: 'Clip', group: 'audiofx', run: () => commands.addAudioEffect('eq'), help: 'audio-effects', keywords: 'eq equalizer bass treble tone' },

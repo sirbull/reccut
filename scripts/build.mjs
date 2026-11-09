@@ -35,6 +35,8 @@ const builds = [
   },
   // Lydeffektene i avspillingen (AudioWorklet).
   { ...common, entryPoints: [path.join(root, 'src/renderer/audiofx-worklet.js')], outfile: path.join(out, 'audiofx-worklet.js'), format: 'iife', platform: 'browser' },
+  // Mikrofonen i Voiceover Booth (AudioWorklet).
+  { ...common, entryPoints: [path.join(root, 'src/renderer/voiceover/capture-worklet.js')], outfile: path.join(out, 'vo-capture-worklet.js'), format: 'iife', platform: 'browser' },
   { ...common, entryPoints: [path.join(root, 'src/worker/segment.js')], outfile: path.join(out, 'segment.js'), format: 'esm', platform: 'browser' },
   { ...common, entryPoints: [path.join(root, 'src/worker/transcribe.js')], outfile: path.join(out, 'transcribe.js'), format: 'esm', platform: 'browser' },
 ];

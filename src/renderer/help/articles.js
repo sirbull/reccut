@@ -1414,6 +1414,67 @@ When a clip follows a track in **Live** mode, the track controls position and ro
 
   /* Lyd */
   {
+    id: 'voiceover',
+    section: 'Audio',
+    title: 'Voiceover Booth: Narration and Talking Head',
+    summary: 'Record a script line by line with retakes, read it as a teleprompter, and stitch the takes together on the timeline.',
+    keywords: 'voice over voiceover narration narrator script teleprompter prompter talking head monologue dialogue retake takes pickup punch in stitch assemble room tone typeloom word pdf markdown fountain final draft read mirror',
+    body: `
+Open the booth with **Voiceover** in the toolbar of Edit, or {{key:voiceover}}. It opens over the editor with the script on the left and the recording tools on the right. Everything you do in the booth is saved in the project, so you can close it and continue later.
+
+## The script
+
+Click **Open Script…** or drop a file on the left side. Typeloom projects, Word (.docx), PDF, Markdown, plain text, Fountain, Final Draft and RTF all work. You can also **Write or Paste** a script, or choose a document that is already attached to the project.
+
+- From **Typeloom**, the binder order is kept. Folders and documents become sections, and the corkboard synopsis is shown as a note that is not read.
+- In a **screenplay**, the character name is shown above each line of dialogue, with the parenthetical as a direction.
+- In **Markdown**, # headings are sections, and bold, links and lists are read as plain text.
+- Words in [brackets] or (parentheses) are shown dimmed, as directions.
+
+Choose **Paragraphs**, **Sentences** or **Lines** to decide how much is one take. Sentences suit dense or technical text, paragraphs suit storytelling.
+
+The line you are reading is highlighted and kept a third down the window, like on a teleprompter. Click any line to go there. **Prompter view** (M) hides the side panel and shows only the script in large text, and the mirror button flips it for a prompter with a beam splitter glass. Change the text size with + and -.
+
+## Recording and retakes
+
+Press **Space** to record the line and Space again to keep the take. The booth goes to the next line, so you can read the whole script with Space alone.
+
+- **R** discards what you are recording and starts the line again right away. Use it the moment you stumble.
+- **Esc** discards the take that is recording.
+- **Backspace** marks the last take as not usable and goes back to its line, ready for a new try.
+- **Up** and **Down** move between lines, **Shift** with the arrows moves between sections, and **N** goes to the next line without a take.
+- **P** plays the chosen take of the line, and **S** stars it.
+
+Each line keeps all its takes. The latest take is used, unless you star one or click another one in the list. A crossed out take is never used.
+
+**Count in** waits one or three seconds before recording. **Cue last line** plays the end of the take before, so the new line matches its tone and pace.
+
+## Clean edits without work
+
+Each take is trimmed where your voice starts and ends, with a little **air before** and **air after**. Soft starts such as a breath or an s are kept. Adjust a take with the scissors in the list if needed. Takes that clip or where no voice was found are marked.
+
+Record **room tone** once: five seconds of the quiet room. It is used as the noise floor when the booth listens for your voice, and it fills the pauses between lines on the timeline, so the voice never drops to digital silence.
+
+Aim for peaks between -12 and -6 dB on the meter. The booth records 24-bit WAV without echo cancellation, noise suppression or automatic gain. Choose the input channel if your interface has the microphone on input 2.
+
+## Talking head
+
+Turn on **Camera** to record video with each take. The takes are WebM files with the picture and the sound, and they are trimmed the same way.
+
+## Stitch to the timeline
+
+**Stitch to Timeline** (Cmd or Ctrl and Return in the booth) puts the chosen takes in script order, at the playhead or at the end. The pause after each line follows the script: a short pause after a sentence, a longer one after a paragraph and the longest before a new section. Change the pauses under **Stitch**.
+
+- Voice takes go on one audio track under the picture, grouped so they move together, with room tone in the pauses.
+- Talking head takes go into the storyline, cut back to back. The pause is the take's own sound, so the picture never goes black.
+
+After retakes, press **Stitch Again**. The clips from the last stitch are replaced, so the timeline always has the best takes. The takes are also in the Media browser, named after the line, so you can use them by hand.
+
+The script is added to the project story, so the AI agent can use it to match the takes to the script.
+`,
+    see: ['audio', 'audio-effects', 'recording'],
+  },
+  {
     id: 'audio-effects',
     section: 'Audio',
     title: 'Audio Effects and Repair',
