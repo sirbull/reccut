@@ -1,4 +1,4 @@
-// Voiceover Booth: et eget arbeidsvindu over redigeringen for fortellerstemme og snakkende hode.
+// Voice Over Studio: et eget arbeidsvindu over redigeringen for fortellerstemme og snakkende hode.
 // Manuset til venstre (også som teleprompter), opptak og valg av opptak til høyre.
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import {
@@ -107,7 +107,7 @@ export function VoiceoverBooth() {
   }, []);
   const prompter = booth.opt('voPrompter');
   return (
-    <div class={`vo-booth${prompter ? ' prompter' : ''}`} role="dialog" aria-modal="true" aria-label="Voiceover Booth" tabIndex={-1} ref={ref}>
+    <div class={`vo-booth${prompter ? ' prompter' : ''}`} role="dialog" aria-modal="true" aria-label="Voice Over Studio" tabIndex={-1} ref={ref}>
       <BoothHeader />
       <div class="vo-body">
         <ScriptPane />
@@ -133,7 +133,7 @@ function BoothHeader() {
   return (
     <header class="vo-head">
       <AudioWaveform size={16} />
-      <b>Voiceover Booth</b>
+      <b>Voice Over Studio</b>
       {v.script && (
         <span class="dim vo-progress" title="Lines with a usable take">
           {done} of {total} lines · about {formatDuration(readingTime(booth.blocks.value))} to read
@@ -153,7 +153,7 @@ function BoothHeader() {
         Camera
       </button>
       {video && cams.length > 1 && <Select value={booth.opt('voCam')} options={[{ value: '', label: 'Default camera' }, ...cams.map((c) => ({ value: c.id, label: c.label }))]} onChange={(id) => reopen({ voCam: id })} />}
-      <IconButton icon={X} title="Close the booth (Esc)" onClick={booth.closeBooth} />
+      <IconButton icon={X} title="Close the studio (Esc)" onClick={booth.closeBooth} />
     </header>
   );
 }
@@ -432,7 +432,7 @@ function TakeRow({ t, chosen }) {
         <IconButton icon={Star} size={13} title="Star: a circled take, preferred when stitching (S)" active={t.star} onClick={() => booth.toggleStar(t)} />
         <IconButton icon={Scissors} size={13} title="Adjust where the take starts and ends" active={open} onClick={() => setOpen(!open)} />
         <IconButton icon={Ban} size={13} title={t.bad ? 'Use again' : 'Not usable'} active={t.bad} onClick={() => booth.markBad(t)} />
-        <IconButton icon={Trash2} size={13} title="Remove from the booth (the file stays in the project)" onClick={() => booth.deleteTake(t)} />
+        <IconButton icon={Trash2} size={13} title="Remove from the studio (the file stays in the project)" onClick={() => booth.deleteTake(t)} />
       </div>
       {(t.clipped || !t.found) && (
         <div class="vo-take-warn">
@@ -479,7 +479,7 @@ function FreeTakes() {
                   <span class="dim"> {secs(t.out - t.in)}</span>
                   {t.key !== 'free' && <span class="vo-warn"> line changed</span>}
                 </span>
-                <IconButton icon={Trash2} size={13} title="Remove from the booth" onClick={() => booth.deleteTake(t)} />
+                <IconButton icon={Trash2} size={13} title="Remove from the studio" onClick={() => booth.deleteTake(t)} />
               </div>
             </li>
           ))}

@@ -1,4 +1,4 @@
-// Voiceover Booth: leser mikrofonen prøve for prøve. Nivået sendes hele tiden (til måleren),
+// Voice Over Studio: leser mikrofonen prøve for prøve. Nivået sendes hele tiden (til måleren),
 // lyden bare mens det tas opp. Lyden samles i biter på omtrent 85 ms for å spare meldinger.
 class VoCapture extends AudioWorkletProcessor {
   constructor() {

@@ -1,4 +1,4 @@
-// Voiceover Booth: opptak av fortellerstemme og snakkende hode, linje for linje fra manus.
+// Voice Over Studio: opptak av fortellerstemme og snakkende hode, linje for linje fra manus.
 // Opptakene lagres i prosjektets Recordings-mappe og syes sammen på tidslinjen.
 // Tilstanden (manus, posisjon, opptak) ligger i project.voiceover og angres ikke, som designene.
 import { computed, signal } from '@preact/signals';

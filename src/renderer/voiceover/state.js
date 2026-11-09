@@ -1,4 +1,4 @@
-// Om Voiceover Booth er åpen. Egen fil, så menyen kan åpne den uten å laste opptaksmotoren.
+// Om Voice Over Studio er åpen. Egen fil, så menyen kan åpne den uten å laste opptaksmotoren.
 import { signal } from '@preact/signals';
 
 export const boothOpen = signal(false);

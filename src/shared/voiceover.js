@@ -1,4 +1,4 @@
-// Voiceover Booth: manus, stemmedeteksjon og sammensying av opptak.
+// Voice Over Studio: manus, stemmedeteksjon og sammensying av opptak.
 // Alt her er rene funksjoner, så de kan testes uten nettleser.
 
 /* Manus */

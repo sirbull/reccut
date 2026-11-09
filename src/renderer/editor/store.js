@@ -300,7 +300,7 @@ export function endTransient(keep = true) {
 function restoreEditHistory(restored, preserveName = false) {
   const current = project.value;
   const name = preserveName ? current.name : restored.name;
-  // Opptak fra Voiceover Booth angres ikke, så mediene deres blir med tilbake.
+  // Opptak fra Voice Over Studio angres ikke, så mediene deres blir med tilbake.
   const vo = current.voiceover;
   const missing = (vo?.takes || []).concat(vo?.roomTone ? [vo.roomTone] : []).filter((t) => !restored.media?.[t.mediaId] && current.media?.[t.mediaId]);
   if (restored.designs === current.designs && restored.designAssets === current.designAssets && restored.name === name && restored.voiceover === vo && !missing.length) return restored;
