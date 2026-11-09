@@ -66,6 +66,8 @@ import { startUpdateChecks } from './updates.js';
 import { VoiceoverBooth } from './voiceover/Booth.jsx';
 import { boothOpen, openBooth } from './voiceover/state.js';
 import { StudioIcon } from './voiceover/StudioIcon.jsx';
+import { QuickRecord } from './voiceover/QuickRecord.jsx';
+import { quickOpen } from './voiceover/quick.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -426,6 +428,7 @@ function App() {
       {aiChatOpen.value && <AIChat key={project.value.id} />}
       <PluginWindows />
       {boothOpen.value && r === 'edit' && <VoiceoverBooth />}
+      {quickOpen.value && r === 'edit' && <QuickRecord />}
       {commands.prefsOpen.value && <SettingsWindow />}
       {helpOpen.value && <HelpCenter />}
       {paletteOpen.value && <CommandPalette />}

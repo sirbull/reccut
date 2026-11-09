@@ -5574,3 +5574,17 @@ button.vo-take-name:hover { background: var(--bg-3); }
 .vo-setup-count.rec { color: var(--red); }
 .vo-setup-progress { width: 100%; height: 6px; border-radius: 3px; background: var(--bg-4); overflow: hidden; }
 .vo-setup-progress div { height: 100%; background: var(--red); transition: width 0.1s linear; }
+
+/* Rask lydopptak. */
+.quick-rec { width: 280px; z-index: 950; outline: none; }
+.quick-rec header { cursor: default; }
+.quick-rec-body { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 12px; }
+.quick-rec-mics { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; max-height: 180px; overflow-y: auto; }
+.quick-rec-mics button { width: 100%; display: flex; align-items: center; gap: 6px; padding: 5px 6px; border: 0; border-radius: 5px; background: none; text-align: left; }
+.quick-rec-mics button:hover:not(:disabled) { background: var(--bg-3); }
+.quick-rec-mics button.on { background: rgba(10, 132, 255, 0.16); }
+.quick-rec-check { width: 12px; flex: none; color: var(--accent-2); }
+.quick-rec-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-rec-meter { height: 8px; }
+.quick-rec .vo-rec { height: 40px; }
+.quick-rec-hint { margin: 0; font-size: 11px; line-height: 1.4; }

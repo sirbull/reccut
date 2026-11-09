@@ -1418,9 +1418,17 @@ When a clip follows a track in **Live** mode, the track controls position and ro
     section: 'Audio',
     title: 'Voice Over Studio: Narration and Talking Head',
     summary: 'Record a script line by line with retakes, read it as a teleprompter, and stitch the takes together on the timeline.',
-    keywords: 'voice over studio voiceover narration narrator script teleprompter prompter talking head monologue dialogue retake takes pickup punch in stitch assemble room tone typeloom word pdf markdown fountain final draft read mirror',
+    keywords: 'record audio quick microphone voice over studio voiceover narration narrator script teleprompter prompter talking head monologue dialogue retake takes pickup punch in stitch assemble room tone typeloom word pdf markdown fountain final draft read mirror',
     body: `
 Open the studio with **Voice Over Studio** in the toolbar of Edit, the headset and microphone button in the timeline toolbar, or {{key:voiceover}}.
+
+## Just record audio
+
+For a quick recording without a script, click the **microphone** in the timeline toolbar, or {{key:recordAudio}}. A small window lists the microphones. Click one, then press **Rec** (or Space) and press again to stop. The recording is saved as 24-bit WAV in Recordings/Audio in the project folder and added to the Media browser as Audio 1, Audio 2 and so on. Nothing is trimmed. Esc stops a recording, or closes the window.
+
+## Where the voice ends up
+
+The studio does not have a track of its own. It keeps the script with the takes for each line, and **Stitch to Timeline** builds the voice on the timeline of the open sequence.
 
 ## First: room tone
 

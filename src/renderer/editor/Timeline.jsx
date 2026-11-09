@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { signal } from '@preact/signals';
 import { createPortal, memo } from 'preact/compat';
 import {
+  Mic,
   AudioLines,
   Captions,
   Spline,
@@ -90,6 +91,7 @@ import {
 import { fileUrl, scrubAudio, seek, showTimeline, sourceProject } from './playback.js';
 import { openBooth } from '../voiceover/state.js';
 import { StudioIcon } from '../voiceover/StudioIcon.jsx';
+import { openQuick, quickOpen } from '../voiceover/quick.js';
 import { Button, IconButton } from '../ui.jsx';
 import * as commands from './commands.js';
 import { prefs, setPrefs } from '../prefs.js';
@@ -1137,6 +1139,7 @@ function TimelineToolbar() {
         <button type="button" class="icon-btn vo-tl-btn" title={`Voice Over Studio: record narration or a talking head (${isMac ? '⌥⌘B' : 'Ctrl+Alt+B'})`} aria-label="Voice Over Studio" onClick={openBooth}>
           <StudioIcon size={15} />
         </button>
+        <IconButton icon={Mic} class={`quick-rec-btn${quickOpen.value ? ' active' : ''}`} title="Record Audio: pick a microphone and press Rec. The clip goes to the Media browser." onClick={(e) => openQuick(e.currentTarget.getBoundingClientRect())} />
         <span class="sep" />
         <IconButton icon={ZoomOut} title={`Zoom Out (${isMac ? '⌘-' : 'Ctrl+-'})`} onClick={() => commands.zoom(1 / 1.5)} />
         <input
