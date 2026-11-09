@@ -26,6 +26,7 @@ import {
   planStudio,
 } from '../../shared/voiceover.js';
 import { presetEffects } from '../../shared/audiofx.js';
+import { DEFAULT_VOICE, PREVIEW_TEXT, spokenText, voiceById } from '../../shared/tts.js';
 import { recordingPlan } from '../../shared/recordingFormats.cjs';
 import { audioSink, prefs, setPrefs } from '../prefs.js';
 import { boothOpen } from './state.js';
@@ -414,6 +415,7 @@ async function halt() {
 
 // Avbryter: forkaster det som ble tatt opp, eller stopper nedtellingen.
 export async function cancel() {
+  if (generating.value) stopAll = true;
   if (status.value === 'countin' || status.value === 'cue' || status.value === 'tone') {
     cancelWait?.();
     stopPlayback();
@@ -427,6 +429,7 @@ export async function cancel() {
 
 // Retake: forkaster opptaket som pågår og starter på nytt med en gang, på samme linje.
 export async function retake() {
+  if (person.value?.ai) return status.value === 'idle' ? generate() : undefined;
   if (status.value === 'recording') {
     await cancel();
     return record({ quick: true });
@@ -452,6 +455,7 @@ export async function stop() {
 }
 
 export async function toggle() {
+  if (person.value?.ai) return generating.value || status.value === 'generating' ? cancelGenerate() : generate();
   if (status.value === 'recording') return stop();
   if (status.value === 'countin' || status.value === 'cue') return cancel();
   if (status.value === 'idle') return record();
@@ -466,13 +470,13 @@ async function folder() {
 const pad = (n, w = 3) => String(n).padStart(w, '0');
 const safe = (s) => String(s).replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
 
-async function saveTake(key, samples, blob) {
-  const rate = ctx.sampleRate;
+async function saveTake(key, samples, blob, { rate = ctx?.sampleRate || 48000, ai = false, advance = true } = {}) {
   if (samples.length < rate * 0.15) throw new Error('The take is too short.');
   const duration = samples.length / rate;
   const isTone = key === 'roomtone';
   const env = levelEnvelope(samples, rate);
-  const speech = isTone ? null : detectSpeech(env, { floorDb: vo.value.roomTone?.floor ?? null });
+  // AI-stemmer har ingen romlyd: stillheten rundt stemmen er digital og finnes uten støygulv.
+  const speech = isTone ? null : detectSpeech(env, { floorDb: ai ? null : vo.value.roomTone?.floor ?? null });
   const trim = isTone ? { in: 0, out: duration, found: true } : trimFor(speech, duration, { preRoll: opt('voPreRoll'), postRoll: opt('voPostRoll') });
   const { peakDb, clipped } = peakInfo(samples);
   const line = blocks.value.find((b) => b.key === key);
@@ -525,7 +529,7 @@ async function saveTake(key, samples, blob) {
     const pk = pickKey(take.person, key);
     if (v.skip?.[pk]) delete v.skip[pk];
     if (key !== 'free') v.selected[pk] = take.id;
-    if (opt('voAutoAdvance') && key !== 'free' && line) {
+    if (advance && opt('voAutoAdvance') && key !== 'free' && line) {
       const list = lines.value;
       const i = list.findIndex((b) => b.key === key);
       if (list[i + 1]) v.pos = list[i + 1].index;
@@ -628,6 +632,113 @@ export function skipRoomTone() {
 }
 // Romlydkortet vises når studioet åpnes første gang i prosjektet, og når romlyden tas opp på nytt.
 export const needsRoomTone = computed(() => roomSetup.value || (!vo.value.roomTone && !vo.value.roomToneSkipped));
+
+/* AI-stemmer (Kokoro): genereres i stedet for å tas opp, og blir vanlige opptak */
+
+export const tts = signal({ installed: false, downloading: false, progress: 0, sizeBytes: 0 });
+export const generating = signal(null); // { done, total } under Generate All
+export const refreshTts = () => api.ttsStatus().then((s) => (tts.value = s)).catch(() => {});
+api.onTtsChanged?.((s) => (tts.value = s));
+
+// Teksten AI-stemmen leser: "Say it as" for linjen, ellers linjen uten [regi].
+export const spokenFor = (key, who = personId.value) => vo.value.spoken?.[pickKey(who, key)] ?? spokenText(blocks.value.find((b) => b.key === key)?.text || '');
+export function setSpoken(key, text, who = personId.value) {
+  setVo((v) => {
+    v.spoken ||= {};
+    const k = pickKey(who, key);
+    const def = spokenText(blocks.value.find((b) => b.key === key)?.text || '');
+    if (!text || text.trim() === def) delete v.spoken[k];
+    else v.spoken[k] = text;
+  });
+}
+
+export function addAiPerson(voice = DEFAULT_VOICE, speed = 1) {
+  if (busy()) return toast('Stop the take first.');
+  const list = people.value;
+  const v = voiceById(voice);
+  const used = new Set(list.map((p) => p.name.toLowerCase()));
+  let name = `${v.name} (AI)`;
+  for (let n = 2; used.has(name.toLowerCase()); n++) name = `${v.name} ${n} (AI)`;
+  // AI-stemmen er ren fra før, så den får ingen effekter som standard.
+  const p = { id: uid(), name, color: COLORS[list.length % COLORS.length], fx: [], gain: 0, ai: { voice: v.id, speed } };
+  setVo((x) => {
+    x.people = [...listOf(x), p];
+    x.person = p.id;
+  });
+  toast(`${p.name} is added on a new track. Press Space to read a line, or Generate All.`, { timeout: 4500 });
+  return p;
+}
+export const setAiVoice = (id, patch) => editPerson(id, (p) => void (p.ai = { ...p.ai, ...patch }));
+
+let stopAll = false;
+// Leser linjen som er valgt, med AI-stemmen til personen som er valgt.
+export async function generate(key = current.value?.key, { advance = true } = {}) {
+  const who = person.value;
+  if (!who?.ai || !key || status.value !== 'idle') return;
+  if (!tts.value.installed) return toast('Download the AI voices first (Add AI Voice).');
+  const text = spokenFor(key, who.id);
+  if (!text) return toast('This line has nothing to read.');
+  preview.stop();
+  status.value = 'generating';
+  recordingKey.value = key;
+  try {
+    const { samples, rate } = await api.ttsGenerate({ text, voice: who.ai.voice, speed: who.ai.speed || 1 });
+    status.value = 'saving';
+    await saveTake(key, samples instanceof Float32Array ? samples : new Float32Array(samples), null, { rate, ai: true, advance });
+  } catch (err) {
+    toast(`Could not read the line: ${err.message}`, { kind: 'error', timeout: 9000 });
+    stopAll = true;
+  } finally {
+    status.value = 'idle';
+    recordingKey.value = null;
+  }
+}
+// Leser alle linjene som mangler opptak for AI-stemmen, i rekkefølge. Mellomrom eller Esc stopper.
+export async function generateAll() {
+  const who = person.value;
+  if (!who?.ai || status.value !== 'idle') return;
+  const todo = lines.value.filter((b) => !chosenTake(vo.value, b.key, who.id));
+  if (!todo.length) return toast(`${who.name} has read every line. Select a line and press R to read it again.`, { timeout: 4000 });
+  stopAll = false;
+  generating.value = { done: 0, total: todo.length };
+  for (const b of todo) {
+    if (stopAll) break;
+    goTo(b.index);
+    await generate(b.key, { advance: false });
+    generating.value = { done: generating.value.done + 1, total: todo.length };
+  }
+  generating.value = null;
+}
+export function cancelGenerate() {
+  stopAll = true;
+}
+
+// Prøvelytt en stemme før den legges til.
+let sampleCtx = null,
+  sampleSrc = null;
+export const sampling = signal(null);
+export async function previewVoice(voice, speed = 1) {
+  sampleSrc?.stop();
+  sampleSrc = null;
+  if (sampling.value === voice) return (sampling.value = null);
+  sampling.value = voice;
+  try {
+    const { samples, rate } = await api.ttsGenerate({ text: PREVIEW_TEXT[voice[0]] || PREVIEW_TEXT.a, voice, speed });
+    if (sampling.value !== voice) return;
+    sampleCtx ||= new AudioContext();
+    sampleCtx.setSinkId?.(audioSink.value).catch(() => {});
+    const buf = sampleCtx.createBuffer(1, samples.length, rate);
+    buf.copyToChannel(samples instanceof Float32Array ? samples : new Float32Array(samples), 0);
+    sampleSrc = sampleCtx.createBufferSource();
+    sampleSrc.buffer = buf;
+    sampleSrc.connect(sampleCtx.destination);
+    sampleSrc.onended = () => sampling.value === voice && (sampling.value = null);
+    sampleSrc.start();
+  } catch (err) {
+    sampling.value = null;
+    toast(`Could not play the voice: ${err.message}`, { kind: 'error' });
+  }
+}
 
 /* Valg av opptak */
 

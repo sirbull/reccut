@@ -27,16 +27,20 @@ import {
   X,
   UserPlus,
   RotateCw,
+  Sparkles,
+  Loader2,
 } from 'lucide-preact';
 import { Button, IconButton, NumberField, Segmented, Select, Slider, Toggle, toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
 import { project } from '../editor/store.js';
 import { isTyping } from '../keyboard.js';
-import { chosenTake, isSkipped, orphanTakes, progress, readingTime, DEFAULT_PACING } from '../../shared/voiceover.js';
+import { chosenTake, isSkipped, pickKey, orphanTakes, progress, readingTime, DEFAULT_PACING } from '../../shared/voiceover.js';
 import { AudioFxChain } from '../editor/AudioFxChain.jsx';
 import { formatDuration } from '../../shared/model.js';
 import * as booth from './booth.js';
 import { StudioIcon } from './StudioIcon.jsx';
+import { AiVoiceDialog, aiDialogOpen, openAiVoices } from './AiVoice.jsx';
+import { VOICES, voiceLabel } from '../../shared/tts.js';
 import { PacingFields } from './Pacing.jsx';
 import { VoTimeline, deleteSelected, pausesOpen, selected as vtSelected, togglePreview } from './VoTimeline.jsx';
 
@@ -65,7 +69,7 @@ export const KEYS = [
 ];
 
 function onBoothKey(e) {
-  if (!booth.boothOpen.value) return;
+  if (!booth.boothOpen.value || aiDialogOpen.value) return;
   const typing = isTyping(e);
   if (typing) {
     if (e.key === 'Escape') document.activeElement?.blur?.();
@@ -87,6 +91,7 @@ function onBoothKey(e) {
   }
   if ((k === ' ' || e.code === 'Space') && e.shiftKey) togglePreview();
   else if (k === ' ' || e.code === 'Space') booth.toggle();
+  else if (k === 'Escape' && booth.generating.value) booth.cancelGenerate();
   else if (k === 'Escape' && pausesOpen.value) pausesOpen.value = false;
   else if (k === 'Escape' && !booth.busy() && vtSelected.value) vtSelected.value = null;
   else if (k === 'Escape') booth.busy() ? booth.cancel() : booth.closeBooth();
@@ -117,6 +122,7 @@ export function VoiceoverBooth() {
   const ref = useRef(null);
   useEffect(() => {
     booth.ensurePeople();
+    booth.refreshTts();
     booth.openInput();
     window.addEventListener('keydown', onBoothKey, true);
     const onDevices = () => booth.refreshDevices();
@@ -138,6 +144,7 @@ export function VoiceoverBooth() {
         {booth.needsRoomTone.value && <RoomToneSetup />}
       </div>
       {!prompter && <VoTimeline />}
+      {aiDialogOpen.value && <AiVoiceDialog />}
       {prompter && <PrompterBar />}
       {!booth.needsRoomTone.value && <KeyBar />}
     </div>
@@ -417,22 +424,37 @@ function Transport() {
   const st = booth.status.value;
   const recording = st === 'recording';
   const cur = booth.current.value;
+  const ai = booth.person.value?.ai;
+  const gen = booth.generating.value;
   return (
     <div class="vo-transport">
+      {ai ? (
+        <>
+          <button class={`vo-rec vo-ai${st === 'generating' || gen ? ' wait' : ''}`} disabled={st === 'saving' || (!gen && st !== 'idle' && st !== 'generating')} onClick={booth.toggle} title="Read the line with the AI voice (Space). Again to stop.">
+            {st === 'generating' || gen ? <Loader2 size={16} class="spin" /> : <Sparkles size={16} />}
+            <span>{gen ? `Reading ${Math.min(gen.done + 1, gen.total)} of ${gen.total}` : st === 'generating' ? 'Reading…' : st === 'saving' ? 'Saving…' : cur ? `Read line ${booth.lineNumber(cur)} as ${booth.person.value.name}` : 'Read'}</span>
+          </button>
+          <Button class="small" icon={Sparkles} onClick={gen ? booth.cancelGenerate : booth.generateAll} disabled={!gen && st !== 'idle'} title="Read every line that has no take yet, one after another">
+            {gen ? 'Stop' : 'Read All Missing Lines'}
+          </Button>
+        </>
+      ) : (
       <button class={`vo-rec${recording ? ' on' : ''}${st === 'countin' || st === 'cue' ? ' wait' : ''}`} disabled={st === 'saving' || st === 'tone'} onClick={booth.toggle} title="Record / stop (Space)">
         {recording ? <Square size={18} /> : <span class="vo-rec-dot" />}
         <span>
           {st === 'countin' ? `Starting in ${booth.countLeft.value}` : st === 'cue' ? 'Cue…' : recording ? formatDuration(booth.elapsed.value) : st === 'saving' ? 'Saving…' : st === 'tone' ? 'Room tone…' : cur ? `Record line ${booth.lineNumber(cur)}${booth.people.value.length > 1 ? ` as ${booth.person.value.name}` : ''}` : 'Record'}
         </span>
       </button>
+      )}
       <div class="vo-transport-row vo-person-row">
         <span class="dim">Record as</span>
         <Select value={booth.personId.value} options={booth.people.value.map((p) => ({ value: p.id, label: p.name }))} onChange={booth.choosePerson} disabled={recording} />
         <IconButton icon={UserPlus} title="Add a person on a new track, with their own takes and sound" onClick={booth.addPerson} disabled={st !== 'idle'} />
+        <IconButton icon={Sparkles} title="Add an AI voice that reads the script (free, runs on this computer)" onClick={openAiVoices} disabled={st !== 'idle'} />
       </div>
       <div class="vo-transport-row">
-        <Button class="small" icon={RotateCcw} onClick={booth.retake} disabled={st === 'saving' || st === 'tone'} title="Discard what is recording and start the line again (R)">
-          Retake
+        <Button class="small" icon={RotateCcw} onClick={booth.retake} disabled={st === 'saving' || st === 'tone' || (ai && st !== 'idle')} title={ai ? 'Read the line again, as a new take (R)' : 'Discard what is recording and start the line again (R)'}>
+          {ai ? 'Read Again' : 'Retake'}
         </Button>
         <IconButton icon={ChevronUp} title="Previous line (↑)" onClick={() => booth.step(-1)} disabled={recording} />
         <IconButton icon={ChevronDown} title="Next line (↓)" onClick={() => booth.step(1)} disabled={recording} />
@@ -450,6 +472,21 @@ function Transport() {
   );
 }
 
+// Det AI-stemmen leser for linjen. Skriv om ord som uttales feil, for eksempel navn, tall eller forkortelser.
+function SayItAs({ block }) {
+  const text = booth.spokenFor(block.key);
+  const [draft, setDraft] = useState(text);
+  const changed = booth.vo.value.spoken?.[pickKey(booth.personId.value, block.key)] != null;
+  return (
+    <label class="vo-say">
+      <span>
+        Say it as {changed && <button class="link" onClick={() => (booth.setSpoken(block.key, ''), setDraft(booth.spokenFor(block.key)))}>Reset</button>}
+      </span>
+      <textarea value={draft} rows={3} onInput={(e) => setDraft(e.currentTarget.value)} onBlur={() => booth.setSpoken(block.key, draft)} title="What the AI voice reads. Write words the way they sound if it says them wrong. The script is not changed." />
+    </label>
+  );
+}
+
 function Takes() {
   const cur = booth.current.value;
   const v = booth.vo.value;
@@ -462,7 +499,8 @@ function Takes() {
         Takes for line {booth.lineNumber(cur)}
         {takes.length > 0 && <span class="dim"> · {takes.length}</span>}
       </h4>
-      {!takes.length && <p class="dim">No takes yet. Press Space and read the line.</p>}
+      {booth.person.value?.ai && <SayItAs key={`${booth.personId.value}|${cur.key}`} block={cur} />}
+      {!takes.length && <p class="dim">{booth.person.value?.ai ? 'No takes yet. Press Space to let the AI voice read the line.' : 'No takes yet. Press Space and read the line.'}</p>}
       <ul class="vo-takes">
         {[...takes].reverse().map((t) => (
           <TakeRow key={t.id} t={t} chosen={chosen?.id === t.id} />
@@ -614,6 +652,21 @@ function Sound() {
         Sound for {p.name}
       </h4>
       <p class="dim">Applies to all of {p.name}'s takes. You hear it in the studio timeline, and it goes with the clips when you stitch.</p>
+      {p.ai && (
+        <>
+          <label class="vt-ctl">
+            Voice
+            <Select value={p.ai.voice} options={VOICES.map((v) => ({ value: v.id, label: voiceLabel(v.id) }))} onChange={(voice) => booth.setAiVoice(p.id, { voice })} />
+            <IconButton icon={booth.sampling.value === p.ai.voice ? Square : Play} size={13} title="Listen" onClick={() => booth.previewVoice(p.ai.voice, p.ai.speed || 1)} />
+          </label>
+          <label class="vt-ctl" title="Speaking speed for new takes. Below 1 is slower.">
+            Speed
+            <Slider value={p.ai.speed || 1} min={0.5} max={1.5} step={0.01} center={1} onInput={(x) => booth.setAiVoice(p.id, { speed: x })} />
+            <NumberField value={p.ai.speed || 1} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={(x) => booth.setAiVoice(p.id, { speed: x })} />
+          </label>
+          <p class="dim">A new voice or speed is used for new takes. Read the lines again to hear it.</p>
+        </>
+      )}
       <label class="vt-ctl">
         Volume
         <Slider value={p.gain || 0} min={-24} max={12} step={0.5} center={0} onInput={(x) => booth.setPersonGain(p.id, x)} />
@@ -719,8 +772,8 @@ function Assemble() {
 function SidePane() {
   return (
     <aside class="vo-side">
-      <Camera />
-      <Meter />
+      {!booth.person.value?.ai && <Camera />}
+      {!booth.person.value?.ai && <Meter />}
       <Transport />
       <Takes />
       <Sound />

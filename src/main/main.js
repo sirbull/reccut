@@ -1098,6 +1098,8 @@ function modelCachePath(key) {
 ipcMain.handle('modelcache:get', async (_e, key) => {
   const subtitleFile = await subtitleModels.readModelFile(key);
   if (subtitleFile) return subtitleFile;
+  const ttsFile = await tts.readModelFile(key);
+  if (ttsFile) return ttsFile;
   const file = modelCachePath(key);
   return fs.existsSync(file) ? new Uint8Array(await fs.promises.readFile(file)) : null;
 });
@@ -1224,6 +1226,34 @@ function extensionHandler(channel, handler) {
     return handler(...args);
   });
 }
+// AI-stemmer (Kokoro) til Voice Over Studio. Ingenting lastes ned før brukeren ber om det.
+const tts = require('./tts').createTts({
+  dir: path.join(app.getPath('userData'), 'tts'),
+  fetchImpl: (url, opts) => net.fetch(url, { ...opts, headers: { 'User-Agent': `Reccut/${app.getVersion()}` } }),
+  onChange: () => tts.status().then((state) => send('tts:changed', state)).catch(() => {}),
+});
+extensionHandler('tts:status', () => tts.status());
+extensionHandler('tts:install', async () => {
+  const { done } = jobs.add({ kind: 'download', title: 'Downloading AI voices', queue: 'light', run: (ctx) => {
+    ctx.setCancel(() => tts.cancel());
+    return tts.install((p) => ctx.progress(p, 'Downloading'));
+  } });
+  await done;
+  return tts.status();
+});
+extensionHandler('tts:cancel', () => tts.cancel());
+extensionHandler('tts:remove', async () => {
+  const { response } = await dialog.showMessageBox(win, { type: 'question', title: 'Remove the AI voices?', message: 'Remove the AI voices?', detail: 'The voice model and the pronunciation add-on are deleted from this computer. Takes you have generated stay in your projects. You can download the voices again later.', buttons: ['Cancel', 'Remove'], defaultId: 0, cancelId: 0, noLink: true });
+  if (response === 1) await tts.remove();
+  return tts.status();
+});
+// Én linje om gangen i et skjult arbeidsvindu. Gir lyd som Float32 (24 kHz, mono).
+extensionHandler('tts:generate', async (payload) => {
+  if (!(await tts.status()).installed) throw new Error('Download the AI voices first.');
+  const text = String(payload?.text || '').slice(0, 5000);
+  if (!text.trim()) throw new Error('There is no text to read.');
+  return jobs.runInWorker('tts', { text, voice: String(payload.voice || 'af_heart'), speed: Math.min(2, Math.max(0.5, Number(payload.speed) || 1)), repository: tts.repository, revision: tts.revision, addon: tts.PHONEMIZER_KEY });
+});
 extensionHandler('ai:config', () => extensions.aiConfig());
 extensionHandler('subtitle-models:list', () => subtitleModels.listAvailableModels());
 extensionHandler('subtitle-models:download', id => subtitleModels.downloadModel(id));

@@ -1418,7 +1418,7 @@ When a clip follows a track in **Live** mode, the track controls position and ro
     section: 'Audio',
     title: 'Voice Over Studio: Narration and Talking Head',
     summary: 'Record a script line by line with retakes, read it as a teleprompter, and stitch the takes together on the timeline.',
-    keywords: 'record audio quick microphone voice over studio voiceover narration narrator script teleprompter prompter talking head monologue dialogue retake takes pickup punch in stitch assemble room tone typeloom word pdf markdown fountain final draft read mirror',
+    keywords: 'ai voice text to speech tts kokoro narrator generate read aloud record audio quick microphone voice over studio voiceover narration narrator script teleprompter prompter talking head monologue dialogue retake takes pickup punch in stitch assemble room tone typeloom word pdf markdown fountain final draft read mirror',
     body: `
 Open the studio with **Voice Over Studio** in the toolbar of Edit, the headset and microphone button in the timeline toolbar, or {{key:voiceover}}.
 
@@ -1478,6 +1478,19 @@ Turn on **Camera** to record video with each take. The takes are WebM files with
 ## Sound: Studio Voice out of the box
 
 Every person starts with **Studio Voice**: rumble and light noise removed, warmth and presence, soft S sounds and an even level, so it sounds like voice over straight away. Adjust it under **Sound for** in the side panel. It works like Audio Effects on a clip: add effects or templates, turn each one on or off, change the order, adjust it or remove it. **Volume** sets the level for all of the person's takes, and **Reset to Studio Voice** starts over. You hear the changes in the studio timeline while it plays, and they go with the clips when you stitch.
+
+## AI voices
+
+Let an AI voice read the script. Click **Add AI Voice** (or the sparkle next to Record as). The first time, Reccut downloads the voices: about 116 MB, once. They come from **Kokoro**, an open model that runs on this computer, so it is free, needs no account or key, and the script never leaves the computer. The voices speak English (US and UK), Spanish, French, Italian, Brazilian Portuguese and Hindi. English sounds best. There is no Norwegian voice.
+
+Pick a voice from the list. **Listen** plays a short sample, and **Speed** below 1 reads slower, which often suits voice over. Each AI voice is added as a person on its own track.
+
+- Press **Space** (or **Read line**) to let the voice read the selected line. **R** or **Read Again** makes a new take. **Read All Missing Lines** reads every line without a take, one after another, and Space or Esc stops it.
+- **Say it as** under the takes is what the voice reads. If it says a name, a number or an abbreviation wrong, write it the way it sounds. The script itself is not changed. Words in [brackets] are never read.
+- Takes from an AI voice work like recorded takes: trim, fades, volume, pauses, compare with other people and stitch. They are saved as WAV files in Recordings/Voiceover.
+- Change the voice and speed under **Sound for**. AI voices start without effects, since they are already clean. Add Studio Voice or other effects if you like.
+
+The pronunciation part is an add-on (phonemizer.js with eSpeak NG, which is GPL software). It is not part of Reccut, and is downloaded from npm and checked before use. Remove the AI voices from this computer at the bottom of the AI Voices window.
 
 ## More than one person
 

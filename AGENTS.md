@@ -15,3 +15,10 @@ Når vi lager en ny versjon av Reccut, må About-vinduet også vise det nye vers
 - Reccut selv skal aldri lese tastaturet globalt. Ingen tastaturkrok, `uiohook`, `GetAsyncKeyState` eller lignende i `src/` eller i `dependencies`. Testen `test/keystrokes.test.mjs` sjekker dette.
 - All global tastaturlesing ligger i [native/keystrokes](native/keystrokes), som bygges for seg og aldri pakkes inn i installasjonsfilen.
 - Filteret (bare snarveier, aldri vanlig skriving) ligger i selve hjelpeprogrammet, slik at vanlige tegn aldri når Reccut.
+
+## AI-stemmer (Voice Over Studio)
+
+- AI-stemmene er Kokoro-82M (Apache 2.0) og kjører lokalt i et skjult arbeidsvindu ([src/worker/tts.js](src/worker/tts.js)). Nedlastingen er i [src/main/tts.js](src/main/tts.js).
+- Uttalen kommer fra phonemizer.js, som inneholder eSpeak NG (GPLv3). Den skal aldri pakkes inn i installasjonsfilen eller legges i `dependencies`. Den lastes ned fra npm når brukeren ber om AI-stemmer. Testen `test/tts.test.mjs` sjekker dette.
+- Alle filer er låst i [src/main/ttsCatalog.json](src/main/ttsCatalog.json): modellen og stemmene med fast revisjon og SHA-256, uttalepakken med npm sin sha512. Endres versjonen, må kontrollsummene regnes ut på nytt.
+- Ingenting lastes ned før brukeren trykker Download AI Voices, og manuset sendes aldri ut av maskinen.

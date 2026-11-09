@@ -35,6 +35,8 @@ also have their own license files in the installed application's resources.
 | OpenMoji | Color and outline emoji | CC BY-SA 4.0. Preserve attribution, the license reference and applicable ShareAlike terms when adapting the artwork. |
 | Unicode data | Emoji names and sequences | Unicode License V3. System-style emoji are rendered with installed fonts. |
 | PDF.js | PDF import | Apache 2.0, plus the licenses for bundled fonts, character maps, color profiles and decoder components. These additional texts are included in the reader. |
+| Kokoro-82M (AI voices), downloaded on request | Voice Over Studio | The model and voices are Apache 2.0 (onnx-community/Kokoro-82M-v1.0-ONNX, pinned revision, checked with SHA-256). The text normalization in Reccut follows kokoro-js (Apache 2.0). Not included in the installer. |
+| phonemizer.js with eSpeak NG, downloaded on request | Pronunciation for the AI voices | The npm package says Apache 2.0, but it contains eSpeak NG, which is GPLv3 or later. It is never included in the installer: it is downloaded from npm when the user asks for AI voices, checked against its npm integrity hash and loaded in a separate worker window. |
 | Blackmagic RAW, when included | Native RAW decoding | Separate proprietary SDK terms. Availability depends on the platform and build. The SDK is not covered by Reccut's or FFmpeg's open-source license. |
 
 The full license texts govern; this table is a guide to the main components.

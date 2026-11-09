@@ -39,10 +39,12 @@ const builds = [
   { ...common, entryPoints: [path.join(root, 'src/renderer/voiceover/capture-worklet.js')], outfile: path.join(out, 'vo-capture-worklet.js'), format: 'iife', platform: 'browser' },
   { ...common, entryPoints: [path.join(root, 'src/worker/segment.js')], outfile: path.join(out, 'segment.js'), format: 'esm', platform: 'browser' },
   { ...common, entryPoints: [path.join(root, 'src/worker/transcribe.js')], outfile: path.join(out, 'transcribe.js'), format: 'esm', platform: 'browser' },
+  // AI-stemmer i Voice Over Studio (Kokoro).
+  { ...common, entryPoints: [path.join(root, 'src/worker/tts.js')], outfile: path.join(out, 'tts.js'), format: 'esm', platform: 'browser' },
 ];
 
 function copyStatic() {
-  for (const f of ['index.html', 'help.html', 'export.html', 'transcribe.html', 'segment.html']) {
+  for (const f of ['index.html', 'help.html', 'export.html', 'transcribe.html', 'segment.html', 'tts.html']) {
     const src = fs.existsSync(path.join(root, 'src/renderer', f)) ? path.join(root, 'src/renderer', f) : path.join(root, 'src/worker', f);
     fs.copyFileSync(src, path.join(out, f));
   }

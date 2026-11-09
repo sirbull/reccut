@@ -2,12 +2,13 @@
 // dra i kantene for å trimme og i hjørnene for fades, og juster volum og pause under.
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { Timer, Eye, EyeOff, Minus, Play, Plus, RotateCcw, Square, Trash2, UserPlus, Volume2, VolumeX, Wand2, Scissors, X } from 'lucide-preact';
+import { Sparkles, Timer, Eye, EyeOff, Minus, Play, Plus, RotateCcw, Square, Trash2, UserPlus, Volume2, VolumeX, Wand2, Scissors, X } from 'lucide-preact';
 import { Button, IconButton, NumberField, Slider } from '../ui.jsx';
 import { formatDuration } from '../../shared/model.js';
 import { normalizeGain, peakDbIn } from '../../shared/voiceover.js';
 import * as booth from './booth.js';
 import * as pv from './preview.js';
+import { openAiVoices } from './AiVoice.jsx';
 import { PAUSES, PacingFields, isDefaultPacing, pacing, resetPacing, setPause } from './Pacing.jsx';
 
 export const selected = signal(null); // opptakets id
@@ -157,6 +158,9 @@ export function VoTimeline() {
         <PausesButton />
         <Button class="small" icon={UserPlus} onClick={booth.addPerson} disabled={booth.busy()} title="Add a person on a new track, with their own takes and sound">
           Add Person
+        </Button>
+        <Button class="small" icon={Sparkles} onClick={openAiVoices} disabled={booth.busy()} title="Add an AI voice that reads the script. Free, and runs on this computer.">
+          Add AI Voice
         </Button>
         <div class="spacer" />
         {skipped > 0 && (
