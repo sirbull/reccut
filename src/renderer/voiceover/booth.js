@@ -26,7 +26,7 @@ import {
   planStudio,
 } from '../../shared/voiceover.js';
 import { presetEffects } from '../../shared/audiofx.js';
-import { DEFAULT_VOICE, PREVIEW_TEXT, spokenText, voiceById } from '../../shared/tts.js';
+import { DEFAULT_VOICE, PREVIEW_TEXT, detectLanguage, languageById, spokenText, voiceById, voiceLanguage } from '../../shared/tts.js';
 import { recordingPlan } from '../../shared/recordingFormats.cjs';
 import { audioSink, prefs, setPrefs } from '../prefs.js';
 import { boothOpen } from './state.js';
@@ -652,7 +652,11 @@ export function setSpoken(key, text, who = personId.value) {
   });
 }
 
-export function addAiPerson(voice = DEFAULT_VOICE, speed = 1) {
+// Språket manuset ser ut til å være skrevet på (forslag til AI-stemmen).
+export const scriptLanguage = computed(() => detectLanguage(vo.value.script?.text || ''));
+export const aiLanguage = (p) => languageById(p?.ai?.lang) || voiceLanguage(p?.ai?.voice);
+
+export function addAiPerson(voice = DEFAULT_VOICE, speed = 1, lang = voiceLanguage(voice).id) {
   if (busy()) return toast('Stop the take first.');
   const list = people.value;
   const v = voiceById(voice);
@@ -660,7 +664,7 @@ export function addAiPerson(voice = DEFAULT_VOICE, speed = 1) {
   let name = `${v.name} (AI)`;
   for (let n = 2; used.has(name.toLowerCase()); n++) name = `${v.name} ${n} (AI)`;
   // AI-stemmen er ren fra før, så den får ingen effekter som standard.
-  const p = { id: uid(), name, color: COLORS[list.length % COLORS.length], fx: [], gain: 0, ai: { voice: v.id, speed } };
+  const p = { id: uid(), name, color: COLORS[list.length % COLORS.length], fx: [], gain: 0, ai: { voice: v.id, speed, lang } };
   setVo((x) => {
     x.people = [...listOf(x), p];
     x.person = p.id;
@@ -682,7 +686,7 @@ export async function generate(key = current.value?.key, { advance = true } = {}
   status.value = 'generating';
   recordingKey.value = key;
   try {
-    const { samples, rate } = await api.ttsGenerate({ text, voice: who.ai.voice, speed: who.ai.speed || 1 });
+    const { samples, rate } = await api.ttsGenerate({ text, voice: who.ai.voice, speed: who.ai.speed || 1, lang: aiLanguage(who).id });
     status.value = 'saving';
     await saveTake(key, samples instanceof Float32Array ? samples : new Float32Array(samples), null, { rate, ai: true, advance });
   } catch (err) {
@@ -717,13 +721,13 @@ export function cancelGenerate() {
 let sampleCtx = null,
   sampleSrc = null;
 export const sampling = signal(null);
-export async function previewVoice(voice, speed = 1) {
+export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice).id) {
   sampleSrc?.stop();
   sampleSrc = null;
   if (sampling.value === voice) return (sampling.value = null);
   sampling.value = voice;
   try {
-    const { samples, rate } = await api.ttsGenerate({ text: PREVIEW_TEXT[voice[0]] || PREVIEW_TEXT.a, voice, speed });
+    const { samples, rate } = await api.ttsGenerate({ text: PREVIEW_TEXT[lang] || PREVIEW_TEXT['en-us'], voice, speed, lang });
     if (sampling.value !== voice) return;
     sampleCtx ||= new AudioContext();
     sampleCtx.setSinkId?.(audioSink.value).catch(() => {});

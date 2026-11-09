@@ -6,7 +6,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
-import { VOICES, LANGUAGES, chunksForSpeech, fixPhonemesFor, normalizeEnglish, spokenText, splitPunctuation, voiceLabel } from '../src/shared/tts.js';
+import { VOICES, LANGUAGES, chunksForSpeech, defaultVoiceFor, detectLanguage, fixPhonemesFor, languageById, nearestSounds, normalizeEnglish, spokenText, splitPunctuation, voiceLabel, voiceLanguage, voicesFor } from '../src/shared/tts.js';
 
 const require = createRequire(import.meta.url);
 const { createTts, untarFile, CATALOG } = require('../src/main/tts.js');
@@ -29,15 +29,15 @@ test('directions in brackets are not read, and long text is split into sentences
 
 test('punctuation is kept between phoneme runs, with the Kokoro fixes for English only', () => {
   assert.deepEqual(splitPunctuation('Hi, there.'), [{ match: false, text: 'Hi' }, { match: true, text: ', ' }, { match: false, text: 'there' }, { match: true, text: '.' }]);
-  assert.equal(fixPhonemesFor('nˈaɪnti r', 'a'), 'nˈaɪndi ɹ');
-  assert.equal(fixPhonemesFor('nˈaɪnti r', 'b'), 'nˈaɪnti ɹ');
-  assert.equal(fixPhonemesFor(' rosa ', 'i'), 'rosa');
+  assert.equal(fixPhonemesFor('nˈaɪnti r', 'en-us'), 'nˈaɪndi ɹ');
+  assert.equal(fixPhonemesFor('nˈaɪnti r', 'en-gb'), 'nˈaɪnti ɹ');
+  assert.equal(fixPhonemesFor(' rosa ', 'it'), 'rosa');
 });
 
 test('every voice has a language and an installed voice file in the pinned catalog', () => {
   const files = new Set(CATALOG.model.files.map((f) => f.path));
   for (const v of VOICES) {
-    assert.ok(LANGUAGES[v.lang], v.id);
+    assert.ok(voiceLanguage(v.id).voices === v.id[0], v.id);
     assert.ok(files.has(`voices/${v.id}.bin`), `${v.id} is in the catalog`);
   }
   assert.equal(voiceLabel('bm_lewis'), 'Lewis (English (UK), male)');
@@ -132,4 +132,22 @@ test('the voice model and the GPL pronunciation add-on are never packed into the
   }
   const resources = JSON.stringify(pkg.build.extraResources || []);
   assert.ok(!/kokoro|phonemizer|tts/i.test(resources));
+});
+
+test('the language is chosen separately, suggested from the script, and Norwegian sounds the model lacks are mapped', () => {
+  assert.equal(detectLanguage('Velkommen til fremtidens redigering. Det er ikke vanskelig, og du kan gjøre det selv.'), 'nb');
+  assert.equal(detectLanguage('Welcome to the future of editing. It is not hard, and you can do it.'), 'en-us');
+  assert.equal(detectLanguage('Välkommen till framtidens redigering. Det är inte svårt och du kan göra det själv.'), 'sv');
+  assert.equal(detectLanguage('Willkommen in der Zukunft. Das ist nicht schwer und wir können es.'), 'de');
+  assert.equal(detectLanguage('Hi'), null);
+  // ʉ (hus), ɭ and ʏ are not in the Kokoro vocabulary; the nearest sounds are used. ç stays.
+  assert.equal(nearestSounds('hʉːs ɭ ʏ ç'), 'hyːs l y ç');
+  assert.equal(fixPhonemesFor('hʉːs', 'nb'), 'hyːs');
+  // Languages with their own voices list them first, the rest only have voices with an accent.
+  assert.ok(voicesFor('fr').own.every((v) => v.id.startsWith('f')));
+  assert.equal(voicesFor('nb').own.length, 0);
+  assert.equal(voicesFor('nb').other.length, VOICES.length);
+  assert.equal(defaultVoiceFor('en-gb'), 'bf_emma');
+  assert.equal(defaultVoiceFor('nb'), languageById('nb').near);
+  assert.ok(LANGUAGES.every((l) => l.espeak && l.label));
 });

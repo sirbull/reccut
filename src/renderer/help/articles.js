@@ -1481,16 +1481,18 @@ Every person starts with **Studio Voice**: rumble and light noise removed, warmt
 
 ## AI voices
 
-Let an AI voice read the script. Click **Add AI Voice** (or the sparkle next to Record as). The first time, Reccut downloads the voices: about 116 MB, once. They come from **Kokoro**, an open model that runs on this computer, so it is free, needs no account or key, and the script never leaves the computer. The voices speak English (US and UK), Spanish, French, Italian, Brazilian Portuguese and Hindi. English sounds best. There is no Norwegian voice.
+Let an AI voice read the script. Click **Add AI Voice** (or the sparkle next to Record as). The first time, Reccut downloads the voices: about 116 MB, once. They come from **Kokoro**, an open model that runs on this computer, so it is free, needs no account or key, and the script never leaves the computer.
+
+Choose the **Language** first, so the words are pronounced right. Reccut suggests the language the script looks like it is written in. Kokoro has voices made for English (US and UK), Spanish, French, Italian, Brazilian Portuguese and Hindi, and English sounds best. Norwegian, Swedish, Danish, German, Dutch, Finnish, Polish and Portuguese (Portugal) are pronounced in that language, but read by a voice made for another language, so they have an accent. Listen to a few voices and pick the one you like.
 
 Pick a voice from the list. **Listen** plays a short sample, and **Speed** below 1 reads slower, which often suits voice over. Each AI voice is added as a person on its own track.
 
 - Press **Space** (or **Read line**) to let the voice read the selected line. **R** or **Read Again** makes a new take. **Read All Missing Lines** reads every line without a take, one after another, and Space or Esc stops it.
 - **Say it as** under the takes is what the voice reads. If it says a name, a number or an abbreviation wrong, write it the way it sounds. The script itself is not changed. Words in [brackets] are never read.
 - Takes from an AI voice work like recorded takes: trim, fades, volume, pauses, compare with other people and stitch. They are saved as WAV files in Recordings/Voiceover.
-- Change the voice and speed under **Sound for**. AI voices start without effects, since they are already clean. Add Studio Voice or other effects if you like.
+- Change the language, voice and speed under **Sound for**. AI voices start without effects, since they are already clean. Add Studio Voice or other effects if you like.
 
-The pronunciation part is an add-on (phonemizer.js with eSpeak NG, which is GPL software). It is not part of Reccut, and is downloaded from npm and checked before use. Remove the AI voices from this computer at the bottom of the AI Voices window.
+The pronunciation part is an add-on (phonemizer.js with eSpeak NG, which is GPL software). It is not part of Reccut, and is downloaded from npm and checked before use. Download or remove the AI voices in **Settings → AI**, or at the bottom of the AI Voices window.
 
 ## More than one person
 

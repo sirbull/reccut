@@ -1252,7 +1252,7 @@ extensionHandler('tts:generate', async (payload) => {
   if (!(await tts.status()).installed) throw new Error('Download the AI voices first.');
   const text = String(payload?.text || '').slice(0, 5000);
   if (!text.trim()) throw new Error('There is no text to read.');
-  return jobs.runInWorker('tts', { text, voice: String(payload.voice || 'af_heart'), speed: Math.min(2, Math.max(0.5, Number(payload.speed) || 1)), repository: tts.repository, revision: tts.revision, addon: tts.PHONEMIZER_KEY });
+  return jobs.runInWorker('tts', { text, voice: String(payload.voice || 'af_heart'), lang: String(payload.lang || ''), speed: Math.min(2, Math.max(0.5, Number(payload.speed) || 1)), repository: tts.repository, revision: tts.revision, addon: tts.PHONEMIZER_KEY });
 });
 extensionHandler('ai:config', () => extensions.aiConfig());
 extensionHandler('subtitle-models:list', () => subtitleModels.listAvailableModels());

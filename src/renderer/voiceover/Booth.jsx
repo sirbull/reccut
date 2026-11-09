@@ -40,7 +40,7 @@ import { formatDuration } from '../../shared/model.js';
 import * as booth from './booth.js';
 import { StudioIcon } from './StudioIcon.jsx';
 import { AiVoiceDialog, aiDialogOpen, openAiVoices } from './AiVoice.jsx';
-import { VOICES, voiceLabel } from '../../shared/tts.js';
+import { LANGUAGES, VOICES, languageById, voiceLabel } from '../../shared/tts.js';
 import { PacingFields } from './Pacing.jsx';
 import { VoTimeline, deleteSelected, pausesOpen, selected as vtSelected, togglePreview } from './VoTimeline.jsx';
 
@@ -654,17 +654,29 @@ function Sound() {
       <p class="dim">Applies to all of {p.name}'s takes. You hear it in the studio timeline, and it goes with the clips when you stitch.</p>
       {p.ai && (
         <>
+          <label class="vt-ctl" title="The language the lines are read in">
+            Language
+            <Select value={booth.aiLanguage(p).id} options={LANGUAGES.map((l) => ({ value: l.id, label: `${l.label}${l.voices ? '' : ' (with accent)'}` }))} onChange={(lang) => booth.setAiVoice(p.id, { lang })} />
+          </label>
           <label class="vt-ctl">
             Voice
             <Select value={p.ai.voice} options={VOICES.map((v) => ({ value: v.id, label: voiceLabel(v.id) }))} onChange={(voice) => booth.setAiVoice(p.id, { voice })} />
-            <IconButton icon={booth.sampling.value === p.ai.voice ? Square : Play} size={13} title="Listen" onClick={() => booth.previewVoice(p.ai.voice, p.ai.speed || 1)} />
+            <IconButton icon={booth.sampling.value === p.ai.voice ? Square : Play} size={13} title="Listen" onClick={() => booth.previewVoice(p.ai.voice, p.ai.speed || 1, booth.aiLanguage(p).id)} />
           </label>
+          {booth.scriptLanguage.value && booth.scriptLanguage.value !== booth.aiLanguage(p).id && (
+            <p class="ai-note">
+              The script looks like {languageById(booth.scriptLanguage.value).label}.{' '}
+              <button class="link" onClick={() => booth.setAiVoice(p.id, { lang: booth.scriptLanguage.value })}>
+                Read it in {languageById(booth.scriptLanguage.value).label}
+              </button>
+            </p>
+          )}
           <label class="vt-ctl" title="Speaking speed for new takes. Below 1 is slower.">
             Speed
             <Slider value={p.ai.speed || 1} min={0.5} max={1.5} step={0.01} center={1} onInput={(x) => booth.setAiVoice(p.id, { speed: x })} />
             <NumberField value={p.ai.speed || 1} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={(x) => booth.setAiVoice(p.id, { speed: x })} />
           </label>
-          <p class="dim">A new voice or speed is used for new takes. Read the lines again to hear it.</p>
+          <p class="dim">A new language, voice or speed is used for new takes. Read the lines again to hear it.</p>
         </>
       )}
       <label class="vt-ctl">

@@ -1,5 +1,6 @@
 import {OnlineSettings} from './design/Online.jsx';
 import { LocalSubtitleModels } from './SubtitleModels.jsx';
+import { AiVoiceSettings } from './voiceover/AiVoice.jsx';
 import { PacingFields, isDefaultPacing, resetPacing } from './voiceover/Pacing.jsx';
 // Innstillinger (Cmd ,), bygd som i Final Cut Pro: faner med ikoner øverst, og en kommandoeditor
 // for hurtigtaster. Alle valg lagres med en gang og gjelder hele appen.
@@ -546,7 +547,7 @@ export function SettingsWindow() {
           {current.id === 'export' && <ExportPane />}
           {current.id === 'design' && <OnlineSettings/>}
           {current.id === 'keyboard' && <KeyboardPane />}
-          {current.id === 'extensions' && <><LocalSubtitleModels/><ExtensionsPane/><OnlineSettings/></>}
+          {current.id === 'extensions' && <><LocalSubtitleModels/><AiVoiceSettings/><ExtensionsPane/><OnlineSettings/></>}
           {current.id === 'plugins' && <PluginsPane designSettings={<OnlineSettings/>}/>}
         </div>
       </div>

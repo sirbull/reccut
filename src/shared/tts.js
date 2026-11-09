@@ -1,16 +1,30 @@
 // AI-stemmer (Kokoro-82M): stemmene og hvordan teksten gjøres om til noe som kan leses høyt.
 // Normaliseringen for engelsk følger kokoro-js (Apache 2.0, hexgrad og Xenova).
 
-// Første bokstav i stemmen er språket. eSpeak-koden brukes til uttalen.
-export const LANGUAGES = {
-  a: { label: 'English (US)', espeak: 'en-us', english: true },
-  b: { label: 'English (UK)', espeak: 'en', english: true },
-  e: { label: 'Spanish', espeak: 'es' },
-  f: { label: 'French', espeak: 'fr-fr' },
-  h: { label: 'Hindi', espeak: 'hi' },
-  i: { label: 'Italian', espeak: 'it' },
-  p: { label: 'Portuguese (Brazil)', espeak: 'pt-br' },
-};
+// Språket teksten leses på. eSpeak-koden gir uttalen. Kokoro har egne stemmer for noen av
+// språkene (voices: første bokstav i stemmen). De andre leses med en stemme fra et annet språk,
+// så de får aksent: uttalen er riktig, men stemmen er ikke trent på språket.
+export const LANGUAGES = [
+  { id: 'en-us', label: 'English (US)', espeak: 'en-us', voices: 'a', english: true },
+  { id: 'en-gb', label: 'English (UK)', espeak: 'en', voices: 'b', english: true },
+  { id: 'es', label: 'Spanish', espeak: 'es', voices: 'e' },
+  { id: 'fr', label: 'French', espeak: 'fr-fr', voices: 'f' },
+  { id: 'it', label: 'Italian', espeak: 'it', voices: 'i' },
+  { id: 'pt-br', label: 'Portuguese (Brazil)', espeak: 'pt-br', voices: 'p' },
+  { id: 'hi', label: 'Hindi', espeak: 'hi', voices: 'h' },
+  { id: 'nb', label: 'Norwegian (Bokmål)', espeak: 'nb', near: 'bf_emma' },
+  { id: 'sv', label: 'Swedish', espeak: 'sv', near: 'bf_emma' },
+  { id: 'da', label: 'Danish', espeak: 'da', near: 'bf_emma' },
+  { id: 'de', label: 'German', espeak: 'de', near: 'bm_george' },
+  { id: 'nl', label: 'Dutch', espeak: 'nl', near: 'bf_emma' },
+  { id: 'fi', label: 'Finnish', espeak: 'fi', near: 'if_sara' },
+  { id: 'pl', label: 'Polish', espeak: 'pl', near: 'if_sara' },
+  { id: 'pt', label: 'Portuguese (Portugal)', espeak: 'pt', near: 'pf_dora' },
+];
+export const languageById = (id) => LANGUAGES.find((l) => l.id === id) || null;
+// Språket en stemme er laget for.
+export const voiceLanguage = (voice) => LANGUAGES.find((l) => l.voices === String(voice)[0]) || LANGUAGES[0];
+export const hasOwnVoices = (lang) => Boolean(languageById(lang)?.voices);
 
 // Karakterene er fra Kokoro sin egen oversikt (A er best). Stemmene med best karakter står først.
 const V = (id, name, gender, grade) => ({ id, name, gender, grade, lang: id[0] });
@@ -61,17 +75,66 @@ export const DEFAULT_VOICE = 'af_heart';
 export const voiceById = (id) => VOICES.find((v) => v.id === id) || VOICES[0];
 export const voiceLabel = (id) => {
   const v = voiceById(id);
-  return `${v.name} (${LANGUAGES[v.lang].label}, ${v.gender.toLowerCase()})`;
+  return `${v.name} (${voiceLanguage(v.id).label}, ${v.gender.toLowerCase()})`;
 };
+// Stemmene for et språk: de som er laget for det først, deretter de andre (med aksent).
+export function voicesFor(lang) {
+  const own = VOICES.filter((v) => voiceLanguage(v.id).id === lang);
+  return { own, other: VOICES.filter((v) => !own.includes(v)) };
+}
+export const defaultVoiceFor = (lang) => voicesFor(lang).own[0]?.id || languageById(lang)?.near || DEFAULT_VOICE;
 export const PREVIEW_TEXT = {
-  a: 'Hi, this is how I sound in the Voice Over Studio.',
-  b: 'Hello, this is how I sound in the Voice Over Studio.',
-  e: 'Hola, así sueno en el estudio de voz.',
-  f: 'Bonjour, voici ma voix dans le studio.',
-  h: 'नमस्ते, स्टूडियो में मेरी आवाज़ ऐसी लगती है।',
-  i: 'Ciao, questa è la mia voce nello studio.',
-  p: 'Olá, esta é a minha voz no estúdio.',
+  'en-us': 'Hi, this is how I sound in the Voice Over Studio.',
+  'en-gb': 'Hello, this is how I sound in the Voice Over Studio.',
+  es: 'Hola, así sueno en el estudio de voz.',
+  fr: 'Bonjour, voici ma voix dans le studio.',
+  hi: 'नमस्ते, स्टूडियो में मेरी आवाज़ ऐसी लगती है।',
+  it: 'Ciao, questa è la mia voce nello studio.',
+  'pt-br': 'Olá, esta é a minha voz no estúdio.',
+  nb: 'Hei, slik høres jeg ut i lydstudioet.',
+  sv: 'Hej, så här låter jag i studion.',
+  da: 'Hej, sådan lyder jeg i studiet.',
+  de: 'Hallo, so klinge ich im Studio.',
+  nl: 'Hallo, zo klink ik in de studio.',
+  fi: 'Hei, tältä kuulostan studiossa.',
+  pl: 'Cześć, tak brzmię w studiu.',
+  pt: 'Olá, é assim que eu soo no estúdio.',
 };
+
+// Språket i et manus, ut fra vanlige småord og bokstaver. Gir et forslag, ikke en fasit.
+const WORDS = {
+  'en-us': 'the and is to of that it you in for with this are on be',
+  nb: 'og er det som ikke på en jeg til av med har for vi deg hva',
+  sv: 'och är det som inte på en jag till av med har för vi dig vad',
+  da: 'og er det som ikke på en jeg til af med har for vi dig hvad',
+  de: 'und ist das die der nicht ein ich zu mit es sie wir auf für',
+  nl: 'en is het de een niet ik van dat met op voor zijn wij je',
+  es: 'el la de que y en los es no un por con para una las',
+  fr: 'le la de et est les des un une que pas pour dans vous je',
+  it: 'il di che e la non un per è una sono con mi si',
+  'pt-br': 'o de que e a não um para com uma os é se na',
+  fi: 'ja on ei se että hän mutta tämä olen kun niin',
+  pl: 'i w nie na się że jest to z do jak co ale',
+};
+export function detectLanguage(text) {
+  const words = String(text).toLowerCase().match(/[\p{L}']+/gu) || [];
+  if (words.length < 3) return null;
+  let best = null,
+    score = 0;
+  for (const [lang, list] of Object.entries(WORDS)) {
+    const set = new Set(list.split(' '));
+    let n = words.filter((w) => set.has(w)).length;
+    if (lang === 'nb' && /[æøå]/i.test(text)) n += 2;
+    if (lang === 'da' && /\b(af|hvad|ikke|jeg)\b/i.test(text) && /æ|ø/.test(text)) n += 1;
+    if (lang === 'sv' && /[äö]/i.test(text) && /å/i.test(text)) n += 2;
+    if (lang === 'de' && /[äöüß]/i.test(text) && !/å/i.test(text)) n += 1;
+    if (n > score) {
+      score = n;
+      best = lang;
+    }
+  }
+  return score >= 2 ? best : null;
+}
 
 /* Tekst til tale */
 
@@ -173,8 +236,15 @@ export function fixPhonemes(ipa, lang) {
   if (lang === 'a') s = s.replace(/(?<=nˈaɪn)ti(?!ː)/g, 'di');
   return s.trim();
 }
-// Andre språk: bare de generelle rettelsene.
-export const fixPhonemesFor = (ipa, lang) => (LANGUAGES[lang]?.english ? fixPhonemes(ipa, lang) : ipa.trim());
+// Lyder Kokoro ikke kjenner, byttes til de nærmeste den har (særlig nordiske vokaler).
+const NEAREST = { ʉ: 'y', ʏ: 'y', ɵ: 'ø', ɘ: 'ə', ɞ: 'œ', ɭ: 'l', ɫ: 'l', ɬ: 'l', ʑ: 'ʒ', ɧ: 'ʃ', ʀ: 'ʁ', ɦ: 'h', ɱ: 'm', ʍ: 'w', ɶ: 'œ', ä: 'a', ë: 'e', ï: 'i', ö: 'ø', ü: 'y' };
+export function nearestSounds(ipa) {
+  return String(ipa)
+    .replace(/[ʉʏɵɘɞɭɫɬʑɧʀɦɱʍɶäëïöü]/g, (c) => NEAREST[c])
+    .replace(/[\u0300-\u0302\u0304-\u036f]/g, '');
+}
+// Engelsk får rettelsene fra kokoro-js. Alle språk får de nærmeste lydene.
+export const fixPhonemesFor = (ipa, lang) => nearestSounds(languageById(lang)?.english ? fixPhonemes(ipa, lang === 'en-us' ? 'a' : 'b') : ipa.trim());
 
 // Tegnsetting sendes til modellen som den er, resten blir uttale.
 export const PUNCTUATION = /(\s*[;:,.!?¡¿—…"«»“”(){}[\]]+\s*)+/g;

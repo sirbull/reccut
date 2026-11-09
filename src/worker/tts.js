@@ -2,7 +2,7 @@
 // Modellen og stemmene leses fra disk via hovedprosessen (kontrollert ved nedlasting).
 // Uttalen (eSpeak NG i phonemizer.js) er et eget tillegg som lastes inn herfra.
 import { env, AutoTokenizer, StyleTextToSpeech2Model, Tensor } from '@huggingface/transformers';
-import { LANGUAGES, chunksForSpeech, fixPhonemesFor, normalizeEnglish, splitPunctuation } from '../shared/tts.js';
+import { chunksForSpeech, fixPhonemesFor, languageById, normalizeEnglish, splitPunctuation, voiceLanguage } from '../shared/tts.js';
 
 env.allowLocalModels = true;
 env.allowRemoteModels = false;
@@ -55,16 +55,26 @@ async function voice(id, { repository, revision }) {
 
 // Tekst til uttale (IPA). Tegnsetting beholdes, så modellen får med seg pausene.
 async function toPhonemes(text, lang, phonemize) {
-  const l = LANGUAGES[lang] || LANGUAGES.a;
+  const l = languageById(lang);
   const src = l.english ? normalizeEnglish(text) : text;
-  const parts = await Promise.all(splitPunctuation(src).map(async (p) => (p.match ? p.text : (await phonemize(p.text, l.espeak)).join(' '))));
-  return fixPhonemesFor(parts.join(''), lang);
+  const parts = await Promise.all(
+    splitPunctuation(src).map(async (p) => {
+      if (p.match) return p.text;
+      try {
+        return (await phonemize(p.text, l.espeak)).join(' ');
+      } catch (err) {
+        if (/Invalid language/.test(err?.message)) throw new Error(`The pronunciation add-on cannot read ${l.label}.`);
+        throw err;
+      }
+    })
+  );
+  return fixPhonemesFor(parts.join(''), l.id);
 }
 
 window.worker.onJob(async ({ jobId, payload }) => {
   try {
     const { model, tokenizer, phonemize } = await load(payload);
-    const lang = payload.voice[0];
+    const lang = languageById(payload.lang)?.id || voiceLanguage(payload.voice).id;
     const style = await voice(payload.voice, payload);
     const chunks = chunksForSpeech(payload.text);
     const pieces = [];
