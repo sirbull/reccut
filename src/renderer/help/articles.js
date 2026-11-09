@@ -1420,7 +1420,11 @@ When a clip follows a track in **Live** mode, the track controls position and ro
     summary: 'Record a script line by line with retakes, read it as a teleprompter, and stitch the takes together on the timeline.',
     keywords: 'voice over studio voiceover narration narrator script teleprompter prompter talking head monologue dialogue retake takes pickup punch in stitch assemble room tone typeloom word pdf markdown fountain final draft read mirror',
     body: `
-Open the studio with **Voice Over** in the toolbar of Edit, or {{key:voiceover}}. It opens over the editor with the script on the left and the recording tools on the right. Everything you do in the studio is saved in the project, so you can close it and continue later.
+Open the studio with **Voice Over Studio** in the toolbar of Edit, the headset and microphone button in the timeline toolbar, or {{key:voiceover}}.
+
+## First: room tone
+
+The first time you open the studio in a project, it asks for five seconds of room tone. Sit where you will record, click **Record Room Tone** (or press Space), and stay quiet. It counts down from 3, records 5 seconds and stops by itself. If it hears a voice or a knock, it asks you to try again. You can skip it and record it later under Room tone in the side panel. It opens over the editor with the script on the left and the recording tools on the right. Everything you do in the studio is saved in the project, so you can close it and continue later.
 
 ## The script
 
@@ -1453,7 +1457,7 @@ Each line keeps all its takes. The latest take is used, unless you star one or c
 
 Each take is trimmed where your voice starts and ends, with a little **air before** and **air after**. Soft starts such as a breath or an s are kept. Adjust a take with the scissors in the list if needed. Takes that clip or where no voice was found are marked.
 
-Record **room tone** once: five seconds of the quiet room. It is used as the noise floor when the studio listens for your voice, and it fills the pauses between lines on the timeline, so the voice never drops to digital silence.
+The **room tone** is used as the noise floor when the studio listens for your voice, and it fills the pauses between lines on the timeline, so the voice never drops to digital silence.
 
 Aim for peaks between -12 and -6 dB on the meter. The studio records 24-bit WAV without echo cancellation, noise suppression or automatic gain. Choose the input channel if your interface has the microphone on input 2.
 

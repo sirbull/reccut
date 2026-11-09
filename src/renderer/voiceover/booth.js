@@ -64,7 +64,7 @@ export const cameraStream = signal(null);
 export const playingTake = signal(null);
 export const recordingKey = signal(null);
 
-const EMPTY = { script: null, pos: 0, takes: [], selected: {}, roomTone: null, placed: null };
+const EMPTY = { script: null, pos: 0, takes: [], selected: {}, roomTone: null, roomToneSkipped: false, placed: null };
 export const vo = computed(() => ({ ...EMPTY, ...(project.value.voiceover || {}) }));
 export const blocks = computed(() => parseScript(vo.value.script?.text || '', { split: opt('voSplit') }));
 export const lines = computed(() => blocks.value.filter((b) => b.kind === 'line'));
@@ -443,8 +443,7 @@ async function saveTake(key, samples, blob) {
       if (list[i + 1]) v.pos = list[i + 1].index;
     }
   });
-  if (isTone && !vo.value.roomTone.quiet) toast('The room tone has sound in it, such as a voice or a knock. Record it again while everyone is quiet.', { kind: 'error', timeout: 8000 });
-  else if (isTone) toast(`Room tone saved. Noise floor ${vo.value.roomTone.floor} dB.`, { kind: 'success', timeout: 4000 });
+  if (isTone && vo.value.roomTone.quiet) toast(`Room tone saved. Noise floor ${vo.value.roomTone.floor} dB.`, { kind: 'success', timeout: 4000 });
   else if (clipped) toast(`Take ${n} clipped (peak ${take.peakDb} dB). Turn the input gain down and record it again.`, { kind: 'error', timeout: 8000 });
   else if (!trim.found) toast(`No voice was found in take ${n}. It is kept untrimmed.`, { timeout: 6000 });
   return take;
@@ -453,22 +452,46 @@ async function saveTake(key, samples, blob) {
 export const lineNumber = (b) => (b ? lines.value.findIndex((x) => x.key === b.key) + 1 : 0);
 
 // Romlyd: fem sekunder stillhet i rommet, brukt til å fylle pausene og som støygulv for deteksjonen.
+// Nedtelling fra 3, så tar den opp av seg selv og stopper. Esc avbryter.
+export const toneLeft = signal(0);
+export const roomSetup = signal(false); // romlydkortet vises på nytt (Record Again, eller romlyden hadde lyd i seg)
 export async function recordRoomTone(seconds = 5) {
   if (!node) await openInput();
   if (!node || status.value !== 'idle') return;
+  recordingKey.value = 'roomtone';
+  try {
+    status.value = 'countin';
+    for (let n = 3; n > 0; n--) {
+      countLeft.value = n;
+      await wait(1000);
+    }
+  } catch {
+    status.value = 'idle';
+    recordingKey.value = null;
+    return;
+  }
+  status.value = 'idle';
   await begin('roomtone', { quick: true });
   status.value = 'tone';
+  const t0 = performance.now();
+  const tick = setInterval(() => (toneLeft.value = Math.max(0, seconds - (performance.now() - t0) / 1000)), 100);
+  toneLeft.value = seconds;
   try {
     await wait(seconds * 1000);
   } catch {
+    clearInterval(tick);
     await halt();
     status.value = 'idle';
+    recordingKey.value = null;
     return;
   }
+  clearInterval(tick);
+  toneLeft.value = 0;
   const { samples } = await halt();
   status.value = 'saving';
   try {
     await saveTake('roomtone', samples, null);
+    roomSetup.value = !vo.value.roomTone?.quiet;
   } catch (err) {
     toast(`Could not save the room tone: ${err.message}`, { kind: 'error' });
   } finally {
@@ -476,6 +499,13 @@ export async function recordRoomTone(seconds = 5) {
     recordingKey.value = null;
   }
 }
+// Hopper over romlyden. Den kan tas opp senere fra panelet.
+export function skipRoomTone() {
+  roomSetup.value = false;
+  setVo((v) => void (v.roomToneSkipped = true));
+}
+// Romlydkortet vises når studioet åpnes første gang i prosjektet, og når romlyden tas opp på nytt.
+export const needsRoomTone = computed(() => roomSetup.value || (!vo.value.roomTone && !vo.value.roomToneSkipped));
 
 /* Valg av opptak */
 
@@ -647,5 +677,6 @@ export function placedCount() {
 export function closeBooth() {
   if (status.value === 'recording') return toast('Stop the take first (Space), or press Esc to discard it.');
   closeInput();
+  roomSetup.value = false;
   boothOpen.value = false;
 }

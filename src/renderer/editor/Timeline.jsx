@@ -88,6 +88,8 @@ import {
   clipSelection,
 } from './store.js';
 import { fileUrl, scrubAudio, seek, showTimeline, sourceProject } from './playback.js';
+import { openBooth } from '../voiceover/state.js';
+import { StudioIcon } from '../voiceover/StudioIcon.jsx';
 import { Button, IconButton } from '../ui.jsx';
 import * as commands from './commands.js';
 import { prefs, setPrefs } from '../prefs.js';
@@ -1132,6 +1134,9 @@ function TimelineToolbar() {
       <div class="group">
         <IconButton icon={Type} title={`Add Title (${isMac ? '⌃T' : 'Alt+T'})`} onClick={() => commands.addTitle('center')} />
         <IconButton icon={Captions} title={`Add Caption (${isMac ? '⌥C' : 'Alt+C'})`} onClick={() => commands.addCaption()} />
+        <button type="button" class="icon-btn vo-tl-btn" title={`Voice Over Studio: record narration or a talking head (${isMac ? '⌥⌘B' : 'Ctrl+Alt+B'})`} aria-label="Voice Over Studio" onClick={openBooth}>
+          <StudioIcon size={15} />
+        </button>
         <span class="sep" />
         <IconButton icon={ZoomOut} title={`Zoom Out (${isMac ? '⌘-' : 'Ctrl+-'})`} onClick={() => commands.zoom(1 / 1.5)} />
         <input

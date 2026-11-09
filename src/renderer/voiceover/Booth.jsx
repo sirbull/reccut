@@ -33,6 +33,7 @@ import { isTyping } from '../keyboard.js';
 import { chosenTake, orphanTakes, progress, readingTime, DEFAULT_PACING } from '../../shared/voiceover.js';
 import { formatDuration } from '../../shared/model.js';
 import * as booth from './booth.js';
+import { StudioIcon } from './StudioIcon.jsx';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -67,6 +68,17 @@ function onBoothKey(e) {
   const mod = e.metaKey || e.ctrlKey;
   const k = e.key;
   let handled = true;
+  // Romlyden først: mellomrom starter den, Esc avbryter eller hopper over.
+  if (booth.needsRoomTone.value) {
+    if (k === ' ' || e.code === 'Space') !booth.busy() && booth.recordRoomTone(5);
+    else if (k === 'Escape') booth.busy() ? booth.cancel() : booth.skipRoomTone();
+    else handled = false;
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    return;
+  }
   if (k === ' ' || e.code === 'Space') booth.toggle();
   else if (k === 'Escape') booth.busy() ? booth.cancel() : booth.closeBooth();
   else if (mod && k === 'Enter') booth.stitch();
@@ -112,9 +124,10 @@ export function VoiceoverBooth() {
       <div class="vo-body">
         <ScriptPane />
         {!prompter && <SidePane />}
+        {booth.needsRoomTone.value && <RoomToneSetup />}
       </div>
       {prompter && <PrompterBar />}
-      <KeyBar />
+      {!booth.needsRoomTone.value && <KeyBar />}
     </div>
   );
 }
@@ -132,7 +145,7 @@ function BoothHeader() {
   };
   return (
     <header class="vo-head">
-      <AudioWaveform size={16} />
+      <StudioIcon size={16} />
       <b>Voice Over Studio</b>
       {v.script && (
         <span class="dim vo-progress" title="Lines with a usable take">
@@ -517,10 +530,64 @@ function RoomTone() {
       <h4>Room tone</h4>
       <p class="dim">Five seconds of the quiet room. It fills the pauses between lines and helps find where your voice starts.</p>
       <div class="vo-transport-row">
-        <Button class="small" icon={Wind} onClick={() => booth.recordRoomTone(5)} disabled={booth.busy()}>
+        <Button class="small" icon={Wind} onClick={() => (booth.roomSetup.value = true)} disabled={booth.busy()}>
           {tone ? 'Record Again' : 'Record Room Tone'}
         </Button>
         {tone && <span class="dim">Floor {tone.floor} dB</span>}
+      </div>
+    </div>
+  );
+}
+
+// Første steg når studioet åpnes: fem sekunder romlyd. Ett klikk, nedtelling fra 3, så tar det opp og stopper selv.
+function RoomToneSetup() {
+  const st = booth.status.value;
+  const tone = booth.vo.value.roomTone;
+  const mine = booth.recordingKey.value === 'roomtone';
+  const counting = mine && st === 'countin';
+  const recording = st === 'tone';
+  const saving = mine && st === 'saving';
+  const retry = tone && !tone.quiet && st === 'idle';
+  return (
+    <div class="vo-setup">
+      <div class="vo-setup-card" role="group" aria-label="Record room tone">
+        <StudioIcon size={30} />
+        <h3>{retry ? 'There was sound in the room tone' : 'First, record the room'}</h3>
+        {counting ? (
+          <div class="vo-setup-count">{booth.countLeft.value}</div>
+        ) : recording ? (
+          <>
+            <div class="vo-setup-count rec">{Math.ceil(booth.toneLeft.value)}</div>
+            <p>Recording the room. Stay quiet and still.</p>
+            <div class="vo-setup-progress">
+              <div style={{ width: `${(1 - booth.toneLeft.value / 5) * 100}%` }} />
+            </div>
+          </>
+        ) : saving ? (
+          <p>Saving…</p>
+        ) : (
+          <>
+            <p>
+              {retry
+                ? 'It sounded like a voice or a knock. Try again while everyone is quiet.'
+                : 'Sit where you will record, with the microphone in place. Reccut counts down from 3 and records 5 seconds of silence, then stops by itself. It uses the room tone to find where your voice starts and to fill the pauses between lines.'}
+            </p>
+            <Meter />
+            <Button variant="primary" class="vo-setup-go" icon={Wind} onClick={() => booth.recordRoomTone(5)} disabled={st !== 'idle'}>
+              {retry ? 'Try Again' : 'Record Room Tone'}
+            </Button>
+            <button class="link" onClick={retry ? () => (booth.roomSetup.value = false) : booth.skipRoomTone}>
+              {retry ? 'Use it anyway' : tone ? 'Keep the one I have' : 'Skip for now'}
+            </button>
+            <p class="dim">Space starts, Esc {tone || retry ? 'closes' : 'skips'}.</p>
+          </>
+        )}
+        {(counting || recording) && (
+          <button class="link" onClick={booth.cancel}>
+            Cancel (Esc)
+          </button>
+        )}
+        {booth.inputError.value && <p class="vo-error">{booth.inputError.value}</p>}
       </div>
     </div>
   );

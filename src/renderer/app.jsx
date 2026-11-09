@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   CircleAlert,
   CircleHelp,
-  Mic,
   Clapperboard,
   FolderOpen,
   ListChecks,
@@ -66,6 +65,7 @@ import { UpdateDialog } from './UpdateDialog.jsx';
 import { startUpdateChecks } from './updates.js';
 import { VoiceoverBooth } from './voiceover/Booth.jsx';
 import { boothOpen, openBooth } from './voiceover/state.js';
+import { StudioIcon } from './voiceover/StudioIcon.jsx';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -207,9 +207,9 @@ function TitleBar() {
           <span class="sep" />
           <IconButton icon={Settings} title={`Settings (${isMac ? '⌘' : 'Ctrl+'},)`} onClick={() => (commands.prefsOpen.value = true)} />
           <IconButton icon={Plus} title={`Import media (${isMac ? '⌘' : 'Ctrl+'}I)`} onClick={() => commands.importDialog()} />
-          <button class="btn secondary" onClick={openBooth} title={`Voice Over Studio: record narration or a talking head from a script, with retakes, and stitch it to the timeline (${isMac ? '⌥⌘' : 'Ctrl+Alt+'}B)`}>
-            <Mic size={15} />
-            Voice Over
+          <button class="btn secondary vo-open-btn" onClick={openBooth} title={`Voice Over Studio: record narration or a talking head from a script, with retakes, and stitch it to the timeline (${isMac ? '⌥⌘' : 'Ctrl+Alt+'}B)`}>
+            <StudioIcon size={15} />
+            Voice Over Studio
           </button>
           <button class="btn primary" onClick={prepareProjectExport} title="Prepare project in Export">
             <Share size={15} />
