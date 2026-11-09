@@ -1218,9 +1218,18 @@ Drag a color handle down off the color bar to remove it, or select it and press 
     section: 'Editing',
     title: 'Keying and Background Removal',
     summary: 'Remove a solid or static background, refine edges and stack multiple keys.',
-    keywords: 'greenscreen blue screen chroma key keyer matte gamma despill hair fine detail shadow edge color background remove clean plate difference stack',
+    keywords: 'corridorkey corridor key ai keying greenscreen blue screen chroma key keyer matte gamma despill hair fine detail shadow edge color background remove clean plate difference stack',
     body: `
-Select a video, image or recording clip and open the Effects inspector. **Remove solid background** samples the source border at the playhead and adds a color key. Use **Screen color** to select a different color.
+Select a video, image or recording clip and open the Effects inspector. **Remove solid background** samples the source border at the playhead and adds a color key. Use **Screen color** to select a different color. The color key, the background reference key and the luma key work without any AI model, in preview and export.
+
+## AI keying with CorridorKey
+
+For hard green and blue screen shots, with hair, motion blur and see-through edges, **AI keying with CorridorKey** under Keying & effect stack does a cleaner job than the color key. It is a model from Corridor Digital that runs on your computer.
+
+- The first time, choose **Get CorridorKey…**. It explains what is downloaded (Python, PyTorch, the program and two model files, 2 to 8 GB depending on the computer), what it needs (Apple Silicon or an NVIDIA graphics card) and its licence, and nothing is downloaded until you accept.
+- When it is installed, choose **Key This Clip with CorridorKey…**. It makes a new ProRes 4444 file with transparency and switches the clip to it. Undo restores the original. It is slow, seconds per frame, so try a short clip first.
+- The licence is CC BY-NC-SA 4.0 with extra terms from Corridor Digital. Processing video for a commercial project is allowed; read the licence for the rest.
+- Remove Background in Design is something else: it cuts out people and objects in still images, with a separate model.
 
 **Remove static background** estimates a background reference from nine source frames. Keep the camera and lighting fixed. The subject must move enough to reveal the background in most samples. A stationary subject may become part of the reference. For better control, add a **Background reference key**, put the playhead on a frame with the subject out of shot, and choose **Capture clean background**.
 
@@ -1283,7 +1292,7 @@ The agent cannot yet create voice-over or music, or export. What is sent to the 
 
 **External video processors** install from a Reccut JSON manifest pointing to a trusted local executable. On a video clip, open Effects → External processing to process the full source and apply the result to that clip. The source timing must be preserved; original audio and media remain available. Cancel through Background tasks.
 
-Native OFX and Adobe plugins cannot be loaded directly. CorridorKey needs an adapter that writes an alpha video, or processing in its standalone app followed by importing the result. Models, licences and runtimes are installed separately. There is no bundled CorridorKey adapter or AI matting model.
+Native OFX and Adobe plugins cannot be loaded directly. CorridorKey from Corridor Digital is available as an optional add-on: choose **Get CorridorKey…** under Keying & effect stack, or install it from Plugins. It is downloaded only after you have read what it needs and accepted its licence, and nothing of it is included in Reccut.
 `,
     see: ['ai-setup', 'ai-local', 'ai-recipes', 'plugins-guide', 'processor-guide', 'keying'],
   },

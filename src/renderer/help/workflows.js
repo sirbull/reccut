@@ -270,7 +270,7 @@ The processed result must preserve source timing and be a readable video file. C
 
 ## Background removal with an external tool
 
-For difficult foreground extraction, use a processor that writes video with an alpha channel, or process in a standalone application and import its result. A CorridorKey integration needs an adapter; there is no bundled CorridorKey adapter or AI person-matting model. Reccut cannot load native OFX or Adobe plugins directly.
+For difficult foreground extraction, use a processor that writes video with an alpha channel, or process in a standalone application and import its result. For green and blue screens with hair, motion blur and see-through edges, CorridorKey is available as an optional add-on (Get CorridorKey… under Keying & effect stack). Reccut cannot load native OFX or Adobe plugins directly.
 
 ## If processing fails
 

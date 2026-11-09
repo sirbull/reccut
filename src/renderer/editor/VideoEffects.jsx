@@ -13,6 +13,7 @@ import { readClipFrame, readClipFrames, encodeReference } from './sourceFrame.js
 import { Button, IconButton, NumberField, Row, Section, Select, Toggle, toast } from '../ui.jsx';
 import { RemoveEffectButton } from './RemoveEffectButton.jsx';
 import { GradientEditor } from './GradientEditor.jsx';
+import { AiKeying } from './AiKeying.jsx';
 
 export function VideoEffects({ clip }) {
   const [busy, setBusy] = useState(false),
@@ -133,6 +134,7 @@ export function VideoEffects({ clip }) {
         Samples the border of the source frame at the playhead. Effects run from top to bottom, before color correction
         and the clip effects below. Add the same effect more than once.
       </p>
+      <AiKeying clip={clip} />
       </>}
       {adjustment && <p class="hint">Effects run from top to bottom on the combined picture below this layer, before its Color settings. Reduce Layer strength in Video to blend the whole look. Add a mask to limit where it applies.</p>}
       {list.map((e, i) => {
