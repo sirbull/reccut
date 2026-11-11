@@ -10,8 +10,12 @@ const fileUrl = (p) => `media://file/${encodeURIComponent(p)}`;
 export const playing = signal(false);
 export const time = signal(0);
 export const peaksVersion = signal(0);
+// Nivået på det som spilles av, til måleren nederst i studioet.
+export const level = signal({ peak: 0, rms: 0, hold: 0 });
 
 let ctx = null;
+let master = null; // all avspilling går hit, og videre til høyttalerne og måleren
+let analyser = null;
 let fxReady = null;
 const routes = new Map(); // person -> { gain, fx }
 const trackLevels = new Map(); // siste volum og av/på, også mens lyden dekodes
@@ -27,6 +31,12 @@ function audio() {
     ctx.setSinkId?.(audioSink.value).catch(() => {});
     // Samme effektkode som avspillingen i redigeringen og eksporten.
     fxReady = ctx.audioWorklet.addModule('audiofx-worklet.js').then(() => true, () => false);
+    master = ctx.createGain();
+    master.connect(ctx.destination);
+    // ponytail: analysatoren mikser stereo til mono. Holder for stemmer, eget nivå per kanal om det trengs.
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    master.connect(analyser);
   }
   return ctx;
 }
@@ -157,7 +167,7 @@ function schedule(buf, { at, in: inPoint, dur, gain = 0, kf = null, fadeIn = 0, 
     g.gain.setValueAtTime(fo === when && offset > dur - fadeOut ? (level * (dur - offset)) / fadeOut : level, fo);
     g.gain.linearRampToValueAtTime(0, end);
   }
-  src.connect(vg).connect(g).connect(out || c.destination);
+  src.connect(vg).connect(g).connect(out || master);
   src.start(when, inPoint + offset, dur - offset);
   sources.push(src);
   src.onended = () => {
@@ -179,11 +189,11 @@ async function route(person, run = playbackRun) {
     r = { gain, fx: null, clean: null };
     if (ready) {
       r.fx = new AudioWorkletNode(c, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
-      gain.connect(r.fx).connect(c.destination);
+      gain.connect(r.fx).connect(master);
       // Clean Voice-filer har fire kanaler (original og renset), som blandes med styrken her.
       r.clean = new AudioWorkletNode(c, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 4, channelCountMode: 'explicit' });
       r.clean.connect(gain);
-    } else gain.connect(c.destination);
+    } else gain.connect(master);
     routes.set(person.id, r);
   }
   const level = trackLevels.get(person.id) || person;
@@ -245,6 +255,22 @@ export function stop() {
   routes.clear();
   cancelAnimationFrame(raf);
   playing.value = false;
+  level.value = { peak: 0, rms: 0, hold: 0 };
+}
+
+const samples = new Float32Array(2048);
+let holdAt = 0;
+function measure() {
+  analyser.getFloatTimeDomainData(samples);
+  let peak = 0;
+  let sum = 0;
+  for (const v of samples) {
+    peak = Math.max(peak, Math.abs(v));
+    sum += v * v;
+  }
+  const now = performance.now();
+  const hold = peak >= level.value.hold || now - holdAt > 1500 ? ((holdAt = now), peak) : level.value.hold;
+  level.value = { peak, rms: Math.sqrt(sum / samples.length), hold };
 }
 
 /**
@@ -266,7 +292,7 @@ export async function play(plan, from = 0, { tone = null, onEnd, people = [] } =
   try {
     const cleanOn = new Set(people.filter((p) => p.clean > 0).map((p) => p.id));
     // Deaktiverte spor planlegges gjennom en dempet lydrute, slik at de kan slås på mens vi spiller.
-    bufs = await Promise.all(plan.items.map((it) => (it.active === false && !byPerson.has(it.person) ? null : load(cleanOn.has(it.person) ? cleanFile(it.take.file) : it.take.file))));
+    bufs = await Promise.all(plan.items.map((it) => (it.take.disabled || (it.active === false && !byPerson.has(it.person)) ? null : load(cleanOn.has(it.person) ? cleanFile(it.take.file) : it.take.file))));
   } catch {
     if (run === playbackRun) playing.value = false;
     return;
@@ -311,6 +337,7 @@ export async function play(plan, from = 0, { tone = null, onEnd, people = [] } =
   const tick = () => {
     const t = from + Math.max(0, c.currentTime - t0);
     time.value = Math.min(t, plan.end);
+    measure();
     if (t >= plan.end) {
       stop();
       onEnd?.();
@@ -355,7 +382,7 @@ export async function scrub(plan, t, people = []) {
   const g = c.createGain();
   g.gain.setValueAtTime(lin(db), c.currentTime);
   g.gain.linearRampToValueAtTime(0, c.currentTime + 0.09);
-  src.connect(g).connect(c.destination);
+  src.connect(g).connect(master);
   const duration = Math.min(0.09, part.in + part.dur - s, buf.duration - s);
   if (duration <= 0) { src.disconnect(); g.disconnect(); return; }
   scrubSources.add(src);
@@ -367,6 +394,8 @@ export function close() {
   stop();
   ctx?.close().catch(() => {});
   ctx = null;
+  master = null;
+  analyser = null;
   fxReady = null;
   buffers.clear();
   peakCache.clear();

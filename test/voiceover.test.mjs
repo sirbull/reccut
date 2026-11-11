@@ -244,6 +244,9 @@ test('two people: the same line lines up for comparing, a dialogue interleaves, 
   // Mute B: both tracks keep their slots and lengths; only B becomes inactive.
   plan = planStudio(blocks, both, { pacing, people: [{ id: 'p1', active: true }, { id: 'p2', active: false }] });
   assert.deepEqual(plan.items.filter((i) => i.active).map((i) => [i.take.id, i.at]), [['a1', 0], ['a2', 2.5]]);
+  // V on one clip: it keeps its place but is off.
+  plan = planStudio(blocks, { ...both, takes: both.takes.map((x) => (x.id === 'b1' ? { ...x, disabled: true } : x)) }, { pacing, people });
+  assert.deepEqual(plan.items.map((i) => [i.take.id, i.at, i.active]), [['a1', 0, true], ['b1', 0, false], ['a2', 2.5, true], ['b2', 2.5, true]]);
   // Dialogue: A says line 1 and 3, B says line 2.
   const dlg = { takes: [t(L[0], 'a1', 'p1', 1), t(L[1], 'b2', 'p2', 2), t(L[2], 'a3', 'p1', 1)], selected: {} };
   plan = planStudio(blocks, dlg, { pacing, people });

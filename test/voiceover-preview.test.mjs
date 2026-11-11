@@ -36,6 +36,7 @@ function setup() {
     constructor() { this.currentTime = 0; this.state = 'running'; this.destination = node('destination'); this.audioWorklet = { addModule: async () => {} }; }
     decodeAudioData(data) { return state.decode ? state.decode(data) : Promise.resolve(buffer(data)); }
     createGain() { return node('gain'); }
+    createAnalyser() { return node('analyser'); }
     createBufferSource() { const n = node('source'); sources.push(n); return n; }
     close() { return Promise.resolve(); }
     setSinkId() { return Promise.resolve(); }

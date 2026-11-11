@@ -547,6 +547,7 @@ export function itemParts(it) {
  * room: 'fill' fyller pausen med opptakets egen romlyd så langt filen rekker, og resten blir et
  * tomrom (gaps, der romlyden kan legges). 'tight' bruker bare det som finnes og lar aldri et tomrom
  * stå igjen (video i hovedsporet).
+ * people: [{ id, active }]. Et klipp med take.disabled (V) er av, men beholder plassen.
  * people: [{ id, active }]. Gir { items: [{ take, block, person, active, at, in, dur }], gaps, end }.
  */
 export function planStudio(blocks, vo, { start = 0, pacing = DEFAULT_PACING, room = false, from = 0, people = [{ id: FIRST_PERSON, active: true }] } = {}) {
@@ -577,7 +578,7 @@ export function planStudio(blocks, vo, { start = 0, pacing = DEFAULT_PACING, roo
           dur += Math.max(0, Math.min(want, (take.duration ?? take.out) - take.out));
         }
         const at = round3(t + offset);
-        items.push({ take, block, person: p.id, active: p.active, at, in: takeParts(take)[0]?.[0] ?? take.in, dur: round3(dur) });
+        items.push({ take, block, person: p.id, active: p.active && !take.disabled, at, in: takeParts(take)[0]?.[0] ?? take.in, dur: round3(dur) });
         spans.push([at, at + dur, studioGapKey(take), p.id]);
         longest = Math.max(longest, offset + dur);
         offset += dur + (k < clips.length - 1 ? Math.max(0, take.pause || 0) : 0);

@@ -2,17 +2,24 @@
 // Brukes på klipp i Properties og på en person i Voice Over Studio.
 // list: effektene. onSet(nyListe): lagre endringen. onLive(id, patch): mens det dras.
 // onStart/onCommit: rundt dra, så Properties kan lage ett angresteg.
-import { useEffect, useRef } from 'preact/hooks';
+// base: typene i standardkjeden. Effekter utover dem får en annen bakgrunn, så de synes som lagt til.
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { AudioFxIcon } from './audioIcons.jsx';
-import { ArrowDown, ArrowUp } from 'lucide-preact';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from 'lucide-preact';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, PITCH_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects, withDefaultPitch } from '../../shared/audiofx.js';
 import { IconButton, NumberField, Row, Segmented, Select, Slider, Toggle } from '../ui.jsx';
 import { RemoveEffectButton } from './RemoveEffectButton.jsx';
 
 const noop = () => {};
 
-export function AudioFxChain({ list = [], onSet, onLive, onStart = noop, onCommit = noop, hint, showAdd = true }) {
+export function AudioFxChain({ list = [], onSet, onLive, onStart = noop, onCommit = noop, hint, showAdd = true, base }) {
   list = withDefaultPitch(list);
+  // Lukket som standard, så panelet ikke blir så langt. Ikke lagret: åpnes på nytt ved behov.
+  const [open, setOpen] = useState(() => new Set());
+  const toggleOpen = (id) => setOpen((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  // ponytail: de første effektene av hver type i base regnes som standard, resten som lagt til. Virker også på lagrede prosjekter uten merke.
+  const left = [...(base || [])];
+  const added = new Set(base ? list.filter((e) => { const i = left.indexOf(e.type); if (i < 0) return true; left.splice(i, 1); return false; }).map((e) => e.id) : []);
   const patch = (id, fn) => onSet(list.map((e) => (e.id === id ? fn({ ...e, p: { ...e.p } }) : e)));
   const move = (i, d) => {
     const j = i + d;
@@ -26,24 +33,27 @@ export function AudioFxChain({ list = [], onSet, onLive, onStart = noop, onCommi
   return (
     <>
       {showAdd && <div class="afx-add">
-        <Select value="" options={addOptions} onChange={(v) => v && onSet([...list, makeEffect(v)])} />
+        <Select value="" options={addOptions} onChange={(v) => { if (!v) return; const e = makeEffect(v); setOpen((s) => new Set(s).add(e.id)); onSet([...list, e]); }} />
         <Select value="" options={presetOptions} onChange={(v) => v && onSet([...list, ...presetEffects(v)])} />
       </div>}
       {!list.length && hint && <p class="hint">{hint}</p>}
       {list.map((e, i) => {
         const def = AUDIO_EFFECTS[e.type];
         if (!def) return null;
+        const isOpen = open.has(e.id);
         return (
-          <div key={e.id} class={`afx-item${e.on === false ? ' off' : ''}`} data-afx-item={e.type}>
+          <div key={e.id} class={`afx-item${e.on === false ? ' off' : ''}${added.has(e.id) ? ' added' : ''}${isOpen ? '' : ' collapsed'}`} data-afx-item={e.type}>
             <div class="afx-head">
+              <IconButton icon={isOpen ? ChevronDown : ChevronRight} size={12} title={isOpen ? 'Collapse' : 'Expand'} onClick={() => toggleOpen(e.id)} />
               <Toggle checked={e.on !== false} onChange={(v) => patch(e.id, (x) => ({ ...x, on: v }))} />
-              <b class="afx-name" title={def.desc}>
+              <b class="afx-name" title={def.desc} onClick={() => toggleOpen(e.id)}>
                 <AudioFxIcon kind="afx" id={e.type} size={13} /> {def.label}
               </b>
               <IconButton icon={ArrowUp} size={12} title="Move up" disabled={i === 0} onClick={() => move(i, -1)} />
               <IconButton icon={ArrowDown} size={12} title="Move down" disabled={i === list.length - 1} onClick={() => move(i, 1)} />
               <RemoveEffectButton label={def.label} adjusted={def.params.some((p) => (e.p[p.id] ?? p.def) !== p.def)} onRemove={() => onSet(list.filter((x) => x.id !== e.id))} />
             </div>
+            {isOpen && <>
             {e.type === 'pitch' && <>
               <Row label="Voice tone">
                 <Select value={e.p.semitones || 0} options={[...(!PITCH_PRESETS.some((pr) => pr.value === (e.p.semitones || 0)) ? [{ value: e.p.semitones, label: 'Custom' }] : []), ...PITCH_PRESETS]} onChange={(v) => patch(e.id, (x) => ({ ...x, on: true, p: { ...x.p, semitones: Number(v) } }))} />
@@ -57,6 +67,7 @@ export function AudioFxChain({ list = [], onSet, onLive, onStart = noop, onCommi
                 <FxParam key={prm.id} prm={prm} value={e.p[prm.id] ?? prm.def} onStart={onStart} onCommit={onCommit} onLive={(v) => onLive(e.id, { [prm.id]: v })} onSet={(v) => patch(e.id, (x) => ({ ...x, p: { ...x.p, [prm.id]: v } }))} />
               ))
             )}
+            </>}
           </div>
         );
       })}

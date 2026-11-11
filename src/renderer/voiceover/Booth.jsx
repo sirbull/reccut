@@ -1,5 +1,6 @@
 // Voice Over Studio: et eget arbeidsvindu over redigeringen for fortellerstemme og snakkende hode.
 // Manuset til venstre (også som teleprompter), opptak og valg av opptak til høyre.
+import { Fragment } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import {
   AudioWaveform,
@@ -33,8 +34,9 @@ import {
   Mic,
   ArrowLeft,
   Download,
+  Keyboard,
 } from 'lucide-preact';
-import { Button, IconButton, NumberField, Segmented, Select, Slider, Toggle, toast } from '../ui.jsx';
+import { Button, IconButton, Modal, NumberField, Segmented, Select, Slider, Toggle, toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
 import { project, room } from '../editor/store.js';
 import { isSpaceInput, isTyping } from '../keyboard.js';
@@ -43,13 +45,14 @@ import { AudioFxChain } from '../editor/AudioFxChain.jsx';
 import { withDefaultPitch } from '../../shared/audiofx.js';
 import { formatDuration } from '../../shared/model.js';
 import * as booth from './booth.js';
+import * as pv from './preview.js';
 import { StudioIcon } from './StudioIcon.jsx';
 import { AiVoiceDialog, aiDialogOpen, openAiVoices } from './AiVoice.jsx';
 import { LANGUAGES, languageById, voiceLabel, voicesFor } from '../../shared/tts.js';
 import { PacingFields } from './Pacing.jsx';
 import { piperById, piperFor, speakerLabel } from './piper.js';
 import { SpeechProgress } from './SpeechProgress.jsx';
-import { EffectsPanel, VoTimeline, clearMarks, deleteSelected, marked, pausesOpen, selected as vtSelected, togglePreview, toggleStudioTool, tool } from './VoTimeline.jsx';
+import { EffectsPanel, VoTimeline, clearMarks, deleteSelected, disableOthers, toggleDisabled, marked, pausesOpen, selected as vtSelected, togglePreview, toggleStudioTool, tool } from './VoTimeline.jsx';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -66,6 +69,8 @@ export const KEYS = [
   ['Space', 'Play / pause the timeline, from the yellow line when the pointer is over it'],
   ['A', 'Select tool: drag a clip sideways to move it and the clips after it'],
   ['B', 'Cut tool: click a clip to split it'],
+  ['V', 'Disable / enable the selected clips. They keep their place.'],
+  ['⇧V', 'Disable all other clips (again to enable them)'],
   ['N', 'Snapping on / off'],
   ['S', 'Skimming on / off'],
   ['⇧S', 'Audio skimming on / off'],
@@ -84,7 +89,7 @@ export const KEYS = [
 
 function onBoothKey(e) {
   if (!booth.boothOpen.value || e.isComposing) return;
-  if (document.querySelector?.('.vt-clip-dialog')) return;
+  if (document.querySelector?.('.vt-clip-dialog, .vo-keys-list')) return;
   // Ta mellomrom før felter, dialoger og romlydoppsettet, så fokus aldri må flyttes til tidslinjen.
   if (e.key === ' ' || e.code === 'Space') {
     if (e.isComposing || isSpaceInput(e)) return;
@@ -131,6 +136,7 @@ function onBoothKey(e) {
   else if (!e.altKey && k.toLowerCase() === 'n' && e.shiftKey) {
     if (!e.repeat) booth.goNextMissing();
   }
+  else if (!e.altKey && (k === 'v' || k === 'V')) { if (!e.repeat && !booth.busy()) e.shiftKey ? disableOthers() : toggleDisabled(); }
   else if (k === 'b' || k === 'B') tool.value = tool.value === 'blade' ? 'select' : 'blade';
   else if (k === 'a' || k === 'A') tool.value = 'select';
   else if ((k === 'r' || k === 'R') && e.shiftKey) booth.retake();
@@ -453,19 +459,25 @@ function Block({ b, current }) {
 
 /* Opptak */
 
+function LevelBar({ level, title }) {
+  const p = db(level.peak),
+    h = db(level.hold);
+  return (
+    <div class="vo-meter" title={title}>
+      <div class="vo-meter-target" />
+      <div class="vo-meter-rms" style={{ width: `${meterPos(db(level.rms)) * 100}%` }} />
+      <div class={`vo-meter-peak${p > -3 ? ' hot' : p > -6 ? ' warm' : ''}`} style={{ width: `${meterPos(p) * 100}%` }} />
+      <div class={`vo-meter-hold${h > -3 ? ' hot' : ''}`} style={{ left: `${meterPos(h) * 100}%` }} />
+    </div>
+  );
+}
+
 function Meter() {
-  const { peak, rms, hold } = booth.level.value;
-  const p = db(peak),
-    h = db(hold);
+  const h = db(booth.level.value.hold);
   const hot = h > -3;
   return (
     <div class="vo-meter-wrap" title="Aim for peaks between -12 and -6 dB">
-      <div class="vo-meter">
-        <div class="vo-meter-target" />
-        <div class="vo-meter-rms" style={{ width: `${meterPos(db(rms)) * 100}%` }} />
-        <div class={`vo-meter-peak${p > -3 ? ' hot' : p > -6 ? ' warm' : ''}`} style={{ width: `${meterPos(p) * 100}%` }} />
-        <div class={`vo-meter-hold${hot ? ' hot' : ''}`} style={{ left: `${meterPos(h) * 100}%` }} />
-      </div>
+      <LevelBar level={booth.level.value} />
       <div class="vo-meter-scale">
         {[-48, -36, -24, -12, -6].map((x) => (
           <span key={x} style={{ left: `${meterPos(x) * 100}%` }}>
@@ -738,6 +750,7 @@ function Sound() {
       )}
       <AudioFxChain
         showAdd={false}
+        base={['pitch', ...booth.DEFAULT_FX().map((e) => e.type)]}
         list={fx}
         onSet={(list) => booth.setPersonFx(p.id, list)}
         onLive={(id, patch) => booth.setPersonFx(p.id, fx.map((e) => (e.id === id ? { ...e, p: { ...e.p, ...patch } } : e)))}
@@ -975,13 +988,25 @@ function PrompterBar() {
 }
 
 function KeyBar() {
+  const [open, setOpen] = useState(false);
   return (
     <footer class="vo-keys">
-      {KEYS.map(([k, label]) => (
-        <span key={k}>
-          <kbd>{k}</kbd> {label}
-        </span>
-      ))}
+      <LevelBar level={pv.level.value} title="Playback level. Peaks should stay below -6 dB; red means the sound clips." />
+      <Button class="small" icon={Keyboard} onClick={() => setOpen(true)}>
+        Keyboard Shortcuts
+      </Button>
+      {open && (
+        <Modal title="Keyboard shortcuts in Voice Over Studio" onClose={() => setOpen(false)} width={560}>
+          <dl class="vo-keys-list">
+            {KEYS.map(([k, label]) => (
+              <Fragment key={k}>
+                <dt><kbd>{k}</kbd></dt>
+                <dd>{label}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </Modal>
+      )}
     </footer>
   );
 }

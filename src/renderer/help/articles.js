@@ -810,6 +810,8 @@ Drag the start or end of a clip to trim it. In the storyline, the following clip
     body: `
 Enable or Disable ({{key:toggleEnabled}}) switches the selected clips off and on. A clip that is off stays on the timeline, but greyed out, and is not seen or heard.
 
+Disable All Other Clips ({{key:disableOthers}}) does the opposite: every clip except the selected ones is switched off, and the selected ones are switched on. Press it again to switch the others back on.
+
 It works the same for audio components: expand the audio ({{key:expandAudio}}), click one of the audio tracks in the clip, and press {{key:toggleEnabled}} to switch only that track off or on.
 `,
     see: ['audio', 'sync'],
@@ -1509,7 +1511,8 @@ The pronunciation part is an add-on (eSpeak NG with all its languages, about 13 
 Click **Add Person** to add another voice on its own track, with their own takes and their own sound. If the script has roles, the new person gets the next role name. Choose who is recording in **Record as** above the record button, or click a track. In a script with roles, going to a line switches to the person with that name.
 
 - Lines are laid out in script order in shared slots. When two people read the same lines, their takes line up so you can compare them line by line. In a dialogue, the lines interleave as in the script.
-- On each track: **mute** disables all clips on that track, like selecting them and pressing V in Edit. Their positions, lengths and pauses stay the same, including the room tone. **Send to Edit** keeps them as disabled clips. **S** (solo) activates only this person's track without moving any clips. Mute and solo also work during playback without stopping the playhead. The **eye** hides the track and **X** removes the person from the studio (the files stay in the Media browser). Double click the name to rename.
+- Press **V** to disable the selected clips (or right-click, Disable Clip). They stay in place, are not heard, and **Send to Edit** keeps them as disabled clips. V again turns them back on. **Shift V** does the opposite: every other clip is disabled. Press it again to turn them back on.
+- On each track: **mute** disables all clips on that track, like selecting them and pressing V. The button lights up while the track is muted. Their positions, lengths and pauses stay the same, including the room tone. **Send to Edit** keeps them as disabled clips. **S** (solo) activates only this person's track without moving any clips. Mute and solo also work during playback without stopping the playhead. The **eye** hides the track and **X** removes the person from the studio (the files stay in the Media browser). Double click the name to rename.
 - Choices, deletes and adjustments are per person. Stitching puts each person on their own track.
 
 ## The studio timeline

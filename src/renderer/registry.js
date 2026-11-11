@@ -276,6 +276,7 @@ export const COMMANDS = [
   { id: 'nudgeLeft', label: 'Nudge Left One Frame', menu: 'Clip', keys: ',', run: () => commands.nudge(-1), help: 'trimming' },
   { id: 'nudgeRight', label: 'Nudge Right One Frame', menu: 'Clip', keys: '.', run: () => commands.nudge(1), help: 'trimming' },
   { id: 'toggleEnabled', label: 'Enable or Disable', menu: 'Clip', group: 'state', keys: 'V', run: commands.toggleEnabled, help: 'enable', desc: 'Switch the selected clip, or the selected audio component, off and on. It stays on the timeline, greyed out.' },
+  { id: 'disableOthers', label: 'Disable All Other Clips', menu: 'Clip', group: 'state', keys: 'Shift+V', run: commands.disableOthers, help: 'enable', keywords: 'solo only this clip enable disable off', desc: 'Switch off every clip except the selected ones. Press again to switch the others back on.' },
   { id: 'solo', label: 'Solo', menu: 'Clip', group: 'state', keys: 'Alt+S', run: commands.toggleSolo, help: 'audio' },
   { id: 'expandAudio', label: 'Expand Audio', menu: 'Clip', group: 'audio', mac: 'Ctrl+S', win: 'Alt+E', run: commands.toggleExpandAudio, help: 'audio', desc: 'Show the audio below the video, with one strip per audio component.' },
   { id: 'detachAudio', label: 'Detach Audio', menu: 'Clip', group: 'audio', mac: 'Ctrl+Shift+S', win: 'Alt+Shift+E', run: commands.detachSelectedAudio, help: 'audio' },
