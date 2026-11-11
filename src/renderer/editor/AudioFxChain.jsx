@@ -6,14 +6,13 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { AudioFxIcon } from './audioIcons.jsx';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from 'lucide-preact';
-import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, PITCH_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects, withDefaultPitch } from '../../shared/audiofx.js';
+import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { IconButton, NumberField, Row, Segmented, Select, Slider, Toggle } from '../ui.jsx';
 import { RemoveEffectButton } from './RemoveEffectButton.jsx';
 
 const noop = () => {};
 
 export function AudioFxChain({ list = [], onSet, onLive, onStart = noop, onCommit = noop, hint, showAdd = true, base }) {
-  list = withDefaultPitch(list);
   // Lukket som standard, så panelet ikke blir så langt. Ikke lagret: åpnes på nytt ved behov.
   const [open, setOpen] = useState(() => new Set());
   const toggleOpen = (id) => setOpen((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -54,12 +53,6 @@ export function AudioFxChain({ list = [], onSet, onLive, onStart = noop, onCommi
               <RemoveEffectButton label={def.label} adjusted={def.params.some((p) => (e.p[p.id] ?? p.def) !== p.def)} onRemove={() => onSet(list.filter((x) => x.id !== e.id))} />
             </div>
             {isOpen && <>
-            {e.type === 'pitch' && <>
-              <Row label="Voice tone">
-                <Select value={e.p.semitones || 0} options={[...(!PITCH_PRESETS.some((pr) => pr.value === (e.p.semitones || 0)) ? [{ value: e.p.semitones, label: 'Custom' }] : []), ...PITCH_PRESETS]} onChange={(v) => patch(e.id, (x) => ({ ...x, on: true, p: { ...x.p, semitones: Number(v) } }))} />
-              </Row>
-              <p class="hint">Lower = deeper, higher = brighter. Works on existing audio; speed and length stay the same.</p>
-            </>}
             {e.type === 'eq' ? (
               <EqEditor effect={e} onStart={onStart} onCommit={onCommit} onLive={(q) => onLive(e.id, q)} onSet={(q) => patch(e.id, (x) => ({ ...x, p: { ...x.p, ...q } }))} />
             ) : (

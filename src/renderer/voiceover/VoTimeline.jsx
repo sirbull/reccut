@@ -14,7 +14,7 @@ import { audioSkimming, skimming, snapping } from '../editor/store.js';
 import * as booth from './booth.js';
 import * as pv from './preview.js';
 import { PAUSES, PacingFields, isDefaultPacing, pacing, resetPacing, setPause } from './Pacing.jsx';
-import { AUDIO_EFFECTS, AUDIO_FX_CATEGORIES, AUDIO_PRESETS, makeEffect, presetEffects } from '../../shared/audiofx.js';
+import { AUDIO_EFFECTS, AUDIO_FX_CATEGORIES, AUDIO_PRESETS, AUDIO_PRESET_CATEGORIES, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { AudioFxIcon, FadeInIcon, FadeOutIcon } from '../editor/audioIcons.jsx';
 import { SendToEdit } from './Booth.jsx';
 import { studioVolumeAt, studioVolumeClip, studioVolumePatch } from './volume.js';
@@ -1032,7 +1032,7 @@ export function EffectsPanel() {
     </button>
   );
   const effects = AUDIO_FX_CATEGORIES.map((category) => ({ category, items: Object.entries(AUDIO_EFFECTS).filter(([, x]) => x.category === category && match(x)) })).filter((g) => g.items.length);
-  const templates = ['Repair', 'Space', 'Creative', 'Lo-fi'].map((category) => ({ category, items: AUDIO_PRESETS.filter((x) => x.category === category && match(x)) })).filter((g) => g.items.length);
+  const templates = AUDIO_PRESET_CATEGORIES.map((category) => ({ category, items: AUDIO_PRESETS.filter((x) => x.category === category && match(x)) })).filter((g) => g.items.length);
   const fades = [
     { id: 'in', label: 'Fade In', desc: 'The sound rises from silence at the start of the clip.', icon: FadeInIcon },
     { id: 'out', label: 'Fade Out', desc: 'The sound falls to silence at the end of the clip.', icon: FadeOutIcon },

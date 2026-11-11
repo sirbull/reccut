@@ -1485,7 +1485,7 @@ Turn on **Camera** to record video with each take. The takes are WebM files with
 
 Every person starts with **Studio Voice**: rumble and light noise removed, warmth and presence, soft S sounds and an even level, so it sounds like voice over straight away. Adjust it under **Sound for** in the side panel. It works like Audio Effects on a clip: add effects or templates, turn each one on or off, change the order, adjust it or remove it. **Volume** sets the level for all of the person's takes, and **Reset to Studio Voice** starts over. You hear the changes in the studio timeline while it plays, and they go with the clips when you stitch.
 
-**Pitch** is available by default for both microphone recordings and AI voices, including existing takes. Negative semitones make the voice deeper; positive values make it brighter. Choose **Natural** (0), **Studio** (−1) for subtle depth or **Trailer** (−3) for a deeper voice, or adjust the slider. The same control works for all voices and keeps the speaking speed and clip length. The effect follows the clips into Edit and export.
+**A deeper voice**: the **Voice** templates **Warm Narrator**, **Deep Voice** and **Trailer Voice** make a voice deeper, bigger and closer the way a studio does it, without the artificial sound of strong pitch. They use **Voice Character**, one effect with the controls that matter: **Depth** (body in the low end), **Presence** (clarity), **Density** (compression), **Warmth** (soft saturation) and a small **Pitch** range for a touch more depth. Add a template from the Audio Effects browser and adjust it under **Sound for**. It works on recordings and AI voices, also on existing takes, and follows the clips into Edit and export.
 
 ## AI voices
 
@@ -1502,7 +1502,7 @@ Under **Voices** you find the 41 voices on their own. Pick a voice from the list
 - Press **R** (or **Read line**) to let the voice read the selected line. **Shift R** or **Read Again** makes a new take. **Read All Missing Lines** reads every line without a take, one after another, and R or Esc stops it.
 - **Say it as** under the takes is what the voice reads. If it says a name, a number or an abbreviation wrong, write it the way it sounds. The script itself is not changed. Words in [brackets] are never read.
 - Takes from an AI voice work like recorded takes: trim, fades, volume, pauses, compare with other people and stitch. They are saved as WAV files in Recordings/Voiceover.
-- Change the language, voice and **Generation speed** under **Sound for** before generating. These settings apply to new takes; generate the lines again to change existing speech. **Pitch** changes existing takes immediately without regenerating. AI voices start with neutral pitch, since they are already clean. Add Studio Voice or other effects if you like.
+- Change the language, voice and **Generation speed** under **Sound for** before generating. These settings apply to new takes; generate the lines again to change existing speech. Effects such as **Voice Character** change existing takes immediately without regenerating. AI voices start without effects, since they are already clean. Add Studio Voice or other effects if you like.
 
 The pronunciation part is an add-on (eSpeak NG with all its languages, about 13 MB, which is GPL software). Voices downloaded with an earlier version of Reccut get the new add-on the first time they read a line. It is not part of Reccut, and is downloaded from npm and checked before use. Download or remove the AI voices in **Settings → AI**, or at the bottom of the AI Voices window.
 
@@ -1567,7 +1567,7 @@ The script is added to the project story, so the AI agent can use it to match th
     body: `
 Open the **Audio Effects** browser ({{key:browser:audio}}). Click an effect or a template to add it to the selected clips, or drag it onto a clip. The effects are heard right away when you play, and the export sounds exactly the same.
 
-**Pitch** is already available under Audio Effects on every audio clip. Lower it to make a voice deeper without changing speed or duration. Choose Natural, Studio, Trailer or Brighter, or adjust it in semitones. It also works on recorded and AI voices in Voice Over Studio.
+**A deeper voice**: the Voice templates **Warm Narrator**, **Deep Voice** and **Trailer Voice** use **Voice Character**, which adds depth, presence, density and warmth in one effect. It sounds more natural than lowering the pitch. **Pitch** is still available as a separate effect for bigger changes.
 
 ## Templates
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AUDIO_EFFECTS, AUDIO_PRESETS, biquadResponse, componentEffects, createChain, eqCoefs, makeEffect, presetEffects, withDefaultPitch } from '../src/shared/audiofx.js';
+import { AUDIO_EFFECTS, AUDIO_PRESETS, biquadResponse, componentEffects, createChain, eqCoefs, makeEffect, presetEffects } from '../src/shared/audiofx.js';
 
 const SR = 48000;
 const sine = (f, n, a = 0.5) => Float32Array.from({ length: n }, (_, i) => a * Math.sin((2 * Math.PI * f * i) / SR));
@@ -128,11 +128,19 @@ test('neutral pitch is sample exact with no delay; disabling it restores the ori
   assert.deepEqual(L, input);
   assert.equal(latency, 0);
   assert.deepEqual(run([{ ...makeEffect('pitch', { semitones: -4 }), on: false }], input.slice()).L, input);
-  const existing = [makeEffect('compressor')];
-  assert.equal(withDefaultPitch(existing)[0].type, 'pitch');
-  assert.equal(existing.length, 1, 'showing the default does not mutate the saved chain');
-  const explicit = [makeEffect('pitch', { semitones: -3 }), ...existing];
-  assert.equal(withDefaultPitch(explicit), explicit, 'never adds a second pitch effect');
+});
+
+test('Voice Character adds low end without changing length, and delays only when it pitches', () => {
+  const gainAt = (f, p) => rms(run([makeEffect('voice', { presence: 0, density: 0, warmth: 0, ...p })], sine(f, SR, 0.05)).L, SR / 2);
+  const low = gainAt(110, { depth: 1 }) / gainAt(110, { depth: 0 });
+  const mid = gainAt(1000, { depth: 1 }) / gainAt(1000, { depth: 0 });
+  assert.ok(low > 2 && mid < 1.2, `low ${low}, mid ${mid}`);
+  assert.ok(gainAt(4000, { presence: 1 }) / gainAt(4000, { presence: 0 }) > 1.5, 'presence lifts 4 kHz');
+  const { L, latency } = run([makeEffect('voice')], sine(220, SR));
+  assert.equal(L.length, SR);
+  assert.equal(latency, 0);
+  assert.equal(run([makeEffect('voice', { semitones: -1 })], sine(220, SR)).latency, 2048);
+  for (const id of ['warm-narrator', 'deep-voice', 'trailer-voice']) assert.equal(AUDIO_PRESETS.find((x) => x.id === id).category, 'Voice');
 });
 
 // Count periods after the analysis window has settled. Tests the sound produced,

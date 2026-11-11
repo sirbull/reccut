@@ -1,17 +1,17 @@
 // Et ikon for hver lydeffekt og lydmal, som viser hva den gjør. Brukes i Edit og i Voice Over Studio.
 import {
-  Activity, AudioLines, Bot, BrickWall, CassetteTape, ChartSpline, Church, Cloud, Disc3, DoorClosed, Ear, Fish, Flame, Gamepad2, Grid3x3,
-  Headphones, House, Landmark, Megaphone, Mic, Mountain, Orbit, Phone, Plane, Radio, RadioReceiver, Repeat, Scale, Shrink, SlidersHorizontal,
+  Activity, AudioLines, BookOpen, Bot, Clapperboard, BrickWall, CassetteTape, ChartSpline, Church, Cloud, Disc3, DoorClosed, Ear, Fish, Flame, Gamepad2, Grid3x3,
+  Headphones, House, Landmark, Megaphone, Mic, MicVocal, Mountain, Orbit, Phone, Plane, Radio, RadioReceiver, Repeat, Scale, Shrink, SlidersHorizontal,
   Sparkles, Speaker, Telescope, TrendingDown, TrendingUp, Truck, Users, Vibrate, Volume2, VolumeX, Wind, Zap,
 } from 'lucide-preact';
 
 const EFFECTS = {
   eq: SlidersHorizontal, highpass: TrendingUp, lowpass: TrendingDown, bandpass: ChartSpline, hum: Zap, denoise: Wind, gate: DoorClosed,
   compressor: Shrink, limiter: BrickWall, deesser: Ear, autolevel: Scale, gain: Volume2, stereo: Headphones, echo: Repeat, reverb: Church,
-  chorus: Users, flanger: Plane, tremolo: Vibrate, distortion: Flame, bitcrush: Grid3x3, lofi: CassetteTape, ringmod: Bot, pitch: AudioLines,
+  chorus: Users, flanger: Plane, tremolo: Vibrate, distortion: Flame, bitcrush: Grid3x3, lofi: CassetteTape, ringmod: Bot, pitch: AudioLines, voice: Mic,
 };
 const PRESETS = {
-  'studio-voice': Mic, 'voice-cleanup': Sparkles, podcast: Radio, 'reduce-noise': Wind, hum50: Zap, hum60: Zap, rumble: Truck, even: Scale,
+  'warm-narrator': BookOpen, 'deep-voice': MicVocal, 'trailer-voice': Clapperboard, 'studio-voice': Mic, 'voice-cleanup': Sparkles, podcast: Radio, 'reduce-noise': Wind, hum50: Zap, hum60: Zap, rumble: Truck, even: Scale,
   loud: Volume2, gate: VolumeX, room: House, hall: Landmark, cathedral: Church, canyon: Mountain, slapback: Repeat, faraway: Telescope,
   telephone: Phone, walkie: RadioReceiver, radio: Radio, megaphone: Megaphone, tape: CassetteTape, vinyl: Disc3, '8bit': Gamepad2,
   distorted: Flame, blown: Speaker, robot: Bot, alien: Orbit, underwater: Fish, dream: Cloud, jet: Plane, pulse: Activity,

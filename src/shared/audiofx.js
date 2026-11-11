@@ -658,20 +658,66 @@ export const AUDIO_EFFECTS = {
     params: [P('semitones', 'Pitch', -12, 12, 0, 0.1, 'st', { center: 0 })],
     create: (p, sr) => pitchShifter(p, sr),
   },
+  // En dyp stemme lages som i studio: fylde i bunnen, mindre grums, nærvær, tetthet og varme.
+  // Pitch er med, men med lite spenn, siden mer enn et par halvtoner høres kunstig ut.
+  voice: {
+    label: 'Voice Character',
+    category: 'Voice',
+    desc: 'A deeper, bigger and closer voice in one effect: depth in the low end, presence, density and warmth. Sounds natural, unlike strong pitch.',
+    params: [
+      P('depth', 'Depth', 0, 1, 0.5, 0.01, '%', { scale: 100 }),
+      P('presence', 'Presence', 0, 1, 0.3, 0.01, '%', { scale: 100 }),
+      P('density', 'Density', 0, 1, 0.4, 0.01, '%', { scale: 100 }),
+      P('warmth', 'Warmth', 0, 1, 0.2, 0.01, '%', { scale: 100 }),
+      P('semitones', 'Pitch', -3, 3, 0, 0.1, 'st', { center: 0 }),
+    ],
+    create(p, sr) {
+      const bank = new FilterBank();
+      const pitch = pitchShifter(p, sr);
+      let q = p;
+      let env = 0;
+      const att = coefFor(5, sr);
+      const rel = coefFor(150, sr);
+      return {
+        get latency() {
+          return pitch.latency;
+        },
+        set(x) {
+          q = x;
+          pitch.set(x);
+          bank.setCoefs([
+            biquadCoefs('lowshelf', 150, 0.8, 9 * x.depth, sr),
+            biquadCoefs('peaking', 350, 1.2, -4 * x.depth, sr),
+            biquadCoefs('peaking', 4000, 0.9, 6 * x.presence, sr),
+          ]);
+        },
+        process(L, R, n) {
+          pitch.process(L, R, n);
+          bank.process(L, R, n);
+          const ratio = 1 + 5 * q.density;
+          const thr = -10 - 16 * q.density;
+          const mk = dbToLin(-thr * (1 - 1 / ratio) * 0.4);
+          const w = q.warmth;
+          const d = 1 + 3 * w;
+          for (let i = 0; i < n; i++) {
+            const x = Math.max(Math.abs(L[i]), Math.abs(R[i]));
+            env = x > env ? att * env + (1 - att) * x : rel * env + (1 - rel) * x;
+            const over = linToDb(env) - thr;
+            const g = (over > 0 ? dbToLin(-over * (1 - 1 / ratio)) : 1) * mk;
+            const l = L[i] * g;
+            const r = R[i] * g;
+            // Myk metning, lik originalen ved lavt nivå.
+            L[i] = l * (1 - w) + (Math.tanh(l * d) / d) * w;
+            R[i] = r * (1 - w) + (Math.tanh(r * d) / d) * w;
+          }
+        },
+      };
+    },
+  },
 };
 
-export const AUDIO_FX_CATEGORIES = ['Repair', 'EQ', 'Dynamics', 'Space', 'Creative', 'Lo-fi'];
-
-// The neutral control is visible on existing clips too, without rewriting their effects.
-// It is saved into the ordinary effect chain as soon as the user adjusts it.
-export const DEFAULT_PITCH = { id: 'default-pitch', type: 'pitch', on: true, p: { semitones: 0 } };
-export const withDefaultPitch = (list = []) => list.some((e) => e.type === 'pitch') ? list : [DEFAULT_PITCH, ...list];
-export const PITCH_PRESETS = [
-  { value: 0, label: 'Natural' },
-  { value: -1, label: 'Studio · subtle depth' },
-  { value: -3, label: 'Trailer · deeper voice' },
-  { value: 2, label: 'Brighter' },
-];
+export const AUDIO_FX_CATEGORIES = ['Voice', 'Repair', 'EQ', 'Dynamics', 'Space', 'Creative', 'Lo-fi'];
+export const AUDIO_PRESET_CATEGORIES = ['Voice', 'Repair', 'Space', 'Creative', 'Lo-fi'];
 
 // Streaming phase vocoder. Analysis/synthesis share a fixed hop, so source timing
 // and duration never change. Peak phase locking keeps neighbouring speech bins
@@ -1043,6 +1089,10 @@ export function createChain(sr) {
 
 const fx = (type, p = {}) => ({ type, p });
 export const AUDIO_PRESETS = [
+  // Stemme: dypere og større, med Voice Character
+  { id: 'warm-narrator', label: 'Warm Narrator', category: 'Voice', desc: 'A little more body and warmth, still natural. For narration and explainers.', chain: [fx('highpass', { freq: 70 }), fx('voice', { depth: 0.3, presence: 0.25, density: 0.3, warmth: 0.3 }), fx('deesser'), fx('limiter', { ceiling: -1 })] },
+  { id: 'deep-voice', label: 'Deep Voice', category: 'Voice', desc: 'Deeper and closer, like a voice over artist right on the microphone.', chain: [fx('highpass', { freq: 60 }), fx('voice', { depth: 0.6, presence: 0.35, density: 0.5, warmth: 0.25 }), fx('deesser'), fx('limiter', { ceiling: -1 })] },
+  { id: 'trailer-voice', label: 'Trailer Voice', category: 'Voice', desc: 'Big, dense and dark, with a touch of space. For trailers, intros and dramatic openings.', chain: [fx('highpass', { freq: 45 }), fx('voice', { depth: 0.9, presence: 0.45, density: 0.8, warmth: 0.45, semitones: -1 }), fx('deesser'), fx('reverb', { size: 0.6, damping: 0.5, mix: 0.08, predelay: 25 }), fx('limiter', { ceiling: -1 })] },
   // Reparasjon
   // Standard i Voice Over Studio: ren, varm og jevn stemme rett ut av boksen.
   { id: 'studio-voice', label: 'Studio Voice', category: 'Repair', desc: 'A clean, warm and even voice over sound: rumble and light noise removed, presence, soft S sounds and steady level.', chain: [fx('highpass', { freq: 80 }), fx('denoise', { amount: 0.35 }), fx('eq', eqParams('podcast')), fx('deesser'), fx('compressor', { threshold: -20, ratio: 3, makeup: 4 }), fx('limiter', { ceiling: -1 })] },

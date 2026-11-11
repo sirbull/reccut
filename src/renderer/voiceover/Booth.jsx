@@ -42,7 +42,6 @@ import { project, room } from '../editor/store.js';
 import { isSpaceInput, isTyping } from '../keyboard.js';
 import { chosenTake, htmlToScript, isSkipped, pickKey, orphanTakes, progress, readingTime, DEFAULT_PACING } from '../../shared/voiceover.js';
 import { AudioFxChain } from '../editor/AudioFxChain.jsx';
-import { withDefaultPitch } from '../../shared/audiofx.js';
 import { formatDuration } from '../../shared/model.js';
 import * as booth from './booth.js';
 import * as pv from './preview.js';
@@ -726,7 +725,7 @@ function RoomTone() {
 function Sound() {
   const p = booth.person.value;
   if (!p) return null;
-  const fx = withDefaultPitch(p.fx || []);
+  const fx = p.fx || [];
   return (
     <div class="vo-section vo-sound">
       <h4>
@@ -826,7 +825,7 @@ function AiSound({ p }) {
         <Slider value={p.ai.speed || 1} min={0.5} max={2} step={0.01} center={1} onInput={(x) => booth.setAiVoice(p.id, { speed: x })} />
         <NumberField value={p.ai.speed || 1} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={(x) => booth.setAiVoice(p.id, { speed: x })} />
       </label>
-      <p class="dim">Language, voice and generation speed apply to new takes. Generate the lines again to hear these changes. Pitch below changes existing takes without regenerating.</p>
+      <p class="dim">Language, voice and generation speed apply to new takes. Generate the lines again to hear these changes. Effects below, such as Voice Character, change existing takes without regenerating.</p>
     </>
   );
 }

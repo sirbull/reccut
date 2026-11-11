@@ -63,7 +63,7 @@ import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detach
 import { prefs } from '../prefs.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { attachToTrack, deleteTrack, detach, removeTrackingKeyframes, trackArea, trackForward, trackRedaction, tracksFor } from './track.js';
-import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects, withDefaultPitch } from '../../shared/audiofx.js';
+import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { MASK_MODES, MASK_SHAPES, canMask, defaultPoints, ellipsePoints, maskKey, maskList, setMaskShape } from '../../shared/shapes.js';
 import { Button, FontPicker, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
 
@@ -646,10 +646,7 @@ function AudioFxSection({ clip }) {
       <AudioFxChain
         list={clip.props.afx || []}
         onSet={(list) => commit((q) => void (q.clips[clip.id].props.afx = list))}
-        onLive={(id, patch) => updateTransient((q) => {
-          const props = q.clips[clip.id].props;
-          props.afx = withDefaultPitch(props.afx || []).map((e) => e.id === id ? { ...e, p: { ...e.p, ...patch } } : e);
-        })}
+        onLive={(id, patch) => updateTransient((q) => Object.assign(q.clips[clip.id].props.afx.find((e) => e.id === id).p, patch))}
         onStart={beginTransient}
         onCommit={endTransient}
         hint="Add an equalizer, noise reduction, reverb, distortion and more, or a template such as Voice Clean Up or Telephone. You can also drag effects from the Audio Effects browser onto the clip."

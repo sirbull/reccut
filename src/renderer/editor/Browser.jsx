@@ -39,7 +39,7 @@ import { startLibraryDrag } from './libraryDrag.js';
 import { CaptionStyleEditor } from './Inspector.jsx';
 import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
 import { prefs } from '../prefs.js';
-import { AUDIO_EFFECTS, AUDIO_FX_CATEGORIES, AUDIO_PRESETS } from '../../shared/audiofx.js';
+import { AUDIO_EFFECTS, AUDIO_FX_CATEGORIES, AUDIO_PRESETS, AUDIO_PRESET_CATEGORIES } from '../../shared/audiofx.js';
 import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../../shared/videoEffects.js';
 
 const api = window.api;
@@ -1028,7 +1028,6 @@ function EffectsTab() {
 function AudioFxTab() {
   const [q, setQ] = useState('');
   const match = (x) => !q || `${x.label} ${x.desc} ${x.category}`.toLowerCase().includes(q.toLowerCase());
-  const presetCats = ['Repair', 'Space', 'Creative', 'Lo-fi'];
   const card = (kind, id, item) => (
     <button
       key={`${kind}${id}`}
@@ -1051,7 +1050,7 @@ function AudioFxTab() {
         <Search size={13} />
         <input placeholder="Search audio effects" value={q} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.stopPropagation()} />
       </div>
-      {presetCats.map((cat) => {
+      {AUDIO_PRESET_CATEGORIES.map((cat) => {
         const list = AUDIO_PRESETS.filter((x) => x.category === cat && match(x));
         if (!list.length) return null;
         return (
