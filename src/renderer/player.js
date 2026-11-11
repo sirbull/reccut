@@ -324,14 +324,29 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
       const moving = isPlaying && eff > 0;
       el.preservesPitch = n.clip.props?.preservePitch !== false;
       if (scrubbing && entry.gain && !outside) {
-        // Lyd mens du skummer: et kort utdrag fra der pekeren er.
-        seekEntry(entry, target);
+        // Lyd mens du skummer: et kort utdrag fra der pekeren er. Hvert utdrag tones
+        // ned, flyttes og tones opp igjen, og spiller så fritt. Å hoppe mens lyden
+        // spiller, gir knitring.
+        const g = entry.gain.gain;
+        const now = audioCtx.currentTime;
         if (entry.scrubId !== scrubId) {
           entry.scrubId = scrubId;
-          el.playbackRate = 1;
-          el.play().catch(() => {});
+          entry.scrubJump = now + (el.paused ? 0 : 0.012);
+          g.cancelScheduledValues(now);
+          g.setTargetAtTime(0, now, 0.003);
         }
-        entry.gain.gain.setTargetAtTime(n.gain, audioCtx.currentTime, 0.005);
+        if (entry.scrubJump != null) {
+          if (now < entry.scrubJump) continue;
+          if (Math.abs(el.currentTime - target) > 0.5 / 60) {
+            if (!el.seeking) el.currentTime = target;
+            continue;
+          }
+          entry.scrubJump = null;
+          el.playbackRate = 1;
+          if (el.paused) el.play().catch(() => {});
+          g.cancelScheduledValues(now);
+          g.setTargetAtTime(n.gain, now, 0.005);
+        }
         continue;
       }
       if (entry.gain) entry.gain.gain.setTargetAtTime(moving && !outside ? n.gain : 0, audioCtx.currentTime, 0.015);
@@ -350,6 +365,9 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
           seekEntry(entry, target);
         }
       } else {
+        // Etter et skummeutdrag får lyden tone ut før pause, ellers klikker det.
+        if (!el.paused && entry.gain && entry.scrubId === scrubId && performance.now() < scrubUntil + 80) continue;
+        entry.scrubJump = null;
         if (!el.paused) el.pause();
         seekEntry(entry, target);
       }
@@ -370,6 +388,9 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
     for (const [id, entry] of pool) {
       if (seen.has(id)) continue;
       if (entry.gain) entry.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.015);
+      entry.scrubJump = null;
+      // Skummet du forbi et kutt, får lyden tone ut før pause.
+      if (!entry.el.paused && !isPlaying && entry.gain && entry.scrubId === scrubId && now < scrubUntil + 80) continue;
       if (!entry.el.paused) entry.el.pause();
       if (now - entry.lastUsed > keepSeconds * 1000) disposeEntry(id, entry);
     }

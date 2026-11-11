@@ -59,7 +59,7 @@ import { SettingsWindow } from './Settings.jsx';
 import { prefs } from './prefs.js';
 import { helpOpen, paletteOpen } from './registry.js';
 import wordmark from '../../assets/reccut-wordmark.svg';
-import { isTyping, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } from './keyboard.js';
+import { isTyping, isSpaceInput, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } from './keyboard.js';
 import { installFileDrop } from './fileDrop.js';
 import { UpdateDialog } from './UpdateDialog.jsx';
 import { startUpdateChecks } from './updates.js';
@@ -272,9 +272,10 @@ function Notice() {
 
 // Tastetrykk går gjennom kommandoregisteret. Taster i tekstfelt og åpne dialoger røres ikke.
 function onKeyDownCapture(e) {
-  if (commandsBlocked(e) || e.defaultPrevented) return;
-  // Mellomrom spiller av utenfor felt og dialoger. Tallfelt eier også sine taster.
-  if (e.code === 'Space') {
+  if (e.defaultPrevented || e.isComposing || document.hasFocus() === false) return;
+  // Mellomrom spiller alltid av, også fra knapper, glidebrytere, valglister og rullbare lister.
+  // Bare tekstfelt som tar mellomrom, og åpne dialoger, beholder tasten.
+  if (e.code === 'Space' && !isSpaceInput(e) && !dialogOwnsKeyboard(e)) {
     const cmd = commandForEvent(e, room.value);
     if (cmd?.id === 'play' || cmd?.id === 'playReverse') {
       e.preventDefault();
@@ -284,6 +285,7 @@ function onKeyDownCapture(e) {
       return;
     }
   }
+  if (commandsBlocked(e)) return;
   const any = commandForEvent(e, room.value);
   if (!any?.anywhere) return;
   e.preventDefault();
