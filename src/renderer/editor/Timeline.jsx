@@ -394,6 +394,12 @@ export function Timeline() {
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
+    if (tool.value === 'blade' && hitClip && ['clip', 'edge', 'vol', 'fade', 'kf', 'comp'].includes(hit)) {
+      if (proj.lanes?.[hitClip.lane]?.locked) return;
+      const t = snap(T, new Set([hitClip.id])).t;
+      commit((p) => splitClip(p, hitClip.id, t));
+      return;
+    }
     if (hit === 'comp') {
       selection.value = [el.dataset.clip];
       selectedComponent.value = { clipId: el.dataset.clip, key: el.dataset.key };
@@ -454,12 +460,6 @@ export function Timeline() {
     if (proj.lanes?.[clip.lane]?.locked) {
       selection.value = [];
       seek(T);
-      return;
-    }
-
-    if (tool.value === 'blade' && (hit === 'clip' || hit === 'edge')) {
-      const t = snap(T, new Set([clipId])).t;
-      commit((p) => splitClip(p, clipId, t));
       return;
     }
 

@@ -8,6 +8,21 @@ export function isTyping(event) {
     (event?.composedPath?.() || [event?.target]).some(editable);
 }
 
+// Space belongs to text entry, but not sliders, selects, toggles or numeric fields.
+export function isSpaceInput(event) {
+  const acceptsSpace = (el) => {
+    if (!el || el.disabled || el.readOnly) return false;
+    if (el.tagName === 'INPUT') {
+      return !el.classList?.contains('num-field') &&
+        ['text', 'search', 'password', 'tel', 'url', 'email'].includes(el.type || 'text');
+    }
+    return el.tagName === 'TEXTAREA' || el.isContentEditable ||
+      Boolean(el.closest?.('[role="textbox"], [role="combobox"][contenteditable="true"]'));
+  };
+  return acceptsSpace(globalThis.document?.activeElement) ||
+    (event?.composedPath?.() || [event?.target]).some(acceptsSpace);
+}
+
 // Modal windows own all keys. Floating plugin windows own keys while focused.
 export function dialogOwnsKeyboard(event) {
   const doc = globalThis.document;

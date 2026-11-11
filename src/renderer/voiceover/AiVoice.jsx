@@ -8,6 +8,7 @@ import { tasks } from '../editor/store.js';
 import { LANGUAGES, VOICES, languageById, voiceLabel, voiceLanguage, voicesFor } from '../../shared/tts.js';
 import { CHARACTERS, TONES, filterStyles, styleEffects } from '../../shared/voiceStyles.js';
 import * as booth from './booth.js';
+import { SpeechProgress } from './SpeechProgress.jsx';
 
 const api = window.api;
 export const aiDialogOpen = signal(false);
@@ -91,7 +92,7 @@ export function AiVoiceDialog() {
     booth.refreshTts();
   }, []);
   const close = () => {
-    booth.sampling.value = null;
+    booth.stopVoicePreview();
     aiDialogOpen.value = false;
   };
   const native = piperFor(lang);
@@ -133,8 +134,8 @@ export function AiVoiceDialog() {
             <Select value={lang} options={LANGUAGES.map((l) => ({ value: l.id, label: `${l.label}${l.id === booth.scriptLanguage.value ? ', the script' : ''}` }))} onChange={setLang} />
           </label>
           <label class="vt-ctl ai-speed" title="Speaking speed for new voices. Below 1 is slower, which often suits voice over. Styles have their own speed.">
-            Speed
-            <Slider value={speed} min={0.5} max={1.5} step={0.01} center={1} onInput={setSpeed} />
+            Generation speed
+            <Slider value={speed} min={0.5} max={2} step={0.01} center={1} onInput={setSpeed} />
             <NumberField value={speed} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={setSpeed} />
           </label>
         </div>
@@ -146,6 +147,7 @@ export function AiVoiceDialog() {
             </button>
           </p>
         )}
+        <SpeechProgress controller={booth.speechAudition} onCancel={booth.stopVoicePreview} />
         {native.length > 0 && <PiperList lang={lang} speed={speed} onAdd={close} />}
         {kokoroPart}
         {t.installed && (

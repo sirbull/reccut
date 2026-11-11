@@ -3,14 +3,16 @@
 // list: effektene. onSet(nyListe): lagre endringen. onLive(id, patch): mens det dras.
 // onStart/onCommit: rundt dra, så Properties kan lage ett angresteg.
 import { useEffect, useRef } from 'preact/hooks';
+import { AudioFxIcon } from './audioIcons.jsx';
 import { ArrowDown, ArrowUp } from 'lucide-preact';
-import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
+import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, PITCH_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects, withDefaultPitch } from '../../shared/audiofx.js';
 import { IconButton, NumberField, Row, Segmented, Select, Slider, Toggle } from '../ui.jsx';
 import { RemoveEffectButton } from './RemoveEffectButton.jsx';
 
 const noop = () => {};
 
-export function AudioFxChain({ list = [], onSet, onLive, onStart = noop, onCommit = noop, hint }) {
+export function AudioFxChain({ list = [], onSet, onLive, onStart = noop, onCommit = noop, hint, showAdd = true }) {
+  list = withDefaultPitch(list);
   const patch = (id, fn) => onSet(list.map((e) => (e.id === id ? fn({ ...e, p: { ...e.p } }) : e)));
   const move = (i, d) => {
     const j = i + d;
@@ -23,10 +25,10 @@ export function AudioFxChain({ list = [], onSet, onLive, onStart = noop, onCommi
   const presetOptions = [{ value: '', label: 'Add Template…' }, ...AUDIO_PRESETS.map((p) => ({ value: p.id, label: `${p.category === 'Repair' ? 'Fix' : p.category}: ${p.label}` }))];
   return (
     <>
-      <div class="afx-add">
+      {showAdd && <div class="afx-add">
         <Select value="" options={addOptions} onChange={(v) => v && onSet([...list, makeEffect(v)])} />
         <Select value="" options={presetOptions} onChange={(v) => v && onSet([...list, ...presetEffects(v)])} />
-      </div>
+      </div>}
       {!list.length && hint && <p class="hint">{hint}</p>}
       {list.map((e, i) => {
         const def = AUDIO_EFFECTS[e.type];
@@ -35,11 +37,19 @@ export function AudioFxChain({ list = [], onSet, onLive, onStart = noop, onCommi
           <div key={e.id} class={`afx-item${e.on === false ? ' off' : ''}`} data-afx-item={e.type}>
             <div class="afx-head">
               <Toggle checked={e.on !== false} onChange={(v) => patch(e.id, (x) => ({ ...x, on: v }))} />
-              <b title={def.desc}>{def.label}</b>
+              <b class="afx-name" title={def.desc}>
+                <AudioFxIcon kind="afx" id={e.type} size={13} /> {def.label}
+              </b>
               <IconButton icon={ArrowUp} size={12} title="Move up" disabled={i === 0} onClick={() => move(i, -1)} />
               <IconButton icon={ArrowDown} size={12} title="Move down" disabled={i === list.length - 1} onClick={() => move(i, 1)} />
               <RemoveEffectButton label={def.label} adjusted={def.params.some((p) => (e.p[p.id] ?? p.def) !== p.def)} onRemove={() => onSet(list.filter((x) => x.id !== e.id))} />
             </div>
+            {e.type === 'pitch' && <>
+              <Row label="Voice tone">
+                <Select value={e.p.semitones || 0} options={[...(!PITCH_PRESETS.some((pr) => pr.value === (e.p.semitones || 0)) ? [{ value: e.p.semitones, label: 'Custom' }] : []), ...PITCH_PRESETS]} onChange={(v) => patch(e.id, (x) => ({ ...x, on: true, p: { ...x.p, semitones: Number(v) } }))} />
+              </Row>
+              <p class="hint">Lower = deeper, higher = brighter. Works on existing audio; speed and length stay the same.</p>
+            </>}
             {e.type === 'eq' ? (
               <EqEditor effect={e} onStart={onStart} onCommit={onCommit} onLive={(q) => onLive(e.id, q)} onSet={(q) => patch(e.id, (x) => ({ ...x, p: { ...x.p, ...q } }))} />
             ) : (

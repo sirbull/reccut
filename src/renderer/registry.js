@@ -39,7 +39,7 @@ import { chooseImage, pasteImage, copyLayers } from './design/assets.js';
 import { toggleViewerFullscreen } from './editor/fullscreen.js';
 import { LAYOUTS, modifierInfo, settings as recordSettings } from './recorder/settings.js';
 import { addFiles, roomActions } from './export/state.js';
-import { openBooth } from './voiceover/state.js';
+import { boothOpen, openBooth } from './voiceover/state.js';
 import { openQuick } from './voiceover/quick.js';
 
 const api = window.api;
@@ -142,8 +142,8 @@ export const COMMANDS = [
   { id: 'prefs', label: 'Settings', menu: isMac ? 'App' : 'File', group: 'prefs', keys: 'CmdOrCtrl+,', register: true, rooms: ALL, run: () => (commands.prefsOpen.value = true), help: 'preferences' },
 
   /* Edit */
-  { id: 'undo', label: 'Undo', menu: 'Edit', help: 'selection-clipboard', keys: 'CmdOrCtrl+Z', register: true, text: 'undo', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.designUndo() : undo(), enabled: () => room.value === 'design' ? design.canDesignUndo() : canUndo() },
-  { id: 'redo', label: 'Redo', menu: 'Edit', help: 'selection-clipboard', keys: 'Shift+CmdOrCtrl+Z', register: true, text: 'redo', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.designRedo() : redo(), enabled: () => room.value === 'design' ? design.canDesignRedo() : canRedo() },
+  { id: 'undo', label: 'Undo', menu: 'Edit', help: 'selection-clipboard', keys: 'CmdOrCtrl+Z', register: true, text: 'undo', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.designUndo() : undo(), enabled: () => boothOpen.value || (room.value === 'design' ? design.canDesignUndo() : canUndo()) },
+  { id: 'redo', label: 'Redo', menu: 'Edit', help: 'selection-clipboard', keys: 'Shift+CmdOrCtrl+Z', also: ['CmdOrCtrl+Y'], register: true, text: 'redo', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.designRedo() : redo(), enabled: () => boothOpen.value || (room.value === 'design' ? design.canDesignRedo() : canRedo()) },
   { id: 'cut', label: 'Cut', menu: 'Edit', help: 'selection-clipboard', group: 'clip', keys: 'CmdOrCtrl+X', register: true, text: 'cut', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? copyLayers(true) : commands.cutSelection() },
   { id: 'copy', label: 'Copy', menu: 'Edit', help: 'selection-clipboard', group: 'clip', keys: 'CmdOrCtrl+C', register: true, text: 'copy', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? copyLayers() : commands.copySelection() },
   { id: 'paste', label: 'Paste', menu: 'Edit', help: 'selection-clipboard', group: 'clip', keys: 'CmdOrCtrl+V', register: true, text: 'paste', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? pasteImage() : commands.paste() },

@@ -2,7 +2,8 @@
 // med volum, fades og romlyd i pausene. Lyden dekodes én gang per fil og holdes i minnet.
 import { signal } from '@preact/signals';
 import { audioSink } from '../prefs.js';
-import { peaks, roomToneFill } from '../../shared/voiceover.js';
+import { itemParts, peaks, takeFades } from '../../shared/voiceover.js';
+import { createChain } from '../../shared/audiofx.js';
 
 const fileUrl = (p) => `media://file/${encodeURIComponent(p)}`;
 
@@ -13,10 +14,12 @@ export const peaksVersion = signal(0);
 let ctx = null;
 let fxReady = null;
 const routes = new Map(); // person -> { gain, fx }
+const trackLevels = new Map(); // siste volum og av/på, også mens lyden dekodes
 const buffers = new Map(); // fil -> Promise<AudioBuffer>
 const peakCache = new Map(); // fil -> Float32Array
 let sources = [];
 let raf = 0;
+let playbackRun = 0;
 
 function audio() {
   if (!ctx) {
@@ -46,7 +49,65 @@ export function load(file) {
   }
   return buffers.get(file);
 }
-export const peaksFor = (file) => peakCache.get(file) || null;
+// Bølgeformen. Med person: slik den høres, med AI Clean Voice, personens volum og effekter, regnet ut
+// offline med samme effektkode som avspillingen. Til den er klar, vises den forrige (eller originalen).
+const processed = new Map(); // fil + lydinnstillinger -> peaks
+const wanted = new Map();
+const rendering = new Set();
+let renderTimer = 0;
+export function peaksFor(file, person = null) {
+  const raw = peakCache.get(file) || null;
+  if (!person || (!(person.clean > 0) && !person.fx?.length && !person.gain)) return raw;
+  const key = JSON.stringify([file, person.clean || 0, person.gain || 0, person.fx || []]);
+  const got = processed.get(key);
+  if (!got && !wanted.has(key) && !rendering.has(key)) {
+    // Under et drag trengs bare den nyeste innstillingen for hver fil og person.
+    for (const [old, w] of wanted) if (w.file === file && w.person.id === person.id) wanted.delete(old);
+    wanted.set(key, { file, person });
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(renderWanted, 250);
+  }
+  return got || raw;
+}
+async function renderWanted() {
+  for (const [key, w] of [...wanted]) {
+    if (rendering.has(key) || processed.has(key)) continue;
+    wanted.delete(key);
+    rendering.add(key);
+    const pk = await renderPeaks(w.file, w.person).catch(() => null);
+    rendering.delete(key);
+    if (pk) {
+      processed.set(key, pk);
+      if (processed.size > 32) processed.delete(processed.keys().next().value);
+      peaksVersion.value++;
+    }
+  }
+}
+// Samme kjede som et personspor i avspillingen: Clean Voice-blanding, volum, effekter.
+async function renderPeaks(file, p) {
+  const src = p.clean > 0 ? cleaned.get(file) : file;
+  if (!src) {
+    cleanFile(file);
+    return null;
+  }
+  const buf = await load(src);
+  const chain = createChain(buf.sampleRate);
+  chain.update(p.fx || []);
+  const latency = chain.latency;
+  const off = new OfflineAudioContext(2, buf.length + latency, buf.sampleRate);
+  await off.audioWorklet.addModule('audiofx-worklet.js');
+  const fxNode = (channels, init) => new AudioWorkletNode(off, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: channels, channelCountMode: 'explicit', processorOptions: { init } });
+  const s = off.createBufferSource();
+  s.buffer = buf;
+  const g = off.createGain();
+  g.gain.value = lin(p.gain);
+  if (buf.numberOfChannels === 4) s.connect(fxNode(4, { list: [], clean: p.clean || 0 })).connect(g);
+  else s.connect(g);
+  g.connect(fxNode(2, p.fx || [])).connect(off.destination);
+  s.start();
+  const out = await off.startRendering();
+  return peaks(out.getChannelData(0).subarray(latency, latency + buf.length), out.sampleRate);
+}
 
 const lin = (db) => Math.pow(10, (db || 0) / 20);
 
@@ -66,7 +127,10 @@ export function dbAt(kf, s) {
 function schedule(buf, { at, in: inPoint, dur, gain = 0, kf = null, fadeIn = 0, fadeOut = 0 }, from, t0, out = null) {
   const c = audio();
   const offset = Math.max(0, from - at);
-  if (offset >= dur) return;
+  dur = Math.min(dur, buf.duration - inPoint);
+  if (offset >= dur || inPoint < 0) return;
+  fadeIn = Math.min(fadeIn, dur / 2);
+  fadeOut = Math.min(fadeOut, dur / 2);
   const when = t0 + Math.max(0, at - from);
   const src = c.createBufferSource();
   src.buffer = buf;
@@ -82,6 +146,7 @@ function schedule(buf, { at, in: inPoint, dur, gain = 0, kf = null, fadeIn = 0, 
       const tt = start + (t - inPoint);
       if (tt > when && tt < end) vg.gain.linearRampToValueAtTime(lin(db), tt);
     }
+    vg.gain.linearRampToValueAtTime(lin(dbAt(kf, inPoint + dur)), end);
   }
   if (fadeIn > 0 && offset < fadeIn) {
     g.gain.setValueAtTime((level * offset) / fadeIn, when);
@@ -95,16 +160,24 @@ function schedule(buf, { at, in: inPoint, dur, gain = 0, kf = null, fadeIn = 0, 
   src.connect(vg).connect(g).connect(out || c.destination);
   src.start(when, inPoint + offset, dur - offset);
   sources.push(src);
+  src.onended = () => {
+    sources = sources.filter((s) => s !== src);
+    src.disconnect();
+    vg.disconnect();
+    g.disconnect();
+  };
 }
 
 // Ett spor per person: volum og effektkjede. Endres mens det spilles.
-async function route(person) {
+async function route(person, run = playbackRun) {
   const c = audio();
+  const ready = await fxReady;
+  if (run !== playbackRun) return null;
   let r = routes.get(person.id);
   if (!r) {
     const gain = c.createGain();
     r = { gain, fx: null, clean: null };
-    if (await fxReady) {
+    if (ready) {
       r.fx = new AudioWorkletNode(c, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
       gain.connect(r.fx).connect(c.destination);
       // Clean Voice-filer har fire kanaler (original og renset), som blandes med styrken her.
@@ -113,7 +186,8 @@ async function route(person) {
     } else gain.connect(c.destination);
     routes.set(person.id, r);
   }
-  r.gain.gain.value = lin(person.gain);
+  const level = trackLevels.get(person.id) || person;
+  r.gain.gain.value = level.muted ? 0 : lin(level.gain);
   r.fx?.port.postMessage(person.fx || []);
   r.clean?.port.postMessage({ list: [], clean: person.clean || 0 });
   return r;
@@ -130,19 +204,33 @@ function cleanFile(file) {
   if (cleaned.has(file)) return cleaned.get(file);
   if (!cleaning.has(file)) {
     cleaning.add(file);
-    window.api.cleanAudio({ file }).then((out) => cleaned.set(file, out), (err) => console.warn('Clean Voice failed', file, err));
+    window.api.cleanAudio({ file }).then(
+      (out) => {
+        cleaned.set(file, out);
+        peaksVersion.value++; // bølgeformen tegnes på nytt med den rensede lyden
+      },
+      (err) => {
+        cleaning.delete(file);
+        console.warn('Clean Voice failed', file, err);
+      }
+    );
   }
   return file;
 }
 export function setFx(id, list) {
   routes.get(id)?.fx?.port.postMessage(list || []);
 }
-export function setGain(id, db) {
+export function setGain(id, db, muted = false) {
+  const previous = trackLevels.get(id);
+  trackLevels.set(id, { gain: db, muted });
+  if (muted && !previous?.muted) stopScrub();
   const r = routes.get(id);
-  if (r) r.gain.gain.value = lin(db);
+  if (r) r.gain.gain.value = muted ? 0 : lin(db);
 }
 
 export function stop() {
+  stopScrub();
+  playbackRun++;
   for (const s of sources) {
     try {
       s.stop();
@@ -160,7 +248,7 @@ export function stop() {
 }
 
 /**
- * Spiller planen fra et tidspunkt. tone: romlyden ({ file, duration }) som fyller pausene, eller null.
+ * Spiller planen fra et tidspunkt. tone: romlyden ({ file, pieces }) i pausene, eller null.
  * onEnd kalles når slutten er nådd.
  */
 export async function play(plan, from = 0, { tone = null, onEnd, people = [] } = {}) {
@@ -168,27 +256,58 @@ export async function play(plan, from = 0, { tone = null, onEnd, people = [] } =
   if (!plan.items.length) return;
   if (from >= plan.end - 0.01) from = 0;
   const c = audio();
-  if (c.state === 'suspended') await c.resume();
+  const run = playbackRun;
   playing.value = true;
+  try { if (c.state === 'suspended') await c.resume(); }
+  catch { if (run === playbackRun) playing.value = false; return; }
+  if (run !== playbackRun) return;
   let bufs;
+  const byPerson = new Map(people.map((p) => [p.id, p]));
   try {
     const cleanOn = new Set(people.filter((p) => p.clean > 0).map((p) => p.id));
-    bufs = await Promise.all(plan.items.map((it) => (it.active === false ? null : load(cleanOn.has(it.person) ? cleanFile(it.take.file) : it.take.file))));
+    // Deaktiverte spor planlegges gjennom en dempet lydrute, slik at de kan slås på mens vi spiller.
+    bufs = await Promise.all(plan.items.map((it) => (it.active === false && !byPerson.has(it.person) ? null : load(cleanOn.has(it.person) ? cleanFile(it.take.file) : it.take.file))));
   } catch {
-    playing.value = false;
+    if (run === playbackRun) playing.value = false;
     return;
   }
-  const toneBuf = tone ? await load(tone.file).catch(() => null) : null;
-  if (!playing.value) return;
+  if (run !== playbackRun) return;
+  // Romlyden går gjennom samme spor som stemmen den hører til: AI Clean Voice, volum og effekter.
+  const toneBufs = new Map();
+  if (tone) {
+    const byId = new Map(people.map((p) => [p.id, p]));
+    for (const piece of tone.pieces || []) {
+      const p = byId.get(piece.person);
+      const f = p?.clean > 0 ? cleanFile(tone.file) : tone.file;
+      if (!toneBufs.has(f)) toneBufs.set(f, await load(f).catch(() => null));
+      piece.buf = toneBufs.get(f);
+    }
+  }
+  if (run !== playbackRun) return;
   const outs = new Map();
-  for (const p of people) outs.set(p.id, await route(p));
-  if (!playing.value) return;
+  for (const p of people) {
+    const own = plan.items.filter((it) => it.person === p.id);
+    outs.set(p.id, await route({ ...p, muted: p.muted || (own.length > 0 && own.every((it) => it.active === false)) }, run));
+  }
+  if (run !== playbackRun) return;
   const t0 = c.currentTime + 0.06;
   plan.items.forEach((it, i) => {
-    if (it.active === false) return;
-    schedule(bufs[i], { at: it.at, in: it.in, dur: it.dur, gain: it.take.gain, kf: it.take.volKf, fadeIn: it.take.fadeIn ?? 0.02, fadeOut: it.take.fadeOut ?? 0.04 }, from, t0, bufs[i].numberOfChannels === 4 ? outs.get(it.person)?.clean || outs.get(it.person)?.gain : outs.get(it.person)?.gain);
+    if (!bufs[i]) return;
+    const out = bufs[i].numberOfChannels === 4 ? outs.get(it.person)?.clean || outs.get(it.person)?.gain : outs.get(it.person)?.gain;
+    // Et klipp med kutt spilles del for del, med korte fades ved hvert kutt så det ikke klikker.
+    const parts = itemParts(it);
+    parts.forEach((part, k) => {
+      const fades = takeFades(it.take);
+      const fadeIn = k === 0 ? fades.fadeIn : 0.006;
+      const fadeOut = k === parts.length - 1 ? fades.fadeOut : 0.006;
+      schedule(bufs[i], { ...part, gain: it.take.gain, kf: it.take.volKf, fadeIn, fadeOut }, from, t0, out);
+    });
   });
-  if (toneBuf) for (const piece of roomToneFill(plan.gaps, tone.duration)) schedule(toneBuf, { ...piece, fadeIn: 0.04, fadeOut: 0.04 }, from, t0);
+  for (const piece of tone?.pieces || []) {
+    if (!piece.buf) continue;
+    const r = outs.get(piece.person);
+    schedule(piece.buf, { ...piece, fadeIn: 0.04, fadeOut: 0.04 }, from, t0, piece.buf.numberOfChannels === 4 ? r?.clean || r?.gain : r?.gain);
+  }
   const tick = () => {
     const t = from + Math.max(0, c.currentTime - t0);
     time.value = Math.min(t, plan.end);
@@ -203,19 +322,33 @@ export async function play(plan, from = 0, { tone = null, onEnd, people = [] } =
 }
 
 // Skrubbing: en kort lydbit der spillehodet er mens det dras, som i Edit.
-let lastScrub = 0;
+let lastScrub = -Infinity;
+let scrubRun = 0;
+const scrubSources = new Set();
+export function stopScrub() {
+  scrubRun++;
+  for (const src of scrubSources) {
+    try { src.stop(); } catch {}
+  }
+  scrubSources.clear();
+}
+
 export async function scrub(plan, t, people = []) {
   const now = performance.now();
   if (playing.value || now - lastScrub < 70) return;
   lastScrub = now;
+  stopScrub();
+  const run = scrubRun;
   const it = plan.items.find((x) => x.active !== false && t >= x.at && t < x.at + x.dur);
   const p = it && people.find((x) => x.id === it.person);
   if (!it || p?.muted) return;
   const buf = await load(it.take.file).catch(() => null);
-  if (!buf) return;
+  if (!buf || run !== scrubRun || playing.value || trackLevels.get(it.person)?.muted) return;
   const c = audio();
   if (c.state === 'suspended') await c.resume();
-  const s = it.in + (t - it.at);
+  if (run !== scrubRun || playing.value || trackLevels.get(it.person)?.muted) return;
+  const part = itemParts(it).find((x) => t < x.at + x.dur) || itemParts(it).at(-1);
+  const s = part.in + (t - part.at);
   const db = (it.take.volKf?.length ? dbAt(it.take.volKf, s) : it.take.gain || 0) + (p?.gain || 0);
   const src = c.createBufferSource();
   src.buffer = buf;
@@ -223,7 +356,11 @@ export async function scrub(plan, t, people = []) {
   g.gain.setValueAtTime(lin(db), c.currentTime);
   g.gain.linearRampToValueAtTime(0, c.currentTime + 0.09);
   src.connect(g).connect(c.destination);
-  src.start(c.currentTime, s, 0.09);
+  const duration = Math.min(0.09, part.in + part.dur - s, buf.duration - s);
+  if (duration <= 0) { src.disconnect(); g.disconnect(); return; }
+  scrubSources.add(src);
+  src.onended = () => { scrubSources.delete(src); src.disconnect(); g.disconnect(); };
+  src.start(c.currentTime, s, duration);
 }
 
 export function close() {
@@ -233,4 +370,8 @@ export function close() {
   fxReady = null;
   buffers.clear();
   peakCache.clear();
+  clearTimeout(renderTimer);
+  wanted.clear();
+  processed.clear();
+  trackLevels.clear();
 }

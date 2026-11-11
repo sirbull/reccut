@@ -4,32 +4,35 @@
 import { cleanNoiseGain, createChain } from '../shared/audiofx.js';
 
 class ReccutFx extends AudioWorkletProcessor {
-  constructor() {
+  // processorOptions.init: samme innhold som en melding, gitt fra start (bølgeformen regnes ut offline,
+  // og der kan lyden være ferdig før en melding rekker frem).
+  constructor(options) {
     super();
     this.chain = createChain(sampleRate);
     this.clean = null;
     this.L = new Float32Array(128);
     this.R = new Float32Array(128);
-    this.port.onmessage = (e) => {
-      const d = e.data;
+    const apply = (d) => {
       this.clean = Array.isArray(d) ? null : d?.clean ?? null;
       this.chain.update((Array.isArray(d) ? d : d?.list) || []);
     };
+    if (options?.processorOptions?.init) apply(options.processorOptions.init);
+    this.port.onmessage = (e) => apply(e.data);
   }
 
   process(inputs, outputs) {
     const inp = inputs[0];
     const out = outputs[0];
     const n = out[0].length;
-    if (!inp || !inp.length) {
-      for (const ch of out) ch.fill(0);
-      return true;
-    }
     if (this.L.length < n) {
       this.L = new Float32Array(n);
       this.R = new Float32Array(n);
     }
-    if (this.clean != null && inp.length >= 4) {
+    if (!inp?.length) {
+      // Flush buffered pitch/denoise samples and effect tails after a source ends.
+      this.L.fill(0);
+      this.R.fill(0);
+    } else if (this.clean != null && inp.length >= 4) {
       const g = cleanNoiseGain(this.clean);
       for (let i = 0; i < n; i++) {
         this.L[i] = inp[2][i] + (inp[0][i] - inp[2][i]) * g;

@@ -543,9 +543,15 @@ export function placeFree(project, clip, start, lane) {
 
 // Legger til media på tidslinjen: append (E), insert (W) eller connect (Q).
 // opts: { in, dur, includeAudio } for et utvalg fra biblioteket.
+// media.clipDefaults: innstillinger et klipp fra dette mediet starter med (opptak fra Voice Over Studio:
+// trim, volum, nøkkelbilder, fades og effekter). Et utsnitt valgt i nettleseren går foran trimmen.
 export function mediaClip(media, opts = {}) {
   const type = mediaClipType(media);
-  const clip = makeClip(type, { media, ...(opts.in != null ? { in: opts.in } : {}), ...(opts.dur ? { dur: opts.dur } : {}) });
+  const d = media.clipDefaults;
+  const range = opts.in != null ? { in: opts.in, ...(opts.dur ? { dur: opts.dur } : {}) } : d?.in != null ? { in: d.in, dur: d.dur } : opts.dur ? { dur: opts.dur } : {};
+  const clip = makeClip(type, { media, ...range });
+  if (d?.props) Object.assign(clip.props, deepClone(d.props), d.props.afx ? { afx: d.props.afx.map((e) => ({ ...deepClone(e), id: uid() })) } : {});
+  if (d?.kf) clip.kf = deepClone(d.kf);
   if (type !== 'audio' && (opts.includeAudio ?? media.includeAudio) === false) {
     clip.props.audioOff = { ...clip.props.audioOff, ...Object.fromEntries(Object.entries(media.streams).filter(([, stream]) => stream.hasAudio).map(([key]) => [key, true])) };
   }

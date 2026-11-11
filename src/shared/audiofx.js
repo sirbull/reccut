@@ -651,9 +651,112 @@ export const AUDIO_EFFECTS = {
       };
     },
   },
+  pitch: {
+    label: 'Pitch',
+    category: 'Creative',
+    desc: 'Lower the voice for a deeper sound, or raise it, without changing the speaking speed or clip length.',
+    params: [P('semitones', 'Pitch', -12, 12, 0, 0.1, 'st', { center: 0 })],
+    create: (p, sr) => pitchShifter(p, sr),
+  },
 };
 
 export const AUDIO_FX_CATEGORIES = ['Repair', 'EQ', 'Dynamics', 'Space', 'Creative', 'Lo-fi'];
+
+// The neutral control is visible on existing clips too, without rewriting their effects.
+// It is saved into the ordinary effect chain as soon as the user adjusts it.
+export const DEFAULT_PITCH = { id: 'default-pitch', type: 'pitch', on: true, p: { semitones: 0 } };
+export const withDefaultPitch = (list = []) => list.some((e) => e.type === 'pitch') ? list : [DEFAULT_PITCH, ...list];
+export const PITCH_PRESETS = [
+  { value: 0, label: 'Natural' },
+  { value: -1, label: 'Studio · subtle depth' },
+  { value: -3, label: 'Trailer · deeper voice' },
+  { value: 2, label: 'Brighter' },
+];
+
+// Streaming phase vocoder. Analysis/synthesis share a fixed hop, so source timing
+// and duration never change. Peak phase locking keeps neighbouring speech bins
+// together instead of letting each bin drift independently. No worklet allocations.
+function pitchShifter(p, sr) {
+  const N = sr <= 24000 ? 1024 : 2048;
+  const H = N / 8;
+  const B = N / 2 + 1;
+  const win = Float64Array.from({ length: N }, (_, i) => 0.5 - 0.5 * Math.cos(TAU * i / N));
+  const wrap = (v) => v - TAU * Math.round(v / TAU);
+  const channels = [0, 1].map(() => ({
+    input: new Float64Array(N), output: new Float64Array(N),
+    re: new Float64Array(N), im: new Float64Array(N),
+    mag: new Float64Array(B), phase: new Float64Array(B), previous: new Float64Array(B),
+    synthesis: new Float64Array(B), peaks: new Int32Array(B),
+    queue: new Float32Array(N * 2), read: 0, write: H, fill: N - H,
+  }));
+  let semitones = 0;
+  let ratio = 1;
+  const frame = (c) => {
+    const { re, im, mag, phase, previous, synthesis, peaks } = c;
+    for (let i = 0; i < N; i++) { re[i] = c.input[i] * win[i]; im[i] = 0; }
+    fft(re, im, false);
+    let count = 0;
+    for (let k = 0; k < B; k++) {
+      mag[k] = Math.hypot(re[k], im[k]);
+      phase[k] = Math.atan2(im[k], re[k]);
+      const expected = TAU * k * H / N;
+      const advance = expected + wrap(phase[k] - previous[k] - expected);
+      synthesis[k] = wrap(synthesis[k] + advance * ratio);
+      previous[k] = phase[k];
+    }
+    for (let k = 1; k < B - 1; k++) if (mag[k] > mag[k - 1] && mag[k] >= mag[k + 1]) peaks[count++] = k;
+    if (!count) peaks[count++] = 0;
+    re.fill(0); im.fill(0);
+    let peak = 0;
+    for (let k = 0; k < B; k++) {
+      while (peak + 1 < count && k > (peaks[peak] + peaks[peak + 1]) / 2) peak++;
+      const pk = peaks[peak];
+      const dest = k + Math.round(pk * (ratio - 1));
+      if (dest < 0 || dest >= B) continue;
+      const angle = synthesis[pk] + wrap(phase[k] - phase[pk]);
+      re[dest] += mag[k] * Math.cos(angle);
+      im[dest] += mag[k] * Math.sin(angle);
+    }
+    im[0] = im[N / 2] = 0;
+    for (let k = 1; k < N / 2; k++) { re[N - k] = re[k]; im[N - k] = -im[k]; }
+    fft(re, im, true);
+    // Hann squared sums to 3 with eight overlapping frames.
+    for (let i = 0; i < N; i++) c.output[i] += re[i] * win[i] / 3;
+    for (let i = 0; i < H; i++) c.queue[c.write++ % c.queue.length] = c.output[i];
+    c.output.copyWithin(0, H); c.output.fill(0, N - H);
+    c.input.copyWithin(0, H); c.fill = N - H;
+  };
+  const reset = () => {
+    for (const c of channels) {
+      for (const key of ['input', 'output', 'previous', 'synthesis', 'queue']) c[key].fill(0);
+      c.read = 0; c.write = H; c.fill = N - H;
+    }
+  };
+  const inst = {
+    get latency() { return semitones === 0 ? 0 : N; },
+    set(q) {
+      const next = clamp(Number(q.semitones) || 0, -12, 12);
+      if ((next === 0) !== (semitones === 0)) reset();
+      semitones = next;
+      ratio = 2 ** (semitones / 12);
+    },
+    process(L, R, n) {
+      if (semitones === 0) return;
+      for (let ci = 0; ci < 2; ci++) {
+        const c = channels[ci], buf = ci === 0 ? L : R;
+        for (let i = 0; i < n; i++) {
+          c.input[c.fill++] = buf[i];
+          // Read before frame() writes: the compensated delay is exactly N.
+          buf[i] = c.queue[c.read % c.queue.length];
+          c.queue[c.read++ % c.queue.length] = 0;
+          if (c.fill === N) frame(c);
+        }
+      }
+    },
+  };
+  inst.set(p);
+  return inst;
+}
 
 // Koeffisientene for equalizeren: skuldre i endene, topper i midten.
 export function eqCoefs(q, sr) {

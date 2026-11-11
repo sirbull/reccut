@@ -395,11 +395,155 @@ export function chosenTake(vo, key, person = null) {
   return takes.find((t) => t.id === pick) || takes.filter((t) => t.star).at(-1) || takes.at(-1) || null;
 }
 
+/* Kutt i et opptak (take.cuts): områder i kildetid som er tatt bort, [[fra, til], ...]. Et kutt med
+   lik start og slutt er bare en deling. Delene (takeParts) er det som er igjen mellom take.in og take.out. */
+export function addCut(cuts = [], a, b = a) {
+  const list = [...cuts.map((c) => [...c]), [round3(Math.min(a, b)), round3(Math.max(a, b))]].sort((x, y) => x[0] - y[0]);
+  const out = [];
+  for (const c of list) {
+    const last = out.at(-1);
+    // Kutt som overlapper eller møtes, slås sammen. En ren deling inni et kutt forsvinner i det.
+    if (last && c[0] <= last[1]) last[1] = Math.max(last[1], c[1]);
+    else out.push(c);
+  }
+  return out;
+}
+export function takeParts(take) {
+  const parts = [];
+  let a = take.in;
+  for (const [x, y] of take.cuts || []) {
+    if (y <= a || x >= take.out) continue;
+    if (x - a > 0.01) parts.push([round3(a), round3(Math.min(x, take.out))]);
+    a = Math.max(a, y);
+  }
+  if (take.out - a > 0.01) parts.push([round3(a), round3(take.out)]);
+  return parts;
+}
+export const takeLength = (take) => takeParts(take).reduce((s, [a, b]) => s + b - a, 0);
+// Fade-lengdene må få plass i kantdelene også etter at et opptak er delt eller kuttet.
+export function takeFades(take) {
+  const parts = takeParts(take);
+  const length = (p) => p ? (p[1] - p[0]) / 2 : 0;
+  return {
+    fadeIn: Math.max(0, Math.min(take.fadeIn ?? 0.02, length(parts[0]))),
+    fadeOut: Math.max(0, Math.min(take.fadeOut ?? 0.04, length(parts.at(-1)))),
+  };
+}
+
+// Opptaket beholdes som kilde og som valg i take-listen. Etter en deling har det egne,
+// vedvarende tidslinjeklipp med uavhengige innstillinger og kildeområder.
+export const studioClips = (take) => (take.clips || [take]).filter((c) => !c.deleted);
+export const allStudioTakes = (vo) => (vo.takes || []).flatMap((t) => [t, ...(t.clips || [])]);
+export const studioGapKey = (take) => take.sourceTakeId ? take.id : take.key;
+
+export function splitStudioClip(vo, plan, id, time, ids) {
+  const it = plan.items.find((x) => x.take.id === id);
+  if (!it || !Number.isFinite(time)) return null;
+  const parts = itemParts(it);
+  const part = parts.find((p) => time >= p.at && time <= p.at + p.dur);
+  if (!part || time - it.at < 0.05 || it.at + it.dur - time < 0.05) return null;
+  const source = vo.takes.find((t) => t.id === (it.take.sourceTakeId || id));
+  if (!source) return null;
+  const at = round3(part.in + time - part.at);
+  const base = it.take;
+  const clone = (id) => ({ ...base, id, sourceTakeId: source.id,
+    ...(base.cuts ? { cuts: base.cuts.map((c) => [...c]) } : {}),
+    ...(base.volKf ? { volKf: base.volKf.map((k) => [...k]) } : {}),
+  });
+  const left = clone(ids[0]), right = clone(ids[1]);
+  delete left.clips;
+  delete right.clips;
+  left.out = at;
+  left.pause = 0;
+  left.fadeOut = 0.006;
+  right.in = at;
+  if (it.at + takeLength(base) - time < 0.05) {
+    // Klippet kan vise opptakets romlyd etter stemmen. Når det kuttes i denne halen,
+    // blir romlyden en virkelig del av klippet og trekkes fra pausen til neste linje.
+    right.out = Math.max(base.out, parts.at(-1).in + parts.at(-1).dur);
+    const next = plan.items.find((x) => x.block.index > it.block.index);
+    right.pause = next ? round3(Math.max(0, next.at - it.at - it.dur)) : 0;
+  }
+  right.fadeIn = 0.006;
+  Object.assign(left, takeFades(left));
+  Object.assign(right, takeFades(right));
+  if (source.clips) {
+    const index = source.clips.findIndex((c) => c.id === id);
+    if (index < 0) return null;
+    source.clips.splice(index, 1, left, right);
+  } else source.clips = [left, right];
+  const gap = studioGapKey(base);
+  if (vo.toneOff?.[gap]) {
+    vo.toneOff[right.id] = true;
+    delete vo.toneOff[gap];
+  }
+  return [left.id, right.id];
+}
+
+export function deleteStudioClips(vo, ids) {
+  const wanted = new Set(ids);
+  vo.skip ||= {};
+  for (const source of vo.takes) {
+    if (!source.clips) {
+      if (wanted.has(source.id)) vo.skip[pickKey(personOf(source), source.key)] = true;
+      continue;
+    }
+    const last = studioClips(source).at(-1);
+    for (const clip of source.clips) if (wanted.has(clip.id)) clip.deleted = true;
+    const remaining = studioClips(source);
+    if (!remaining.length) vo.skip[pickKey(personOf(source), source.key)] = true;
+    else if (last && wanted.has(last.id)) {
+      // Pausen til neste manuslinje beholdes når slutten av en linje slettes.
+      if (last.pause == null) delete remaining.at(-1).pause;
+      else remaining.at(-1).pause = last.pause;
+    }
+  }
+}
+
+// Flytt et klipp og klippene etter det. Mellom oppdelte klipp endres bare den interne pausen;
+// før en ny manuslinje endres pausen etter den foregående linjen.
+export function moveStudioClip(vo, plan, takeId, delta) {
+  const live = plan.items;
+  const it = live.find((it) => it.take.id === takeId);
+  if (!it || !Number.isFinite(delta)) return;
+  let before;
+  const own = live.filter((x) => x.person === it.person && x.block.key === it.block.key && x.at < it.at - 1e-6);
+  if (own.length) before = [own.at(-1)];
+  else {
+    const prev = live.filter((x) => x.block.key !== it.block.key && x.at < it.at - 1e-6).sort((a, b) => b.at - a.at)[0];
+    if (!prev) {
+      vo.leadIn = round3(Math.max(0, it.at + delta));
+      return;
+    }
+    const byPerson = new Map();
+    for (const x of live.filter((x) => x.block.key === prev.block.key)) byPerson.set(x.person, x);
+    before = [...byPerson.values()];
+  }
+  const end = Math.max(...before.map((x) => x.at + takeLength(x.take)));
+  const pause = round3(Math.max(0, it.at - end + delta));
+  const ids = new Set(before.map((x) => x.take.id));
+  for (const t of allStudioTakes(vo)) if (ids.has(t.id)) t.pause = pause;
+}
+// Delene av et klipp i tidslinjen: { at, in, dur } for hver, etter hverandre fra it.at. Den siste får
+// med det klippet er forlenget med (romlyd fra selve opptaket).
+export function itemParts(it) {
+  const parts = takeParts(it.take);
+  if (!parts.length) return [{ at: it.at, in: it.in, dur: it.dur }];
+  const out = [];
+  let t = it.at;
+  parts.forEach(([a, b], k) => {
+    const dur = k === parts.length - 1 ? Math.max(0.01, it.at + it.dur - t) : b - a;
+    out.push({ at: round3(t), in: a, dur: round3(dur) });
+    t += b - a;
+  });
+  return out;
+}
+
 /**
  * Plan for tidslinjen med ett spor per person. Linjene ligger i manusrekkefølge i felles plasser,
  * så to personer som leser samme linje ligger rett over hverandre (sammenligning), og en dialog
- * flettes etter manuset. Plassen er så lang som det lengste opptaket blant personene som høres
- * (active), og pausen etter følger manuset: ny setning, nytt avsnitt eller ny seksjon.
+ * flettes etter manuset. Plassen er så lang som det lengste opptaket, også på deaktiverte spor.
+ * active styrer bare av/på, aldri plasseringen. Pausen etter følger manuset.
  * room: 'fill' fyller pausen med opptakets egen romlyd så langt filen rekker, og resten blir et
  * tomrom (gaps, der romlyden kan legges). 'tight' bruker bare det som finnes og lar aldri et tomrom
  * stå igjen (video i hovedsporet).
@@ -409,54 +553,55 @@ export function planStudio(blocks, vo, { start = 0, pacing = DEFAULT_PACING, roo
   const lines = blocks.filter((b) => b.kind === 'line' && b.index >= from);
   const slots = [];
   for (const block of lines) {
-    const takes = people.map((p) => ({ p, take: isSkipped(vo, p.id, block.key) ? null : chosenTake(vo, block.key, p.id) })).filter((x) => x.take);
-    if (takes.length) slots.push({ block, takes, live: takes.filter((x) => x.p.active) });
+    const takes = people.map((p) => ({ p, take: isSkipped(vo, p.id, block.key) ? null : chosenTake(vo, block.key, p.id) })).filter((x) => x.take && studioClips(x.take).length).map((x) => ({ ...x, clips: studioClips(x.take) }));
+    if (takes.length) slots.push({ block, takes });
   }
-  const live = slots.filter((s) => s.live.length);
   const items = [];
   const spans = [];
-  let t = start;
+  let t = start + (slots.length && from === 0 ? Math.max(0, Number(vo.leadIn) || 0) : 0);
+  const length = (clips) => clips.reduce((sum, c, i) => sum + Math.max(0.05, takeLength(c)) + (i < clips.length - 1 ? Math.max(0, c.pause || 0) : 0), 0);
   for (const slot of slots) {
     const { block } = slot;
-    if (!slot.live.length) {
-      // Bare personer som ikke høres: vises der de hører hjemme, men tar ingen plass.
-      for (const { p, take } of slot.takes) items.push({ take, block, person: p.id, active: false, at: round3(t), in: take.in, dur: round3(Math.max(0.05, take.out - take.in)) });
-      continue;
-    }
-    const i = live.indexOf(slot);
-    const next = live[i + 1]?.block;
+    const next = slots[slots.indexOf(slot) + 1]?.block;
     const auto = !next ? 0 : next.section !== block.section ? pacing.section : next.para !== block.para ? pacing.paragraph : pacing.sentence;
-    const manual = slot.live.map((x) => x.take.pause).filter((v) => v != null);
-    // Pausen etter en linje kan settes for hånd (take.pause), ellers følger den manuset.
+    const manual = slot.takes.map((x) => x.clips.at(-1).pause).filter((v) => v != null);
     const pause = !next ? 0 : manual.length ? Math.max(0, ...manual) : auto;
-    const len = Math.max(...slot.live.map((x) => Math.max(0.05, x.take.out - x.take.in)));
-    let advance = len + pause;
+    const len = Math.max(...slot.takes.map((x) => length(x.clips)));
     let longest = 0;
-    for (const { p, take } of slot.takes) {
-      const own = Math.max(0.05, take.out - take.in);
-      let dur = own;
-      if (room && p.active) {
-        const want = room === 'tight' ? pause : len - own + pause;
-        dur += Math.max(0, Math.min(want, (take.duration ?? take.out) - take.out));
-      }
-      items.push({ take, block, person: p.id, active: p.active, at: round3(t), in: take.in, dur: round3(dur) });
-      if (p.active) {
-        spans.push([t, t + dur]);
-        longest = Math.max(longest, dur);
-      }
+    for (const { p, clips } of slot.takes) {
+      let offset = 0;
+      clips.forEach((take, k) => {
+        let dur = Math.max(0.05, takeLength(take));
+        if (room && k === clips.length - 1) {
+          const want = room === 'tight' ? pause : len - length(clips) + pause;
+          dur += Math.max(0, Math.min(want, (take.duration ?? take.out) - take.out));
+        }
+        const at = round3(t + offset);
+        items.push({ take, block, person: p.id, active: p.active, at, in: takeParts(take)[0]?.[0] ?? take.in, dur: round3(dur) });
+        spans.push([at, at + dur, studioGapKey(take), p.id]);
+        longest = Math.max(longest, offset + dur);
+        offset += dur + (k < clips.length - 1 ? Math.max(0, take.pause || 0) : 0);
+      });
     }
-    if (room === 'tight') advance = longest;
-    t += advance;
+    t += room === 'tight' ? longest : len + pause;
   }
-  // Tomrom: der ingen som høres, snakker eller har egen romlyd.
+  // Tomrom mellom klippene beholdes også når et spor er deaktivert.
   const gaps = [];
   spans.sort((a, b) => a[0] - b[0]);
+  // after: linjen før pausen, så en pause kan kjennes igjen (romlyd som er slettet).
+  // person: hvem som snakket før pausen. Romlyden i pausen ligger på den personens romlydspor.
   let reach = start;
-  for (const [a, b] of spans) {
-    if (a - reach > 0.001) gaps.push({ at: round3(reach), dur: round3(a - reach) });
+  let after = null;
+  let person = spans[0]?.[3] ?? null;
+  for (const [a, b, key, who] of spans) {
+    if (a - reach > 0.001) gaps.push({ at: round3(reach), dur: round3(a - reach), after, person });
+    if (b >= reach) {
+      after = key;
+      person = who;
+    }
     reach = Math.max(reach, b);
   }
-  if (t - reach > 0.001 && live.length) gaps.push({ at: round3(reach), dur: round3(t - reach) });
+  if (t - reach > 0.001 && slots.length) gaps.push({ at: round3(reach), dur: round3(t - reach), after, person });
   return { items, gaps, end: round3(t) };
 }
 
@@ -489,7 +634,7 @@ export function roomToneFill(gaps, toneDuration, overlap = 0.04, edge = 0.5) {
     while (left > 0.02) {
       if (offset >= last - 0.1) offset = first;
       const dur = Math.min(left, last - offset);
-      out.push({ at: round3(at), in: round3(offset), dur: round3(dur) });
+      out.push({ at: round3(at), in: round3(offset), dur: round3(dur), ...(g.after !== undefined ? { after: g.after } : {}), ...(g.person ? { person: g.person } : {}) });
       offset += dur;
       at += dur;
       left -= dur;

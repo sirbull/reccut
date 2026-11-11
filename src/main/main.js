@@ -671,6 +671,18 @@ ipcMain.handle('rec:recover', async (_e, dir) => {
   return dir;
 });
 
+// Opptak fra Voice Over Studio som ikke brukes, flyttes til papirkurven når studioet sendes til Edit.
+// Bare lyd- og videofiler i en Voiceover-mappe, så ingenting annet kan slettes herfra.
+ipcMain.handle('vo:trashTakes', async (_e, files) => {
+  let n = 0;
+  for (const file of Array.isArray(files) ? files : []) {
+    const f = path.resolve(String(file));
+    if (path.basename(path.dirname(f)) !== 'Voiceover' || !['.wav', '.webm'].includes(path.extname(f).toLowerCase())) continue;
+    if (await shell.trashItem(f).then(() => true, () => false)) n++;
+  }
+  return n;
+});
+
 ipcMain.handle('rec:discard', async (_e, dir) => {
   await fs.promises.unlink(markerFile()).catch(() => {});
   if (dir) await shell.trashItem(dir).catch(() => {});
@@ -1333,7 +1345,8 @@ extensionHandler('tts:remove', async () => {
   return tts.status();
 });
 // Én linje om gangen i et skjult arbeidsvindu. Gir lyd som Float32 (24 kHz, mono).
-extensionHandler('tts:generate', async (payload) => {
+const generateTts = require('./ttsJobs').createTtsJobs({ jobs, onProgress: (state) => send('tts:progress', state) });
+extensionHandler('tts:generate', (payload) => generateTts(payload, async (payload, ctx) => {
   const text = String(payload?.text || '').slice(0, 5000);
   if (!text.trim()) throw new Error('There is no text to read.');
   const speed = Math.min(2, Math.max(0.5, Number(payload?.speed) || 1));
@@ -1348,14 +1361,16 @@ extensionHandler('tts:generate', async (payload) => {
     const url = (ext) => base + v.files.find((f) => f.path.endsWith(ext)).path.split('/').map(encodeURIComponent).join('/');
     const speaker = Math.max(0, v.speakers.indexOf(String(payload.speaker || '')));
     await tts.ensureAddon();
-    return jobs.runInWorker('tts', { engine: 'piper', text, speed, model: url('.onnx'), config: url('.onnx.json'), speaker, ...addon });
+    if (ctx.isCanceled()) throw new Error('Canceled');
+    return jobs.runInWorker('tts', { engine: 'piper', text, speed, model: url('.onnx'), config: url('.onnx.json'), speaker, ...addon }, ctx);
   }
   if (!(await tts.status()).installed) throw new Error('MODEL_MISSING:voices Download the AI voices first.');
   const voice = String(payload.voice || 'af_heart');
   if (!/^[a-z]{2}_[a-z]+(:\d+(\.\d+)?)?(,[a-z]{2}_[a-z]+(:\d+(\.\d+)?)?){0,3}$/.test(voice)) throw new Error('Unknown voice.');
   await tts.ensureAddon();
-  return jobs.runInWorker('tts', { text, voice, lang: String(payload.lang || ''), speed, repository: tts.repository, revision: tts.revision, ...addon });
-});
+  if (ctx.isCanceled()) throw new Error('Canceled');
+  return jobs.runInWorker('tts', { text, voice, lang: String(payload.lang || ''), speed, repository: tts.repository, revision: tts.revision, ...addon }, ctx);
+}));
 extensionHandler('ai:config', () => extensions.aiConfig());
 extensionHandler('subtitle-models:list', () => subtitleModels.listAvailableModels());
 extensionHandler('subtitle-models:download', id => subtitleModels.downloadModel(id));

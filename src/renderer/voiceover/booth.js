@@ -1,11 +1,11 @@
 // Voice Over Studio: opptak av fortellerstemme og snakkende hode, linje for linje fra manus.
 // Opptakene lagres i prosjektets Recordings-mappe og syes sammen på tidslinjen.
 // Tilstanden (manus, posisjon, opptak) ligger i project.voiceover og angres ikke, som designene.
-import { computed, signal } from '@preact/signals';
+import { computed, effect, signal } from '@preact/signals';
 import { produce } from 'immer';
 import { project, projectFolders, scheduleSave, getTime, commit, selection, saveNow, withAnalysis, room, makeCaptionClip } from '../editor/store.js';
-import { currentSequence, uid } from '../../shared/model.js';
-import { deleteClips, groupClips, insertIntoPrimary, mediaClip } from '../../shared/ops.js';
+import { CAPTION_LANE, currentSequence, isVisual, timelines, uid } from '../../shared/model.js';
+import { deleteClips, groupClips, overwritePrimary, mediaClip } from '../../shared/ops.js';
 import {
   DEFAULT_PACING,
   chosenTake,
@@ -16,9 +16,13 @@ import {
   nextMissing,
   parseScript,
   peakInfo,
-  planAssembly,
   roomToneFill,
   scriptCaptions,
+  itemParts,
+  takeFades,
+  moveStudioClip,
+  splitStudioClip,
+  allStudioTakes,
   roomToneLevel,
   trimFor,
   FIRST_PERSON,
@@ -26,7 +30,7 @@ import {
   pickKey,
   planStudio,
 } from '../../shared/voiceover.js';
-import { presetEffects } from '../../shared/audiofx.js';
+import { createChain, presetEffects } from '../../shared/audiofx.js';
 import { styleById, styleEffects } from '../../shared/voiceStyles.js';
 import { piperById, speakerName } from './piper.js';
 import { DEFAULT_VOICE, PREVIEW_TEXT, detectLanguage, languageById, parseVoice, spokenText, voiceById, voiceLanguage, VOICES } from '../../shared/tts.js';
@@ -34,6 +38,7 @@ import { recordingPlan } from '../../shared/recordingFormats.cjs';
 import { audioSink, prefs, setPrefs } from '../prefs.js';
 import { boothOpen } from './state.js';
 import * as preview from './preview.js';
+import { createSpeechGeneration } from './speech.js';
 
 export { boothOpen };
 const fileUrl = (p) => `media://file/${encodeURIComponent(p)}`;
@@ -54,6 +59,10 @@ export const VO_DEFAULTS = {
   voFont: 30,
   voMirror: false,
   voPrompter: false,
+  voBrowserVisible: true,
+  voInspectorVisible: true,
+  voTemplatesOpen: true,
+  voEffectsOpen: true,
   // Luft før og etter stemmen når opptaket trimmes. Pausene mellom klippene settes av Pauses.
   voPreRoll: 0.05,
   voPostRoll: 0.08,
@@ -87,12 +96,147 @@ export const current = computed(() => {
   return list.find((b) => b.index === vo.value.pos) || list.find((b) => b.index > vo.value.pos) || list.at(-1) || null;
 });
 
-// Uten angresteg: endringer i manus og opptak skal ikke forsvinne når redigeringen angres.
-export function setVo(mutator) {
-  const next = produce({ ...EMPTY, ...(project.value.voiceover || {}) }, mutator);
+// Studioet har sin egen angrehistorikk (Cmd/Ctrl Z), adskilt fra Edit, så det ene aldri angrer det andre.
+// Å bytte linje eller person er ikke et steg. Mange endringer rett etter hverandre (et drag) blir ett steg.
+// Innstillingene i sidepanelet (Recording, Stitch, Pauses) og inndelingen av manuset er også med.
+const QUIET = new Set(['pos', 'person']);
+const UNDOABLE_PREFS = ['voCountIn', 'voCue', 'voAutoAdvance', 'voPreRoll', 'voPostRoll', 'voPacing', 'voPlace', 'voRoomFill', 'voSubtitles', 'voSplit'];
+const past = [];
+const future = [];
+let lastStep = -Infinity;
+let editingGesture = false;
+let historyFor = null;
+export const voHistory = signal(0);
+function forProject() {
+  if (historyFor === project.value.id) return;
+  historyFor = project.value.id;
+  past.length = future.length = 0;
+  lastStep = -Infinity;
+  editingGesture = false;
+}
+const snapshot = () => ({ vo: project.value.voiceover || {}, prefs: Object.fromEntries(UNDOABLE_PREFS.map((k) => [k, prefs.value[k]])) });
+function remember(force = false) {
+  forProject();
+  if (editingGesture) return;
+  const now = performance.now();
+  if (force || now - lastStep > 400) {
+    past.push(snapshot());
+    if (past.length > 100) past.shift();
+    future.length = 0;
+    voHistory.value++;
+  }
+  lastStep = now;
+}
+// Ett drag, også med en pause underveis, skal kunne angres med ett tastetrykk.
+export function beginGesture() {
+  remember(true);
+  editingGesture = true;
+}
+export function endGesture() {
+  editingGesture = false;
+  lastStep = -Infinity;
+}
+export function setVo(mutator, separate = false) {
+  forProject();
+  const prev = { ...EMPTY, ...(project.value.voiceover || {}) };
+  const next = produce(prev, mutator);
+  if (next === prev) return;
+  if (Object.keys(next).some((k) => !QUIET.has(k) && next[k] !== prev[k])) remember(separate);
+  if (separate) lastStep = -Infinity;
   project.value = { ...project.value, voiceover: next };
   scheduleSave();
 }
+const clearHistory = () => {
+  past.length = future.length = 0;
+  lastStep = -Infinity;
+  editingGesture = false;
+  voHistory.value++;
+};
+
+/* Flere manus. Hvert har egne opptak, valg og sammensying. Det åpne ligger i project.voiceover,
+   de andre i project.voiceovers. Personene (stemmer og lyd) og romlyden deles av alle. */
+const SHARED = ['people', 'person', 'roomTone', 'roomTones', 'roomToneSkipped'];
+const sessionId = (x) => x?.id || 'main';
+const scriptName = (x) => x?.script?.name || x?.name || 'Untitled script';
+export const scriptId = computed(() => sessionId(project.value.voiceover));
+export const scripts = computed(() => {
+  const p = project.value;
+  return [p.voiceover || {}, ...Object.values(p.voiceovers || {})].map((x) => ({ id: sessionId(x), name: scriptName(x), takes: (x.takes || []).filter((t) => t.key !== 'free').length }));
+});
+const split = (x) => [Object.fromEntries(SHARED.filter((k) => k in x).map((k) => [k, x[k]])), Object.fromEntries(Object.entries(x).filter(([k]) => !SHARED.includes(k)))];
+// Bytter til et annet manus (id), eller et nytt (next). Det som var åpent, legges bort uendret.
+function swapTo(id, next = null) {
+  const p = project.value;
+  const cur = p.voiceover || {};
+  const [shared, own] = split(cur);
+  const rest = { ...(p.voiceovers || {}) };
+  const target = next || rest[id];
+  if (!target) return;
+  delete rest[sessionId(target)];
+  if (own.script || own.takes?.length || own.name) rest[sessionId(cur)] = { ...own, id: sessionId(cur) };
+  project.value = { ...p, voiceover: { ...split(target)[1], ...shared }, voiceovers: rest };
+  scriptDraft.value = null;
+  clearHistory();
+  scheduleSave();
+}
+export function openScript(id) {
+  if (busy()) return toast('Stop the take first.');
+  if (id !== scriptId.value) swapTo(id);
+}
+// Nytt manus: det forrige og opptakene dets blir liggende i listen. Skriv eller lim inn med en gang.
+export function newScript() {
+  if (busy()) return toast('Stop the take first.');
+  const id = uid();
+  swapTo(id, { id, name: `Script ${scripts.value.length + 1}`, script: null, pos: 0, takes: [], selected: {}, skip: {} });
+  scriptDraft.value = '';
+}
+// Sletter manuset som er åpent, med opptakene. Filer som ikke er brukt i en tidslinje, går til papirkurven.
+export async function deleteScript() {
+  if (busy()) return toast('Stop the take first.');
+  const v = vo.value;
+  const takes = v.takes;
+  const n = takes.length;
+  if (!confirm(`Delete the script "${scriptName(v)}"${n ? ` and its ${n} ${n === 1 ? 'take' : 'takes'}` : ''}? Takes that are not used in a timeline are moved to the Trash. This cannot be undone.`)) return;
+  const used = new Set();
+  for (const tl of timelines(project.value)) for (const c of Object.values(tl.clips || {})) if (c.mediaId) used.add(c.mediaId);
+  const gone = takes.filter((t) => !used.has(t.mediaId));
+  const media = { ...project.value.media };
+  for (const t of gone) delete media[t.mediaId];
+  const others = Object.keys(project.value.voiceovers || {});
+  project.value = { ...project.value, media };
+  const [shared] = split(project.value.voiceover || {});
+  if (others.length) {
+    // Det slettede manuset legges ikke bort: det neste i listen åpnes i stedet.
+    project.value = { ...project.value, voiceover: { ...shared } };
+    swapTo(others[0]);
+  } else {
+    project.value = { ...project.value, voiceover: { ...shared, id: uid(), name: 'Script 1' } };
+    clearHistory();
+    scheduleSave();
+  }
+  if (gone.length) await api.trashVoiceTakes(gone.map((t) => t.file)).catch(() => 0);
+  toast(`The script is deleted${gone.length ? `, and ${gone.length} ${gone.length === 1 ? 'take was' : 'takes were'} moved to the Trash` : ''}.`, { timeout: 5000 });
+}
+
+// Innstillinger i studioet som kan angres.
+export function setVoPrefs(patch) {
+  remember();
+  setPrefs(patch);
+}
+function travel(from, to) {
+  forProject();
+  if (busy() || !from.length) return false;
+  to.push(snapshot());
+  const step = from.pop();
+  project.value = { ...project.value, voiceover: step.vo };
+  setPrefs(step.prefs);
+  lastStep = -Infinity;
+  voHistory.value++;
+  scheduleSave();
+  return true;
+}
+export const voUndo = () => travel(past, future);
+export const voRedo = () => travel(future, past);
 
 /* Personer: hvert sitt spor, egne opptak, effekter og volum */
 
@@ -148,6 +292,21 @@ export const setPersonFx = (id, fx) => editPerson(id, (p) => void (p.fx = fx));
 export const setPersonGain = (id, gain) => editPerson(id, (p) => void (p.gain = gain));
 // Clean Voice (AI-støyfjerning) for alle opptakene til personen: styrke 0 til 1, null er av.
 export const setPersonClean = (id, amount) => editPerson(id, (p) => void (amount == null ? delete p.clean : (p.clean = amount)));
+// Romlydsporet til en person: volum (toneGain), av/på (toneMuted) og høyde (toneHeight).
+export const setPersonTone = (id, patch) => editPerson(id, (p) => void Object.assign(p, patch));
+// Romlyden i pausene, per person: pausen etter en linje får romlyd fra den som snakket. Bare personer som
+// tar opp med mikrofon; AI-stemmer har digital stillhet. all: ta med spor som er slått av (for visning).
+export function tonePieces(plan, { all = false, includeMuted = false } = {}) {
+  const tone = vo.value.roomTone;
+  if (!tone || plan.video || !opt('voRoomFill')) return [];
+  const byId = new Map(people.value.map((p) => [p.id, p]));
+  return roomToneFill(plan.toneGaps, tone.duration)
+    .filter((x) => {
+      const p = byId.get(x.person);
+      return p && !p.ai && (all || includeMuted || !p.muted) && (all || !p.toneMuted);
+    })
+    .map((x) => ({ ...x, gain: byId.get(x.person).toneGain || 0 }));
+}
 export const setPersonHeight = (id, h) => editPerson(id, (p) => void (p.height = h));
 export const toggleMute = (id) => editPerson(id, (p) => void (p.muted = !p.muted));
 export const toggleHidden = (id) => editPerson(id, (p) => void (p.hidden = !p.hidden));
@@ -183,7 +342,7 @@ export function commitDraft() {
   const text = scriptDraft.value;
   if (text == null) return;
   scriptDraft.value = null;
-  useScript(vo.value.script?.name || 'Voiceover script', text);
+  useScript(vo.value.script?.name || vo.value.name || 'Voiceover script', text);
 }
 export function useScript(name, text) {
   setVo((v) => {
@@ -201,7 +360,7 @@ export function useScript(name, text) {
 }
 export function setSplit(split) {
   const key = current.value?.key;
-  setPrefs({ voSplit: split });
+  setVoPrefs({ voSplit: split });
   const b = parseScript(vo.value.script?.text || '', { split }).find((x) => x.key === key);
   if (b) setVo((v) => void (v.pos = b.index));
 }
@@ -439,6 +598,7 @@ async function halt() {
 
 // Avbryter: forkaster det som ble tatt opp, eller stopper nedtellingen.
 export async function cancel() {
+  if (status.value === 'generating') return cancelGenerate();
   if (generating.value) stopAll = true;
   if (status.value === 'countin' || status.value === 'cue' || status.value === 'tone') {
     cancelWait?.();
@@ -514,9 +674,15 @@ export async function trimToVoice(takes) {
     if (people.value.find((p) => p.id === personOf(t))?.ai) continue;
     const buf = await preview.load(t.file).catch(() => null);
     if (!buf) continue;
-    const trim = micTrim(levelEnvelope(buf.getChannelData(0), buf.sampleRate), Math.min(buf.duration, t.duration || buf.duration));
+    const from = t.sourceTakeId ? t.in : 0;
+    const to = t.sourceTakeId ? t.out : Math.min(buf.duration, t.duration || buf.duration);
+    const samples = buf.getChannelData(0).subarray(Math.floor(from * buf.sampleRate), Math.floor(to * buf.sampleRate));
+    const env = levelEnvelope(samples, buf.sampleRate);
+    const trim = t.sourceTakeId
+      ? trimFor(detectSpeech(env, { floorDb: vo.value.roomTone?.floor ?? null }), to - from, { preRoll: opt('voPreRoll'), postRoll: opt('voPostRoll') })
+      : micTrim(env, to - from);
     if (!trim.found && trim.in === 0) continue;
-    setTake(t.id, { in: trim.in, out: trim.out });
+    setTake(t.id, { in: from + trim.in, out: from + trim.out });
     n++;
   }
   toast(n ? `${n} ${n === 1 ? 'take is' : 'takes are'} trimmed to the voice.` : 'No voice was found to trim to.', { kind: n ? 'success' : 'info', timeout: 4000 });
@@ -688,6 +854,8 @@ export const needsRoomTone = computed(() => roomSetup.value || (!vo.value.roomTo
 
 export const tts = signal({ installed: false, downloading: false, progress: 0, sizeBytes: 0 });
 export const generating = signal(null); // { done, total } under Generate All
+export const speechGeneration = createSpeechGeneration(api);
+export const speechAudition = createSpeechGeneration(api);
 export const refreshTts = () => api.ttsStatus().then((s) => (tts.value = s)).catch(() => {});
 api.onTtsChanged?.((s) => (tts.value = s));
 
@@ -764,11 +932,11 @@ export async function generate(key = current.value?.key, { advance = true } = {}
   status.value = 'generating';
   recordingKey.value = key;
   try {
-    const { samples, rate } = await api.ttsGenerate({ text, voice: who.ai.voice, speed: who.ai.speed || 1, lang: aiLanguage(who).id, engine: who.ai.engine || 'kokoro', speaker: who.ai.speaker || '' });
+    const { samples, rate } = await speechGeneration.run({ text, voice: who.ai.voice, speed: who.ai.speed || 1, lang: aiLanguage(who).id, engine: who.ai.engine || 'kokoro', speaker: who.ai.speaker || '' });
     status.value = 'saving';
     await saveTake(key, samples instanceof Float32Array ? samples : new Float32Array(samples), null, { rate, ai: true, advance });
   } catch (err) {
-    toast(`Could not read the line: ${err.message}`, { kind: 'error', timeout: 9000 });
+    if (err.name !== 'AbortError') toast(`Could not read the line: ${err.message}`, { kind: 'error', timeout: 9000 });
     stopAll = true;
   } finally {
     status.value = 'idle';
@@ -783,24 +951,34 @@ export async function generateAll() {
   const todo = lines.value.filter((b) => !chosenTake(vo.value, b.key, who.id));
   if (!todo.length) return toast(`${who.name} has read every line. Select a line and press R to read it again.`, { timeout: 4000 });
   stopAll = false;
-  generating.value = { done: 0, total: todo.length };
+  const startedAt = Date.now();
+  generating.value = { done: 0, total: todo.length, startedAt };
   for (const b of todo) {
     if (stopAll) break;
     goTo(b.index);
     await generate(b.key, { advance: false });
-    generating.value = { done: generating.value.done + 1, total: todo.length };
+    if (!stopAll) generating.value = { done: generating.value.done + 1, total: todo.length, startedAt };
   }
   generating.value = null;
 }
 export function cancelGenerate() {
   stopAll = true;
+  speechGeneration.cancel();
 }
 
 // Prøvelytt en stemme før den legges til.
 let sampleCtx = null,
-  sampleSrc = null,
-  sampleFx = null;
+  sampleSrc = null;
+let sampleSequence = 0;
 export const sampling = signal(null);
+export function stopVoicePreview() {
+  sampleSequence++;
+  speechAudition.cancel();
+  sampling.value = null;
+  sampleSrc?.stop();
+  sampleSrc?.disconnect();
+  sampleSrc = null;
+}
 // Ferdige lydprøver som følger med appen, for stemmer som ikke er lastet ned ennå.
 // ponytail: bare de engelske har prøve ennå. Kjør scripts/voice-samples.mjs med det nye tillegget, og ta med alle her.
 const SAMPLED = new Set(VOICES.filter((v) => languageById(voiceLanguage(v.id).id).english).map((v) => v.id));
@@ -814,9 +992,10 @@ export const piperSample = (v, speaker) => bundled(`voice-samples/piper/${v.id}-
 
 // sample: spill av en ferdig lydprøve i stedet for å lage lyden (stemmen er ikke lastet ned).
 export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice).id, { fx = null, key = voice, engine = 'kokoro', speaker = '', sample = null } = {}) {
-  sampleSrc?.stop();
-  sampleSrc = null;
-  if (sampling.value === key) return (sampling.value = null);
+  const previous = sampling.value;
+  stopVoicePreview();
+  if (previous === key) return;
+  const sequence = sampleSequence;
   sampling.value = key;
   try {
     sampleCtx ||= new AudioContext();
@@ -825,31 +1004,43 @@ export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice)
     if (sample) {
       buf = await sampleCtx.decodeAudioData(await (await fetch(sample)).arrayBuffer());
     } else {
-      const { samples, rate } = await api.ttsGenerate({ text: PREVIEW_TEXT[lang] || PREVIEW_TEXT['en-us'], voice, speed, lang, engine, speaker });
+      const { samples, rate } = await speechAudition.run({ text: PREVIEW_TEXT[lang] || PREVIEW_TEXT['en-us'], voice, speed, lang, engine, speaker });
       buf = sampleCtx.createBuffer(1, samples.length, rate);
       buf.copyToChannel(samples instanceof Float32Array ? samples : new Float32Array(samples), 0);
     }
-    if (sampling.value !== key) return;
+    if (sequence !== sampleSequence) return;
+    if (fx?.length) buf = await voiceWithEffects(buf, fx);
+    if (sequence !== sampleSequence) return;
+    await sampleCtx.resume();
+    if (sequence !== sampleSequence) return;
     sampleSrc = sampleCtx.createBufferSource();
     sampleSrc.buffer = buf;
-    // Med effekter (en stil): samme effektkode som avspilling og eksport.
-    let out = sampleCtx.destination;
-    if (fx?.length) {
-      await (sampleFx ||= sampleCtx.audioWorklet.addModule('audiofx-worklet.js').then(() => true, () => false));
-      if (await sampleFx) {
-        const node = new AudioWorkletNode(sampleCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
-        node.port.postMessage(fx);
-        node.connect(sampleCtx.destination);
-        out = node;
-      }
-    }
-    sampleSrc.connect(out);
-    sampleSrc.onended = () => sampling.value === key && (sampling.value = null);
+    sampleSrc.connect(sampleCtx.destination);
+    if (sequence !== sampleSequence) return;
+    sampleSrc.onended = () => sequence === sampleSequence && (sampling.value = null);
     sampleSrc.start();
   } catch (err) {
+    if (sequence !== sampleSequence) return;
     sampling.value = null;
-    toast(`Could not play the voice: ${err.message}`, { kind: 'error' });
+    if (err.name !== 'AbortError') toast(`Could not play the voice: ${err.message}`, { kind: 'error' });
   }
+}
+
+// Render auditions with the same chain as export, including delay compensation
+// and the final samples. A short voice sample must not lose its ending to pitch.
+async function voiceWithEffects(buf, list) {
+  const chain = createChain(buf.sampleRate);
+  chain.update(list);
+  const latency = chain.latency;
+  const L = new Float32Array(buf.length + latency);
+  const R = new Float32Array(L.length);
+  L.set(buf.getChannelData(0));
+  R.set(buf.getChannelData(Math.min(1, buf.numberOfChannels - 1)));
+  chain.process(L, R, L.length);
+  const out = sampleCtx.createBuffer(2, buf.length, buf.sampleRate);
+  out.copyToChannel(L.subarray(latency), 0);
+  out.copyToChannel(R.subarray(latency), 1);
+  return out;
 }
 
 /* Valg av opptak */
@@ -885,36 +1076,55 @@ export function deleteTake(take) {
 }
 /* Studioets tidslinje */
 
-// Planen slik den blir sydd sammen, med ett spor per person. Personer som er dempet, høres ikke,
-// tar ikke plass og syes ikke inn. Én person med bare video legges tett (hovedsporet).
+// Planen slik den blir sydd sammen, med ett spor per person. Deaktiverte spor beholder plassen.
+// Én person med bare video legges tett, uavhengig av om sporet er aktivt.
 export function studioPlan(start = 0, from = 0) {
   const v = vo.value;
   const list = people.value.map((p) => ({ id: p.id, active: !p.muted }));
   const pacing = { ...DEFAULT_PACING, ...opt('voPacing') };
-  const fill = planStudio(blocks.value, v, { start, pacing, room: 'fill', from, people: list });
-  const live = fill.items.filter((it) => it.active);
+  // Med romlyd slutter klippet der stemmen slutter, og pausen er romlyd. Uten romlyd fylles pausen
+  // med opptakets egen stillhet etter stemmen, så langt den rekker, i stedet for digital stillhet.
+  const tone = Boolean(v.roomTone && opt('voRoomFill'));
+  const fill = planStudio(blocks.value, v, { start, pacing, room: tone ? false : 'fill', from, people: list });
+  const live = fill.items;
   const speakers = new Set(live.map((it) => it.person));
   const video = live.length > 0 && speakers.size === 1 && live.every((it) => it.take.video);
-  return video ? { ...planStudio(blocks.value, v, { start, pacing, room: 'tight', from, people: list }), video } : { ...fill, video };
+  const result = video ? { ...planStudio(blocks.value, v, { start, pacing, room: 'tight', from, people: list }), video } : { ...fill, video };
+  // Pausene som får romlyd. Romlyd som er slettet i studioet (toneOff, etter linjen) blir stille.
+  result.toneGaps = result.gaps.filter((g) => !v.toneOff?.[g.after ?? 'start']);
+  return result;
 }
 export const plan = computed(() => studioPlan(0));
 
+export function splitTake(plan, id, time) {
+  let split = null;
+  setVo((v) => { split = splitStudioClip(v, plan, id, time, [uid(), uid()]); }, true);
+  return split;
+}
+
+export function moveTake(plan, id, delta) {
+  setVo((v) => moveStudioClip(v, plan, id, delta));
+}
+
 // Endrer volum, fades, pause eller trim på et opptak. Brukes også mens det dras, så det lagres i bakgrunnen.
-export function setTake(id, patch) {
+export const setTake = (id, patch) => setTakes([id], patch);
+export function setTakes(ids, patch) {
+  const wanted = new Set(ids);
   setVo((v) => {
-    const t = v.takes.find((x) => x.id === id);
-    if (!t) return;
-    for (const [k, val] of Object.entries(patch)) {
-      if (val == null) delete t[k];
-      else t[k] = val;
+    for (const t of allStudioTakes(v)) {
+      if (!wanted.has(t.id)) continue;
+      for (const [k, val] of Object.entries(patch)) {
+        if (val == null) delete t[k];
+        else t[k] = val;
+      }
+      if ('in' in patch || 'out' in patch) {
+        t.in = Math.max(0, Math.min(t.in, 'out' in patch ? t.duration - 0.05 : t.out - 0.05));
+        t.out = Math.min(t.duration, Math.max(t.out, t.in + 0.05));
+      }
+      const fades = takeFades(t);
+      if (t.fadeIn != null) t.fadeIn = fades.fadeIn;
+      if (t.fadeOut != null) t.fadeOut = fades.fadeOut;
     }
-    if ('in' in patch || 'out' in patch) {
-      t.in = Math.max(0, Math.min(t.in, t.duration - 0.05));
-      t.out = Math.min(t.duration, Math.max(t.out, t.in + 0.05));
-    }
-    const len = t.out - t.in;
-    if (t.fadeIn != null) t.fadeIn = Math.max(0, Math.min(t.fadeIn, len / 2));
-    if (t.fadeOut != null) t.fadeOut = Math.max(0, Math.min(t.fadeOut, len / 2));
   });
 }
 // Sletter et klipp fra tidslinjen: linjen hoppes over, men opptakene beholdes og kan hentes tilbake.
@@ -952,32 +1162,74 @@ export const takesFor = (key, who = personId.value) => vo.value.takes.filter((t)
 let audio = null,
   stopAt = 0,
   playResolve = null;
+let takeCtx = null, takeFx = null, takeGain = null, takeFxReady = null;
+let takeRun = 0, takeEndTimer = 0, takeLatency = 0, auditionTake = null;
+
+// The take-list Listen button uses the person's sound too, just like the studio
+// timeline. Keep the media element graph so pitch and volume can change live.
+effect(() => {
+  const id = playingTake.value;
+  const take = auditionTake;
+  const who = id && take && people.value.find((p) => p.id === personOf(take));
+  if (!takeGain) return;
+  takeGain.gain.value = who ? 10 ** (((who.gain || 0) + (take.gain || 0)) / 20) : 1;
+  takeFx?.port.postMessage(who?.fx || []);
+  const chain = createChain(takeCtx.sampleRate);
+  chain.update(who?.fx || []);
+  takeLatency = chain.latency / takeCtx.sampleRate;
+});
+
 export function stopPlayback() {
+  takeRun++;
+  clearTimeout(takeEndTimer);
   if (audio) {
     audio.pause();
     audio.removeAttribute('src');
     audio.load();
   }
   playingTake.value = null;
+  auditionTake = null;
+  takeFx?.port.postMessage([]);
   playResolve?.();
   playResolve = null;
 }
-export function playTake(take, { tail = 0 } = {}) {
+export async function playTake(take, { tail = 0 } = {}) {
   stopPlayback();
+  const run = takeRun;
   audio ||= new Audio();
-  audio.setSinkId?.(audioSink.value).catch(() => {});
+  if (!takeCtx) {
+    takeCtx = new AudioContext({ latencyHint: 'interactive' });
+    takeGain = takeCtx.createGain();
+    takeCtx.createMediaElementSource(audio).connect(takeGain);
+    takeFxReady = takeCtx.audioWorklet.addModule('audiofx-worklet.js').then(() => {
+      takeFx = new AudioWorkletNode(takeCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
+      takeGain.connect(takeFx).connect(takeCtx.destination);
+    }, () => takeGain.connect(takeCtx.destination));
+  }
+  try {
+    await takeFxReady;
+    await takeCtx.resume();
+  } catch { return; }
+  if (run !== takeRun) return;
+  takeCtx.setSinkId?.(audioSink.value).catch(() => {});
   audio.src = fileUrl(take.file);
   const from = tail ? Math.max(take.in, take.out - tail) : take.in;
   stopAt = take.out;
+  auditionTake = take;
   playingTake.value = take.id;
+  const finish = () => {
+    audio.pause();
+    clearTimeout(takeEndTimer);
+    takeEndTimer = setTimeout(() => { if (run === takeRun) stopPlayback(); }, takeLatency * 1000);
+  };
   return new Promise((resolve) => {
     playResolve = resolve;
     audio.onloadedmetadata = () => {
       audio.currentTime = from;
       audio.play().catch(() => stopPlayback());
     };
-    audio.ontimeupdate = () => audio.currentTime >= stopAt && stopPlayback();
-    audio.onended = () => stopPlayback();
+    audio.ontimeupdate = () => { if (!audio.paused && audio.currentTime >= stopAt) finish(); };
+    audio.onended = finish;
     audio.onerror = () => stopPlayback();
   });
 }
@@ -991,99 +1243,145 @@ export function playCurrent() {
 
 // Syr valgte opptak sammen i manusrekkefølge, ett spor per person som høres, med personens
 // effekter og volum. En tidligere sammensying i samme sekvens erstattes, så nye retakes kan syes
-// inn igjen. Én person med video havner i hovedsporet, ellers ligger lyd under og video over.
+// inn igjen. Video legges i et ledig hovedspor eller over alle andre videospor, og lyd under.
+/* Media fra studioet */
+
+// Hvert opptak i Media-nettleseren får innstillingene fra studioet (trim, volum, nøkkelbilder, fades og
+// personens effekter), så et klipp som dras ut derfra, er likt de som ble sydd sammen.
+export function syncVoiceoverMedia() {
+  const v = vo.value;
+  const byId = new Map(people.value.map((p) => [p.id, p]));
+  const media = { ...project.value.media };
+  let changed = false;
+  const round1 = (x) => Math.round(x * 10) / 10;
+  for (const t of v.takes) {
+    const m = media[t.mediaId];
+    if (!m) continue;
+    const who = byId.get(personOf(t));
+    const gain = who?.gain || 0;
+    const fx = who?.fx ?? DEFAULT_FX();
+    const clipDefaults = {
+      in: t.in,
+      dur: Math.max(0.05, t.out - t.in),
+      props: { volume: round1((t.gain || 0) + gain), aFadeIn: t.fadeIn ?? 0.02, aFadeOut: t.fadeOut ?? 0.04, ...(fx.length ? { afx: fx } : {}) },
+      ...(t.volKf?.length ? { kf: { volume: t.volKf.map(([s, db, ease]) => [s, round1(db + gain), ...(ease ? [ease] : [])]) } } : {}),
+    };
+    if (JSON.stringify(m.clipDefaults) === JSON.stringify(clipDefaults)) continue;
+    media[t.mediaId] = { ...m, clipDefaults };
+    changed = true;
+  }
+  if (changed) {
+    project.value = { ...project.value, media };
+    scheduleSave();
+  }
+}
+
 // open: gå til Edit etterpå, med det som ble sydd sammen valgt.
 export function stitch({ from = 0, open = false } = {}) {
+  syncVoiceoverMedia();
   const v = vo.value;
   const p = project.value;
   const seq = currentSequence(p).id;
   const first = studioPlan(0, from);
-  if (!first.items.some((it) => it.active)) return toast('There are no takes to put on the timeline yet.');
+  if (!first.items.length) return toast('There are no takes to put on the timeline yet.');
   const video = first.video;
   const previous = v.placed?.seq === seq ? v.placed.ids.filter((id) => p.clips[id]) : [];
   const prevStart = previous.length ? Math.min(...previous.map((id) => p.clips[id].start)) : null;
   const start = prevStart ?? (opt('voPlace') === 'end' ? (video ? p.clips[p.primary.at(-1)]?.start + p.clips[p.primary.at(-1)]?.dur || 0 : p.duration) : getTime());
   const plan = studioPlan(start, from);
   const byId = new Map(people.value.map((x) => [x.id, x]));
-  const live = plan.items.filter((it) => it.active);
+  const live = plan.items;
   let placed = [];
   commit((d) => {
-    if (previous.length) deleteClips(d, previous, { ripple: true });
+    if (previous.length) deleteClips(d, previous, { ripple: false });
     const mediaFor = (t) => {
       if (!d.media[t.mediaId] && t.media) d.media[t.mediaId] = t.media;
       return d.media[t.mediaId];
     };
     const all = [];
-    const spoken = []; // stemmeklippene med linjen sin, til undertekstene
+    const spoken = new Map(); // Én undertekst per manuslinje, også når stemmen er delt i klipp.
+    // Et opptak med kutt blir ett klipp per del, rett etter hverandre, med korte fades ved kuttene.
     const makeClips = (items) =>
-      items
-        .map((it) => {
-          const m = mediaFor(it.take);
-          if (!m) return null;
+      items.flatMap((it) => {
+        const m = mediaFor(it.take);
+        if (!m) return [];
+        const parts = itemParts(it);
+        const clips = parts.map((part, k) => {
           const who = byId.get(it.person);
-          const c = mediaClip(m, { in: it.in, dur: it.dur });
+          const c = mediaClip(m, { in: part.in, dur: part.dur });
           const role = who && people.value.length > 1 ? who.name : it.block.speaker;
           c.name = `${role ? `${role}: ` : ''}${it.block.text}`.slice(0, 80);
           // Justeringer fra studioet: volum per klipp pluss personens volum, fades og personens effekter.
           c.props.volume = Math.round(((it.take.gain || 0) + (who?.gain || 0)) * 10) / 10;
           // Nøkkelbildene fra studioet blir volumnøkkelbilder i Edit (samme kildetid, pluss personens volum).
           if (it.take.volKf?.length) c.kf = { ...(c.kf || {}), volume: it.take.volKf.map(([t, db, ease]) => [t, Math.round((db + (who?.gain || 0)) * 10) / 10, ...(ease ? [ease] : [])]) };
-          c.props.aFadeIn = it.take.fadeIn ?? 0.02;
-          c.props.aFadeOut = it.take.fadeOut ?? 0.04;
+          else if (c.kf?.volume) delete c.kf.volume;
+          const fades = takeFades(it.take);
+          c.props.aFadeIn = k === 0 ? fades.fadeIn : Math.min(0.006, part.dur / 2);
+          c.props.aFadeOut = k === parts.length - 1 ? fades.fadeOut : Math.min(0.006, part.dur / 2);
           const fx = who?.fx ?? DEFAULT_FX();
           if (fx.length) c.props.afx = fx.map((e) => ({ ...e, id: Math.random().toString(36).slice(2, 8), p: { ...e.p } }));
           if (who?.clean != null) c.props.cleanVoice = { [c.stream || 'main']: who.clean };
-          c.start = it.at;
-          spoken.push({ c, text: it.block.text });
+          c.start = part.at;
+          c.enabled = it.active !== false;
           return c;
-        })
-        .filter(Boolean);
-    if (video) {
-      // Hovedsporet: klippene settes inn der sammensyingen begynner, og resten skyves til høyre.
-      const clips = makeClips(live);
-      const T = previous.length ? start : opt('voPlace') === 'end' ? null : start;
-      insertIntoPrimary(d, clips, T, { split: true });
-      all.push(...clips);
-    } else {
-      const from0 = live[0]?.at ?? start;
-      for (const who of people.value.filter((x) => !x.muted)) {
+        });
+        const key = pickKey(it.person, it.block.key);
+        const line = spoken.get(key);
+        if (line) line.last = clips.at(-1);
+        else spoken.set(key, { first: clips[0], last: clips.at(-1), text: it.block.text });
+        return clips;
+      });
+    {
+      const from0 = start;
+      // Romlyd: hver person sitt eget spor rett under stemmen, med personens romlydvolum.
+      const tone = v.roomTone && opt('voRoomFill') ? v.roomTone : null;
+      const tm = tone && (d.media[tone.mediaId] || (tone.media && (d.media[tone.mediaId] = tone.media)));
+      const pieces = tm ? tonePieces(plan, { all: true }) : [];
+      const busy = (lane) => Object.values(d.clips).some((c) => c.lane === lane && c.start < plan.end - 1e-6 && from0 < c.start + c.dur - 1e-6);
+      for (const who of people.value) {
         const clips = makeClips(live.filter((it) => it.person === who.id));
         if (!clips.length) continue;
-        // Video legges over hovedsporet og lyd under, hver person på sitt eget spor.
-        const pic = clips.every((c) => c.type !== 'audio');
-        const lane = pic ? freeVideoLane(d.clips, from0, plan.end) : freeAudioLane(d.clips, from0, plan.end);
-        for (const c of clips) {
+        // En person kan ha både lyd og video. Bare lydklipp skal havne på lydsporet.
+        const pictures = clips.filter((c) => c.type !== 'audio');
+        const audio = clips.filter((c) => c.type === 'audio');
+        placeStudioVideo(d, pictures);
+        const lane = freeAudioLane(d.clips, from0, plan.end);
+        for (const c of audio) {
           c.lane = lane;
           d.clips[c.id] = c;
         }
         all.push(...clips);
-      }
-      // Romlyd i pausene, på sporet under stemmene.
-      const tone = v.roomTone && opt('voRoomFill') ? v.roomTone : null;
-      const tm = tone && (d.media[tone.mediaId] || (tone.media && (d.media[tone.mediaId] = tone.media)));
-      if (tm) {
-        const pieces = roomToneFill(plan.gaps, tone.duration);
-        const toneLane = freeAudioLane(d.clips, start, plan.end);
-        const toneClips = [];
-        for (const piece of pieces) {
+        const mine = audio.length ? pieces.filter((x) => x.person === who.id) : [];
+        if (!mine.length) continue;
+        const toneLane = busy(lane - 1) ? freeAudioLane(d.clips, from0, plan.end) : lane - 1;
+        for (const piece of mine) {
           const c = mediaClip(tm, { in: piece.in, dur: piece.dur });
-          c.name = 'Room tone';
+          c.name = people.value.length > 1 ? `Room tone (${who.name})` : 'Room tone';
+          // Samme behandling som stemmen over: volum, AI Clean Voice og effekter, pluss romlydens eget volum.
+          c.props.volume = Math.round(((who.gain || 0) + piece.gain) * 10) / 10;
+          const fx = who.fx ?? DEFAULT_FX();
+          if (fx.length) c.props.afx = fx.map((e) => ({ ...e, id: Math.random().toString(36).slice(2, 8), p: { ...e.p } }));
+          if (who.clean != null) c.props.cleanVoice = { [c.stream || 'main']: who.clean };
           c.props.aFadeIn = 0.04;
           c.props.aFadeOut = 0.04;
           c.start = piece.at;
           c.lane = toneLane;
+          c.enabled = !who.muted && !who.toneMuted;
           d.clips[c.id] = c;
-          toneClips.push(c);
+          all.push(c);
         }
-        all.push(...toneClips);
       }
     }
     // Undertekster fra manuset, over hvert klipp der det havnet. Erstattes sammen med resten neste gang.
     if (opt('voSubtitles')) {
-      for (const s of scriptCaptions(spoken.map(({ c, text }) => ({ text, start: c.start, dur: c.dur })))) {
-        const cc = makeCaptionClip(s.start, s.text, Math.max(0.3, s.end - s.start));
-        d.clips[cc.id] = cc;
-        all.push(cc);
+      for (const { first, last, text } of spoken.values()) {
+        for (const s of scriptCaptions([{ text, start: first.start, dur: last.start + last.dur - first.start }])) {
+          const cc = makeCaptionClip(s.start, s.text, Math.max(0.3, s.end - s.start));
+          cc.enabled = first.enabled;
+          d.clips[cc.id] = cc;
+          all.push(cc);
+        }
       }
     }
     // Alt som ble sydd sammen er én gruppe, på tvers av sporene: flyttes samlet, og kan åpnes for justering.
@@ -1098,15 +1396,27 @@ export function stitch({ from = 0, open = false } = {}) {
     closeBooth();
     room.value = 'edit';
   }
-  toast(`${live.length} ${live.length === 1 ? 'take is' : 'takes are'} on the timeline${video ? ' in the storyline' : tracks > 1 ? ` on ${tracks} tracks` : ''}${opt('voSubtitles') ? ', with subtitles from the script' : ''}. Send to Edit again after retakes to replace them.`, { kind: 'success', timeout: 6000 });
+  toast(`${live.length} ${live.length === 1 ? 'take is' : 'takes are'} on the timeline${tracks > 1 ? ` on ${tracks} tracks` : ''}${opt('voSubtitles') ? ', with subtitles from the script' : ''}. Send to Edit again after retakes to replace them.`, { kind: 'success', timeout: 6000 });
 }
 
-// Første ledige spor over hovedsporet for hele strekningen.
-function freeVideoLane(clips, from, to) {
-  for (let lane = 1; lane < 50; lane++) {
-    if (!Object.values(clips).some((c) => c.lane === lane && c.start < to - 1e-6 && from < c.start + c.dur - 1e-6)) return lane;
+// Bruk V1 når hele strekningen er tom, ellers et spor over alle andre videospor.
+// Overskriv bare tomrom i V1, så senere klipp og tilkoblet lyd beholder tidene sine.
+function placeStudioVideo(project, clips) {
+  if (!clips.length) return;
+  const from = Math.min(...clips.map((c) => c.start));
+  const to = Math.max(...clips.map((c) => c.start + c.dur));
+  const existing = Object.values(project.clips);
+  const busy = existing.some((c) => c.lane >= 0 && c.lane < CAPTION_LANE && isVisual(c) && c.type !== 'gap' && c.start < to - 1e-6 && from < c.start + c.dur - 1e-6);
+  if (!busy && !project.lanes?.[0]?.locked && !project.lanes?.[0]?.hidden) {
+    for (const c of clips) overwritePrimary(project, c, c.start);
+    return;
   }
-  return 50;
+  let lane = Math.max(0, ...existing.filter((c) => c.lane > 0 && c.lane < CAPTION_LANE).map((c) => c.lane)) + 1;
+  while (project.lanes?.[lane]?.locked || project.lanes?.[lane]?.hidden) lane++;
+  for (const c of clips) {
+    c.lane = lane;
+    project.clips[c.id] = c;
+  }
 }
 
 export function placedCount() {
@@ -1117,6 +1427,7 @@ export function placedCount() {
 
 export function closeBooth() {
   if (status.value === 'recording') return toast('Stop the take first (R), or press Esc to discard it.');
+  syncVoiceoverMedia();
   closeInput();
   roomSetup.value = false;
   boothOpen.value = false;

@@ -21,6 +21,12 @@ import {
   roomToneLevel,
   splitSentences,
   trimFor,
+  moveStudioClip,
+  planStudio,
+  takeFades,
+  splitStudioClip,
+  allStudioTakes,
+  deleteStudioClips,
 } from '../src/shared/voiceover.js';
 
 const lines = (blocks) => blocks.filter((b) => b.kind === 'line');
@@ -155,7 +161,7 @@ test('stitching lays the chosen takes out in script order with pauses that follo
   const pacing = { sentence: 0.3, paragraph: 0.8, section: 2 };
   const plan = planAssembly(blocks, vo, { start: 10, pacing });
   assert.deepEqual(plan.items.map((i) => [i.take.id, i.at, i.dur]), [['a', 10, 1], ['b', 11.3, 2], ['c', 14.1, 1], ['d', 17.1, 1]]);
-  assert.deepEqual(plan.gaps, [{ at: 11, dur: 0.3 }, { at: 13.3, dur: 0.8 }, { at: 15.1, dur: 2 }]);
+  assert.deepEqual(plan.gaps.map(({ at, dur }) => ({ at, dur })), [{ at: 11, dur: 0.3 }, { at: 13.3, dur: 0.8 }, { at: 15.1, dur: 2 }]);
   assert.equal(plan.end, 18.1);
   // Video: the pause is the take's own sound as far as the file goes, and nothing is left as a black gap.
   const tight = planAssembly(blocks, vo, { start: 0, pacing, room: 'tight' });
@@ -224,7 +230,7 @@ test('the studio timeline: deleted lines are left out, a pause can be set by han
   assert.ok(Math.abs(peakDbIn(pk, 0.02, 0.03) + 12.04) < 0.01);
 });
 
-test('two people: the same line lines up for comparing, a dialogue interleaves, and a muted person takes no time', async () => {
+test('two people: the same line lines up for comparing, a dialogue interleaves, and mute preserves timing', async () => {
   const { planStudio, chosenTake: pick } = await import('../src/shared/voiceover.js');
   const blocks = parseScript('One.\n\nTwo.\n\nThree.');
   const L = lines(blocks);
@@ -235,14 +241,14 @@ test('two people: the same line lines up for comparing, a dialogue interleaves, 
   const people = [{ id: 'p1', active: true }, { id: 'p2', active: true }];
   let plan = planStudio(blocks, both, { pacing, people });
   assert.deepEqual(plan.items.map((i) => [i.take.id, i.at]), [['a1', 0], ['b1', 0], ['a2', 2.5], ['b2', 2.5]]);
-  // Mute B: A is tight again, B is still shown where it belongs.
+  // Mute B: both tracks keep their slots and lengths; only B becomes inactive.
   plan = planStudio(blocks, both, { pacing, people: [{ id: 'p1', active: true }, { id: 'p2', active: false }] });
-  assert.deepEqual(plan.items.filter((i) => i.active).map((i) => [i.take.id, i.at]), [['a1', 0], ['a2', 1.5]]);
+  assert.deepEqual(plan.items.filter((i) => i.active).map((i) => [i.take.id, i.at]), [['a1', 0], ['a2', 2.5]]);
   // Dialogue: A says line 1 and 3, B says line 2.
   const dlg = { takes: [t(L[0], 'a1', 'p1', 1), t(L[1], 'b2', 'p2', 2), t(L[2], 'a3', 'p1', 1)], selected: {} };
   plan = planStudio(blocks, dlg, { pacing, people });
   assert.deepEqual(plan.items.map((i) => [i.take.id, i.person, i.at]), [['a1', 'p1', 0], ['b2', 'p2', 1.5], ['a3', 'p1', 4]]);
-  assert.deepEqual(plan.gaps, [{ at: 1, dur: 0.5 }, { at: 3.5, dur: 0.5 }]);
+  assert.deepEqual(plan.gaps.map(({ at, dur }) => ({ at, dur })), [{ at: 1, dur: 0.5 }, { at: 3.5, dur: 0.5 }]);
   // Choices and deletes are per person; old choices belong to the first person.
   const v = { takes: [t(L[0], 'x', undefined, 1), t(L[0], 'y', undefined, 1), t(L[0], 'z', 'p2', 1)], selected: { [L[0].key]: 'x' }, skip: { [`p2|${L[0].key}`]: true } };
   assert.equal(pick(v, L[0].key, 'p1').id, 'x');
@@ -274,4 +280,241 @@ test('subtitles from the script follow each clip, split long lines and leave out
   assert.ok(caps.length >= 3 && caps.slice(1).every((c) => c.text.length <= 84 && !c.text.includes('[')));
   assert.equal(caps[1].start, 15);
   assert.ok(Math.abs(caps.at(-1).end - 23) < 0.01);
+});
+
+test('each pause knows the line before it, so its room tone can be deleted', () => {
+  const pieces = roomToneFill([{ at: 1, dur: 1, after: 'a' }, { at: 4, dur: 1, after: 'b' }], 5, 0);
+  assert.deepEqual([...new Set(pieces.map((p) => p.after))], ['a', 'b']);
+});
+
+test('a take dragged from the media browser starts with the settings from the studio', async () => {
+  const { mediaClip } = await import('../src/shared/ops.js');
+  const fx = [{ id: 'a', type: 'eq', on: true, p: { preset: 'podcast' } }];
+  const media = { id: 'm', kind: 'audio', name: 'Line 1 take 2', duration: 4, streams: { main: { hasAudio: true } }, clipDefaults: { in: 0.4, dur: 2.5, props: { volume: -3, aFadeIn: 0.02, aFadeOut: 0.04, afx: fx }, kf: { volume: [[0.5, -3], [2, -9]] } } };
+  const c = mediaClip(media);
+  assert.deepEqual([c.in, c.dur, c.props.volume, c.props.aFadeOut], [0.4, 2.5, -3, 0.04]);
+  assert.deepEqual(c.kf.volume, [[0.5, -3], [2, -9]]);
+  assert.equal(c.props.afx[0].type, 'eq');
+  assert.notEqual(c.props.afx[0].id, 'a', 'each clip gets its own effect ids');
+  c.kf.volume[0][1] = 0;
+  assert.equal(media.clipDefaults.kf.volume[0][1], -3, 'the media is not changed by editing the clip');
+  // A range marked in the browser wins over the studio trim.
+  assert.deepEqual([mediaClip(media, { in: 1, dur: 1 }).in, mediaClip(media, { in: 1, dur: 1 }).dur], [1, 1]);
+});
+
+test('cutting a take splits it, and deleting a part closes the gap', async () => {
+  const { addCut, takeParts, takeLength, itemParts } = await import('../src/shared/voiceover.js');
+  const take = { in: 0.5, out: 4.5, cuts: addCut([], 2) };
+  assert.deepEqual(takeParts(take), [[0.5, 2], [2, 4.5]]);
+  // Delete an "eh" from 2 to 2.6: the part after moves up against the part before.
+  take.cuts = addCut(take.cuts, 2, 2.6);
+  assert.deepEqual(take.cuts, [[2, 2.6]]);
+  assert.deepEqual(takeParts(take), [[0.5, 2], [2.6, 4.5]]);
+  assert.ok(Math.abs(takeLength(take) - 3.4) < 1e-9);
+  const parts = itemParts({ take, at: 10, in: 0.5, dur: 3.4 });
+  assert.deepEqual(parts.map((p) => [p.at, p.in, p.dur]), [[10, 0.5, 1.5], [11.5, 2.6, 1.9]]);
+  // Cutting away the start moves where the clip begins.
+  take.cuts = addCut(take.cuts, 0, 1);
+  assert.deepEqual(takeParts(take), [[1, 2], [2.6, 4.5]]);
+});
+
+test('moving a studio clip changes the preceding pause and shifts every later voice together', () => {
+  const blocks = parseScript('First.\n\nSecond.\n\nThird.');
+  const L = lines(blocks);
+  const vo = { takes: L.map((b, i) => ({ id: `t${i}`, key: b.key, person: i === 2 ? 'p2' : 'p1', in: 0.5, out: 2.5, duration: 8 })) };
+  const options = { pacing: { sentence: 0.3, paragraph: 0.5, section: 1 }, people: [{ id: 'p1', active: true }, { id: 'p2', active: true }] };
+  const initial = planStudio(blocks, vo, options);
+  moveStudioClip(vo, initial, 't1', 1.25);
+  const moved = planStudio(blocks, vo, options);
+  assert.deepEqual(moved.items.map((x) => x.at), [0, 3.75, 6.25]);
+  assert.deepEqual(moved.items.map((x) => [x.in, x.dur]), initial.items.map((x) => [x.in, x.dur]), 'moving does not trim the audio');
+  const gap = moved.gaps[0];
+  assert.equal(gap.dur, 1.75);
+  assert.equal(gap.person, 'p1');
+  const fill = roomToneFill([gap], 5);
+  assert.ok(fill[0].at <= gap.at && fill.at(-1).at + fill.at(-1).dur >= gap.at + gap.dur - 0.001, 'room tone covers the newly opened pause');
+  // A second pointermove is relative to the same starting plan, not cumulative.
+  moveStudioClip(vo, initial, 't1', 0.75);
+  assert.equal(planStudio(blocks, vo, options).items[1].at, 3.25);
+  moveStudioClip(vo, initial, 't1', -20);
+  assert.equal(planStudio(blocks, vo, options).items[1].at, 2, 'clips stop against the preceding voice');
+});
+
+test('the first studio clip can open and close a leading pause with room tone', () => {
+  const blocks = parseScript('First.\n\nSecond.');
+  const vo = { takes: lines(blocks).map((b, i) => ({ id: `t${i}`, key: b.key, in: 0, out: 1, duration: 2 })) };
+  const initial = planAssembly(blocks, vo);
+  moveStudioClip(vo, initial, 't0', 2);
+  const plan = planAssembly(blocks, vo);
+  assert.equal(plan.items[0].at, 2);
+  assert.equal(plan.items[1].at, initial.items[1].at + 2);
+  assert.deepEqual(plan.gaps[0], { at: 0, dur: 2, after: null, person: 'p1' });
+  assert.ok(roomToneFill(plan.gaps, 5).some((x) => x.at === 0 && x.after === null));
+  const offset = planAssembly(blocks, vo, { start: 10 });
+  assert.equal(offset.items[0].at, 12, 'Send to Edit preserves the leading pause at the insertion time');
+  assert.equal(planAssembly(blocks, vo, { from: lines(blocks)[1].index }).items[0].at, 0, 'sending from a later line does not copy the lead-in');
+  moveStudioClip(vo, plan, 't0', -20);
+  assert.equal(planAssembly(blocks, vo).items[0].at, 0);
+});
+
+test('moving clips accounts for room tone already extended from the previous recording', () => {
+  const blocks = parseScript('One.\n\nTwo.');
+  const vo = { takes: lines(blocks).map((b, i) => ({ id: `t${i}`, key: b.key, in: 0, out: 1, duration: 5 })) };
+  const options = { room: 'fill', pacing: { paragraph: 0.5 } };
+  const initial = planAssembly(blocks, vo, options);
+  assert.equal(initial.items[0].dur, 1.5);
+  moveStudioClip(vo, initial, 't1', 1);
+  assert.equal(planAssembly(blocks, vo, options).items[1].at, 2.5, 'existing filled pause is not subtracted twice');
+});
+
+test('fades fit short clips and the edge parts of a cut recording', () => {
+  assert.deepEqual(takeFades({ in: 0, out: 0.1, fadeIn: 0.3, fadeOut: 0.3 }), { fadeIn: 0.05, fadeOut: 0.05 });
+  assert.deepEqual(takeFades({ in: 0, out: 3, cuts: [[0.1, 1]], fadeIn: 0.3, fadeOut: 0.3 }), { fadeIn: 0.05, fadeOut: 0.3 });
+  assert.deepEqual(takeFades({ in: 0, out: 1, cuts: [[0, 1]], fadeIn: 0.3, fadeOut: 0.3 }), { fadeIn: 0, fadeOut: 0 });
+});
+
+
+function splitFixture() {
+  const blocks = parseScript('First line.\n\nSecond line.');
+  const vo = { takes: lines(blocks).map((b, i) => ({ id: `take${i}`, key: b.key, file: 'voice.wav', in: 0.5, out: 4.5, duration: 6, gain: 0, fadeIn: 0.2, fadeOut: 0.3, volKf: [[0.5, -2], [4.5, -8]] })) };
+  return { blocks, vo, initial: planAssembly(blocks, vo) };
+}
+
+test('studio splitting creates independent persistent clips without adding a pause or changing the source', () => {
+  const { blocks, vo, initial } = splitFixture();
+  const original = JSON.stringify(vo.takes[0]);
+  assert.deepEqual(splitStudioClip(vo, initial, 'take0', 1.5, ['left', 'right']), ['left', 'right']);
+  const plan = planAssembly(blocks, vo);
+  assert.deepEqual(plan.items.map((x) => [x.take.id, x.at, x.in, x.dur]), [['left', 0, 0.5, 1.5], ['right', 1.5, 2, 2.5], ['take1', initial.items[1].at, 0.5, 4]]);
+  assert.equal(plan.end, initial.end);
+  assert.equal(vo.takes.length, 2, 'splitting does not make a competing retake');
+  const { clips, ...source } = vo.takes[0];
+  assert.equal(JSON.stringify(source), original);
+  assert.notEqual(clips[0].volKf, clips[1].volKf);
+  clips[0].volKf[0][1] = -20;
+  assert.equal(clips[1].volKf[0][1], -2);
+  assert.equal(source.volKf[0][1], -2);
+  const reloaded = JSON.parse(JSON.stringify(vo));
+  assert.deepEqual(planAssembly(blocks, reloaded), planAssembly(blocks, vo), 'independent clips survive project save and reopen');
+});
+
+test('split clips can be trimmed, given different levels, moved and split again independently', () => {
+  const { blocks, vo, initial } = splitFixture();
+  splitStudioClip(vo, initial, 'take0', 1.5, ['left', 'right']);
+  const left = allStudioTakes(vo).find((x) => x.id === 'left');
+  const right = allStudioTakes(vo).find((x) => x.id === 'right');
+  left.out -= 0.5;
+  right.gain = -12;
+  right.volKf = null;
+  const trimmed = planAssembly(blocks, vo);
+  assert.equal(trimmed.items[0].dur, 1);
+  assert.equal(trimmed.items[1].in, 2);
+  assert.equal(trimmed.items[1].take.gain, -12);
+  assert.equal(trimmed.items[0].take.gain, 0);
+  assert.equal(trimmed.items[1].at, 1);
+  moveStudioClip(vo, trimmed, 'right', 0.75);
+  const moved = planAssembly(blocks, vo);
+  assert.equal(moved.items[0].at, 0);
+  assert.equal(moved.items[1].at, 1.75);
+  assert.equal(moved.items[2].at, trimmed.items[2].at + 0.75);
+  assert.equal(moved.gaps[0].after, 'left');
+  assert.equal(moved.gaps[0].dur, 0.75);
+  assert.ok(roomToneFill(moved.gaps, 5).some((x) => x.after === 'left'));
+  splitStudioClip(vo, moved, 'right', 2.75, ['middle', 'end']);
+  const twice = planAssembly(blocks, vo);
+  assert.deepEqual(twice.items.slice(0, 3).map((x) => x.take.id), ['left', 'middle', 'end']);
+  assert.equal(twice.items[1].take.gain, -12);
+  assert.equal(twice.items[2].take.gain, -12);
+  assert.equal(twice.end, moved.end);
+});
+
+test('deleting one split clip retains its sibling and source and closes up the following material', () => {
+  const { blocks, vo, initial } = splitFixture();
+  splitStudioClip(vo, initial, 'take0', 1.5, ['left', 'right']);
+  deleteStudioClips(vo, ['left']);
+  const plan = planAssembly(blocks, vo);
+  assert.deepEqual(plan.items.map((x) => x.take.id), ['right', 'take1']);
+  assert.equal(plan.items[0].at, 0);
+  assert.equal(plan.items[0].in, 2);
+  assert.equal(plan.items[1].at, initial.items[1].at - 1.5);
+  assert.equal(vo.takes[0].in, 0.5);
+  assert.equal(vo.takes[0].out, 4.5);
+  deleteStudioClips(vo, ['right']);
+  assert.deepEqual(planAssembly(blocks, vo).items.map((x) => x.take.id), ['take1']);
+});
+
+test('cutting outside or at a clip edge does not create empty clips', () => {
+  const { vo, initial } = splitFixture();
+  for (const at of [-1, 0, 0.01, 3.99, 4, 20, NaN]) assert.equal(splitStudioClip(vo, initial, 'take0', at, ['left', 'right']), null);
+  assert.equal(vo.takes[0].clips, undefined);
+});
+
+test('splitting a clip with its own room-tone tail preserves the next line timing', () => {
+  for (const time of [0.5, 1.2]) {
+    const blocks = parseScript('One.\n\nTwo.');
+    const vo = { takes: lines(blocks).map((b, i) => ({ id: `t${i}`, key: b.key, in: 0, out: 1, duration: 4 })) };
+    const options = { room: 'fill', pacing: { paragraph: 0.5 } };
+    const initial = planAssembly(blocks, vo, options);
+    assert.equal(initial.items[0].dur, 1.5);
+    splitStudioClip(vo, initial, 't0', time, ['left', 'right']);
+    const split = planAssembly(blocks, vo, options);
+    assert.equal(split.items[2].at, initial.items[1].at, `next line stays in place when splitting at ${time}`);
+    assert.equal(split.end, initial.end);
+  }
+});
+
+test('every new studio pause is automatically covered by room tone, including long gaps between split clips', () => {
+  const { blocks, vo, initial } = splitFixture();
+  splitStudioClip(vo, initial, 'take0', 1.5, ['left', 'right']);
+  // A pause entered below the timeline uses the same fill as an A-tool move.
+  allStudioTakes(vo).find((c) => c.id === 'left').pause = 12;
+  let plan = planAssembly(blocks, vo);
+  moveStudioClip(vo, plan, 'left', 2);
+  plan = planAssembly(blocks, vo);
+  const inner = plan.gaps.find((g) => g.after === 'left');
+  assert.equal(inner.dur, 12);
+  assert.equal(plan.gaps[0].at, 0);
+  assert.equal(plan.gaps[0].dur, 2);
+  const pieces = roomToneFill(plan.gaps, 5);
+  assert.ok(pieces.filter((p) => p.after === 'left').length > 1, 'the recorded room tone repeats automatically for long pauses');
+  for (const gap of plan.gaps) {
+    const fill = pieces.filter((p) => p.after === gap.after).sort((a, b) => a.at - b.at);
+    let covered = gap.at;
+    for (const piece of fill) {
+      assert.ok(piece.at <= covered + 0.001, 'no silence between room-tone pieces');
+      covered = Math.max(covered, piece.at + piece.dur);
+      assert.ok(piece.in >= 0.5 && piece.in + piece.dur <= 4.5 + 0.001, 'fill avoids recording start and stop clicks');
+      assert.equal(piece.person, gap.person);
+    }
+    assert.ok(covered >= gap.at + gap.dur - 0.001, 'room tone reaches the next clip');
+  }
+  // Close the gap again: room tone is recalculated and leaves no obsolete pieces.
+  moveStudioClip(vo, plan, 'right', -12);
+  const closed = planAssembly(blocks, vo);
+  assert.ok(!closed.gaps.some((g) => g.after === 'left'));
+  assert.ok(!roomToneFill(closed.gaps, 5).some((p) => p.after === 'left'));
+});
+
+test('mute and solo retain every clip, manual pause, room-tone gap and total duration in every pacing mode', () => {
+  const blocks = parseScript('First.\n\nSecond.\n\nThird.');
+  const L = lines(blocks);
+  const vo = { leadIn: 0.6, takes: [
+    { id: 'a', key: L[0].key, person: 'p1', in: 0.5, out: 1.5, duration: 3, pause: 1.2 },
+    { id: 'b', key: L[0].key, person: 'p2', in: 0, out: 3, duration: 5, clips: [
+      { id: 'b1', sourceTakeId: 'b', key: L[0].key, person: 'p2', in: 0, out: 1, duration: 5, pause: 0.3 },
+      { id: 'b2', sourceTakeId: 'b', key: L[0].key, person: 'p2', in: 2, out: 3, duration: 5, pause: 1.2 },
+    ] },
+    { id: 'c', key: L[1].key, person: 'p2', in: 0, out: 4, duration: 5 },
+    { id: 'd', key: L[2].key, person: 'p1', in: 0, out: 1, duration: 2 },
+  ] };
+  const geometry = (plan) => ({ ...plan, items: plan.items.map(({ active, ...it }) => it) });
+  for (const room of [false, 'fill', 'tight']) {
+    const options = { room, pacing: { paragraph: 0.8 } };
+    const initial = planStudio(blocks, vo, { ...options, people: [{ id: 'p1', active: true }, { id: 'p2', active: true }] });
+    for (const active of [[true, false], [false, true], [false, false]]) {
+      const plan = planStudio(blocks, vo, { ...options, people: active.map((on, i) => ({ id: `p${i + 1}`, active: on })) });
+      assert.deepEqual(geometry(plan), geometry(initial), `${room}: mute/solo must only change active flags`);
+      assert.ok(plan.items.every((it) => it.active === active[it.person === 'p1' ? 0 : 1]));
+    }
+  }
 });

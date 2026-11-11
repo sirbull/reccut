@@ -64,6 +64,7 @@ import { installFileDrop } from './fileDrop.js';
 import { UpdateDialog } from './UpdateDialog.jsx';
 import { startUpdateChecks } from './updates.js';
 import { VoiceoverBooth } from './voiceover/Booth.jsx';
+import { studioMenu } from './voiceover/VoTimeline.jsx';
 import { boothOpen, openBooth } from './voiceover/state.js';
 import { StudioIcon } from './voiceover/StudioIcon.jsx';
 import { QuickRecord } from './voiceover/QuickRecord.jsx';
@@ -314,6 +315,8 @@ function handleMenu(id) {
     if (!cmd?.allowWhileTyping) return;
     document.activeElement?.blur?.();
   }
+  // Voice Over Studio har sin egen angrehistorikk og sitt eget utvalg (Cmd Z, Shift Cmd Z, Cmd A).
+  if (boothOpen.value && studioMenu(id)) return;
   // Menyen bygges om etter et rombytte, så et tastetrykk rett etter byttet kan treffe den gamle menyen.
   if (dialogOwnsKeyboard() || !cmd || !inRoom(cmd)) return;
   runCommand(id);

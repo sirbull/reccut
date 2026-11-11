@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AUDIO_EFFECTS, AUDIO_PRESETS, biquadResponse, componentEffects, createChain, eqCoefs, makeEffect, presetEffects } from '../src/shared/audiofx.js';
+import { AUDIO_EFFECTS, AUDIO_PRESETS, biquadResponse, componentEffects, createChain, eqCoefs, makeEffect, presetEffects, withDefaultPitch } from '../src/shared/audiofx.js';
 
 const SR = 48000;
 const sine = (f, n, a = 0.5) => Float32Array.from({ length: n }, (_, i) => a * Math.sin((2 * Math.PI * f * i) / SR));
@@ -120,4 +120,56 @@ test('mono applies to the chosen component only, averages both channels and runs
   run(componentEffects({ props: { audioMono: { main: true } } }, 'main'), L, R);
   assert.deepEqual([...L], [...expected]);
   assert.deepEqual([...R], [...expected]);
+});
+
+test('neutral pitch is sample exact with no delay; disabling it restores the original', () => {
+  const input = sine(187, SR);
+  const { L, latency } = run([makeEffect('pitch')], input.slice());
+  assert.deepEqual(L, input);
+  assert.equal(latency, 0);
+  assert.deepEqual(run([{ ...makeEffect('pitch', { semitones: -4 }), on: false }], input.slice()).L, input);
+  const existing = [makeEffect('compressor')];
+  assert.equal(withDefaultPitch(existing)[0].type, 'pitch');
+  assert.equal(existing.length, 1, 'showing the default does not mutate the saved chain');
+  const explicit = [makeEffect('pitch', { semitones: -3 }), ...existing];
+  assert.equal(withDefaultPitch(explicit), explicit, 'never adds a second pitch effect');
+});
+
+// Count periods after the analysis window has settled. Tests the sound produced,
+// rather than just the slider or saved parameter.
+const frequency = (x, sr) => {
+  const crossings = [];
+  for (let i = sr; i < x.length; i++) if (x[i - 1] <= 0 && x[i] > 0) crossings.push(i);
+  return (crossings.length - 1) * sr / (crossings.at(-1) - crossings[0]);
+};
+test('pitch shifts both channels in either direction without changing their duration', () => {
+  for (const sr of [22050, 24000, 44100, 48000]) for (const st of [-12, -3, 2, 12]) {
+    const input = Float32Array.from({ length: sr * 2 }, (_, i) => 0.4 * Math.sin(2 * Math.PI * 220 * i / sr));
+    const L = input.slice(), R = input.map((v) => v * 0.3);
+    const chain = createChain(sr);
+    chain.update([makeEffect('pitch', { semitones: st })]);
+    for (let i = 0; i < L.length; i += 128) chain.process(L.subarray(i, i + 128), R.subarray(i, i + 128), Math.min(128, L.length - i));
+    assert.equal(L.length, input.length);
+    assert.ok(L.every(Number.isFinite) && R.every(Number.isFinite));
+    assert.ok(Math.abs(frequency(L, sr) - 220 * 2 ** (st / 12)) < 2, `${sr} Hz, ${st} st: ${frequency(L, sr)} Hz`);
+    assert.ok(rms(L, sr) > 0.1, 'shifted voice stays audible');
+    assert.ok(rms(R.map((v, i) => v - L[i] * 0.3)) / rms(L) < 0.001, 'stereo balance stays intact');
+  }
+});
+
+test('pitch is identical in worklet sized and export sized blocks and resets to neutral', () => {
+  const effect = makeEffect('pitch', { semitones: -3 });
+  const input = sine(173, SR * 2);
+  const live = run([effect], input.slice());
+  const chain = createChain(SR);
+  chain.update([effect]);
+  const offline = input.slice(), right = input.slice();
+  chain.process(offline, right, offline.length);
+  assert.deepEqual(offline, live.L);
+  assert.equal(chain.latency, 2048);
+  chain.update([{ ...effect, p: { semitones: 0 } }]);
+  const neutral = input.slice();
+  chain.process(neutral, neutral.slice(), neutral.length);
+  assert.equal(chain.latency, 0);
+  assert.deepEqual(neutral, input);
 });

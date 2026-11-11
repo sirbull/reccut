@@ -314,12 +314,14 @@ export function endTransient(keep = true) {
 function restoreEditHistory(restored, preserveName = false) {
   const current = project.value;
   const name = preserveName ? current.name : restored.name;
-  // Opptak fra Voice Over Studio angres ikke, så mediene deres blir med tilbake.
+  // Opptak fra Voice Over Studio angres ikke (alle manusene), så mediene deres blir med tilbake.
   const vo = current.voiceover;
-  const missing = (vo?.takes || []).concat(vo?.roomTones || (vo?.roomTone ? [vo.roomTone] : [])).filter((t) => !restored.media?.[t.mediaId] && current.media?.[t.mediaId]);
-  if (restored.designs === current.designs && restored.designAssets === current.designAssets && restored.name === name && restored.voiceover === vo && !missing.length) return restored;
+  const vos = current.voiceovers;
+  const sessions = [vo, ...Object.values(vos || {})].filter(Boolean);
+  const missing = sessions.flatMap((x) => (x.takes || []).concat(x.roomTones || (x.roomTone ? [x.roomTone] : []))).filter((t) => !restored.media?.[t.mediaId] && current.media?.[t.mediaId]);
+  if (restored.designs === current.designs && restored.designAssets === current.designAssets && restored.name === name && restored.voiceover === vo && restored.voiceovers === vos && !missing.length) return restored;
   const media = missing.length ? { ...restored.media, ...Object.fromEntries(missing.map((t) => [t.mediaId, current.media[t.mediaId]])) } : restored.media;
-  return { ...restored, name, media, designs: current.designs, designAssets: current.designAssets, ...(vo ? { voiceover: vo } : {}) };
+  return { ...restored, name, media, designs: current.designs, designAssets: current.designAssets, ...(vo ? { voiceover: vo } : {}), ...(vos ? { voiceovers: vos } : {}) };
 }
 
 export function undo() {

@@ -116,15 +116,19 @@ async function piperModel(payload) {
 }
 
 async function piper(jobId, payload) {
+  window.worker.progress(jobId, 0, 'Loading pronunciation…', { phase: 'loading' });
   const phonemize = await loadPhonemizer(payload.addon, payload.addonData);
+  window.worker.progress(jobId, 0, 'Loading voice model…', { phase: 'loading' });
   const { session, config } = await piperModel(payload);
   const voice = config.espeak?.voice || 'en-us';
   const rate = config.audio?.sample_rate || 22050;
   const inf = config.inference || {};
   const multi = (config.num_speakers || 1) > 1;
   const chunks = chunksForSpeech(payload.text);
+  const report = speechProgress(jobId, chunks);
   const pieces = [];
   for (let i = 0; i < chunks.length; i++) {
+    report(i);
     const parts = await Promise.all(splitPunctuation(chunks[i]).map(async (p) => (p.match ? p.text : (await phonemize(p.text, voice)).join(' '))));
     const ids = piperIds(parts.join(''), config.phoneme_id_map);
     if (ids.length < 3) continue;
@@ -137,9 +141,20 @@ async function piper(jobId, payload) {
     const out = await session.run(feeds);
     pieces.push(Float32Array.from((out.output || Object.values(out)[0]).data));
     if (i < chunks.length - 1) pieces.push(new Float32Array(Math.round(rate * 0.28)));
-    window.worker.progress(jobId, (i + 1) / chunks.length, 'Speaking');
+    report(i + 1);
   }
   return { samples: joinPieces(pieces), rate };
+}
+
+// Character-weighted progress advances only after a real piece of speech is ready.
+function speechProgress(jobId, chunks) {
+  const total = chunks.reduce((sum, text) => sum + text.length, 0) || 1;
+  return (completed) => window.worker.progress(
+    jobId,
+    chunks.slice(0, completed).reduce((sum, text) => sum + text.length, 0) / total,
+    completed < chunks.length ? `Generating speech · part ${completed + 1} of ${chunks.length}` : 'Preparing audio…',
+    { phase: completed < chunks.length ? 'synthesizing' : 'finishing', completed, total: chunks.length }
+  );
 }
 
 function joinPieces(pieces) {
@@ -162,12 +177,15 @@ window.worker.onJob(async ({ jobId, payload }) => {
     return;
   }
   try {
+    window.worker.progress(jobId, 0, 'Loading voice model…', { phase: 'loading' });
     const { model, tokenizer, phonemize } = await load(payload);
     const lang = languageById(payload.lang)?.id || voiceLanguage(payload.voice).id;
     const style = await voice(payload.voice, payload);
     const chunks = chunksForSpeech(payload.text);
+    const report = speechProgress(jobId, chunks);
     const pieces = [];
     for (let i = 0; i < chunks.length; i++) {
+      report(i);
       const ipa = await toPhonemes(chunks[i], lang, phonemize);
       if (!ipa) continue;
       const { input_ids } = tokenizer(ipa, { truncation: true });
@@ -180,7 +198,7 @@ window.worker.onJob(async ({ jobId, payload }) => {
       pieces.push(waveform.data);
       // Kort pause mellom setninger som er laget hver for seg.
       if (i < chunks.length - 1) pieces.push(new Float32Array(Math.round(RATE * 0.28)));
-      window.worker.progress(jobId, (i + 1) / chunks.length, 'Speaking');
+      report(i + 1);
     }
     const len = pieces.reduce((a, p) => a + p.length, 0);
     const samples = new Float32Array(len);

@@ -6,6 +6,7 @@ import { ExpressionControls } from './ExpressionControls.jsx';
 import { ProcessorEffects } from './ProcessorEffects.jsx';
 import { RemoveEffectButton } from './RemoveEffectButton.jsx';
 import { AudioFxChain } from './AudioFxChain.jsx';
+import { FadeInIcon, FadeOutIcon } from './audioIcons.jsx';
 import { VideoEffects } from './VideoEffects.jsx';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { Fragment } from 'preact';
@@ -62,7 +63,7 @@ import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detach
 import { prefs } from '../prefs.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { attachToTrack, deleteTrack, detach, removeTrackingKeyframes, trackArea, trackForward, trackRedaction, tracksFor } from './track.js';
-import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
+import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects, withDefaultPitch } from '../../shared/audiofx.js';
 import { MASK_MODES, MASK_SHAPES, canMask, defaultPoints, ellipsePoints, maskKey, maskList, setMaskShape } from '../../shared/shapes.js';
 import { Button, FontPicker, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
 
@@ -645,7 +646,10 @@ function AudioFxSection({ clip }) {
       <AudioFxChain
         list={clip.props.afx || []}
         onSet={(list) => commit((q) => void (q.clips[clip.id].props.afx = list))}
-        onLive={(id, patch) => updateTransient((q) => Object.assign(q.clips[clip.id].props.afx.find((e) => e.id === id).p, patch))}
+        onLive={(id, patch) => updateTransient((q) => {
+          const props = q.clips[clip.id].props;
+          props.afx = withDefaultPitch(props.afx || []).map((e) => e.id === id ? { ...e, p: { ...e.p, ...patch } } : e);
+        })}
         onStart={beginTransient}
         onCommit={endTransient}
         hint="Add an equalizer, noise reduction, reverb, distortion and more, or a template such as Voice Clean Up or Telephone. You can also drag effects from the Audio Effects browser onto the clip."
@@ -936,7 +940,7 @@ function CleanVoiceSection({ clip, comps }) {
   if (!comps.length) return null;
   const busy = (file) => tasks.value.find((t) => t.title === `Removing background noise from ${file.split(/[\\/]/).pop()}` && (t.state === 'running' || t.state === 'queued'));
   return (
-    <Section title="Clean Voice" data-section="clean-voice">
+    <Section title="AI Clean Voice" data-section="clean-voice">
       {comps.map((c) => {
         const amount = clip.props.cleanVoice?.[c.key];
         const job = amount != null && !c.stream.cleaned && busy(c.stream.path);
@@ -1051,8 +1055,8 @@ function AudioTab({ clip }) {
         <p class="hint">{isMac ? 'Option' : 'Alt'} click the volume line on the clip to add keyframes. {isMac ? 'Control' : 'Alt'} + and {isMac ? 'Control' : 'Alt'} - change the level by 1 dB.</p>
       </Section>
       <Section title="Fade">
-        <PlainNumber clip={clip} prop="aFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
-        <PlainNumber clip={clip} prop="aFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
+        <PlainNumber clip={clip} prop="aFadeIn" label={<span class="afx-name"><FadeInIcon size={13} /> Fade in</span>} min={0} max={clip.dur / 2} step={0.1} unit="s" />
+        <PlainNumber clip={clip} prop="aFadeOut" label={<span class="afx-name"><FadeOutIcon size={13} /> Fade out</span>} min={0} max={clip.dur / 2} step={0.1} unit="s" />
       </Section>
       <AudioFxSection clip={clip} />
       {a && (
