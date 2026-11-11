@@ -27,7 +27,7 @@ async function trimFile(s, to, onSeconds, setCancel) {
 }
 
 // Buffer som lages på nytt automatisk, og derfor ikke trengs i pakken.
-const CACHE_FIELDS = ['proxy', 'thumbs', 'wave', 'reversed', 'motion', 'optimized'];
+const CACHE_FIELDS = ['proxy', 'thumbs', 'wave', 'reversed', 'cleaned', 'motion', 'optimized'];
 
 function safeName(name) {
   return (name || 'Untitled').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Untitled';
@@ -241,7 +241,7 @@ async function writePackage({ project, files, designFiles = [], dest, removed },
   if (missing.length) lines.push('', 'MISSING (could not be copied, shown as Media Offline):', ...missing.map((m) => `  ${m}`));
   lines.push(
     '',
-    'Not included, made again automatically when the project is opened: thumbnails, waveforms, proxies, optimized media, reversed copies and motion analysis.',
+    'Not included, made again automatically when the project is opened: thumbnails, waveforms, proxies, optimized media, reversed copies, cleaned voice audio and motion analysis.',
     'Titles, captions, masks, effects and title templates are stored in the project file.'
   );
   await fs.promises.writeFile(path.join(root, 'Package Report.txt'), lines.join('\n'));

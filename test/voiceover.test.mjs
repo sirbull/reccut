@@ -6,6 +6,8 @@ import {
   detectSpeech,
   encodeWav,
   freeAudioLane,
+  htmlToScript,
+  scriptCaptions,
   levelEnvelope,
   nextMissing,
   orphanTakes,
@@ -97,6 +99,13 @@ test('speech detection finds where the voice starts and ends, and trims with air
   assert.ok(ss.start < 0.6, `soft start ${ss.start}`);
 });
 
+test('clicks from pressing record and stop are not counted as speech', () => {
+  const rate = 16000;
+  const s = tone(rate, [[0.1, 0.6], [0.6, 0], [1, 0.3], [0.6, 0], [0.1, 0.6], [0.1, 0]]);
+  const sp = detectSpeech(levelEnvelope(s, rate), { skipStart: 0.3, skipEnd: 0.4 });
+  assert.ok(Math.abs(sp.start - 0.7) < 0.05 && Math.abs(sp.end - 1.7) < 0.05, `${sp.start} to ${sp.end}`);
+});
+
 test('silence and steady noise are not speech, and untrimmed takes keep the whole file', () => {
   const rate = 16000;
   assert.equal(detectSpeech(levelEnvelope(tone(rate, [[2, 0]]), rate)), null);
@@ -168,8 +177,12 @@ test('the voice goes on one free audio lane, and room tone fills the pauses', ()
   assert.equal(freeAudioLane(clips, 2, 10), -2);
   assert.equal(freeAudioLane(clips, 0, 10), -3);
   assert.equal(freeAudioLane(clips, 0, 10, new Set(['x'])), -1);
-  const pieces = roomToneFill([{ at: 1, dur: 0.5 }, { at: 3, dur: 6 }], 4, 0);
+  const pieces = roomToneFill([{ at: 1, dur: 0.5 }, { at: 3, dur: 6 }], 4, 0, 0);
   assert.deepEqual(pieces, [{ at: 1, in: 0, dur: 0.5 }, { at: 3, in: 0.5, dur: 3.5 }, { at: 6.5, in: 0, dur: 2.5 }]);
+  // Klikket fra start og stopp i hver ende av romlyden kommer aldri med.
+  const cut = roomToneFill([{ at: 0, dur: 9 }], 5, 0);
+  assert.ok(cut.every((p) => p.in >= 0.5 && p.in + p.dur <= 4.5 + 1e-9), JSON.stringify(cut));
+  assert.ok(Math.abs(cut.reduce((a, p) => a + p.dur, 0) - 9) < 1e-6);
   assert.deepEqual(roomToneFill([{ at: 0, dur: 1 }], 0), []);
 });
 
@@ -235,4 +248,30 @@ test('two people: the same line lines up for comparing, a dialogue interleaves, 
   assert.equal(pick(v, L[0].key, 'p1').id, 'x');
   assert.equal(pick(v, L[0].key, 'p2').id, 'z');
   assert.deepEqual(planStudio(blocks, v, { people }).items.map((i) => i.take.id), ['x']);
+});
+
+test('formatted paste turns headings into sections and keeps paragraphs apart', () => {
+  const html = '<html><head><style>p{}</style></head><body><!--StartFragment--><h1 class=x>Act&nbsp;One</h1>\n<p>Hello <b>there</b>.<br>Second line.</p><p>Fish &amp; chips &#8211; ok</p><h2></h2><ul><li>One</li><li>Two</li></ul></body></html>';
+  assert.equal(htmlToScript(html), '# Act One\n\nHello there.\nSecond line.\n\nFish & chips \u2013 ok\n\nOne\nTwo');
+});
+
+test('noisy lead-in before the voice is trimmed, even when the room tone was quieter', () => {
+  const rate = 16000;
+  // Rom med støy (ca. -40 dB) i ett sekund, så stemmen, så stille igjen. Romlyden ble målt mye lavere.
+  const s = tone(rate, [[1, 0.012], [1, 0.3], [0.8, 0.012]]);
+  const sp = detectSpeech(levelEnvelope(s, rate), { floorDb: -75, skipStart: 0.3, skipEnd: 0.4 });
+  assert.ok(sp.start > 0.8 && sp.start < 1.05, `start ${sp.start}`);
+  assert.ok(sp.end > 1.95 && sp.end < 2.25, `end ${sp.end}`);
+});
+
+test('subtitles from the script follow each clip, split long lines and leave out directions', () => {
+  const caps = scriptCaptions([
+    { text: 'Noen synes det er spennende. Andre synes det er skremmende.', start: 10, dur: 4 },
+    { text: '[smiling] For bare hundre år siden virket det umulig å snakke med noen på den andre siden av kloden. I dag gjør vi det uten å tenke over det.', start: 15, dur: 8 },
+  ]);
+  assert.equal(caps[0].text, 'Noen synes det er spennende. Andre synes det er skremmende.');
+  assert.deepEqual([caps[0].start, caps[0].end], [10, 14]);
+  assert.ok(caps.length >= 3 && caps.slice(1).every((c) => c.text.length <= 84 && !c.text.includes('[')));
+  assert.equal(caps[1].start, 15);
+  assert.ok(Math.abs(caps.at(-1).end - 23) < 0.01);
 });

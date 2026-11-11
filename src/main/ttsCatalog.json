@@ -237,13 +237,14 @@
   ]
  },
  "phonemizer": {
-  "name": "phonemizer",
-  "version": "1.2.1",
-  "tarball": "https://registry.npmjs.org/phonemizer/-/phonemizer-1.2.1.tgz",
-  "integrity": "sha512-v0KJ4mi2T4Q7eJQ0W15Xd4G9k4kICSXE8bpDeJ8jisL4RyJhNWsweKTOi88QXFc4r4LZlz5jVL5lCHhkpdT71A==",
-  "size": 1369002,
-  "entry": "package/dist/phonemizer.js",
-  "license": "phonemizer.js is Apache-2.0 and contains eSpeak NG, which is GPL-3.0-or-later"
+  "name": "@echogarden/espeak-ng-emscripten",
+  "version": "0.3.5",
+  "tarball": "https://registry.npmjs.org/@echogarden/espeak-ng-emscripten/-/espeak-ng-emscripten-0.3.5.tgz",
+  "integrity": "sha512-Izbkm7NWccwb//RKgOp1/0k21StKN1DFIn+K7GU1XN7n6pmSi4bsk/0tYUsgQbysC4GVyrVompNmLInU/BFE+A==",
+  "size": 12528264,
+  "entry": "package/espeak-ng.js",
+  "data": "package/espeak-ng.data",
+  "license": "eSpeak NG (espeak-ng.js and espeak-ng.data) is GPL-3.0"
  },
  "piper": {
   "repository": "rhasspy/piper-voices",
@@ -275,7 +276,7 @@
    {
     "id": "no_NO-nvcc-medium",
     "lang": "nb",
-    "name": "NVCC",
+    "name": "Norwegian Dialects",
     "gender": "",
     "license": "CC0",
     "espeak": "nb",

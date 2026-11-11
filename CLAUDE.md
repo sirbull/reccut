@@ -32,3 +32,9 @@ Når vi lager en ny versjon av Reccut, må About-vinduet også vise det nye vers
 - Første gang appen startes, spør den én gang hvilke modeller brukeren vil laste ned ([src/renderer/AiModels.jsx](src/renderer/AiModels.jsx)). Vinduet skal alltid si hva hver modell brukes til og hvor stor den er.
 - En funksjon som mangler modellen sin, kaster `MODEL_MISSING:<captions|background|voices>` og åpner det samme vinduet i stedet for å vise en feilmelding.
 - Lisenstekstene til modellene ligger i `assets/licenses`, så lisensoversikten kan bygges uten modellene.
+- Unntak: støyfjerningsmodellen til Clean Voice (DeepFilterNet 3, MIT/Apache 2.0, 16 MB) følger med appen, etter ønske fra brukeren. Den ligger i `assets/denoise`, kopieres til `build/denoise` og er låst med SHA-256 i `test/clean-voice.test.mjs`. Ingen andre modeller skal pakkes inn.
+
+## Clean Voice (AI-støyfjerning)
+
+- Slås på per lydkomponent i Audio-fanen (`props.cleanVoice[key]` = styrke 0 til 1). Kjører lokalt i et skjult arbeidsvindu ([src/worker/denoise.js](src/worker/denoise.js)).
+- Hver kildefil renses én gang til `clean-voice.flac` i hurtigbufferen, med fire kanaler: original V/H og renset V/H. Styrken blandes inn med `cleanNoiseGain` i avspillingen (lydtråden) og eksporten (ffmpeg `pan`), så slideren virker med en gang.

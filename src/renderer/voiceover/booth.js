@@ -3,7 +3,7 @@
 // Tilstanden (manus, posisjon, opptak) ligger i project.voiceover og angres ikke, som designene.
 import { computed, signal } from '@preact/signals';
 import { produce } from 'immer';
-import { project, projectFolders, scheduleSave, getTime, commit, selection, saveNow, withAnalysis } from '../editor/store.js';
+import { project, projectFolders, scheduleSave, getTime, commit, selection, saveNow, withAnalysis, room, makeCaptionClip } from '../editor/store.js';
 import { currentSequence, uid } from '../../shared/model.js';
 import { deleteClips, groupClips, insertIntoPrimary, mediaClip } from '../../shared/ops.js';
 import {
@@ -18,6 +18,7 @@ import {
   peakInfo,
   planAssembly,
   roomToneFill,
+  scriptCaptions,
   roomToneLevel,
   trimFor,
   FIRST_PERSON,
@@ -27,8 +28,8 @@ import {
 } from '../../shared/voiceover.js';
 import { presetEffects } from '../../shared/audiofx.js';
 import { styleById, styleEffects } from '../../shared/voiceStyles.js';
-import { piperById } from './piper.js';
-import { DEFAULT_VOICE, PREVIEW_TEXT, detectLanguage, languageById, parseVoice, spokenText, voiceById, voiceLanguage } from '../../shared/tts.js';
+import { piperById, speakerName } from './piper.js';
+import { DEFAULT_VOICE, PREVIEW_TEXT, detectLanguage, languageById, parseVoice, spokenText, voiceById, voiceLanguage, VOICES } from '../../shared/tts.js';
 import { recordingPlan } from '../../shared/recordingFormats.cjs';
 import { audioSink, prefs, setPrefs } from '../prefs.js';
 import { boothOpen } from './state.js';
@@ -53,11 +54,15 @@ export const VO_DEFAULTS = {
   voFont: 30,
   voMirror: false,
   voPrompter: false,
-  voPreRoll: 0.12,
-  voPostRoll: 0.3,
+  // Luft før og etter stemmen når opptaket trimmes. Pausene mellom klippene settes av Pauses.
+  voPreRoll: 0.05,
+  voPostRoll: 0.08,
   voPacing: DEFAULT_PACING,
   voRoomFill: true,
   voPlace: 'playhead',
+  voSubtitles: false, // Send to Edit lager også undertekster fra manuset
+  voTimelineH: 230,
+  voToneH: 76, // høyden på romlydsporet // høyden på studioets tidslinje, dras i kanten over den
 };
 export const opt = (k) => prefs.value[k] ?? VO_DEFAULTS[k];
 
@@ -106,6 +111,11 @@ export function ensurePeople() {
     v.person = FIRST_PERSON;
   });
 }
+// Studioet åpner alltid på opptak med mikrofon, ikke på en AI-stemme.
+export function startOnMic() {
+  const mic = people.value.find((p) => !p.ai);
+  if (person.value?.ai && mic) setVo((v) => void (v.person = mic.id));
+}
 const listOf = (v) => (v.people?.length ? v.people : [firstPerson()]);
 function editPerson(id, fn) {
   setVo((v) => {
@@ -136,6 +146,9 @@ export function choosePerson(id) {
 export const renamePerson = (id, name) => editPerson(id, (p) => void (p.name = String(name).trim().slice(0, 40) || p.name));
 export const setPersonFx = (id, fx) => editPerson(id, (p) => void (p.fx = fx));
 export const setPersonGain = (id, gain) => editPerson(id, (p) => void (p.gain = gain));
+// Clean Voice (AI-støyfjerning) for alle opptakene til personen: styrke 0 til 1, null er av.
+export const setPersonClean = (id, amount) => editPerson(id, (p) => void (amount == null ? delete p.clean : (p.clean = amount)));
+export const setPersonHeight = (id, h) => editPerson(id, (p) => void (p.height = h));
 export const toggleMute = (id) => editPerson(id, (p) => void (p.muted = !p.muted));
 export const toggleHidden = (id) => editPerson(id, (p) => void (p.hidden = !p.hidden));
 // Solo: bare denne høres. Trykk igjen for å høre alle.
@@ -162,6 +175,15 @@ export async function loadScriptFile(path) {
   const doc = await api.aiReadDocument(path);
   if (!doc.text?.trim()) throw new Error(`${doc.name} has no text.`);
   useScript(doc.name, doc.text);
+}
+// Manuset som skrives i redigeringen (null = ikke åpen). Record og Read lagrer det først,
+// så man ikke må trykke Done før man tar opp.
+export const scriptDraft = signal(null);
+export function commitDraft() {
+  const text = scriptDraft.value;
+  if (text == null) return;
+  scriptDraft.value = null;
+  useScript(vo.value.script?.name || 'Voiceover script', text);
 }
 export function useScript(name, text) {
   setVo((v) => {
@@ -332,8 +354,8 @@ export async function record({ quick = false } = {}) {
   if (!node) await openInput();
   if (!node) return;
   const line = current.value;
-  if (!line) return toast('Load or write a script first, or record freely with Free Take.');
-  await begin(line?.key ?? null, { quick });
+  // Uten manus blir det et fritt opptak.
+  await begin(line ? line.key : 'free', { quick });
 }
 
 // Fritt opptak uten manus: blir en linje som heter "Free take".
@@ -457,6 +479,7 @@ export async function stop() {
 }
 
 export async function toggle() {
+  commitDraft();
   if (person.value?.ai) return generating.value || status.value === 'generating' ? cancelGenerate() : generate();
   if (status.value === 'recording') return stop();
   if (status.value === 'countin' || status.value === 'cue') return cancel();
@@ -472,14 +495,40 @@ async function folder() {
 const pad = (n, w = 3) => String(n).padStart(w, '0');
 const safe = (s) => String(s).replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
 
+// Mikrofonopptak: finn hvor stemmen starter og slutter. Klikket fra Record og stopp (mus, styreflate,
+// mellomrom) ligger i kantene, så der letes det ikke etter tale, og litt av hver ende fjernes alltid.
+const EDGE_START = 0.1;
+const EDGE_END = 0.15;
+function micTrim(env, duration) {
+  const speech = detectSpeech(env, { floorDb: vo.value.roomTone?.floor ?? null, skipStart: 0.3, skipEnd: 0.4 });
+  const t = trimFor(speech, duration, { preRoll: opt('voPreRoll'), postRoll: opt('voPostRoll') });
+  const a = Math.max(t.in, EDGE_START);
+  const b = Math.min(t.out, duration - EDGE_END);
+  return b - a > 0.1 ? { ...t, in: Math.round(a * 1000) / 1000, out: Math.round(b * 1000) / 1000 } : t;
+}
+
+// Finner stemmen på nytt i opptak som allerede er tatt (for eksempel tatt før denne analysen fantes).
+export async function trimToVoice(takes) {
+  let n = 0;
+  for (const t of takes) {
+    if (people.value.find((p) => p.id === personOf(t))?.ai) continue;
+    const buf = await preview.load(t.file).catch(() => null);
+    if (!buf) continue;
+    const trim = micTrim(levelEnvelope(buf.getChannelData(0), buf.sampleRate), Math.min(buf.duration, t.duration || buf.duration));
+    if (!trim.found && trim.in === 0) continue;
+    setTake(t.id, { in: trim.in, out: trim.out });
+    n++;
+  }
+  toast(n ? `${n} ${n === 1 ? 'take is' : 'takes are'} trimmed to the voice.` : 'No voice was found to trim to.', { kind: n ? 'success' : 'info', timeout: 4000 });
+}
+
 async function saveTake(key, samples, blob, { rate = ctx?.sampleRate || 48000, ai = false, advance = true } = {}) {
   if (samples.length < rate * 0.15) throw new Error('The take is too short.');
   const duration = samples.length / rate;
   const isTone = key === 'roomtone';
   const env = levelEnvelope(samples, rate);
-  // AI-stemmer har ingen romlyd: stillheten rundt stemmen er digital og finnes uten støygulv.
-  const speech = isTone ? null : detectSpeech(env, { floorDb: ai ? null : vo.value.roomTone?.floor ?? null });
-  const trim = isTone ? { in: 0, out: duration, found: true } : trimFor(speech, duration, { preRoll: opt('voPreRoll'), postRoll: opt('voPostRoll') });
+  // AI-stemmer har ingen romlyd og ingen klikk: stillheten rundt stemmen er digital.
+  const trim = isTone ? { in: 0, out: duration, found: true } : ai ? trimFor(detectSpeech(env), duration, { preRoll: opt('voPreRoll'), postRoll: opt('voPostRoll') }) : micTrim(env, duration);
   const { peakDb, clipped } = peakInfo(samples);
   const line = blocks.value.find((b) => b.key === key);
   const who = person.value;
@@ -672,7 +721,7 @@ export function addAiPerson(voice = DEFAULT_VOICE, speed = 1, lang = voiceLangua
     x.people = [...listOf(x), p];
     x.person = p.id;
   });
-  toast(`${p.name} is added on a new track. Press Space to read a line, or Read All Missing Lines.`, { timeout: 4500 });
+  toast(`${p.name} is added on a new track. Press R to read a line, or Read All Missing Lines.`, { timeout: 4500 });
   return p;
 }
 export const setAiVoice = (id, patch) => editPerson(id, (p) => void (p.ai = { ...p.ai, ...patch }));
@@ -684,7 +733,7 @@ export function addPiperPerson(voiceId, speaker = '', speed = 1) {
   if (busy()) return toast('Stop the take first.');
   const list = people.value;
   const used = new Set(list.map((p) => p.name.toLowerCase()));
-  const stem = speaker ? `${v.name} ${speaker}` : v.name;
+  const stem = speaker ? speakerName(v, speaker) : v.name;
   let name = `${stem} (AI)`;
   for (let n = 2; used.has(name.toLowerCase()); n++) name = `${stem} ${n} (AI)`;
   const p = { id: uid(), name, color: COLORS[list.length % COLORS.length], fx: [], gain: 0, ai: { engine: 'piper', voice: v.id, speaker, speed, lang: v.lang } };
@@ -692,7 +741,7 @@ export function addPiperPerson(voiceId, speaker = '', speed = 1) {
     x.people = [...listOf(x), p];
     x.person = p.id;
   });
-  toast(`${p.name} is added on a new track. Press Space to read a line, or Read All Missing Lines.`, { timeout: 4500 });
+  toast(`${p.name} is added on a new track. Press R to read a line, or Read All Missing Lines.`, { timeout: 4500 });
   return p;
 }
 
@@ -708,7 +757,7 @@ let stopAll = false;
 export async function generate(key = current.value?.key, { advance = true } = {}) {
   const who = person.value;
   if (!who?.ai || !key || status.value !== 'idle') return;
-  if (who.ai.engine === 'piper' ? !tts.value.piper?.[who.ai.voice]?.installed : !tts.value.installed) return toast('Download this voice first (Add AI Voice).');
+  if (who.ai.engine === 'piper' ? !tts.value.piper?.[who.ai.voice]?.installed : !tts.value.installed) return toast('Download this voice first (Use AI Voice).');
   const text = spokenFor(key, who.id);
   if (!text) return toast('This line has nothing to read.');
   preview.stop();
@@ -728,6 +777,7 @@ export async function generate(key = current.value?.key, { advance = true } = {}
 }
 // Leser alle linjene som mangler opptak for AI-stemmen, i rekkefølge. Mellomrom eller Esc stopper.
 export async function generateAll() {
+  commitDraft();
   const who = person.value;
   if (!who?.ai || status.value !== 'idle') return;
   const todo = lines.value.filter((b) => !chosenTake(vo.value, b.key, who.id));
@@ -751,18 +801,35 @@ let sampleCtx = null,
   sampleSrc = null,
   sampleFx = null;
 export const sampling = signal(null);
-export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice).id, { fx = null, key = voice, engine = 'kokoro', speaker = '' } = {}) {
+// Ferdige lydprøver som følger med appen, for stemmer som ikke er lastet ned ennå.
+// ponytail: bare de engelske har prøve ennå. Kjør scripts/voice-samples.mjs med det nye tillegget, og ta med alle her.
+const SAMPLED = new Set(VOICES.filter((v) => languageById(voiceLanguage(v.id).id).english).map((v) => v.id));
+// Siden er en file://-side, så prøvene hentes gjennom media://, som fetch kan lese.
+const bundled = (rel) => {
+  const p = decodeURIComponent(new URL(rel, location.href).pathname);
+  return fileUrl(api.platform === 'win32' ? p.slice(1) : p);
+};
+export const kokoroSample = (id) => (SAMPLED.has(id) ? bundled(`voice-samples/kokoro/${id}.ogg`) : null);
+export const piperSample = (v, speaker) => bundled(`voice-samples/piper/${v.id}-${Math.max(0, v.speakers.indexOf(speaker))}.ogg`);
+
+// sample: spill av en ferdig lydprøve i stedet for å lage lyden (stemmen er ikke lastet ned).
+export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice).id, { fx = null, key = voice, engine = 'kokoro', speaker = '', sample = null } = {}) {
   sampleSrc?.stop();
   sampleSrc = null;
   if (sampling.value === key) return (sampling.value = null);
   sampling.value = key;
   try {
-    const { samples, rate } = await api.ttsGenerate({ text: PREVIEW_TEXT[lang] || PREVIEW_TEXT['en-us'], voice, speed, lang, engine, speaker });
-    if (sampling.value !== key) return;
     sampleCtx ||= new AudioContext();
     sampleCtx.setSinkId?.(audioSink.value).catch(() => {});
-    const buf = sampleCtx.createBuffer(1, samples.length, rate);
-    buf.copyToChannel(samples instanceof Float32Array ? samples : new Float32Array(samples), 0);
+    let buf;
+    if (sample) {
+      buf = await sampleCtx.decodeAudioData(await (await fetch(sample)).arrayBuffer());
+    } else {
+      const { samples, rate } = await api.ttsGenerate({ text: PREVIEW_TEXT[lang] || PREVIEW_TEXT['en-us'], voice, speed, lang, engine, speaker });
+      buf = sampleCtx.createBuffer(1, samples.length, rate);
+      buf.copyToChannel(samples instanceof Float32Array ? samples : new Float32Array(samples), 0);
+    }
+    if (sampling.value !== key) return;
     sampleSrc = sampleCtx.createBufferSource();
     sampleSrc.buffer = buf;
     // Med effekter (en stil): samme effektkode som avspilling og eksport.
@@ -925,7 +992,8 @@ export function playCurrent() {
 // Syr valgte opptak sammen i manusrekkefølge, ett spor per person som høres, med personens
 // effekter og volum. En tidligere sammensying i samme sekvens erstattes, så nye retakes kan syes
 // inn igjen. Én person med video havner i hovedsporet, ellers ligger lyd under og video over.
-export function stitch({ from = 0 } = {}) {
+// open: gå til Edit etterpå, med det som ble sydd sammen valgt.
+export function stitch({ from = 0, open = false } = {}) {
   const v = vo.value;
   const p = project.value;
   const seq = currentSequence(p).id;
@@ -946,6 +1014,7 @@ export function stitch({ from = 0 } = {}) {
       return d.media[t.mediaId];
     };
     const all = [];
+    const spoken = []; // stemmeklippene med linjen sin, til undertekstene
     const makeClips = (items) =>
       items
         .map((it) => {
@@ -957,11 +1026,15 @@ export function stitch({ from = 0 } = {}) {
           c.name = `${role ? `${role}: ` : ''}${it.block.text}`.slice(0, 80);
           // Justeringer fra studioet: volum per klipp pluss personens volum, fades og personens effekter.
           c.props.volume = Math.round(((it.take.gain || 0) + (who?.gain || 0)) * 10) / 10;
+          // Nøkkelbildene fra studioet blir volumnøkkelbilder i Edit (samme kildetid, pluss personens volum).
+          if (it.take.volKf?.length) c.kf = { ...(c.kf || {}), volume: it.take.volKf.map(([t, db, ease]) => [t, Math.round((db + (who?.gain || 0)) * 10) / 10, ...(ease ? [ease] : [])]) };
           c.props.aFadeIn = it.take.fadeIn ?? 0.02;
           c.props.aFadeOut = it.take.fadeOut ?? 0.04;
           const fx = who?.fx ?? DEFAULT_FX();
           if (fx.length) c.props.afx = fx.map((e) => ({ ...e, id: Math.random().toString(36).slice(2, 8), p: { ...e.p } }));
+          if (who?.clean != null) c.props.cleanVoice = { [c.stream || 'main']: who.clean };
           c.start = it.at;
+          spoken.push({ c, text: it.block.text });
           return c;
         })
         .filter(Boolean);
@@ -983,7 +1056,6 @@ export function stitch({ from = 0 } = {}) {
           c.lane = lane;
           d.clips[c.id] = c;
         }
-        if (clips.length > 1) groupClips(d, clips.map((c) => c.id));
         all.push(...clips);
       }
       // Romlyd i pausene, på sporet under stemmene.
@@ -1003,17 +1075,30 @@ export function stitch({ from = 0 } = {}) {
           d.clips[c.id] = c;
           toneClips.push(c);
         }
-        if (toneClips.length > 1) groupClips(d, toneClips.map((c) => c.id));
         all.push(...toneClips);
       }
     }
+    // Undertekster fra manuset, over hvert klipp der det havnet. Erstattes sammen med resten neste gang.
+    if (opt('voSubtitles')) {
+      for (const s of scriptCaptions(spoken.map(({ c, text }) => ({ text, start: c.start, dur: c.dur })))) {
+        const cc = makeCaptionClip(s.start, s.text, Math.max(0.3, s.end - s.start));
+        d.clips[cc.id] = cc;
+        all.push(cc);
+      }
+    }
+    // Alt som ble sydd sammen er én gruppe, på tvers av sporene: flyttes samlet, og kan åpnes for justering.
+    if (!video && all.length > 1) groupClips(d, all.map((c) => c.id));
     placed = all.map((c) => c.id);
   });
   setVo((x) => void (x.placed = { seq, ids: placed, start }));
   selection.value = placed;
   saveNow();
   const tracks = new Set(live.map((it) => it.person)).size;
-  toast(`${live.length} ${live.length === 1 ? 'take is' : 'takes are'} on the timeline${video ? ' in the storyline' : tracks > 1 ? ` on ${tracks} tracks` : ''}. Stitch again after retakes to replace them.`, { kind: 'success', timeout: 6000 });
+  if (open) {
+    closeBooth();
+    room.value = 'edit';
+  }
+  toast(`${live.length} ${live.length === 1 ? 'take is' : 'takes are'} on the timeline${video ? ' in the storyline' : tracks > 1 ? ` on ${tracks} tracks` : ''}${opt('voSubtitles') ? ', with subtitles from the script' : ''}. Send to Edit again after retakes to replace them.`, { kind: 'success', timeout: 6000 });
 }
 
 // Første ledige spor over hovedsporet for hele strekningen.
@@ -1031,7 +1116,7 @@ export function placedCount() {
 }
 
 export function closeBooth() {
-  if (status.value === 'recording') return toast('Stop the take first (Space), or press Esc to discard it.');
+  if (status.value === 'recording') return toast('Stop the take first (R), or press Esc to discard it.');
   closeInput();
   roomSetup.value = false;
   boothOpen.value = false;

@@ -725,6 +725,19 @@ ipcMain.handle('media:reanalyze', async (_e, items) => {
 ipcMain.handle('media:reverse', (_e, m) => {
   media.scheduleReverse(m, notifyAnalyzed);
 });
+// Clean Voice: renser en lydfil i bakgrunnen. Med mediaId meldes kopien som en analyse.
+const cleanTasks = new Map();
+ipcMain.handle('media:clean', (_e, { file, mediaId = null, stream = null }) => {
+  if (!cleanTasks.has(file)) {
+    const { done } = jobs.add({ kind: 'analyze', mediaId, title: `Removing background noise from ${path.basename(file)}`, queue: 'light', run: (ctx) => media.cleanAudio(file, ctx) });
+    cleanTasks.set(file, done);
+    done.finally(() => cleanTasks.delete(file)).catch(() => {});
+  }
+  return cleanTasks.get(file).then((cleaned) => {
+    if (mediaId) notifyAnalyzed({ mediaId, stream, patch: { cleaned } });
+    return cleaned;
+  });
+});
 // Malpakken: kopierer skriptene og beskrivelsen til en mappe brukeren velger, pluss eksempelmalen.
 ipcMain.handle('kit:save', async (_e, exampleJson) => {
   const r = await dialog.showOpenDialog(win, { title: 'Choose where to save the Reccut Template Kit', defaultPath: app.getPath('downloads'), properties: ['openDirectory', 'createDirectory'] });
@@ -835,6 +848,26 @@ ipcMain.handle('design:segmentStart', async (_e, payload) => {
   done.then((result) => send('design:segmentDone', { id, result }), (err) => send('design:segmentDone', { id, error: String(err.message || err) }));
   return id;
 });
+// Tekstkommandoer fra menyen kjøres av webContents, så lim inn virker (execCommand('paste') er sperret).
+const TEXT_EDITS = ['undo', 'redo', 'cut', 'copy', 'paste', 'pasteAndMatchStyle', 'selectAll'];
+ipcMain.handle('edit:text', (e, role) => { if (TEXT_EDITS.includes(role)) e.sender[role](); });
+
+// Høyreklikk i tekstfelt: vanlig lim inn (med formatering) eller som ren tekst.
+app.on('web-contents-created', (_e, contents) => contents.on('context-menu', (_ev, p) => {
+  if (!p.isEditable) return;
+  const f = p.editFlags;
+  Menu.buildFromTemplate([
+    { role: 'undo', enabled: f.canUndo },
+    { role: 'redo', enabled: f.canRedo },
+    { type: 'separator' },
+    { role: 'cut', enabled: f.canCut },
+    { role: 'copy', enabled: f.canCopy },
+    { role: 'paste', enabled: f.canPaste },
+    { role: 'pasteAndMatchStyle', label: 'Paste as Plain Text', accelerator: 'Shift+CmdOrCtrl+V', enabled: f.canPaste },
+    { type: 'separator' },
+    { role: 'selectAll', enabled: f.canSelectAll },
+  ]).popup();
+}));
 ipcMain.handle('design:clipboardRead', () => require('./design').readClipboard(clipboard, (bytes) => nativeImage.createFromBuffer(bytes).toPNG()));
 ipcMain.handle('design:clipboardWrite', (_e, text) => clipboard.writeText(String(text)));
 
@@ -1060,6 +1093,17 @@ ipcMain.handle('export:start', (_e, payload) => {
           ctx.progress(0, 'Creating reversed media');
           st.reversed = await media.reverseStream(st, ctx);
           notifyAnalyzed({ mediaId: m.id, stream: key, patch: { reversed: st.reversed } });
+        }
+      }
+      // Clean Voice: den rensede kopien lages nå hvis den ikke er klar.
+      for (const c of payload.settings.frame ? [] : Object.values(p.clips)) {
+        const m = !p.media[c.mediaId]?.offline && p.media[c.mediaId];
+        for (const [key, amount] of Object.entries((m && c.props?.cleanVoice) || {})) {
+          const st = m.streams[key];
+          if (!(amount > 0) || !st?.hasAudio || (st.cleaned && fs.existsSync(st.cleaned))) continue;
+          ctx.progress(0, 'Removing background noise');
+          st.cleaned = await media.cleanAudio(st.path, ctx);
+          notifyAnalyzed({ mediaId: m.id, stream: key, patch: { cleaned: st.cleaned } });
         }
       }
       return jobs.runInWorker('export', { ...payload, ffmpeg: ff.getFfmpegPath(), tmpDir: path.join(os.tmpdir(), 'reccut-export') }, ctx);
@@ -1293,6 +1337,8 @@ extensionHandler('tts:generate', async (payload) => {
   const text = String(payload?.text || '').slice(0, 5000);
   if (!text.trim()) throw new Error('There is no text to read.');
   const speed = Math.min(2, Math.max(0.5, Number(payload?.speed) || 1));
+  // Uttaletillegget hentes her om det mangler eller er en eldre versjon (bare engelsk), før første linje leses.
+  const addon = { addon: tts.PHONEMIZER_KEY, addonData: tts.ESPEAK_DATA_KEY };
   // Piper: én stemme per språk. Bare stemmer fra katalogen som er lastet ned.
   if (payload?.engine === 'piper') {
     const v = tts.piperVoice(String(payload.voice));
@@ -1301,12 +1347,14 @@ extensionHandler('tts:generate', async (payload) => {
     const base = `https://huggingface.co/${tts.piper.repository}/resolve/${tts.piper.revision}/`;
     const url = (ext) => base + v.files.find((f) => f.path.endsWith(ext)).path.split('/').map(encodeURIComponent).join('/');
     const speaker = Math.max(0, v.speakers.indexOf(String(payload.speaker || '')));
-    return jobs.runInWorker('tts', { engine: 'piper', text, speed, model: url('.onnx'), config: url('.onnx.json'), speaker, addon: tts.PHONEMIZER_KEY });
+    await tts.ensureAddon();
+    return jobs.runInWorker('tts', { engine: 'piper', text, speed, model: url('.onnx'), config: url('.onnx.json'), speaker, ...addon });
   }
   if (!(await tts.status()).installed) throw new Error('MODEL_MISSING:voices Download the AI voices first.');
   const voice = String(payload.voice || 'af_heart');
   if (!/^[a-z]{2}_[a-z]+(:\d+(\.\d+)?)?(,[a-z]{2}_[a-z]+(:\d+(\.\d+)?)?){0,3}$/.test(voice)) throw new Error('Unknown voice.');
-  return jobs.runInWorker('tts', { text, voice, lang: String(payload.lang || ''), speed, repository: tts.repository, revision: tts.revision, addon: tts.PHONEMIZER_KEY });
+  await tts.ensureAddon();
+  return jobs.runInWorker('tts', { text, voice, lang: String(payload.lang || ''), speed, repository: tts.repository, revision: tts.revision, ...addon });
 });
 extensionHandler('ai:config', () => extensions.aiConfig());
 extensionHandler('subtitle-models:list', () => subtitleModels.listAvailableModels());

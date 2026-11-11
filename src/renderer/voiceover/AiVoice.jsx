@@ -11,7 +11,10 @@ import * as booth from './booth.js';
 
 const api = window.api;
 export const aiDialogOpen = signal(false);
-export const openAiVoices = () => {
+const dialogLang = signal(null);
+// lang: åpne på et bestemt språk (fra Sound-panelet). Som klikkhåndterer får den en hendelse, ikke et språk.
+export const openAiVoices = (lang) => {
+  dialogLang.value = typeof lang === 'string' ? lang : null;
   booth.refreshTts();
   aiDialogOpen.value = true;
 };
@@ -82,7 +85,7 @@ const mb = (b) => `${Math.round(b / 1e6)} MB`;
 export function AiVoiceDialog() {
   const t = booth.tts.value;
   const [speed, setSpeed] = useState(1);
-  const [lang, setLang] = useState(() => booth.scriptLanguage.value || 'en-us');
+  const [lang, setLang] = useState(() => dialogLang.value || booth.scriptLanguage.value || 'en-us');
   const [tab, setTab] = useState('styles');
   useEffect(() => {
     booth.refreshTts();
@@ -161,6 +164,9 @@ function KokoroSetup({ collapsed, lang }) {
   const [open, setOpen] = useState(!collapsed);
   const job = tasks.value.find((x) => x.kind === 'download' && /AI voices/.test(x.title) && (x.state === 'running' || x.state === 'queued'));
   const install = () => api.ttsInstall().then(booth.refreshTts).catch(() => booth.refreshTts());
+  // Lydprøver av stemmene laget for språket, eller de engelske når språket ikke har egne.
+  const own = voicesFor(lang).own.filter((v) => booth.kokoroSample(v.id));
+  const samples = own.length ? own : VOICES.filter((v) => ['af_heart', 'af_bella', 'am_michael', 'bf_emma', 'bm_george'].includes(v.id));
   return (
     <div class="ai-voice-group">
       <button class="ai-voice-title" onClick={() => setOpen(!open)} aria-expanded={open}>
@@ -171,8 +177,18 @@ function KokoroSetup({ collapsed, lang }) {
           <ul class="dim">
             <li>Voices made for English (US and UK), Spanish, French, Italian, Brazilian Portuguese and Hindi, and ready made styles from dark and cinematic to bright and lively. English sounds best.</li>
             <li>Other languages{languageById(lang)?.voices ? '' : `, like ${languageById(lang).label},`} are pronounced correctly but read with an accent. Use the voices made for the language above when there are any.</li>
-            <li>Includes a pronunciation add-on (phonemizer.js with eSpeak NG, GPL), downloaded from npm and checked before use. The model is Apache 2.0.</li>
+            <li>Includes a pronunciation add-on for all languages (eSpeak NG, GPL, about 13 MB), downloaded from npm and checked before use. The model is Apache 2.0.</li>
           </ul>
+          {samples.length > 0 && (
+            <div class="ai-samples">
+              <span class="dim">Hear them first:</span>
+              {samples.map((v) => (
+                <Button key={v.id} class="small" icon={booth.sampling.value === `sample:${v.id}` ? Square : Play} onClick={() => booth.previewVoice(v.id, 1, lang, { key: `sample:${v.id}`, sample: booth.kokoroSample(v.id) })}>
+                  {v.name}
+                </Button>
+              ))}
+            </div>
+          )}
           {job || t.downloading ? (
             <div class="ai-progress">
               <Loader2 size={14} class="spin" />
@@ -213,7 +229,7 @@ function PiperList({ lang, speed, onAdd }) {
           const playing = booth.sampling.value === key;
           return (
             <li key={v.id}>
-              {st.installed ? <IconButton icon={playing ? Square : Play} size={14} title={playing ? 'Stop' : 'Listen'} onClick={() => booth.previewVoice(v.id, speed, lang, { engine: 'piper', speaker, key })} /> : <span class="ai-models-spacer" />}
+              <IconButton icon={playing ? Square : Play} size={14} title={playing ? 'Stop' : st.installed ? 'Listen' : 'Listen to a sample. No download needed.'} onClick={() => booth.previewVoice(v.id, speed, lang, { engine: 'piper', speaker, key, sample: st.installed ? null : booth.piperSample(v, speaker) })} />
               <b>{v.name}</b>
               <span class="dim">{[v.gender, v.speakers.length ? `${v.speakers.length} voices` : '', v.license].filter(Boolean).join(', ')}</span>
               {v.speakers.length > 0 && (

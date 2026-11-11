@@ -440,6 +440,15 @@ export function setComponentMono(clipId, key, mono) {
   });
 }
 
+// Clean Voice (AI-støyfjerning) for én lydkomponent: styrke 0 til 1, null slår det av.
+export function setCleanVoice(clipId, key, amount) {
+  commit((p) => {
+    const q = p.clips[clipId];
+    q.props.cleanVoice = { ...q.props.cleanVoice, [key]: amount };
+    if (amount == null) delete q.props.cleanVoice[key];
+  });
+}
+
 export function addTransition(type = 'dissolve') {
   const p = project.value;
   const dur = prefs.value.transitionDur;

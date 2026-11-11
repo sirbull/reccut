@@ -1432,11 +1432,11 @@ For a quick recording without a script, click the **microphone** in the timeline
 
 ## Where the voice ends up
 
-The studio does not have a track of its own. It keeps the script with the takes for each line, and **Stitch to Timeline** builds the voice on the timeline of the open sequence.
+The studio does not have a track of its own. It keeps the script with the takes for each line, and **Send to Edit** builds the voice on the timeline of the open sequence.
 
 ## First: room tone
 
-The first time you open the studio in a project, it asks for five seconds of room tone. Sit where you will record, click **Record Room Tone** (or press Space), and stay quiet. It counts down from 3, records 5 seconds and stops by itself. If it hears a voice or a knock, it asks you to try again. You can skip it and record it later.
+The first time you open the studio in a project, it asks for five seconds of room tone. Sit where you will record, click **Record Room Tone** (or press R or Space), and stay quiet. It counts down from 3, records 5 seconds and stops by itself. If it hears a voice or a knock, it asks you to try again. You can skip it and record it later.
 
 Record a **new room tone** with **New** next to Room tone at the top, or **New Room Tone** in the side panel, for example when you move to another room or change the microphone. All room tones in the project are kept in a list. Choose the one to use in the Room tone menu at the top or click it in the list. It is used for new takes and for the pauses the next time you stitch. Listen to a room tone with the play button, and remove it from the list with the bin (the file stays in the project). It opens over the editor with the script on the left and the recording tools on the right. Everything you do in the studio is saved in the project, so you can close it and continue later.
 
@@ -1455,9 +1455,9 @@ The line you are reading is highlighted and kept a third down the window, like o
 
 ## Recording and retakes
 
-Press **Space** to record the line and Space again to keep the take. The studio goes to the next line, so you can read the whole script with Space alone.
+Press **R** to record the line and R again to keep the take. The studio goes to the next line, so you can read the whole script with R alone. **Space** plays the timeline, and clicking a line moves the playhead to where its clip is, or where it will go.
 
-- **R** discards what you are recording and starts the line again right away. Use it the moment you stumble.
+- **Shift R** discards what you are recording and starts the line again right away. Use it the moment you stumble.
 - **Esc** discards the take that is recording.
 - **Backspace** marks the last take as not usable and goes back to its line, ready for a new try.
 - **Up** and **Down** move between lines, **Shift** with the arrows moves between sections, and **N** goes to the next line without a take.
@@ -1485,22 +1485,22 @@ Every person starts with **Studio Voice**: rumble and light noise removed, warmt
 
 ## AI voices
 
-Let an AI voice read the script. Click **Add AI Voice** (or the sparkle next to Record as). The first time, Reccut downloads the voices: about 116 MB, once. They come from **Kokoro**, an open model that runs on this computer, so it is free, needs no account or key, and the script never leaves the computer.
+Let an AI voice read the script. Click **AI Voice** at the top of the side panel. Click **Record** to go back to your own voice. To use another AI voice, click the sparkle next to Record as. The first time, Reccut downloads the voices: about 127 MB, once. They come from **Kokoro**, an open model that runs on this computer, so it is free, needs no account or key, and the script never leaves the computer.
 
 Choose the **Language** first, so the words are pronounced right.
 
-For Norwegian, Swedish, Danish, German, Dutch, Finnish and Polish, and as an alternative for Spanish, French, Italian and Portuguese, **voices made for the language** are listed first. They come from Piper, are about 63 to 77 MB each, and you download only the ones you want. They have open licences (most are CC0, the French and Italian voices are CC BY 4.0). The Norwegian NVCC voice has ten speakers, and the German Thorsten voice has emotions such as whisper, sleepy and surprised. Choose them in the list before you add the voice, or later under Sound. Reccut suggests the language the script looks like it is written in. Kokoro has voices made for English (US and UK), Spanish, French, Italian, Brazilian Portuguese and Hindi, and English sounds best. Norwegian, Swedish, Danish, German, Dutch, Finnish, Polish and Portuguese (Portugal) are pronounced in that language, but read by a voice made for another language, so they have an accent. Listen to a few voices and pick the one you like.
+For Norwegian, Swedish, Danish, German, Dutch, Finnish and Polish, and as an alternative for Spanish, French, Italian and Portuguese, **voices made for the language** are listed first. They come from Piper, are about 63 to 77 MB each, and you download only the ones you want. They have open licences (most are CC0, the French and Italian voices are CC BY 4.0). The Norwegian Dialects voice has ten speakers from five parts of Norway, and the German Thorsten voice has emotions such as whisper, sleepy and surprised. Choose them in the list before you add the voice, or later under Sound. Reccut suggests the language the script looks like it is written in. Kokoro has voices made for English (US and UK), Spanish, French, Italian, Brazilian Portuguese and Hindi, and English sounds best. Norwegian, Swedish, Danish, German, Dutch, Finnish, Polish and Portuguese (Portugal) are pronounced in that language, but read by a voice made for another language, so they have an accent. Listen to a few voices and pick the one you like. You can hear a sample of each voice before you download it.
 
 **Styles** are ready made voices for different moods: dark or bright, cinematic or natural, calm or energetic, female or male. Trailer, Noir and Epic are deep and cinematic, with a little compression and hall. Deep Narrator, Documentary and Storyteller are natural narrators. Clear Guide, Calm Guide and Newsreader suit tutorials and updates. Bright Explainer, Upbeat Host and Fresh are light and lively. Many styles blend two voices into a new one. Filter the list, listen with the effects, and add the one you like. The style's effects are put under Sound for the person, where you can change them.
 
 Under **Voices** you find the 41 voices on their own. Pick a voice from the list. **Listen** plays a short sample, and **Speed** below 1 reads slower, which often suits voice over. Each AI voice is added as a person on its own track.
 
-- Press **Space** (or **Read line**) to let the voice read the selected line. **R** or **Read Again** makes a new take. **Read All Missing Lines** reads every line without a take, one after another, and Space or Esc stops it.
+- Press **R** (or **Read line**) to let the voice read the selected line. **Shift R** or **Read Again** makes a new take. **Read All Missing Lines** reads every line without a take, one after another, and R or Esc stops it.
 - **Say it as** under the takes is what the voice reads. If it says a name, a number or an abbreviation wrong, write it the way it sounds. The script itself is not changed. Words in [brackets] are never read.
 - Takes from an AI voice work like recorded takes: trim, fades, volume, pauses, compare with other people and stitch. They are saved as WAV files in Recordings/Voiceover.
 - Change the language, voice and speed under **Sound for**. AI voices start without effects, since they are already clean. Add Studio Voice or other effects if you like.
 
-The pronunciation part is an add-on (phonemizer.js with eSpeak NG, which is GPL software). It is not part of Reccut, and is downloaded from npm and checked before use. Download or remove the AI voices in **Settings → AI**, or at the bottom of the AI Voices window.
+The pronunciation part is an add-on (eSpeak NG with all its languages, about 13 MB, which is GPL software). Voices downloaded with an earlier version of Reccut get the new add-on the first time they read a line. It is not part of Reccut, and is downloaded from npm and checked before use. Download or remove the AI voices in **Settings → AI**, or at the bottom of the AI Voices window.
 
 ## More than one person
 
@@ -1512,7 +1512,7 @@ Click **Add Person** to add another voice on its own track, with their own takes
 
 ## The studio timeline
 
-At the bottom of the studio, the takes you keep are laid out in script order, the way they will be stitched, with the pauses between them. Press **Shift Space** or the play button to listen from the playhead, with room tone in the pauses. Click in the ruler or an empty spot to move the playhead.
+At the bottom of the studio, the takes you keep are laid out in script order, the way they will be stitched, with the pauses between them. Press **Space** or the play button to listen from the playhead, with room tone in the pauses (shown on its own Room tone track). Click in the ruler or an empty spot to move the playhead, and drag to scrub. Hover to skim, pinch or Cmd/Ctrl scroll to zoom, and drag the top edge of the timeline to make it taller. The yellow line in each clip is its volume: drag it, or Option/Alt click to add keyframes, like in Edit. **Trim to Voice** finds where the voice starts and ends in every clip.
 
 Click a clip to select it. The script jumps to its line.
 
@@ -1532,12 +1532,12 @@ To change the space after one clip, select it and change **Pause after**. **Defa
 
 ## Stitch to the timeline
 
-**Stitch to Timeline** (Cmd or Ctrl and Return in the studio) puts the chosen takes in script order, at the playhead or at the end. The pause after each line follows the script: a short pause after a sentence, a longer one after a paragraph and the longest before a new section. Change the pauses under **Stitch**.
+**Send to Edit** (Cmd or Ctrl and Return in the studio) stitches the chosen takes in script order, with room tone in the pauses, at the playhead or at the end, and opens Edit so you can keep working. The pause after each line follows the script: a short pause after a sentence, a longer one after a paragraph and the longest before a new section. Change the pauses under **Stitch**.
 
 - Voice takes go on one audio track under the picture, grouped so they move together, with room tone in the pauses.
 - Talking head takes go into the storyline, cut back to back. The pause is the take's own sound, so the picture never goes black.
 
-After retakes, press **Stitch Again**. The clips from the last stitch are replaced, so the timeline always has the best takes. The takes are also in the Media browser, named after the line, so you can use them by hand.
+Turn on **Subtitles** (next to Send to Edit, or **Subtitles from the script** under Stitch) to also get subtitles with the text from the script, timed to where each clip lands. Long lines are split into readable pieces. Fix them in the Captions tab like any other captions. After retakes, press **Send to Edit** again. The clips from the last stitch are replaced, so the timeline always has the best takes. The takes are also in the Media browser, named after the line, so you can use them by hand.
 
 The script is added to the project story, so the AI agent can use it to match the takes to the script.
 `,

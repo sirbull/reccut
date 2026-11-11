@@ -1,15 +1,16 @@
 // AI-stemmer i Voice Over Studio: Kokoro-82M (Apache 2.0) kjører lokalt og gratis, uten nøkkel.
 // Ingenting lastes ned før brukeren ber om det. Alle filer er låst til en bestemt versjon og
 // kontrolleres med sha256 (modellen) og sha512 (uttalepakken fra npm) før de tas i bruk.
-// Uttalepakken (phonemizer.js) inneholder eSpeak NG, som er GPL. Den pakkes derfor aldri inn
-// i installasjonsfilen, men hentes som et tillegg, på samme måte som Keystroke-tillegget.
+// Uttalepakken er eSpeak NG (@echogarden/espeak-ng-emscripten, med alle språk), som er GPL. Den pakkes
+// derfor aldri inn i installasjonsfilen, men hentes som et tillegg, på samme måte som Keystroke-tillegget.
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const crypto = require('node:crypto');
 const CATALOG = require('./ttsCatalog.json');
 
-const PHONEMIZER_KEY = 'reccut-tts:phonemizer.js';
+const PHONEMIZER_KEY = 'reccut-tts:espeak-ng.js';
+const ESPEAK_DATA_KEY = 'reccut-tts:espeak-ng.data';
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const sri = (buf) => `sha512-${crypto.createHash('sha512').update(buf).digest('base64')}`;
 
@@ -36,16 +37,17 @@ function createTts({ dir, fetchImpl = globalThis.fetch, catalog = CATALOG, onCha
   let installed = null; // null = ikke sjekket ennå
 
   const file = (rel) => path.join(dir, 'kokoro', ...rel.split('/'));
-  const addonFile = () => path.join(dir, 'phonemizer.js');
+  const addonFile = () => path.join(dir, 'espeak-ng.js');
+  const dataFile = () => path.join(dir, 'espeak-ng.data');
 
   async function check() {
     try {
       const m = JSON.parse(await fs.readFile(path.join(dir, 'manifest.json'), 'utf8'));
-      installed = m?.revision === model.revision && m?.phonemizer === catalog.phonemizer.version;
+      // Uttaletillegget sjekkes for seg (addonInstalled), så en ny versjon av det ikke krever modellen på nytt.
+      installed = m?.revision === model.revision;
       if (installed) {
         // Rask sjekk av størrelser. Innholdet kontrolleres ved nedlasting.
         for (const f of model.files) if ((await fs.stat(file(f.path))).size !== f.size) installed = false;
-        await fs.stat(addonFile());
       }
     } catch {
       installed = false;
@@ -65,9 +67,9 @@ function createTts({ dir, fetchImpl = globalThis.fetch, catalog = CATALOG, onCha
   async function addonInstalled() {
     try {
       await fs.stat(addonFile());
+      await fs.stat(dataFile());
       const mark = await fs.readFile(path.join(dir, 'addon.json'), 'utf8').then(JSON.parse, () => null);
-      const kokoro = await fs.readFile(path.join(dir, 'manifest.json'), 'utf8').then(JSON.parse, () => null);
-      return mark?.version === catalog.phonemizer.version || kokoro?.phonemizer === catalog.phonemizer.version;
+      return mark?.name === catalog.phonemizer.name && mark?.version === catalog.phonemizer.version;
     } catch {
       return false;
     }
@@ -77,11 +79,16 @@ function createTts({ dir, fetchImpl = globalThis.fetch, catalog = CATALOG, onCha
     const tgz = await fetchBytes(catalog.phonemizer.tarball, signal);
     if (sri(tgz) !== catalog.phonemizer.integrity) throw new Error('The pronunciation add-on did not match its checksum.');
     const js = untarFile(tgz, catalog.phonemizer.entry);
-    if (!js) throw new Error('The pronunciation add-on is incomplete.');
+    const data = untarFile(tgz, catalog.phonemizer.data);
+    if (!js || !data) throw new Error('The pronunciation add-on is incomplete.');
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(addonFile() + '.tmp', js);
-    await fs.rename(addonFile() + '.tmp', addonFile());
-    await fs.writeFile(path.join(dir, 'addon.json'), JSON.stringify({ version: catalog.phonemizer.version }));
+    for (const [to, bytes] of [[addonFile(), js], [dataFile(), data]]) {
+      await fs.writeFile(to + '.tmp', bytes);
+      await fs.rename(to + '.tmp', to);
+    }
+    await fs.writeFile(path.join(dir, 'addon.json'), JSON.stringify({ name: catalog.phonemizer.name, version: catalog.phonemizer.version }));
+    // Det gamle tillegget (phonemizer.js, bare engelsk) trengs ikke lenger.
+    await fs.rm(path.join(dir, 'phonemizer.js'), { force: true });
     return catalog.phonemizer.size;
   }
 
@@ -167,13 +174,8 @@ function createTts({ dir, fetchImpl = globalThis.fetch, catalog = CATALOG, onCha
     const staging = path.join(dir, `.staging-${crypto.randomBytes(4).toString('hex')}`);
     try {
       await fs.mkdir(staging, { recursive: true });
-      // Uttalepakken: npm-tarball låst med sha512, som i package-lock.
-      const tgz = await fetchBytes(catalog.phonemizer.tarball, ctrl.signal);
-      if (sri(tgz) !== catalog.phonemizer.integrity) throw new Error('The pronunciation add-on did not match its checksum.');
-      const js = untarFile(tgz, catalog.phonemizer.entry);
-      if (!js) throw new Error('The pronunciation add-on is incomplete.');
-      await fs.writeFile(path.join(staging, 'phonemizer.js'), js);
-      step(catalog.phonemizer.size);
+      // Uttalepakken: npm-tarball låst med sha512, som i package-lock. Delt med Piper.
+      step((await ensureAddon(ctrl.signal)) || catalog.phonemizer.size);
       // Modellen og stemmene, fra en fast versjon.
       for (const f of model.files) {
         if (ctrl.signal.aborted) throw new Error('Canceled');
@@ -184,11 +186,10 @@ function createTts({ dir, fetchImpl = globalThis.fetch, catalog = CATALOG, onCha
         await fs.writeFile(out, buf);
         step(f.size);
       }
-      await fs.writeFile(path.join(staging, 'manifest.json'), JSON.stringify({ revision: model.revision, phonemizer: catalog.phonemizer.version, installed: Date.now() }));
+      await fs.writeFile(path.join(staging, 'manifest.json'), JSON.stringify({ revision: model.revision, installed: Date.now() }));
       // Byttes inn til slutt, så en avbrutt nedlasting aldri etterlater en halv installasjon.
       await fs.rm(path.join(dir, 'kokoro'), { recursive: true, force: true });
       await fs.rename(path.join(staging, 'kokoro'), path.join(dir, 'kokoro'));
-      await fs.rename(path.join(staging, 'phonemizer.js'), addonFile());
       await fs.rename(path.join(staging, 'manifest.json'), path.join(dir, 'manifest.json'));
       installed = true;
     } finally {
@@ -210,15 +211,16 @@ function createTts({ dir, fetchImpl = globalThis.fetch, catalog = CATALOG, onCha
     const piperLeft = (await Promise.all((catalog.piper?.voices || []).map(piperInstalled))).some(Boolean);
     if (!piperLeft) {
       await fs.rm(addonFile(), { force: true });
+      await fs.rm(dataFile(), { force: true });
       await fs.rm(path.join(dir, 'addon.json'), { force: true });
-    } else await fs.writeFile(path.join(dir, 'addon.json'), JSON.stringify({ version: catalog.phonemizer.version }));
+    }
     installed = false;
     onChange();
   }
 
   // Filer til arbeidsvinduet: modellfilene (som Transformers.js ber om med adressen sin) og uttalepakken.
   async function readModelFile(key) {
-    if (key === PHONEMIZER_KEY) return (await addonInstalled()) ? new Uint8Array(await fs.readFile(addonFile())) : null;
+    if (key === PHONEMIZER_KEY || key === ESPEAK_DATA_KEY) return (await addonInstalled()) ? new Uint8Array(await fs.readFile(key === PHONEMIZER_KEY ? addonFile() : dataFile())) : null;
     const piperFile = await readPiperFile(key);
     if (piperFile) return piperFile;
     if (installed === null) await check();
@@ -254,7 +256,7 @@ function createTts({ dir, fetchImpl = globalThis.fetch, catalog = CATALOG, onCha
     return new Uint8Array(await fs.readFile(path.join(piperRoot(v), path.basename(rel))));
   }
 
-  return { status, install, cancel, remove, installPiper, cancelPiper, removePiper, piperVoice, readModelFile, check, PHONEMIZER_KEY, repository: model.repository, revision: model.revision, piper: catalog.piper };
+  return { status, install, cancel, remove, installPiper, cancelPiper, removePiper, piperVoice, readModelFile, check, ensureAddon, PHONEMIZER_KEY, ESPEAK_DATA_KEY, repository: model.repository, revision: model.revision, piper: catalog.piper };
 }
 
-module.exports = { createTts, untarFile, PHONEMIZER_KEY, CATALOG };
+module.exports = { createTts, untarFile, PHONEMIZER_KEY, ESPEAK_DATA_KEY, CATALOG };

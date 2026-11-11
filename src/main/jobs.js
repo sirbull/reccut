@@ -125,7 +125,7 @@ let jobSeq = 1;
 
 function getWorker(kind) {
   if (workers[kind] && !workers[kind].isDestroyed()) return workers[kind];
-  const node = kind === 'export';
+  const node = kind === 'export' || kind === 'denoise';
   const win = new BrowserWindow({
     show: false,
     width: 400,

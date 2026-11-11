@@ -27,7 +27,21 @@ setAutoFreeze(true);
 
 const api = window.api;
 
-export const room = signal('record');
+// Appen starter i rommet den var i da den ble lukket.
+const ROOMS = ['record', 'edit', 'export', 'design'];
+const savedRoom = (() => {
+  try {
+    return localStorage.getItem('room');
+  } catch {
+    return null;
+  }
+})();
+export const room = signal(ROOMS.includes(savedRoom) ? savedRoom : 'record');
+effect(() => {
+  try {
+    localStorage.setItem('room', room.value);
+  } catch {}
+});
 export const project = signal(newProject());
 export const projectEpoch = signal(0);
 // Hver versjon av prosjektet endres aldri etter at den er laget, så tidsindeksen kan gjenbrukes.
@@ -619,6 +633,22 @@ function patchMedia(fn) {
   for (let i = 0; i < redoStack.length; i++) redoStack[i] = apply(redoStack[i]);
   if (transientBase) transientBase = apply(transientBase);
 }
+
+// Clean Voice: lager den rensede kopien i bakgrunnen for lyd som har det slått på og mangler den.
+// Gjelder også klipp fra Voice Over Studio, angring og prosjekter der hurtigbufferen er tømt.
+const cleanRequested = new Set();
+effect(() => {
+  const p = project.value;
+  for (const c of Object.values(p.clips)) {
+    const m = p.media[c.mediaId];
+    for (const [key, amount] of Object.entries(c.props?.cleanVoice || {})) {
+      const st = m?.streams?.[key];
+      if (!(amount > 0) || m.offline || !st?.hasAudio || st.cleaned || cleanRequested.has(st.path)) continue;
+      cleanRequested.add(st.path);
+      api.cleanAudio({ file: st.path, mediaId: m.id, stream: key }).catch((err) => console.warn('Clean Voice failed', st.path, err));
+    }
+  }
+});
 
 export async function checkOffline() {
   const list = Object.values(project.value.media);

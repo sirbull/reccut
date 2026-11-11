@@ -50,8 +50,20 @@ export const peaksFor = (file) => peakCache.get(file) || null;
 
 const lin = (db) => Math.pow(10, (db || 0) / 20);
 
+// Volum (dB) i kildetid s fra nøkkelbildene [[tid, dB], ...]: rett linje mellom punktene, flatt utenfor.
+export function dbAt(kf, s) {
+  if (s <= kf[0][0]) return kf[0][1];
+  for (let i = 1; i < kf.length; i++) {
+    const [t0, v0] = kf[i - 1];
+    const [t1, v1] = kf[i];
+    if (s <= t1) return v0 + ((v1 - v0) * (s - t0)) / Math.max(1e-6, t1 - t0);
+  }
+  return kf.at(-1)[1];
+}
+
 // Ett klipp med volum og fades, med start midt i klippet når avspillingen starter senere.
-function schedule(buf, { at, in: inPoint, dur, gain = 0, fadeIn = 0, fadeOut = 0 }, from, t0, out = null) {
+// kf: volumets nøkkelbilder i kildetid (som i Edit). Da gjelder de i stedet for gain.
+function schedule(buf, { at, in: inPoint, dur, gain = 0, kf = null, fadeIn = 0, fadeOut = 0 }, from, t0, out = null) {
   const c = audio();
   const offset = Math.max(0, from - at);
   if (offset >= dur) return;
@@ -59,9 +71,18 @@ function schedule(buf, { at, in: inPoint, dur, gain = 0, fadeIn = 0, fadeOut = 0
   const src = c.createBufferSource();
   src.buffer = buf;
   const g = c.createGain();
-  const level = lin(gain);
+  const level = kf?.length ? 1 : lin(gain);
   const start = when - offset; // der klippet ville startet
   const end = start + dur;
+  // ponytail: rampene går lineært i forsterkning mellom punktene, Edit går i dB. Hørbart likt for korte rampene.
+  const vg = c.createGain();
+  if (kf?.length) {
+    vg.gain.setValueAtTime(lin(dbAt(kf, inPoint + offset)), when);
+    for (const [t, db] of kf) {
+      const tt = start + (t - inPoint);
+      if (tt > when && tt < end) vg.gain.linearRampToValueAtTime(lin(db), tt);
+    }
+  }
   if (fadeIn > 0 && offset < fadeIn) {
     g.gain.setValueAtTime((level * offset) / fadeIn, when);
     g.gain.linearRampToValueAtTime(level, start + fadeIn);
@@ -71,7 +92,7 @@ function schedule(buf, { at, in: inPoint, dur, gain = 0, fadeIn = 0, fadeOut = 0
     g.gain.setValueAtTime(fo === when && offset > dur - fadeOut ? (level * (dur - offset)) / fadeOut : level, fo);
     g.gain.linearRampToValueAtTime(0, end);
   }
-  src.connect(g).connect(out || c.destination);
+  src.connect(vg).connect(g).connect(out || c.destination);
   src.start(when, inPoint + offset, dur - offset);
   sources.push(src);
 }
@@ -82,16 +103,36 @@ async function route(person) {
   let r = routes.get(person.id);
   if (!r) {
     const gain = c.createGain();
-    r = { gain, fx: null };
+    r = { gain, fx: null, clean: null };
     if (await fxReady) {
       r.fx = new AudioWorkletNode(c, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
       gain.connect(r.fx).connect(c.destination);
+      // Clean Voice-filer har fire kanaler (original og renset), som blandes med styrken her.
+      r.clean = new AudioWorkletNode(c, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 4, channelCountMode: 'explicit' });
+      r.clean.connect(gain);
     } else gain.connect(c.destination);
     routes.set(person.id, r);
   }
   r.gain.gain.value = lin(person.gain);
   r.fx?.port.postMessage(person.fx || []);
+  r.clean?.port.postMessage({ list: [], clean: person.clean || 0 });
   return r;
+}
+export function setClean(id, amount) {
+  routes.get(id)?.clean?.port.postMessage({ list: [], clean: amount || 0 });
+}
+
+// Clean Voice i studioet: opptakene renses i bakgrunnen første gang de spilles med det på.
+// ponytail: til den rensede filen er klar, høres originalen. Neste avspilling bruker den.
+const cleaned = new Map(); // fil -> renset fil
+const cleaning = new Set();
+function cleanFile(file) {
+  if (cleaned.has(file)) return cleaned.get(file);
+  if (!cleaning.has(file)) {
+    cleaning.add(file);
+    window.api.cleanAudio({ file }).then((out) => cleaned.set(file, out), (err) => console.warn('Clean Voice failed', file, err));
+  }
+  return file;
 }
 export function setFx(id, list) {
   routes.get(id)?.fx?.port.postMessage(list || []);
@@ -111,6 +152,7 @@ export function stop() {
   for (const r of routes.values()) {
     r.gain.disconnect();
     r.fx?.disconnect();
+    r.clean?.disconnect();
   }
   routes.clear();
   cancelAnimationFrame(raf);
@@ -130,7 +172,8 @@ export async function play(plan, from = 0, { tone = null, onEnd, people = [] } =
   playing.value = true;
   let bufs;
   try {
-    bufs = await Promise.all(plan.items.map((it) => (it.active === false ? null : load(it.take.file))));
+    const cleanOn = new Set(people.filter((p) => p.clean > 0).map((p) => p.id));
+    bufs = await Promise.all(plan.items.map((it) => (it.active === false ? null : load(cleanOn.has(it.person) ? cleanFile(it.take.file) : it.take.file))));
   } catch {
     playing.value = false;
     return;
@@ -138,12 +181,12 @@ export async function play(plan, from = 0, { tone = null, onEnd, people = [] } =
   const toneBuf = tone ? await load(tone.file).catch(() => null) : null;
   if (!playing.value) return;
   const outs = new Map();
-  for (const p of people) outs.set(p.id, (await route(p)).gain);
+  for (const p of people) outs.set(p.id, await route(p));
   if (!playing.value) return;
   const t0 = c.currentTime + 0.06;
   plan.items.forEach((it, i) => {
     if (it.active === false) return;
-    schedule(bufs[i], { at: it.at, in: it.in, dur: it.dur, gain: it.take.gain, fadeIn: it.take.fadeIn ?? 0.02, fadeOut: it.take.fadeOut ?? 0.04 }, from, t0, outs.get(it.person));
+    schedule(bufs[i], { at: it.at, in: it.in, dur: it.dur, gain: it.take.gain, kf: it.take.volKf, fadeIn: it.take.fadeIn ?? 0.02, fadeOut: it.take.fadeOut ?? 0.04 }, from, t0, bufs[i].numberOfChannels === 4 ? outs.get(it.person)?.clean || outs.get(it.person)?.gain : outs.get(it.person)?.gain);
   });
   if (toneBuf) for (const piece of roomToneFill(plan.gaps, tone.duration)) schedule(toneBuf, { ...piece, fadeIn: 0.04, fadeOut: 0.04 }, from, t0);
   const tick = () => {
@@ -157,6 +200,30 @@ export async function play(plan, from = 0, { tone = null, onEnd, people = [] } =
     raf = requestAnimationFrame(tick);
   };
   raf = requestAnimationFrame(tick);
+}
+
+// Skrubbing: en kort lydbit der spillehodet er mens det dras, som i Edit.
+let lastScrub = 0;
+export async function scrub(plan, t, people = []) {
+  const now = performance.now();
+  if (playing.value || now - lastScrub < 70) return;
+  lastScrub = now;
+  const it = plan.items.find((x) => x.active !== false && t >= x.at && t < x.at + x.dur);
+  const p = it && people.find((x) => x.id === it.person);
+  if (!it || p?.muted) return;
+  const buf = await load(it.take.file).catch(() => null);
+  if (!buf) return;
+  const c = audio();
+  if (c.state === 'suspended') await c.resume();
+  const s = it.in + (t - it.at);
+  const db = (it.take.volKf?.length ? dbAt(it.take.volKf, s) : it.take.gain || 0) + (p?.gain || 0);
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const g = c.createGain();
+  g.gain.setValueAtTime(lin(db), c.currentTime);
+  g.gain.linearRampToValueAtTime(0, c.currentTime + 0.09);
+  src.connect(g).connect(c.destination);
+  src.start(c.currentTime, s, 0.09);
 }
 
 export function close() {

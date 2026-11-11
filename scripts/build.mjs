@@ -39,18 +39,24 @@ const builds = [
   { ...common, entryPoints: [path.join(root, 'src/renderer/voiceover/capture-worklet.js')], outfile: path.join(out, 'vo-capture-worklet.js'), format: 'iife', platform: 'browser' },
   { ...common, entryPoints: [path.join(root, 'src/worker/segment.js')], outfile: path.join(out, 'segment.js'), format: 'esm', platform: 'browser' },
   { ...common, entryPoints: [path.join(root, 'src/worker/transcribe.js')], outfile: path.join(out, 'transcribe.js'), format: 'esm', platform: 'browser' },
+  // AI-støyfjerning (DeepFilterNet 3) med filtilgang, som eksporten.
+  { ...common, entryPoints: [path.join(root, 'src/worker/denoise.js')], outfile: path.join(out, 'denoise.js'), format: 'iife', platform: 'browser', external: ['fs', 'electron'] },
   // AI-stemmer i Voice Over Studio (Kokoro).
   { ...common, entryPoints: [path.join(root, 'src/worker/tts.js')], outfile: path.join(out, 'tts.js'), format: 'esm', platform: 'browser' },
 ];
 
 function copyStatic() {
-  for (const f of ['index.html', 'help.html', 'export.html', 'transcribe.html', 'segment.html', 'tts.html']) {
+  for (const f of ['index.html', 'help.html', 'export.html', 'transcribe.html', 'segment.html', 'tts.html', 'denoise.html']) {
     const src = fs.existsSync(path.join(root, 'src/renderer', f)) ? path.join(root, 'src/renderer', f) : path.join(root, 'src/worker', f);
     fs.copyFileSync(src, path.join(out, f));
   }
   fs.copyFileSync(path.join(root, 'src/renderer/help/handbook.css'), path.join(out, 'handbook.css'));
   const licenses=path.join(root,'assets/licenses');
   fs.cpSync(path.join(root,'assets/emoji'),path.join(out,'emoji'),{recursive:true});
+  // Lydprøver av AI-stemmene (scripts/voice-samples.mjs), så de kan høres før nedlasting.
+  fs.cpSync(path.join(root,'assets/voice-samples'),path.join(out,'voice-samples'),{recursive:true});
+  // Støyfjerningsmodellen (16 MB) følger med appen, så Clean Voice virker uten nedlasting.
+  fs.cpSync(path.join(root,'assets/denoise'),path.join(out,'denoise'),{recursive:true});
   if(fs.existsSync(licenses))fs.cpSync(licenses,path.join(out,'licenses'),{recursive:true});
   buildLicenses({ root, out: path.join(out, 'licenses') });
   // Bilder til hjelpen.

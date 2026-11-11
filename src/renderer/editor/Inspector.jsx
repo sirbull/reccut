@@ -8,6 +8,7 @@ import { RemoveEffectButton } from './RemoveEffectButton.jsx';
 import { AudioFxChain } from './AudioFxChain.jsx';
 import { VideoEffects } from './VideoEffects.jsx';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { Fragment } from 'preact';
 import { signal } from '@preact/signals';
 import { ArrowDown, ArrowUp, Captions, ChevronLeft, ChevronRight, Circle, Diamond, EyeOff, Film, PanelLeft, PanelRight, PenTool, RectangleHorizontal, SquareDashed, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
 import {
@@ -57,7 +58,7 @@ import { beginTransient, commit, endPreview, projectPath, renameProject, endTran
 import { groupPositionClips, groupVisuals, setGroupOpacity, setGroupPosition } from '../../shared/groupSettings.js';
 import { seek } from './playback.js';
 import { setKeyframe } from './keyframes.js';
-import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, shownInspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, setComponentMono, toggleComponent } from './commands.js';
+import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, shownInspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, setCleanVoice, setComponentMono, toggleComponent } from './commands.js';
 import { prefs } from '../prefs.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { attachToTrack, deleteTrack, detach, removeTrackingKeyframes, trackArea, trackForward, trackRedaction, tracksFor } from './track.js';
@@ -929,6 +930,36 @@ function AudioChannelsSection({ clip, comps }) {
   );
 }
 
+// Clean Voice: AI-støyfjerning (DeepFilterNet 3) for tale. Lyden renses én gang i bakgrunnen,
+// og styrken blandes inn med en gang, i avspilling og eksport.
+function CleanVoiceSection({ clip, comps }) {
+  if (!comps.length) return null;
+  const busy = (file) => tasks.value.find((t) => t.title === `Removing background noise from ${file.split(/[\\/]/).pop()}` && (t.state === 'running' || t.state === 'queued'));
+  return (
+    <Section title="Clean Voice" data-section="clean-voice">
+      {comps.map((c) => {
+        const amount = clip.props.cleanVoice?.[c.key];
+        const job = amount != null && !c.stream.cleaned && busy(c.stream.path);
+        return (
+          <Fragment key={c.key}>
+            <Row label={comps.length > 1 ? c.label : 'Remove noise'}>
+              <Toggle checked={amount != null} onChange={(v) => setCleanVoice(clip.id, c.key, v ? 0.8 : null)} />
+            </Row>
+            {amount != null && (
+              <Row label="Strength">
+                <Slider value={amount} min={0} max={1} step={0.01} onStart={beginTransient} onInput={(v) => updateTransient((q) => void (q.clips[clip.id].props.cleanVoice[c.key] = v))} onCommit={() => endTransient(true)} />
+                <span class="value narrow">{Math.round(amount * 100)} %</span>
+              </Row>
+            )}
+            {amount != null && !c.stream.cleaned && <p class="hint">{job ? `Cleaning the audio: ${Math.round((job.progress || 0) * 100)} %. You hear the original until it is done.` : 'Preparing the cleaned audio.'}</p>}
+          </Fragment>
+        );
+      })}
+      <p class="hint">AI removes background noise such as fans, traffic, hum and room sound from speech. It runs on this computer, and nothing is sent anywhere.</p>
+    </Section>
+  );
+}
+
 // Nivåer fra lydbølgen innenfor klippet: topp og gjennomsnitt i dBFS, etter volumet på klippet.
 function clipLevels(clip, comp, wave) {
   if (!wave || !comp) return null;
@@ -1008,6 +1039,7 @@ function AudioTab({ clip }) {
       </Section>
       <AudioComponentsSection clip={clip} />
       <AudioChannelsSection clip={clip} comps={comps} />
+      <CleanVoiceSection clip={clip} comps={comps.filter((c) => !c.off)} />
       <Section title="Volume">
         {props.length <= 1 ? (
           <Param clip={clip} prop={props[0] || 'volume'} label="Volume" min={-60} max={12} step={0.5} precision={1} unit="dB" center={0} />

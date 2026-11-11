@@ -1,6 +1,6 @@
 // AI-stemmer med Kokoro-82M (Transformers.js), lokalt i et skjult vindu, uten nett.
 // Modellen og stemmene leses fra disk via hovedprosessen (kontrollert ved nedlasting).
-// Uttalen (eSpeak NG i phonemizer.js) er et eget tillegg som lastes inn herfra.
+// Uttalen (eSpeak NG, alle språk) er et eget tillegg som lastes inn herfra.
 import { env, AutoTokenizer, StyleTextToSpeech2Model, Tensor } from '@huggingface/transformers';
 import * as ort from 'onnxruntime-web/webgpu';
 import { blendVectors, chunksForSpeech, piperIds, fixPhonemesFor, languageById, normalizeEnglish, parseVoice, splitPunctuation, voiceLanguage } from '../shared/tts.js';
@@ -25,24 +25,37 @@ let loaded = null; // { key, model, tokenizer, phonemize }
 const voices = new Map();
 
 let phonemizer = null;
-// Uttaletillegget (eSpeak NG i phonemizer.js), lastet ned for seg og delt av Kokoro og Piper.
-async function loadPhonemizer(addon) {
+// Uttaletillegget (eSpeak NG fra @echogarden/espeak-ng-emscripten), lastet ned for seg og delt av Kokoro og Piper.
+// Språkdataene (espeak-ng.data) gis direkte fra disken, så modulen aldri henter noe selv.
+async function loadPhonemizer(addon, addonData) {
   if (phonemizer) return phonemizer;
-  const bytes = await window.worker.cacheMatch(addon);
-  if (!bytes) throw new Error('MODEL_MISSING:voices The pronunciation add-on is missing. Download the voice again.');
+  const [bytes, data] = await Promise.all([window.worker.cacheMatch(addon), window.worker.cacheMatch(addonData)]);
+  if (!bytes || !data) throw new Error('MODEL_MISSING:voices The pronunciation add-on is missing. Download the voice again.');
   const url = URL.createObjectURL(new Blob([bytes], { type: 'text/javascript' }));
+  let Module;
   try {
-    ({ phonemize: phonemizer } = await import(/* @vite-ignore */ url));
+    ({ default: Module } = await import(/* @vite-ignore */ url));
   } finally {
     URL.revokeObjectURL(url);
   }
+  const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+  const espeak = new (await Module({ getPreloadedPackage: () => buffer })).eSpeakNGWorker();
+  // Samme svar som før: én streng per setningsdel, i IPA. Denne utgaven skiller lydene med _ og
+  // markerer språkbytter med (en), som fjernes.
+  phonemizer = async (text, lang) => {
+    if (espeak.set_voice(lang) !== 0) throw new Error(`Invalid language identifier: "${lang}".`);
+    return (espeak.synthesize_ipa(text).ipa || '')
+      .split('\n')
+      .map((l) => l.replace(/\([a-z-]+\)/gi, '').replace(/_/g, ''))
+      .filter((l) => l.trim());
+  };
   return phonemizer;
 }
 
-async function load({ repository, revision, addon }) {
+async function load({ repository, revision, addon, addonData }) {
   const key = `${repository}@${revision}`;
   if (loaded?.key === key) return loaded;
-  const phonemize = await loadPhonemizer(addon);
+  const phonemize = await loadPhonemizer(addon, addonData);
   const opts = { revision, local_files_only: true };
   const [model, tokenizer] = await Promise.all([
     StyleTextToSpeech2Model.from_pretrained(repository, { ...opts, dtype: 'q8', device: 'wasm' }),
@@ -103,7 +116,7 @@ async function piperModel(payload) {
 }
 
 async function piper(jobId, payload) {
-  const phonemize = await loadPhonemizer(payload.addon);
+  const phonemize = await loadPhonemizer(payload.addon, payload.addonData);
   const { session, config } = await piperModel(payload);
   const voice = config.espeak?.voice || 'en-us';
   const rate = config.audio?.sample_rate || 22050;

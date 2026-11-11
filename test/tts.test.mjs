@@ -65,11 +65,11 @@ const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const sri = (b) => `sha512-${crypto.createHash('sha512').update(b).digest('base64')}`;
 
 function fixture() {
-  const model = Buffer.from('onnx'), voice = Buffer.from(new Float32Array(512).buffer), addon = Buffer.from('export const phonemize = async () => [];');
-  const pack = tgz({ 'package/dist/phonemizer.js': addon, 'package/LICENSE': Buffer.from('x') });
+  const model = Buffer.from('onnx'), voice = Buffer.from(new Float32Array(512).buffer), addon = Buffer.from('export default async () => ({});'), data = Buffer.from('espeak data');
+  const pack = tgz({ 'package/espeak-ng.js': addon, 'package/espeak-ng.data': data, 'package/COPYING': Buffer.from('x') });
   const catalog = {
     model: { repository: 'org/kokoro', revision: 'a'.repeat(40), files: [{ path: 'onnx/model_quantized.onnx', size: model.length, sha256: sha256(model) }, { path: 'voices/af_heart.bin', size: voice.length, sha256: sha256(voice) }] },
-    phonemizer: { version: '1.2.1', tarball: 'https://registry.npmjs.org/phonemizer/-/phonemizer-1.2.1.tgz', integrity: sri(pack), size: pack.length, entry: 'package/dist/phonemizer.js', license: 'GPL inside' },
+    phonemizer: { name: '@echogarden/espeak-ng-emscripten', version: '0.3.5', tarball: 'https://registry.npmjs.org/@echogarden/espeak-ng-emscripten/-/espeak-ng-emscripten-0.3.5.tgz', integrity: sri(pack), size: pack.length, entry: 'package/espeak-ng.js', data: 'package/espeak-ng.data', license: 'GPL inside' },
   };
   const bodies = new Map([[catalog.phonemizer.tarball, pack], [`https://huggingface.co/org/kokoro/resolve/${'a'.repeat(40)}/onnx/model_quantized.onnx`, model], [`https://huggingface.co/org/kokoro/resolve/${'a'.repeat(40)}/voices/af_heart.bin`, voice]]);
   const calls = [];
@@ -78,7 +78,7 @@ function fixture() {
     const b = bodies.get(url);
     return { ok: Boolean(b), status: b ? 200 : 404, arrayBuffer: async () => b.buffer.slice(b.byteOffset, b.byteOffset + b.length) };
   };
-  return { catalog, bodies, fetchImpl, calls, addon, voice };
+  return { catalog, bodies, fetchImpl, calls, addon, data, voice };
 }
 
 test('the AI voices download only when asked, are checked, and are served only for the pinned files', async () => {
@@ -92,6 +92,7 @@ test('the AI voices download only when asked, are checked, and are served only f
   assert.equal(progress.at(-1), 1);
   assert.equal((await tts.status()).installed, true);
   assert.deepEqual(Buffer.from(await tts.readModelFile(tts.PHONEMIZER_KEY)), f.addon);
+  assert.deepEqual(Buffer.from(await tts.readModelFile(tts.ESPEAK_DATA_KEY)), f.data);
   const rev = 'a'.repeat(40);
   assert.deepEqual(Buffer.from(await tts.readModelFile(`https://huggingface.co/org/kokoro/resolve/${rev}/voices/af_heart.bin`)), f.voice);
   assert.ok(await tts.readModelFile('https://huggingface.co/org/kokoro/resolve/main/onnx/model_quantized.onnx'));
@@ -112,11 +113,12 @@ test('a file that does not match its checksum stops the install and leaves nothi
   const tts = createTts({ dir, fetchImpl: f.fetchImpl, catalog: f.catalog });
   await assert.rejects(tts.install(), /checksum/);
   assert.equal((await tts.status()).installed, false);
-  assert.deepEqual(fs.readdirSync(dir), []);
+  // Ingen halv modell. Uttaletillegget er kontrollert for seg og deles med Piper, så det kan bli liggende.
+  assert.deepEqual(fs.readdirSync(dir).filter((x) => !['addon.json', 'espeak-ng.js', 'espeak-ng.data'].includes(x)), []);
   // The pronunciation add-on is checked against its npm integrity too.
   const g = fixture();
-  g.bodies.set(g.catalog.phonemizer.tarball, tgz({ 'package/dist/phonemizer.js': Buffer.from('changed') }));
-  await assert.rejects(createTts({ dir, fetchImpl: g.fetchImpl, catalog: g.catalog }).install(), /checksum/);
+  g.bodies.set(g.catalog.phonemizer.tarball, tgz({ 'package/espeak-ng.js': Buffer.from('changed') }));
+  await assert.rejects(createTts({ dir: fs.mkdtempSync(path.join(os.tmpdir(), 'tts-')), fetchImpl: g.fetchImpl, catalog: g.catalog }).install(), /checksum/);
 });
 
 test('only regular files are read from the npm tarball', () => {
@@ -127,11 +129,11 @@ test('only regular files are read from the npm tarball', () => {
 
 test('the voice model and the GPL pronunciation add-on are never packed into the installer', () => {
   const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-  for (const dep of ['phonemizer', 'kokoro-js']) {
+  for (const dep of ['phonemizer', 'kokoro-js', '@echogarden/espeak-ng-emscripten']) {
     assert.ok(!pkg.dependencies?.[dep] && !pkg.devDependencies?.[dep], `${dep} is not a dependency`);
   }
   const resources = JSON.stringify(pkg.build.extraResources || []);
-  assert.ok(!/kokoro|phonemizer|tts/i.test(resources));
+  assert.ok(!/kokoro|phonemizer|espeak|tts/i.test(resources));
 });
 
 test('the language is chosen separately, suggested from the script, and Norwegian sounds the model lacks are mapped', () => {

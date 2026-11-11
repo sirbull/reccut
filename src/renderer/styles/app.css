@@ -2128,7 +2128,8 @@ input[type='color'].color::-webkit-color-swatch {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  z-index: 60;
+  /* Over Voice Over Studio (900) og dialogene i den, ellers forsvinner beskjedene der. */
+  z-index: 1000;
   pointer-events: none;
 }
 .toast {
@@ -5475,6 +5476,9 @@ kbd.keycap {
 .vo-booth { position: fixed; inset: 0; z-index: 900; display: flex; flex-direction: column; background: var(--bg-0); outline: none; }
 .app:not(.room-edit) .vo-booth { display: none; }
 .vo-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--bg-1); border-bottom: 1px solid var(--line); min-height: 44px; }
+/* Plass til vinduknappene på Mac (studioet dekker tittellinjen), og den kan dras som en tittellinje. */
+.mac .vo-head { padding-left: 84px; -webkit-app-region: drag; }
+.mac .vo-head :is(button, select, input, .select, a, label) { -webkit-app-region: no-drag; }
 .vo-head .spacer, .vo-script-bar .spacer { flex: 1; }
 .vo-head .select { max-width: 200px; }
 .vo-field { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
@@ -5511,6 +5515,10 @@ kbd.keycap {
 .vo-empty-actions { display: flex; gap: 8px; margin: 6px 0; }
 .vo-docs { display: flex; flex-wrap: wrap; gap: 6px 10px; justify-content: center; }
 .vo-side { flex: none; width: 340px; overflow-y: auto; border-left: 1px solid var(--line); background: var(--bg-1); padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.vo-draft-hint { font-size: 12px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.vo-mode { display: flex; flex: none; }
+.vo-mode button { flex: 1; justify-content: center; padding: 7px 10px; font-size: 13px; }
+.vo-mode button:disabled { opacity: 0.5; }
 .vo-camera { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; background: #000; transform: scaleX(-1); }
 .vo-meter-wrap { display: flex; flex-direction: column; gap: 3px; }
 .vo-meter { position: relative; height: 10px; border-radius: 5px; background: var(--bg-3); overflow: hidden; }
@@ -5527,6 +5535,7 @@ kbd.keycap {
 .vo-meter-scale b.hot { color: var(--red); font-weight: 600; }
 .vo-transport { display: flex; flex-direction: column; gap: 8px; }
 .vo-rec { display: flex; align-items: center; justify-content: center; gap: 10px; height: 46px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--bg-3); color: var(--text); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.vo-rec > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vo-rec:hover:not(:disabled) { background: var(--bg-4); }
 .vo-rec:disabled { opacity: 0.6; }
 .vo-rec-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--red); }
@@ -5594,10 +5603,19 @@ button.vo-take-name:hover { background: var(--bg-3); }
 .vt-bar { display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-bottom: 1px solid var(--line); }
 .vt-bar .spacer, .vt-controls .spacer { flex: 1; }
 .vt-time { font-variant-numeric: tabular-nums; min-width: 92px; }
-.vt-scroll { max-height: 230px; overflow: auto; position: relative; }
+.vt-scroll { overflow: auto; position: relative; }
+.vt { position: relative; }
+.vt-split { position: absolute; left: 0; right: 0; top: -4px; height: 8px; cursor: ns-resize; z-index: 5; }
+.vt-split:hover, .vt-split:active { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.vo-subs-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+.vt-skim { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--yellow); opacity: 0.7; pointer-events: none; z-index: 2; }
+.vt-tone-clip { background: var(--bg-4) !important; pointer-events: none; cursor: default; }
+.vt-tone .vt-lane { cursor: text; }
 .vt-content { position: relative; }
 .vt-empty { margin: 0; padding: 14px 16px 18px 180px; }
-.vt-row { display: flex; height: 76px; border-bottom: 1px solid var(--line); }
+.vt-row { position: relative; display: flex; height: 76px; border-bottom: 1px solid var(--line); }
+.vt-row-size { position: absolute; left: 0; right: 0; bottom: -4px; height: 8px; cursor: ns-resize; z-index: 5; }
+.vt-row-size:hover, .vt-row-size:active { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 .vt-row.hidden { height: 28px; }
 .vt-ruler-row { height: 20px; }
 .vt-head { position: sticky; left: 0; z-index: 3; flex: none; width: 168px; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 6px 0 10px; background: var(--bg-2); border-right: 1px solid var(--line); cursor: pointer; }
@@ -5620,6 +5638,8 @@ button.vo-take-name:hover { background: var(--bg-3); }
 .vt-wave { position: absolute; left: 0; top: 16px; pointer-events: none; }
 .vt-fades { position: absolute; left: 0; top: 16px; pointer-events: none; }
 .vt-fades polygon { fill: rgba(0, 0, 0, 0.35); }
+.vt-vol { position: absolute; left: 0; top: 16px; overflow: visible; pointer-events: none; z-index: 2; }
+.vt-clip .vol-kf-point { z-index: 3; }
 .vt-gain { position: absolute; right: 4px; bottom: 2px; font-size: 9px; color: var(--text); background: rgba(0, 0, 0, 0.35); padding: 0 3px; border-radius: 3px; pointer-events: none; }
 .vt-edge { position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; background: var(--yellow); opacity: 0.85; }
 .vt-edge.in { left: -1px; border-radius: 6px 0 0 6px; }
@@ -5654,6 +5674,7 @@ button.vo-badge { border: 0; cursor: pointer; }
 .ai-setup { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 .ai-setup p, .ai-pick p { margin: 0; line-height: 1.5; }
 .ai-setup ul { margin: 0; padding-left: 18px; line-height: 1.5; display: flex; flex-direction: column; gap: 4px; }
+.ai-samples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .ai-progress { display: flex; align-items: center; gap: 8px; width: 100%; }
 .ai-progress .bar { flex: 1; height: 6px; border-radius: 3px; background: var(--bg-4); overflow: hidden; }
 .ai-progress .bar div { height: 100%; background: var(--accent); }

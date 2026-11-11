@@ -38,12 +38,70 @@ export function splitSentences(text) {
   return out;
 }
 
+// Undertekster fra manuset: hver linje legges over klippet sitt (parts: [{ text, start, dur }]).
+// Lange linjer deles i biter på høyst maxChars (to linjer), helst mellom setninger og ved komma,
+// og tiden fordeles etter antall tegn. Retningslinjer i [klammer] er ikke med.
+export function scriptCaptions(parts, { maxChars = 84 } = {}) {
+  const out = [];
+  for (const { text, start, dur } of parts) {
+    const clean = plainLine(text).replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
+    if (!clean || !(dur > 0)) continue;
+    const pieces = [];
+    for (const sentence of splitSentences(clean)) {
+      let rest = sentence;
+      while (rest.length > maxChars) {
+        const head = rest.slice(0, maxChars + 1);
+        const comma = Math.max(head.lastIndexOf(', '), head.lastIndexOf('; '), head.lastIndexOf(': '));
+        let cut = comma > maxChars * 0.4 ? comma + 1 : head.lastIndexOf(' ');
+        if (cut <= 0) cut = maxChars;
+        pieces.push(rest.slice(0, cut).trim());
+        rest = rest.slice(cut).trim();
+      }
+      if (rest) pieces.push(rest);
+    }
+    // Korte setninger slås sammen så lenge de får plass.
+    const chunks = [];
+    for (const p of pieces) {
+      if (chunks.length && chunks.at(-1).length + 1 + p.length <= maxChars) chunks[chunks.length - 1] += ` ${p}`;
+      else chunks.push(p);
+    }
+    const total = chunks.reduce((a, c) => a + c.length, 0);
+    let t = start;
+    for (const c of chunks) {
+      const d = (dur * c.length) / total;
+      out.push({ start: round3(t), end: round3(t + d), text: c });
+      t += d;
+    }
+  }
+  return out;
+}
+
 // Enkel, stabil nøkkel for en linje, så opptak følger linjen selv om manuset endres rundt den.
 export function blockKey(text, speaker = '') {
   const s = `${speaker}|${String(text).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()}`;
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return (h >>> 0).toString(36);
+}
+
+// Formatert tekst fra utklippstavlen (Word, Google Docs, nettsider) blir manus:
+// overskrifter blir seksjoner (#), avsnitt skilles med en tom linje og linjeskift beholdes.
+// ponytail: regex, ikke DOM, så det kan testes i node. Tabeller og nestede lister blir bare linjer.
+export function htmlToScript(html) {
+  const entities = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+  return String(html)
+    .replace(/<(head|style|script)[\s\S]*?<\/\1>|<!--[\s\S]*?-->/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/<h([1-6])[^>]*>/gi, (_, n) => `\n\n${'#'.repeat(n)} `)
+    .replace(/<br[^>]*>|<\/li>/gi, '\n')
+    .replace(/<\/(h[1-6]|p|div|ul|ol|blockquote|tr|table)>/gi, '\n\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(#x?[0-9a-f]+|\w+);/gi, (m, e) => e[0] !== '#' ? entities[e.toLowerCase()] ?? m
+      : String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : Number(e.slice(1))))
+    .split('\n').map((l) => l.trim()).join('\n')
+    .replace(/^#+ *$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**
@@ -172,12 +230,15 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
  * floorDb: kjent støygulv (fra romlyd), ellers regnes det ut fra de stilleste delene.
  * Gir { start, end, floor, peak } i sekunder, eller null når ingenting blir sagt.
  */
-export function detectSpeech(env, { hop = 0.01, floorDb = null, minSpeech = 0.06, minGap = 0.35 } = {}) {
+// skipStart/skipEnd (sekunder): kantene der det ikke letes etter tale (klikk fra Record og stopp).
+// Tale som fortsetter inn i kantene tas likevel med av de myke kantene under.
+// maxEdge: hvor langt de myke kantene (s, f, pust) kan gå ut fra der stemmen tydelig starter og slutter.
+export function detectSpeech(env, { hop = 0.01, floorDb = null, minSpeech = 0.06, minGap = 0.35, skipStart = 0, skipEnd = 0, maxEdge = 0.2 } = {}) {
   if (!env.length) return null;
-  // Støygulvet fra romlyden brukes bare når det er lavere enn det stilleste i opptaket,
-  // så en romlyd med lyd i aldri gjør stemmen usynlig.
+  // Støygulvet er det stilleste i selve opptaket. Romlyden kan senke det litt (opptak med lite stillhet),
+  // men aldri mer enn 6 dB: ble romlyden målt stillere, ville støyen i opptaket ellers regnes som stemme.
   const own = percentile(env, 0.1);
-  const floor = clamp(floorDb != null ? Math.min(floorDb, own) : own, -100, -25);
+  const floor = clamp(floorDb != null ? Math.max(Math.min(floorDb, own), own - 6) : own, -100, -25);
   const peak = percentile(env, 0.995);
   const range = peak - floor;
   if (range < 10) return null;
@@ -188,15 +249,17 @@ export function detectSpeech(env, { hop = 0.01, floorDb = null, minSpeech = 0.06
     for (let j = 0; j < k; j++) if (!(env[i + dir * j] > open)) return false;
     return true;
   };
+  const first = Math.round(skipStart / hop);
+  const last = env.length - 1 - Math.round(skipEnd / hop);
   let s = -1;
-  for (let i = 0; i + k <= env.length; i++)
+  for (let i = first; i + k <= last + 1; i++)
     if (run(i, 1)) {
       s = i;
       break;
     }
   if (s < 0) return null;
   let e = s;
-  for (let i = env.length - 1; i - k + 1 >= s; i--)
+  for (let i = last; i - k + 1 >= s; i--)
     if (run(i, -1)) {
       e = i;
       break;
@@ -206,7 +269,8 @@ export function detectSpeech(env, { hop = 0.01, floorDb = null, minSpeech = 0.06
   const edge = (i, dir) => {
     let quiet = 0,
       last = i;
-    for (let j = i + dir; j >= 0 && j < env.length; j += dir) {
+    const stop = i + dir * Math.round(maxEdge / hop);
+    for (let j = i + dir; j >= 0 && j < env.length && j !== stop; j += dir) {
       if (env[j] > soft) {
         last = j;
         quiet = 0;
@@ -411,16 +475,20 @@ export function freeAudioLane(clips, from, to, ignore = new Set()) {
 }
 
 // Romlyd under pausene: biter av romlyden, med litt overlapp så overgangene ikke høres.
-export function roomToneFill(gaps, toneDuration, overlap = 0.04) {
-  if (!(toneDuration > 0.2)) return [];
+// Begge ender av romlyden (edge sekunder) brukes aldri: der ligger klikket fra start og stopp.
+export function roomToneFill(gaps, toneDuration, overlap = 0.04, edge = 0.5) {
+  const cut = Math.min(edge, toneDuration * 0.15);
+  const first = cut;
+  const last = toneDuration - cut;
+  if (!(last - first > 0.2)) return [];
   const out = [];
-  let offset = 0;
+  let offset = first;
   for (const g of gaps) {
     let at = Math.max(0, g.at - overlap),
       left = g.dur + overlap * 2;
     while (left > 0.02) {
-      if (offset >= toneDuration - 0.1) offset = 0;
-      const dur = Math.min(left, toneDuration - offset);
+      if (offset >= last - 0.1) offset = first;
+      const dur = Math.min(left, last - offset);
       out.push({ at: round3(at), in: round3(offset), dur: round3(dur) });
       offset += dur;
       at += dur;

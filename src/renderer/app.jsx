@@ -305,7 +305,8 @@ function handleMenu(id) {
   const cmd = byId.get(id);
   if (isTyping()) {
     if (cmd?.text) {
-      document.execCommand(cmd.text);
+      // execCommand('paste') er sperret i Chromium; webContents limer inn som en ekte Cmd V.
+      api.editText(cmd.text);
       return;
     }
     // Export dialogs are explicit actions, also when an inspector/search field

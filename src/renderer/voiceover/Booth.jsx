@@ -24,23 +24,25 @@ import {
   Video,
   VideoOff,
   Wind,
-  X,
   UserPlus,
   RotateCw,
   Sparkles,
   Loader2,
+  Mic,
+  ArrowLeft,
+  Download,
 } from 'lucide-preact';
 import { Button, IconButton, NumberField, Segmented, Select, Slider, Toggle, toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
-import { project } from '../editor/store.js';
+import { project, room } from '../editor/store.js';
 import { isTyping } from '../keyboard.js';
-import { chosenTake, isSkipped, pickKey, orphanTakes, progress, readingTime, DEFAULT_PACING } from '../../shared/voiceover.js';
+import { chosenTake, htmlToScript, isSkipped, pickKey, orphanTakes, progress, readingTime, DEFAULT_PACING } from '../../shared/voiceover.js';
 import { AudioFxChain } from '../editor/AudioFxChain.jsx';
 import { formatDuration } from '../../shared/model.js';
 import * as booth from './booth.js';
 import { StudioIcon } from './StudioIcon.jsx';
 import { AiVoiceDialog, aiDialogOpen, openAiVoices } from './AiVoice.jsx';
-import { LANGUAGES, VOICES, isBlend, languageById, voiceLabel } from '../../shared/tts.js';
+import { LANGUAGES, languageById, voiceLabel, voicesFor } from '../../shared/tts.js';
 import { PacingFields } from './Pacing.jsx';
 import { piperById, piperFor, speakerLabel } from './piper.js';
 import { VoTimeline, deleteSelected, pausesOpen, selected as vtSelected, togglePreview } from './VoTimeline.jsx';
@@ -55,8 +57,9 @@ const meterPos = (dbv) => Math.max(0, Math.min(1, (dbv + 60) / 60));
 const secs = (v) => `${v.toFixed(1)} s`;
 
 export const KEYS = [
-  ['Space', 'Record / stop and keep'],
-  ['R', 'Retake: discard and start the line again'],
+  ['R', 'Record / stop and keep'],
+  ['⇧R', 'Record the line again: discard and start over'],
+  ['Space', 'Play / pause the timeline'],
   ['Esc', 'Discard the take that is recording'],
   ['⌫', 'Last take was bad, go back to it'],
   ['↑ ↓', 'Previous / next line'],
@@ -64,9 +67,8 @@ export const KEYS = [
   ['N', 'Next line without a take'],
   ['P', 'Play the chosen take'],
   ['S', 'Star the chosen take'],
-  ['⇧Space', 'Play the timeline'],
   ['M', 'Prompter view'],
-  [`${MOD}↩`, 'Stitch takes to the timeline'],
+  [`${MOD}↩`, 'Send to Edit: stitch the takes with room tone'],
 ];
 
 function onBoothKey(e) {
@@ -81,7 +83,7 @@ function onBoothKey(e) {
   let handled = true;
   // Romlyden først: mellomrom starter den, Esc avbryter eller hopper over.
   if (booth.needsRoomTone.value) {
-    if (k === ' ' || e.code === 'Space') !booth.busy() && booth.recordRoomTone(5);
+    if (k === ' ' || e.code === 'Space' || k === 'r' || k === 'R') !booth.busy() && booth.recordRoomTone(5);
     else if (k === 'Escape') booth.busy() ? booth.cancel() : booth.skipRoomTone();
     else handled = false;
     if (handled) {
@@ -90,16 +92,17 @@ function onBoothKey(e) {
     }
     return;
   }
-  if ((k === ' ' || e.code === 'Space') && e.shiftKey) togglePreview();
-  else if (k === ' ' || e.code === 'Space') booth.toggle();
+  // Mellomrom spiller tidslinjen, men aldri mens det tas opp (lyden ville kommet med i opptaket).
+  if (k === ' ' || e.code === 'Space') !booth.busy() && togglePreview();
   else if (k === 'Escape' && booth.generating.value) booth.cancelGenerate();
   else if (k === 'Escape' && pausesOpen.value) pausesOpen.value = false;
   else if (k === 'Escape' && !booth.busy() && vtSelected.value) vtSelected.value = null;
-  else if (k === 'Escape') booth.busy() ? booth.cancel() : booth.closeBooth();
+  else if (k === 'Escape') booth.busy() ? booth.cancel() : backToEdit();
   else if ((k === 'Backspace' || k === 'Delete') && !booth.busy() && vtSelected.value) deleteSelected();
-  else if (mod && k === 'Enter') booth.stitch();
+  else if (mod && k === 'Enter') booth.stitch({ open: true });
   else if (mod) handled = false;
-  else if (k === 'r' || k === 'R') booth.retake();
+  else if ((k === 'r' || k === 'R') && e.shiftKey) booth.retake();
+  else if (k === 'r' || k === 'R') booth.toggle();
   else if ((k === 'Backspace' || k === 'Delete') && !booth.busy()) booth.scrapLast();
   else if (k === 'ArrowUp') e.shiftKey ? booth.stepSection(-1) : booth.step(-1);
   else if (k === 'ArrowDown') e.shiftKey ? booth.stepSection(1) : booth.step(1);
@@ -119,10 +122,27 @@ function onBoothKey(e) {
   }
 }
 
+// Lim inn beholder formateringen som manus (overskrifter blir seksjoner).
+// Lim inn som ren tekst (høyreklikk, ⇧⌘V eller ⌥⇧⌘V) gir bare teksten, slik den var.
+function pasteScript(e) {
+  const html = e.clipboardData?.getData('text/html');
+  if (!html) return;
+  e.preventDefault();
+  // insertText beholder angre-historikken i feltet.
+  document.execCommand('insertText', false, htmlToScript(html));
+}
+function pastePlainKey(e) {
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyV') {
+    e.preventDefault();
+    api.editText('pasteAndMatchStyle');
+  }
+}
+
 export function VoiceoverBooth() {
   const ref = useRef(null);
   useEffect(() => {
     booth.ensurePeople();
+    booth.startOnMic();
     booth.refreshTts();
     booth.openInput();
     window.addEventListener('keydown', onBoothKey, true);
@@ -187,7 +207,9 @@ function BoothHeader() {
         Camera
       </button>
       {video && cams.length > 1 && <Select value={booth.opt('voCam')} options={[{ value: '', label: 'Default camera' }, ...cams.map((c) => ({ value: c.id, label: c.label }))]} onChange={(id) => reopen({ voCam: id })} />}
-      <IconButton icon={X} title="Close the studio (Esc)" onClick={booth.closeBooth} />
+      <Button variant="primary" class="small vo-back" icon={ArrowLeft} onClick={backToEdit} title="Leave the studio and go back to Edit (Esc). The takes are kept.">
+        Back to Edit
+      </Button>
     </header>
   );
 }
@@ -211,12 +233,19 @@ function RoomTonePicker() {
   );
 }
 
+const backToEdit = () => {
+  booth.closeBooth();
+  if (!booth.boothOpen.value) room.value = 'edit';
+};
+
 /* Manus */
 
 function ScriptPane() {
   const v = booth.vo.value;
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
+  const draft = booth.scriptDraft.value;
+  const editing = draft != null;
+  const setDraft = (text) => (booth.scriptDraft.value = text);
+  useEffect(() => () => (booth.scriptDraft.value = null), []);
   const [over, setOver] = useState(false);
   const scroller = useRef(null);
   const cur = booth.current.value;
@@ -251,14 +280,8 @@ function ScriptPane() {
     e.stopPropagation();
     setOver(true);
   };
-  const startEdit = () => {
-    setDraft(v.script?.text || '');
-    setEditing(true);
-  };
-  const saveEdit = () => {
-    booth.useScript(v.script?.name || 'Voiceover script', draft);
-    setEditing(false);
-  };
+  const startEdit = () => setDraft(v.script?.text || '');
+  const saveEdit = booth.commitDraft;
   const docs = (project.value.story?.documents || []).filter((d) => d.text?.trim());
 
   return (
@@ -272,9 +295,12 @@ function ScriptPane() {
             <Button variant="primary" class="small" icon={Check} onClick={saveEdit}>
               Done
             </Button>
-            <Button class="small" onClick={() => setEditing(false)}>
+            <Button class="small" onClick={() => setDraft(null)}>
               Cancel
             </Button>
+            {draft.trim() && draft !== (v.script?.text || '') && (
+              <span class="vo-draft-hint">Not saved yet. Click Done to read the script line by line (Record does it too).</span>
+            )}
           </>
         ) : (
           <Button icon={Pencil} class="small" onClick={startEdit}>
@@ -300,7 +326,7 @@ function ScriptPane() {
         <IconButton icon={MonitorPlay} title="Prompter view: only the script, big (M)" active={prompter} onClick={() => setPrefs({ voPrompter: !prompter })} />
       </div>
       {editing ? (
-        <textarea class="vo-editor" value={draft} onInput={(e) => setDraft(e.currentTarget.value)} placeholder={'Write or paste the script.\n\nBlank lines separate paragraphs. Lines starting with # are sections, and lines starting with = are notes that are not read.\n[Directions in brackets] are shown, but are part of the line.'} autoFocus />
+        <textarea class="vo-editor" value={draft} onInput={(e) => setDraft(e.currentTarget.value)} onPaste={pasteScript} onKeyDown={pastePlainKey} placeholder={'Write or paste the script.\n\nBlank lines separate paragraphs. Lines starting with # are sections, and lines starting with = are notes that are not read.\n[Directions in brackets] are shown, but are part of the line.'} autoFocus />
       ) : !v.script ? (
         <div class="vo-empty">
           <FileText size={34} />
@@ -431,19 +457,19 @@ function Transport() {
     <div class="vo-transport">
       {ai ? (
         <>
-          <button class={`vo-rec vo-ai${st === 'generating' || gen ? ' wait' : ''}`} disabled={st === 'saving' || (!gen && st !== 'idle' && st !== 'generating')} onClick={booth.toggle} title="Read the line with the AI voice (Space). Again to stop.">
+          <button class={`vo-rec vo-ai${st === 'generating' || gen ? ' wait' : ''}`} disabled={st === 'saving' || (!gen && st !== 'idle' && st !== 'generating')} onClick={booth.toggle} title="Read the line with the AI voice (R). Again to stop.">
             {st === 'generating' || gen ? <Loader2 size={16} class="spin" /> : <Sparkles size={16} />}
-            <span>{gen ? `Reading ${Math.min(gen.done + 1, gen.total)} of ${gen.total}` : st === 'generating' ? 'Reading…' : st === 'saving' ? 'Saving…' : cur ? `Read line ${booth.lineNumber(cur)} as ${booth.person.value.name}` : 'Read'}</span>
+            <span>{gen ? `Reading ${Math.min(gen.done + 1, gen.total)} of ${gen.total}` : st === 'generating' ? 'Reading…' : st === 'saving' ? 'Saving…' : cur ? `Read line ${booth.lineNumber(cur)}` : 'Read'}</span>
           </button>
           <Button class="small" icon={Sparkles} onClick={gen ? booth.cancelGenerate : booth.generateAll} disabled={!gen && st !== 'idle'} title="Read every line that has no take yet, one after another">
             {gen ? 'Stop' : 'Read All Missing Lines'}
           </Button>
         </>
       ) : (
-      <button class={`vo-rec${recording ? ' on' : ''}${st === 'countin' || st === 'cue' ? ' wait' : ''}`} disabled={st === 'saving' || st === 'tone'} onClick={booth.toggle} title="Record / stop (Space)">
+      <button class={`vo-rec${recording ? ' on' : ''}${st === 'countin' || st === 'cue' ? ' wait' : ''}`} disabled={st === 'saving' || st === 'tone'} onClick={booth.toggle} title="Record / stop (R)">
         {recording ? <Square size={18} /> : <span class="vo-rec-dot" />}
         <span>
-          {st === 'countin' ? `Starting in ${booth.countLeft.value}` : st === 'cue' ? 'Cue…' : recording ? formatDuration(booth.elapsed.value) : st === 'saving' ? 'Saving…' : st === 'tone' ? 'Room tone…' : cur ? `Record line ${booth.lineNumber(cur)}${booth.people.value.length > 1 ? ` as ${booth.person.value.name}` : ''}` : 'Record'}
+          {st === 'countin' ? `Starting in ${booth.countLeft.value}` : st === 'cue' ? 'Cue…' : recording ? formatDuration(booth.elapsed.value) : st === 'saving' ? 'Saving…' : st === 'tone' ? 'Room tone…' : cur ? `Record line ${booth.lineNumber(cur)}` : 'Record'}
         </span>
       </button>
       )}
@@ -451,10 +477,10 @@ function Transport() {
         <span class="dim">Record as</span>
         <Select value={booth.personId.value} options={booth.people.value.map((p) => ({ value: p.id, label: p.name }))} onChange={booth.choosePerson} disabled={recording} />
         <IconButton icon={UserPlus} title="Add a person on a new track, with their own takes and sound" onClick={booth.addPerson} disabled={st !== 'idle'} />
-        <IconButton icon={Sparkles} title="Add an AI voice that reads the script (free, runs on this computer)" onClick={openAiVoices} disabled={st !== 'idle'} />
+        <IconButton icon={Sparkles} title="Use another AI voice (free, runs on this computer)" onClick={openAiVoices} disabled={st !== 'idle'} />
       </div>
       <div class="vo-transport-row">
-        <Button class="small" icon={RotateCcw} onClick={booth.retake} disabled={st === 'saving' || st === 'tone' || (ai && st !== 'idle')} title={ai ? 'Read the line again, as a new take (R)' : 'Discard what is recording and start the line again (R)'}>
+        <Button class="small" icon={RotateCcw} onClick={booth.retake} disabled={st === 'saving' || st === 'tone' || (ai && st !== 'idle')} title={ai ? 'Read the line again, as a new take (Shift R)' : 'Discard what is recording and start the line again (Shift R)'}>
           {ai ? 'Read Again' : 'Retake'}
         </Button>
         <IconButton icon={ChevronUp} title="Previous line (↑)" onClick={() => booth.step(-1)} disabled={recording} />
@@ -501,7 +527,7 @@ function Takes() {
         {takes.length > 0 && <span class="dim"> · {takes.length}</span>}
       </h4>
       {booth.person.value?.ai && <SayItAs key={`${booth.personId.value}|${cur.key}`} block={cur} />}
-      {!takes.length && <p class="dim">{booth.person.value?.ai ? 'No takes yet. Press Space to let the AI voice read the line.' : 'No takes yet. Press Space and read the line.'}</p>}
+      {!takes.length && <p class="dim">{booth.person.value?.ai ? 'No takes yet. Press R to let the AI voice read the line.' : 'No takes yet. Press R and read the line.'}</p>}
       <ul class="vo-takes">
         {[...takes].reverse().map((t) => (
           <TakeRow key={t.id} t={t} chosen={chosen?.id === t.id} />
@@ -653,39 +679,20 @@ function Sound() {
         Sound for {p.name}
       </h4>
       <p class="dim">Applies to all of {p.name}'s takes. You hear it in the studio timeline, and it goes with the clips when you stitch.</p>
-      {p.ai?.engine === 'piper' && <PiperSound p={p} />}
-      {p.ai && p.ai.engine !== 'piper' && (
-        <>
-          <label class="vt-ctl" title="The language the lines are read in">
-            Language
-            <Select value={booth.aiLanguage(p).id} options={LANGUAGES.map((l) => ({ value: l.id, label: `${l.label}${l.voices ? '' : ' (with accent)'}` }))} onChange={(lang) => booth.setAiVoice(p.id, { lang })} />
-          </label>
-          <label class="vt-ctl">
-            Voice
-            <Select value={p.ai.voice} options={[...(isBlend(p.ai.voice) ? [{ value: p.ai.voice, label: voiceLabel(p.ai.voice) }] : []), ...VOICES.map((v) => ({ value: v.id, label: voiceLabel(v.id) }))]} onChange={(voice) => booth.setAiVoice(p.id, { voice })} />
-            <IconButton icon={booth.sampling.value === p.ai.voice ? Square : Play} size={13} title="Listen" onClick={() => booth.previewVoice(p.ai.voice, p.ai.speed || 1, booth.aiLanguage(p).id)} />
-          </label>
-          {booth.scriptLanguage.value && booth.scriptLanguage.value !== booth.aiLanguage(p).id && (
-            <p class="ai-note">
-              The script looks like {languageById(booth.scriptLanguage.value).label}.{' '}
-              <button class="link" onClick={() => booth.setAiVoice(p.id, { lang: booth.scriptLanguage.value })}>
-                Read it in {languageById(booth.scriptLanguage.value).label}
-              </button>
-            </p>
-          )}
-          <label class="vt-ctl" title="Speaking speed for new takes. Below 1 is slower.">
-            Speed
-            <Slider value={p.ai.speed || 1} min={0.5} max={1.5} step={0.01} center={1} onInput={(x) => booth.setAiVoice(p.id, { speed: x })} />
-            <NumberField value={p.ai.speed || 1} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={(x) => booth.setAiVoice(p.id, { speed: x })} />
-          </label>
-          <p class="dim">A new language, voice or speed is used for new takes. Read the lines again to hear it.</p>
-        </>
-      )}
+      {p.ai && <AiSound p={p} />}
       <label class="vt-ctl">
         Volume
         <Slider value={p.gain || 0} min={-24} max={12} step={0.5} center={0} onInput={(x) => booth.setPersonGain(p.id, x)} />
         <NumberField value={p.gain || 0} min={-24} max={12} step={0.5} precision={1} unit="dB" width={66} onChange={(x) => booth.setPersonGain(p.id, x)} />
       </label>
+      {!p.ai && (
+        <label class="vt-ctl" title="AI removes background noise such as fans, traffic and hum. It runs on this computer.">
+          Clean Voice
+          <Toggle checked={p.clean != null} onChange={(v) => booth.setPersonClean(p.id, v ? 0.8 : null)} />
+          {p.clean != null && <Slider value={p.clean} min={0} max={1} step={0.01} onInput={(x) => booth.setPersonClean(p.id, x)} />}
+          {p.clean != null && <span class="dim">{Math.round(p.clean * 100)} %</span>}
+        </label>
+      )}
       <AudioFxChain
         list={fx}
         onSet={(list) => booth.setPersonFx(p.id, list)}
@@ -699,35 +706,70 @@ function Sound() {
   );
 }
 
-// Lyd for en Piper-stemme: språket følger stemmen. Bytt til en annen nedlastet stemme for samme språk,
-// velg stemme i stemmesett med flere, og still farten.
-function PiperSound({ p }) {
-  const v = piperById(p.ai.voice);
-  if (!v) return null;
-  const installed = piperFor(v.lang).filter((x) => booth.tts.value.piper?.[x.id]?.installed || x.id === v.id);
-  const key = `piper:${v.id}:${p.ai.speaker || ''}`;
+// Stemmen til en AI-person. Språket først, så bare stemmene for språket som er lastet ned
+// (Piper og Kokoro i samme liste). Flere stemmer og språk lastes ned fra AI Voices.
+function AiSound({ p }) {
+  const t = booth.tts.value;
+  const piper = p.ai.engine === 'piper' ? piperById(p.ai.voice) : null;
+  const lang = booth.aiLanguage(p).id;
+  const label = languageById(lang).label;
+  const forLang = (l) => [
+    ...piperFor(l).filter((x) => t.piper?.[x.id]?.installed).map((x) => ({ engine: 'piper', voice: x.id, label: x.name })),
+    ...(t.installed ? voicesFor(l).own.map((v) => ({ engine: 'kokoro', voice: v.id, label: `${v.name} (${v.gender.toLowerCase()})` })) : []),
+  ];
+  const choices = forLang(lang);
+  const value = `${piper ? 'piper' : 'kokoro'}:${p.ai.voice}`;
+  const options = choices.map((c) => ({ value: `${c.engine}:${c.voice}`, label: c.label }));
+  // En stemme fra et annet språk (som en stil) vises fortsatt, så valget ikke blir tomt.
+  if (!options.some((o) => o.value === value)) options.unshift({ value, label: piper ? piper.name : voiceLabel(p.ai.voice) });
+  const use = (c, l = lang) =>
+    booth.setAiVoice(p.id, c.engine === 'piper' ? { engine: 'piper', voice: c.voice, speaker: piperById(c.voice).speakers[0] || '', lang: l } : { engine: undefined, speaker: undefined, voice: c.voice, lang: l });
+  const pick = (val) => {
+    const i = val.indexOf(':');
+    use({ engine: val.slice(0, i), voice: val.slice(i + 1) });
+  };
+  // Nytt språk: bytt til den første nedlastede stemmen for det, ellers behold stemmen og vis nedlasting.
+  const setLang = (l) => {
+    const first = forLang(l)[0];
+    first ? use(first, l) : booth.setAiVoice(p.id, { lang: l });
+  };
+  const key = piper ? `piper:${piper.id}:${p.ai.speaker || ''}` : p.ai.voice;
+  const listen = () => booth.previewVoice(p.ai.voice, p.ai.speed || 1, lang, piper ? { engine: 'piper', speaker: p.ai.speaker || '', key } : {});
   return (
     <>
-      <p class="dim">
-        {languageById(v.lang)?.label} voice, {v.license}.
-      </p>
+      <label class="vt-ctl" title="The language the lines are read in">
+        Language
+        <Select value={lang} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onChange={setLang} />
+      </label>
       <label class="vt-ctl">
         Voice
-        <Select value={v.id} options={installed.map((x) => ({ value: x.id, label: x.name }))} onChange={(voice) => booth.setAiVoice(p.id, { voice, speaker: piperById(voice).speakers[0] || '' })} />
-        <IconButton icon={booth.sampling.value === key ? Square : Play} size={13} title="Listen" onClick={() => booth.previewVoice(v.id, p.ai.speed || 1, v.lang, { engine: 'piper', speaker: p.ai.speaker || '', key })} />
+        <Select value={value} options={options} onChange={pick} />
+        <IconButton icon={booth.sampling.value === key ? Square : Play} size={13} title="Listen" onClick={listen} />
       </label>
-      {v.speakers.length > 0 && (
+      {piper?.speakers.length > 0 && (
         <label class="vt-ctl">
-          {v.id.includes('emotional') ? 'Emotion' : 'Speaker'}
-          <Select value={p.ai.speaker || v.speakers[0]} options={v.speakers.map((x) => ({ value: x, label: speakerLabel(v, x) }))} onChange={(speaker) => booth.setAiVoice(p.id, { speaker })} />
+          {piper.id.includes('emotional') ? 'Emotion' : 'Speaker'}
+          <Select value={p.ai.speaker || piper.speakers[0]} options={piper.speakers.map((x) => ({ value: x, label: speakerLabel(piper, x) }))} onChange={(speaker) => booth.setAiVoice(p.id, { speaker })} />
         </label>
+      )}
+      {!choices.length && <p class="ai-note">No voices for {label} are downloaded yet. Download one to read the script in {label}.</p>}
+      <Button class="small" icon={Download} variant={choices.length ? 'secondary' : 'primary'} onClick={() => openAiVoices(lang)} title={`Listen to and download voices for ${label}`}>
+        Download Voices…
+      </Button>
+      {booth.scriptLanguage.value && booth.scriptLanguage.value !== lang && (
+        <p class="ai-note">
+          The script looks like {languageById(booth.scriptLanguage.value).label}.{' '}
+          <button class="link" onClick={() => setLang(booth.scriptLanguage.value)}>
+            Read it in {languageById(booth.scriptLanguage.value).label}
+          </button>
+        </p>
       )}
       <label class="vt-ctl" title="Speaking speed for new takes. Below 1 is slower.">
         Speed
         <Slider value={p.ai.speed || 1} min={0.5} max={1.5} step={0.01} center={1} onInput={(x) => booth.setAiVoice(p.id, { speed: x })} />
         <NumberField value={p.ai.speed || 1} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={(x) => booth.setAiVoice(p.id, { speed: x })} />
       </label>
-      <p class="dim">A new voice, speaker or speed is used for new takes. Read the lines again to hear it.</p>
+      <p class="dim">A new language, voice or speed is used for new takes. Read the lines again to hear it.</p>
     </>
   );
 }
@@ -772,7 +814,7 @@ function RoomToneSetup() {
             <button class="link" onClick={retry ? () => (booth.roomSetup.value = false) : booth.skipRoomTone}>
               {retry ? 'Use it anyway' : tone ? 'Keep the one I have' : 'Skip for now'}
             </button>
-            <p class="dim">Space starts, Esc {tone || retry ? 'closes' : 'skips'}.</p>
+            <p class="dim">R or Space starts, Esc {tone || retry ? 'closes' : 'skips'}.</p>
           </>
         )}
         {(counting || recording) && (
@@ -783,6 +825,24 @@ function RoomToneSetup() {
         {booth.inputError.value && <p class="vo-error">{booth.inputError.value}</p>}
       </div>
     </div>
+  );
+}
+
+// Syr de valgte opptakene sammen i manusrekkefølge, med romlyd i pausene, og legger dem i Edit.
+export function SendToEdit({ large = false, disabled = false }) {
+  const tone = booth.vo.value.roomTone && booth.opt('voRoomFill') && !booth.plan.value.video;
+  const subs = booth.opt('voSubtitles');
+  return (
+    <>
+      {!large && (
+        <label class="vo-subs-toggle" title="Also add subtitles with the text from the script, timed to each clip">
+          <Toggle checked={subs} onChange={(on) => setPrefs({ voSubtitles: on })} /> Subtitles
+        </label>
+      )}
+      <Button variant="primary" class={large ? 'vo-send' : 'small'} icon={Scissors} onClick={() => booth.stitch({ open: true })} disabled={disabled || booth.busy()} title={`Stitch the chosen takes together in script order${tone ? ', with room tone in the pauses,' : ''}${subs ? ' add subtitles from the script,' : ''} and open them in Edit. Again after retakes to replace them. (${MOD}Return)`}>
+        Send to Edit
+      </Button>
+    </>
   );
 }
 
@@ -804,10 +864,10 @@ function Assemble() {
             <Toggle checked={booth.opt('voRoomFill')} onChange={(on) => setPrefs({ voRoomFill: on })} />
           </>
         )}
+        <span title="Send to Edit also adds subtitles with the text from the script, timed to each clip. Fix them in the Captions tab.">Subtitles from the script</span>
+        <Toggle checked={booth.opt('voSubtitles')} onChange={(on) => setPrefs({ voSubtitles: on })} />
       </div>
-      <Button variant="primary" icon={Scissors} onClick={() => booth.stitch()} disabled={!done || booth.busy()} title={`Put the chosen takes on the timeline in script order (${MOD}Return)`}>
-        {placed ? 'Stitch Again' : 'Stitch to Timeline'}
-      </Button>
+      <SendToEdit large disabled={!done} />
       <p class="dim">
         {video ? 'Talking head takes go into the storyline, cut back to back.' : 'Voice takes go on their own audio track, grouped, under the picture.'}
         {placed ? ` ${placed} clips from the last stitch will be replaced.` : ''}
@@ -816,9 +876,37 @@ function Assemble() {
   );
 }
 
+// Opptak eller AI-stemme, øverst i sidepanelet. Bytter til den personen av den typen som sist ble brukt.
+const lastOf = {};
+function ModeSwitch() {
+  const p = booth.person.value;
+  const ai = Boolean(p?.ai);
+  lastOf[ai ? 'ai' : 'mic'] = p?.id;
+  const busy = booth.status.value !== 'idle';
+  const use = (wantAi) => {
+    if (wantAi === ai) return;
+    const list = booth.people.value.filter((x) => Boolean(x.ai) === wantAi);
+    const next = list.find((x) => x.id === lastOf[wantAi ? 'ai' : 'mic']) || list[0];
+    if (next) booth.choosePerson(next.id);
+    else if (wantAi) openAiVoices();
+    else booth.addPerson();
+  };
+  return (
+    <div class="segmented vo-mode" role="radiogroup" aria-label="Voice source">
+      <button role="radio" aria-checked={!ai} class={ai ? '' : 'active'} disabled={busy} onClick={() => use(false)} title="Record your own voice with the microphone">
+        <Mic size={15} /> Record
+      </button>
+      <button role="radio" aria-checked={ai} class={ai ? 'active' : ''} disabled={busy} onClick={() => use(true)} title="Use an AI voice that reads the script. Free, and runs on this computer.">
+        <Sparkles size={15} /> AI Voice
+      </button>
+    </div>
+  );
+}
+
 function SidePane() {
   return (
     <aside class="vo-side">
+      <ModeSwitch />
       {!booth.person.value?.ai && <Camera />}
       {!booth.person.value?.ai && <Meter />}
       <Transport />

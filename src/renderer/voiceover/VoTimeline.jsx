@@ -2,14 +2,17 @@
 // dra i kantene for å trimme og i hjørnene for fades, og juster volum og pause under.
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { Sparkles, Timer, Eye, EyeOff, Minus, Play, Plus, RotateCcw, Square, Trash2, UserPlus, Volume2, VolumeX, Wand2, Scissors, X } from 'lucide-preact';
+import { Timer, Eye, EyeOff, Minus, Play, Plus, RotateCcw, Square, Trash2, UserPlus, Volume2, VolumeX, Wand2, Scissors, X } from 'lucide-preact';
 import { Button, IconButton, NumberField, Slider } from '../ui.jsx';
-import { formatDuration } from '../../shared/model.js';
-import { normalizeGain, peakDbIn } from '../../shared/voiceover.js';
+import { formatDuration, kfTime, valueAt } from '../../shared/model.js';
+import { formatVolumeDb, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from '../editor/volume.js';
+import { normalizeGain, peakDbIn, roomToneFill } from '../../shared/voiceover.js';
+import { setPrefs } from '../prefs.js';
+import { audioSkimming } from '../editor/store.js';
 import * as booth from './booth.js';
 import * as pv from './preview.js';
-import { openAiVoices } from './AiVoice.jsx';
 import { PAUSES, PacingFields, isDefaultPacing, pacing, resetPacing, setPause } from './Pacing.jsx';
+import { SendToEdit } from './Booth.jsx';
 
 export const selected = signal(null); // opptakets id
 export const pausesOpen = signal(false); // Pauses-vinduet over tidslinjen
@@ -64,6 +67,101 @@ function Wave({ file, from, dur, width, height, gain = 0 }) {
   return <canvas ref={ref} class="vt-wave" style={{ width: `${width}px`, height: `${height}px` }} />;
 }
 
+/* Volum som i Edit: dra linjen opp eller ned, Alt-klikk for et nøkkelbilde, dra punktene, høyreklikk for å slette.
+   Opptaket gjøres om til et klipp i Edit-formatet, så linjen tegnes og endres med samme kode som der. */
+const asClip = (it) => ({ in: it.in, start: it.at, dur: it.dur, props: { volume: it.take.gain || 0 }, kf: it.take.volKf?.length ? { volume: it.take.volKf.map((k) => [...k]) } : {} });
+const saveVolume = (take, c) => booth.setTake(take.id, c.kf.volume?.length ? { volKf: c.kf.volume } : { gain: c.props.volume, volKf: null });
+
+function volumeDrag(e, it, pps, H, kfIndex = null) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  pv.stop();
+  selected.value = it.take.id;
+  const base = asClip(it);
+  const rect = e.currentTarget.closest('.vt-clip').getBoundingClientRect();
+  const T = it.at + (e.clientX - rect.left) / pps;
+  if (e.altKey) {
+    if (kfIndex != null) return;
+    // Nytt punkt på linjen, med volumet som er der.
+    const list = [...(base.kf.volume || []), [Math.round(kfTime(base, T) * 1000) / 1000, Math.round((valueAt(base, 'volume', T) ?? 0) * 10) / 10]];
+    return booth.setTake(it.take.id, { volKf: list.sort((a, b) => a[0] - b[0]) });
+  }
+  const indices = kfIndex == null ? volumeSegment(base, 'volume', T) : [kfIndex];
+  const x0 = e.clientX;
+  const y0 = e.clientY;
+  let dir = kfIndex == null ? 'y' : null; // et punkt dras opp/ned eller sidelengs, etter første bevegelse
+  const move = (ev) => {
+    const dx = ev.clientX - x0;
+    const dy = y0 - ev.clientY;
+    if (!dir) {
+      if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+      dir = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    }
+    const c = asClip(it);
+    if (dir === 'x') moveVolumeKeyframe(c, 'volume', kfIndex, base.kf.volume[kfIndex][0] + dx / pps, 0.01);
+    else shiftVolume(c, 'volume', volumeDelta(dy, H), indices);
+    saveVolume(it.take, c);
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+async function deleteKeyframe(e, it, i) {
+  e.preventDefault();
+  e.stopPropagation();
+  if ((await window.api.popupMenu([{ id: 'delete', label: 'Delete Keyframe' }])) !== 'delete') return;
+  const list = (it.take.volKf || []).filter((_, k) => k !== i);
+  // Med ett punkt igjen blir det vanlig volum for hele klippet, som i Edit.
+  booth.setTake(it.take.id, list.length > 1 ? { volKf: list } : { gain: list[0]?.[1] ?? it.take.gain ?? 0, volKf: null });
+}
+
+function VolumeLine({ it, pps, w, H }) {
+  const c = asClip(it);
+  const path = volumePath(c, 'volume', w, H, pps);
+  const alt = window.api.platform === 'darwin' ? 'Option' : 'Alt';
+  return (
+    <>
+      <svg class="vt-vol" width={w} height={H}>
+        <path class="vol-line" d={path} />
+        <path class="vol-line-hit" d={path} onPointerDown={(e) => volumeDrag(e, it, pps, H)}>
+          <title>{`${it.take.volKf?.length ? 'Volume keyframes' : formatVolumeDb(it.take.gain || 0)} · Drag to adjust the volume. ${alt} click to add a keyframe.`}</title>
+        </path>
+      </svg>
+      {(c.kf.volume || []).map(([t, v], i) => (
+        <div key={i} class="vol-kf-point" style={{ left: `${(t - c.in) * pps - 6}px`, top: `${16 + volumeY(v, H) - 6}px` }} onPointerDown={(e) => volumeDrag(e, it, pps, H, i)} onContextMenu={(e) => deleteKeyframe(e, it, i)} title={`${formatVolumeDb(v)}. Drag up or down for volume, sideways to move. Right click to delete.`} />
+      ))}
+    </>
+  );
+}
+
+// Dra for å skrubbe: spillehodet følger pekeren, med lyd. lane: elementet tiden måles fra.
+function scrubDrag(e, lane, pps, { onUp = null, threshold = 0 } = {}) {
+  const rect = lane.getBoundingClientRect();
+  const plan = booth.plan.value;
+  const at = (x) => Math.max(0, Math.min(plan.end, (x - rect.left) / pps));
+  const x0 = e.clientX;
+  let on = threshold === 0;
+  if (on) pv.time.value = at(e.clientX);
+  const move = (ev) => {
+    if (!on && Math.abs(ev.clientX - x0) < threshold) return;
+    on = true;
+    pv.time.value = at(ev.clientX);
+    pv.scrub(plan, pv.time.value, booth.people.value);
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    onUp?.();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
 // Dra: kanter trimmer, hjørner gir fades. Endringene lagres fortløpende.
 function drag(e, take, kind, pps) {
   e.preventDefault();
@@ -87,6 +185,36 @@ function drag(e, take, kind, pps) {
   window.addEventListener('pointerup', up);
 }
 
+// Kanten over tidslinjen dras for å gjøre den høyere og manuset lavere.
+function resizeTimeline(e) {
+  e.preventDefault();
+  const y0 = e.clientY;
+  const h0 = booth.opt('voTimelineH');
+  const move = (ev) => setPrefs({ voTimelineH: Math.round(Math.max(110, Math.min(window.innerHeight - 320, h0 + y0 - ev.clientY))) });
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+// Dra underkanten av et spor for å gjøre det høyere, så bølgeformen blir lettere å se.
+const ROW_H = 76;
+function resizeRow(e, h0, set) {
+  e.preventDefault();
+  e.stopPropagation();
+  const y0 = e.clientY;
+  const move = (ev) => set(Math.round(Math.max(44, Math.min(320, h0 + ev.clientY - y0))));
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+const RowSize = ({ h, set }) => <div class="vt-row-size" title="Drag to make the track taller or lower" onPointerDown={(e) => resizeRow(e, h, set)} />;
+
 export function VoTimeline() {
   const plan = booth.plan.value;
   const scroller = useRef(null);
@@ -108,6 +236,7 @@ export function VoTimeline() {
   for (const p of booth.people.value) {
     pv.setFx(p.id, p.fx || []);
     pv.setGain(p.id, p.gain || 0);
+    pv.setClean(p.id, p.clean);
   }
   // Endres planen mens den spilles, stoppes avspillingen så det som høres stemmer med det som vises.
   const planRef = useRef(plan);
@@ -119,6 +248,23 @@ export function VoTimeline() {
   const end = Math.max(plan.end, 1);
   const pps = clampPps(((width - HEAD - 40) / end) * zoom);
   const t = pv.time.value;
+  // Spillehodet følger linjen som er valgt: til klippet, eller dit klippet kommer når linjen ikke er tatt opp.
+  // Etter et nytt opptak står det rett etter det nye klippet.
+  const cur = booth.current.value;
+  const who = booth.personId.value;
+  const takes = booth.vo.value.takes;
+  const seen = useRef(takes.length);
+  useEffect(() => {
+    if (pv.playing.value || !cur) return;
+    const live = plan.items.filter((it) => it.active !== false);
+    const fresh = takes.length > seen.current ? live.find((it) => it.take.id === takes.at(-1).id) : null;
+    seen.current = takes.length;
+    const own = live.find((it) => it.take.key === cur.key && it.person === who);
+    const at = fresh ? fresh.at + fresh.dur : own ? own.at : live.find((it) => it.block.index > cur.index)?.at ?? plan.end;
+    pv.time.value = at;
+    const el = scroller.current;
+    if (el && (at * pps < el.scrollLeft || at * pps > el.scrollLeft + el.clientWidth - HEAD - 40)) el.scrollLeft = Math.max(0, at * pps - 80);
+  }, [cur?.key, who, takes.length]);
   // Spillehodet følges når det går ut av synet.
   useEffect(() => {
     const el = scroller.current;
@@ -127,15 +273,42 @@ export function VoTimeline() {
     if (x > el.scrollLeft + el.clientWidth - HEAD - 40 || x < el.scrollLeft) el.scrollLeft = Math.max(0, x - 40);
   }, [t, pps]);
 
+  // Klikk flytter spillehodet. Dra for å skrubbe, med lyd, som i Edit.
   const seek = (e) => {
-    if (e.target.closest('.vt-clip')) return;
-    const rect = e.currentTarget.getBoundingClientRect();
+    if (e.button !== 0 || e.target.closest('.vt-clip:not(.vt-tone-clip)')) return;
     const was = pv.playing.value;
     pv.stop();
-    pv.time.value = Math.max(0, Math.min(plan.end, (e.clientX - rect.left) / pps));
     selected.value = null;
-    if (was) togglePreview();
+    scrubDrag(e, e.currentTarget, pps, { onUp: () => was && togglePreview() });
   };
+  // Skumming som i Edit: en linje følger pekeren, og lyden høres når lydskumming er på.
+  const [skim, setSkim] = useState(null);
+  const onSkim = (e) => {
+    if (e.buttons || e.target.closest('.vt-head')) return setSkim(null);
+    const lane = e.currentTarget.querySelector('.vt-ruler');
+    if (!lane) return;
+    const T = (e.clientX - lane.getBoundingClientRect().left) / pps;
+    if (T < 0 || T > plan.end) return setSkim(null);
+    setSkim(T);
+    if (audioSkimming.value) pv.scrub(plan, T, booth.people.value);
+  };
+  // Knip eller Cmd/Ctrl og rullehjul zoomer rundt pekeren, som i Edit.
+  const onWheel = (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const el = scroller.current;
+    const x = e.clientX - el.getBoundingClientRect().left - HEAD;
+    const T = (el.scrollLeft + x) / pps;
+    const z = Math.max(1, Math.min(40, zoom * Math.exp(-e.deltaY * 0.01)));
+    const next = clampPps(((width - HEAD - 40) / end) * z);
+    setZoom(z);
+    requestAnimationFrame(() => (el.scrollLeft = Math.max(0, T * next - x)));
+  };
+  const tone = !plan.video && booth.vo.value.roomTone;
+  const toneOn = booth.opt('voRoomFill');
+  useEffect(() => {
+    if (tone) pv.load(tone.file).catch(() => {});
+  }, [tone?.file]);
   const step = end > 120 ? 10 : end > 40 ? 5 : 1;
   const ticks = [];
   for (let s = 0; s <= end; s += step) ticks.push(s);
@@ -146,8 +319,9 @@ export function VoTimeline() {
 
   return (
     <section class="vt">
+      <div class="vt-split" title="Drag to make the timeline taller or lower" onPointerDown={resizeTimeline} />
       <div class="vt-bar">
-        <IconButton icon={pv.playing.value ? Square : Play} title="Play the voice from the playhead (Shift Space)" onClick={togglePreview} disabled={!plan.items.length} />
+        <IconButton icon={pv.playing.value ? Square : Play} title="Play the voice from the playhead (Space)" onClick={togglePreview} disabled={!plan.items.length} />
         <span class="vt-time">
           {formatDuration(t)} <span class="dim">/ {formatDuration(plan.end)}</span>
         </span>
@@ -159,23 +333,22 @@ export function VoTimeline() {
         <Button class="small" icon={UserPlus} onClick={booth.addPerson} disabled={booth.busy()} title="Add a person on a new track, with their own takes and sound">
           Add Person
         </Button>
-        <Button class="small" icon={Sparkles} onClick={openAiVoices} disabled={booth.busy()} title="Add an AI voice that reads the script. Free, and runs on this computer.">
-          Add AI Voice
-        </Button>
         <div class="spacer" />
         {skipped > 0 && (
           <Button class="small" icon={RotateCcw} onClick={() => booth.setVo((v) => void (v.skip = {}))} title="Bring back all deleted clips">
             Restore Deleted
           </Button>
         )}
+        <Button class="small" icon={Scissors} onClick={() => booth.trimToVoice(plan.items.filter((i) => i.active !== false).map((i) => i.take))} disabled={!plan.items.length || booth.busy()} title="Find where the voice starts and ends in every clip, and trim away the silence and the clicks from Record and stop. Your own trims on these clips are replaced.">
+          Trim to Voice
+        </Button>
         <IconButton icon={Minus} title="Zoom out" onClick={() => setZoom(Math.max(1, zoom / 1.5))} disabled={zoom <= 1} />
         <IconButton icon={Plus} title="Zoom in" onClick={() => setZoom(Math.min(40, zoom * 1.5))} />
-        <Button variant="primary" class="small" icon={Scissors} onClick={() => booth.stitch()} disabled={!plan.items.some((i) => i.active) || booth.busy()}>
-          {booth.placedCount() ? 'Stitch Again' : 'Stitch to Timeline'}
-        </Button>
+        <SendToEdit disabled={!plan.items.some((i) => i.active)} />
       </div>
-      <div class="vt-scroll" ref={scroller}>
+      <div class="vt-scroll" ref={scroller} style={{ height: `${booth.opt('voTimelineH')}px` }} onWheel={onWheel} onPointerMove={onSkim} onPointerLeave={() => setSkim(null)}>
         <div class="vt-content" style={{ width: `${HEAD + W}px` }}>
+          {skim != null && <div class="vt-skim" style={{ left: `${HEAD + skim * pps}px` }} />}
           <div class="vt-row vt-ruler-row">
             <div class="vt-head vt-head-ruler" />
             <div class="vt-lane vt-ruler" style={{ width: `${W}px` }} onPointerDown={seek}>
@@ -188,8 +361,9 @@ export function VoTimeline() {
             </div>
           </div>
           {people.map((p) => (
-            <div key={p.id} class={`vt-row${p.hidden ? ' hidden' : ''}${p.muted ? ' muted' : ''}${p.id === booth.personId.value ? ' active' : ''}`}>
+            <div key={p.id} class={`vt-row${p.hidden ? ' hidden' : ''}${p.muted ? ' muted' : ''}${p.id === booth.personId.value ? ' active' : ''}`} style={p.hidden ? null : { height: `${p.height || ROW_H}px` }}>
               <TrackHead p={p} />
+              {!p.hidden && <RowSize h={p.height || ROW_H} set={(h) => booth.setPersonHeight(p.id, h)} />}
               <div class="vt-lane" style={{ width: `${W}px` }} onPointerDown={seek}>
                 {!p.hidden && (
                   <>
@@ -199,7 +373,7 @@ export function VoTimeline() {
                     {plan.items
                       .filter((it) => it.person === p.id)
                       .map((it) => (
-                        <Clip key={it.take.id} it={it} pps={pps} color={p.color} />
+                        <Clip key={it.take.id} it={it} pps={pps} color={p.color} rowH={p.height || ROW_H} />
                       ))}
                   </>
                 )}
@@ -207,6 +381,27 @@ export function VoTimeline() {
               </div>
             </div>
           ))}
+          {tone && plan.items.length > 0 && (
+            <div class={`vt-row vt-tone${toneOn ? '' : ' muted'}`} style={{ height: `${booth.opt('voToneH')}px` }}>
+              <RowSize h={booth.opt('voToneH')} set={(h) => setPrefs({ voToneH: h })} />
+              <div class="vt-head">
+                <div class="vt-head-name">
+                  <b class="vt-person">Room tone</b>
+                </div>
+                <div class="vt-head-tools">
+                  <IconButton icon={toneOn ? Volume2 : VolumeX} size={13} active={!toneOn} title={toneOn ? 'Room tone fills the pauses, here and when you send to Edit. Click to leave the pauses silent.' : 'The pauses are silent. Click to fill them with room tone.'} onClick={() => setPrefs({ voRoomFill: !toneOn })} />
+                </div>
+              </div>
+              <div class="vt-lane" style={{ width: `${W}px` }} onPointerDown={seek}>
+                {roomToneFill(plan.gaps, tone.duration).map((piece) => (
+                  <div key={piece.at} class="vt-clip vt-tone-clip" style={{ left: `${piece.at * pps}px`, width: `${Math.max(2, piece.dur * pps)}px`, height: `${booth.opt('voToneH') - 6}px` }}>
+                    <Wave file={tone.file} from={piece.in} dur={piece.dur} width={Math.max(2, piece.dur * pps)} height={booth.opt('voToneH') - 22} />
+                  </div>
+                ))}
+                <div class="vt-playhead" style={{ left: `${t * pps}px` }} />
+              </div>
+            </div>
+          )}
           {!plan.items.length && <p class="dim vt-empty">The takes you keep show up here in script order, the way they will be stitched. Play them through, trim them and adjust them. Add a person to record another voice on its own track.</p>}
         </div>
       </div>
@@ -215,36 +410,39 @@ export function VoTimeline() {
   );
 }
 
-function Clip({ it, pps, color }) {
+function Clip({ it, pps, color, rowH = ROW_H }) {
   const take = it.take;
   const w = Math.max(4, it.dur * pps);
   const on = selected.value === take.id;
   const current = booth.current.value?.key === take.key;
   const fi = take.fadeIn ?? 0.02,
     fo = take.fadeOut ?? 0.04;
-  const H = 54;
+  const H = rowH - 22; // bølgeformen, under navnet
   return (
     <div
       class={`vt-clip${on ? ' on' : ''}${current ? ' current' : ''}${take.video ? ' video' : ''}${it.active === false ? ' inactive' : ''}`}
-      style={{ left: `${it.at * pps}px`, width: `${w}px`, background: color }}
+      style={{ left: `${it.at * pps}px`, width: `${w}px`, height: `${rowH - 6}px`, background: color }}
       title={`${booth.lineNumber(it.block)}. ${it.block.text}`}
       onPointerDown={(e) => {
         e.stopPropagation();
         selected.value = take.id;
         booth.goTo(it.block.index);
         booth.choosePerson(it.person);
+        // Dra i klippet for å skrubbe gjennom det.
+        if (e.button === 0) scrubDrag(e, e.currentTarget.parentElement, pps, { threshold: 4 });
       }}
       onDblClick={() => playOne(it)}
     >
       <div class="vt-label">
         <b>{booth.lineNumber(it.block)}</b> {it.block.text}
       </div>
-      <Wave file={take.file} from={it.in} dur={it.dur} width={w} height={H} gain={take.gain || 0} />
+      <Wave file={take.file} from={it.in} dur={it.dur} width={w} height={H} gain={take.volKf?.length ? 0 : take.gain || 0} />
       <svg class="vt-fades" width={w} height={H} viewBox={`0 0 ${w} ${H}`} preserveAspectRatio="none">
         {fi > 0 && <polygon points={`0,0 ${fi * pps},0 0,${H}`} />}
         {fo > 0 && <polygon points={`${w},0 ${w - fo * pps},0 ${w},${H}`} />}
       </svg>
-      {(take.gain || 0) !== 0 && <span class="vt-gain">{take.gain > 0 ? '+' : ''}{take.gain} dB</span>}
+      {!take.volKf?.length && (take.gain || 0) !== 0 && <span class="vt-gain">{take.gain > 0 ? '+' : ''}{take.gain} dB</span>}
+      <VolumeLine it={it} pps={pps} w={w} H={H} />
       {on && (
         <>
           <div class="vt-edge in" title="Drag to trim the start" onPointerDown={(e) => drag(e, take, 'in', pps)} />
@@ -272,12 +470,23 @@ function ClipControls({ it }) {
         {booth.people.value.length > 1 ? `${booth.people.value.find((p) => p.id === it.person)?.name}, ` : ''}line {booth.lineNumber(it.block)}, take {take.n}
       </b>
       <IconButton icon={Play} size={14} title="Play this clip (double click)" onClick={() => playOne(it)} />
-      <label class="vt-ctl" title="Volume">
-        Volume
-        <Slider value={gain} min={-24} max={12} step={0.5} center={0} onInput={(x) => booth.setTake(take.id, { gain: x })} />
-        <NumberField value={gain} min={-24} max={12} step={0.5} precision={1} unit="dB" width={66} onChange={(x) => booth.setTake(take.id, { gain: x })} />
-      </label>
-      <IconButton icon={Wand2} size={14} title="Normalize: peak at -3 dB" onClick={normalize} />
+      {take.volKf?.length ? (
+        <span class="vt-ctl">
+          Volume has {take.volKf.length} keyframes
+          <Button class="small" onClick={() => booth.setTake(take.id, { gain: take.volKf[0][1], volKf: null })} title="Remove the keyframes and use one volume for the whole clip">
+            Remove Keyframes
+          </Button>
+        </span>
+      ) : (
+        <>
+          <label class="vt-ctl" title="Volume for the whole clip. You can also drag the yellow line in the clip.">
+            Volume
+            <Slider value={gain} min={-24} max={12} step={0.5} center={0} onInput={(x) => booth.setTake(take.id, { gain: x })} />
+            <NumberField value={gain} min={-60} max={12} step={0.5} precision={1} unit="dB" width={66} onChange={(x) => booth.setTake(take.id, { gain: x })} />
+          </label>
+          <IconButton icon={Wand2} size={14} title="Normalize: peak at -3 dB" onClick={normalize} />
+        </>
+      )}
       <label class="vt-ctl">
         Fade in
         <NumberField value={take.fadeIn ?? 0.02} min={0} max={5} step={0.01} precision={2} unit="s" width={66} onChange={(x) => booth.setTake(take.id, { fadeIn: x })} />
