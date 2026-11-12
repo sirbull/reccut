@@ -2789,10 +2789,9 @@ input[type='color'].color::-webkit-color-swatch {
 .speed-grid .chip {
   justify-content: center;
 }
-.tl-content.tool-trim .tl-clip,
-.tl-content.tool-trim .tl-audioband,
-.tl-content.tool-trim .edge.start,
-.tl-content.tool-trim .edge.end { cursor: var(--trim-cursor); }
+.tl-content.tool-trim .tl-clip { cursor: ew-resize; }
+.tl-content.tool-trim .tl-clip.t-caption { cursor: default; }
+.tl-content.tool-trim .edge.roll-edge { cursor: var(--trim-cursor); }
 .tl-content.tool-range, .tl-content.tool-range .tl-clip { cursor: text; }
 .tl-content.tool-zoom, .tl-content.tool-zoom .tl-clip { cursor: zoom-in; }
 .tl-content.tool-zoom:active { cursor: zoom-out; }

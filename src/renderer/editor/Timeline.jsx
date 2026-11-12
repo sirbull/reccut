@@ -1219,6 +1219,19 @@ function LaneBg({ row, p }) {
   );
 }
 
+// Beregn ved hover, så nye naboer og spor-/gruppelåser gjelder uten å tegne alle klipp på nytt.
+function updateRollCursor(e) {
+  const el = e.currentTarget;
+  const p = project.value;
+  const pair = tool.value === 'trim' && rollPair(p, el.dataset.clip, el.dataset.edge);
+  const parents = pair && pair.map((id) => recordingEditId(p, id));
+  const affected = parents && Object.values(p.clips).filter((c) => parents.includes(c.id) || parents.includes(c.linkedTo) || parents.includes(c.slideshowParent));
+  const allowed = pair && pair.every((id) => inEditingGroup(p.clips[id])) &&
+    rollPair(p, parents[0], 'end')?.[1] === parents[1] &&
+    affected.every((c) => !p.lanes?.[c.lane]?.locked);
+  el.classList.toggle('roll-edge', Boolean(allowed));
+}
+
 const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0, labelEnd = 0 }) {
   waveVersion.value;
   const x = PAD + clip.start * z;
@@ -1274,8 +1287,8 @@ const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0,
           <div class="tl-busy-bar" style={{ width: `${Math.max(3, busy.progress * 100)}%` }} />
         </div>
       )}
-      <div class="edge start" data-hit="edge" data-edge="start" data-clip={clip.id} />
-      <div class="edge end" data-hit="edge" data-edge="end" data-clip={clip.id} />
+      <div class="edge start" data-hit="edge" data-edge="start" data-clip={clip.id} onPointerEnter={updateRollCursor} onPointerMove={updateRollCursor} />
+      <div class="edge end" data-hit="edge" data-edge="end" data-clip={clip.id} onPointerEnter={updateRollCursor} onPointerMove={updateRollCursor} />
     </div>
   );
 });
