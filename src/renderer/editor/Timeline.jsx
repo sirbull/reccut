@@ -8,7 +8,6 @@ import {
   AudioLines,
   Captions,
   Spline,
-  Brackets,
   Eye,
   EyeOff,
   Hand,
@@ -1109,10 +1108,21 @@ function TrackHeaders({ rows, p, scrollRef }) {
 }
 
 const isMac = window.api.platform === 'darwin';
+
+// Rullende trim: to kanter med piler utover, som viser at begge sider kan justeres.
+function TrimIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 3h3v18H7M17 3h-3v18h3" />
+      <path d="M1 12l4-4v8ZM23 12l-4-4v8Z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 const TOOLS = [
   { id: 'select', icon: MousePointer2, label: 'Select', key: 'A' },
   { id: 'position', icon: MoveHorizontal, label: 'Position (move clips and leave gaps)', key: 'P' },
-  { id: 'trim', icon: Brackets, label: 'Trim (roll at a cut, slip in a clip, Option drag to slide)', key: 'T' },
+  { id: 'trim', icon: TrimIcon, label: 'Trim (roll at a cut, slip in a clip, Option drag to slide)', key: 'T' },
   { id: 'range', icon: SquareDashed, label: 'Range Selection', key: 'R' },
   { id: 'blade', icon: Scissors, label: 'Blade', key: 'B' },
   { id: 'zoom', icon: Search, label: 'Zoom (Option click to zoom out)', key: 'Z' },
