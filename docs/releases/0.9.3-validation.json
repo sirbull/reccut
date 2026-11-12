@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-12",
+  "date": "2026-11-13",
   "version": "0.9.3",
   "packageVersion": "0.9.3",
   "lockVersion": "0.9.3",
@@ -7,7 +7,8 @@
     "passed": true,
     "runtimeVersion": "0.9.3",
     "displayedVersion": "Version 0.9.3",
-    "screenshot": "../media/about-0.9.3.png"
+    "screenshot": "../media/about-0.9.3.png",
+    "releaseRecheck": "2026-11-13: npm start; selected About Reccut from the application menu; verified text and screenshot"
   },
   "updateCheck": {
     "current": "0.9.3",
@@ -24,7 +25,7 @@
   },
   "tests": {
     "command": "npm test",
-    "passed": 871,
+    "passed": 872,
     "failed": 0
   },
   "build": "npm start rebuilt successfully",
