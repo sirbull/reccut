@@ -311,7 +311,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 </header>
 
 <div class="wrap showcase reveal">
-  <div class="frame"><img src="media/overview.jpg" alt="The current Reccut editor with Record, Edit, Export and Design tabs, the title Into the Wild over a mountain lake, and a timeline of nature clips, titles and music" width="2000" height="1255"></div>
+  <div class="frame"><img src="media/overview.jpg" loading="lazy" alt="The current Reccut editor with Record, Edit, Export and Design tabs, the title Into the Wild over a mountain lake, and a timeline of nature clips, titles and music" width="2000" height="1255"></div>
 </div>
 
 <section id="edit">
@@ -361,7 +361,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     </div>
     <figure class="record-demo reveal">
       <div class="frame">
-        <video id="record-demo" autoplay muted loop playsinline controls preload="metadata" poster="media/record-gameplay.jpg" width="1440" height="904" aria-label="Gameplay and camera recording demo in Reccut">
+        <video id="record-demo" muted loop playsinline controls preload="none" poster="media/record-gameplay.jpg" width="1440" height="904" aria-label="Gameplay and camera recording demo in Reccut">
           <source src="media/record-gameplay.mp4" type="video/mp4">
           <img src="media/record-gameplay.jpg" alt="Reccut recording gameplay from Echoes of Quite Recent, with the creator's face in the lower-right corner" width="2000" height="1255">
         </video>
@@ -708,9 +708,14 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     }
   }, { capture: true });
   const recordDemo = document.getElementById('record-demo');
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    recordDemo.autoplay = false;
-    recordDemo.pause();
+  // Load and start the demo only when it scrolls near the viewport.
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const demoObserver = new IntersectionObserver((entries) => {
+      if (!entries[0].isIntersecting) return;
+      demoObserver.disconnect();
+      recordDemo.play().catch(() => {});
+    }, { rootMargin: '300px' });
+    demoObserver.observe(recordDemo);
   }
   const box = document.getElementById('lightbox');
   const big = box.querySelector('.lightbox-image');

@@ -162,6 +162,16 @@ Choose a preset (YouTube, Apple devices, smallest file, master, GIF, audio only)
 | --- | --- |
 | MP4 (H.264, H.265/HEVC, AV1), WebM (VP9, AV1), MOV (H.264, ProRes 422), MKV, GIF | MP3, AAC, WAV, FLAC, Opus |
 
+## Voice Over Studio and local AI voices
+
+Record narration or talking-head takes from a script, compare takes and stitch
+them into your edit. Use your microphone, Kokoro, language-specific Piper voices,
+or expressive VoxCPM2 voices on an Apple Silicon Mac. VoxCPM offers Norwegian,
+US English, Swedish, Danish and German, with two voices and ten moods per
+language, including Warm and Sensual. Listen before downloading and choose the
+packages you need; synthesis runs locally. See the [voice guide](docs/AI-VOICES.md)
+and [0.9.3 release notes](docs/releases/0.9.3.md) for setup and known limitations.
+
 ## AI agents and model choice
 
 Connect a model in **Settings → AI & Plugins**, import your clips and ask the AI agent to edit them. You can attach a script in the AI chat:
