@@ -1,5 +1,11 @@
 # Reccut
 
+## Nettsiden
+
+- Alt publisert innhold på nettsiden skal være på engelsk: tekst, bildetekster, alternativ tekst, tekst i skjermbilder, demomanus og tale i AI-stemmeeksempler.
+- Bruk engelskspråklig tale i stemmedemoer, også når samtalen om arbeidet foregår på norsk.
+- Lingit-talesyntese og Lingit-stemmer skal ikke brukes. Bruk Reccuts stemmer med åpen lisens til demoer.
+
 ## Ny versjon
 
 Når vi lager en ny versjon av Reccut, må About-vinduet også vise det nye versjonsnummeret.

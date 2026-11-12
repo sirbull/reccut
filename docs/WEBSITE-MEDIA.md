@@ -4,9 +4,9 @@ Refreshed on 5 November 2026 using the current Reccut source. No application ver
 
 ## Voice Over Studio — 12 November 2026
 
-`media/voice-over-studio.jpg` shows the actual studio renderer with a four-paragraph demo script, real narration waveforms, a starred take, audio effect templates, AI Clean Voice and the Send to Edit subtitle option. The narration was generated locally with Kokoro-82M, voice `af_heart`, using the model and eSpeak NG pronunciation add-on pinned in `ttsCatalog.json`. No Lingit voices or other system speech engines are used for the finished image. No user recording or manuscript is included.
+`media/voice-over-studio.jpg` shows the actual studio renderer with a four-paragraph English demo script, real narration waveforms, a starred take, audio effect templates, AI Clean Voice and the Send to Edit subtitle option. The spoken narration is also in English (`en-us`), generated locally with Kokoro-82M, voice `af_heart`, using the model and eSpeak NG pronunciation add-on pinned in `ttsCatalog.json`. No Lingit voices or other system speech engines are used for the finished image. No user recording or manuscript is included.
 
-To photograph the studio again, prepare a directory containing `script.txt` (four paragraphs) and matching `line-0.wav` through `line-3.wav`, then run:
+All published website text, screenshot scripts and spoken voice examples must be in English. To photograph the studio again, prepare a directory containing `script.txt` (four English paragraphs) and matching English narration in `line-0.wav` through `line-3.wav`, then run:
 
 ```sh
 node scripts/capture-voiceover.cjs "<demo-directory>"

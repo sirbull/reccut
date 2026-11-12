@@ -1,6 +1,7 @@
 // Photograph the actual studio in an isolated profile, using demo audio only.
 // Usage: node scripts/capture-voiceover.cjs <demo-directory>
-// The directory contains script.txt (four paragraphs) and line-0.wav to line-3.wav.
+// The directory contains script.txt (four English paragraphs) and matching English
+// narration in line-0.wav to line-3.wav. Use Reccut's openly licensed voices, never Lingit.
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
