@@ -5789,10 +5789,14 @@ button.vo-badge { border: 0; cursor: pointer; }
 
 /* KI-modeller: første oppstart, manglende modell og Settings → AI. */
 .ai-models .modal-body { display: flex; flex-direction: column; gap: 12px; }
+/* Keep complete model groups in the scrollable body instead of shrinking and clipping them. */
+.ai-models .modal-body > * { flex-shrink: 0; }
+.ai-models > header, .ai-models > footer { flex-shrink: 0; }
 .ai-models-reason { margin: 0; padding: 10px 12px; border-radius: 8px; background: rgba(10, 132, 255, 0.12); color: var(--text); line-height: 1.45; }
 .ai-models-group { border: 1px solid var(--line-2); border-radius: 10px; overflow: hidden; }
 .ai-models-group.focus { border-color: var(--accent); }
 .ai-models-group header { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; background: var(--bg-3); }
+.ai-models-group header > div { flex: 1; min-width: 0; }
 .ai-models-group header svg { flex: none; margin-top: 2px; color: var(--accent-2); }
 .ai-models-group header p { margin: 2px 0 0; color: var(--text-2); line-height: 1.4; }
 .ai-models-group ul { list-style: none; margin: 0; padding: 0; }
@@ -5819,6 +5823,6 @@ button.vo-badge { border: 0; cursor: pointer; }
 .ai-style-foot .spacer { flex: 1; }
 .ai-style-foot .dim { font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .ai-models-spacer { width: 13px; flex: none; }
-.ai-models-lang { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--text-2); }
+.ai-models-lang { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 6px; color: var(--text-2); }
 .ai-voice-list li .select { max-width: 170px; flex: none; }
 .ai-voice-list li > .dim { white-space: nowrap; }

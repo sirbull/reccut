@@ -25,6 +25,17 @@ const path = require('path');
 // silently intercept npm start. Keep installed projects/settings in their existing profile.
 const developmentMode = !app.isPackaged && process.argv.includes('--reccut-development');
 if (developmentMode) app.setPath('userData', path.join(app.getPath('appData'), 'Reccut Development'));
+// npm start uses electron.exe, whose default icon and taskbar identity belong to Electron.
+// Set the identity before creating windows, and brand secondary windows as well.
+if (process.platform === 'win32') {
+  const appId = 'no.sirbull.reccut'; // Matches build.appId; builder removes build from the packaged manifest.
+  app.setAppUserModelId(developmentMode ? `${appId}.development` : appId);
+}
+if (process.platform !== 'darwin') {
+  app.on('browser-window-created', (_event, window) => {
+    window.setIcon(path.join(__dirname, '../../assets/icon.png'));
+  });
+}
 const ff = require('./ffmpeg');
 const { finalizeRecordingStream } = require('./recording');
 const jobs = require('./jobs');
