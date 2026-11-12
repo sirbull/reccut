@@ -9,6 +9,7 @@ import { drawTestCard } from './testcard.js';
 import { drawTemplate, findTemplate } from './titletemplates.js';
 import { stabilizeAt } from './stabilize.js';
 import { imageRectAt } from './imageMotion.js';
+import { drawHighlight } from './highlight.js';
 import { clipMatrix, clipPivot, maskList, paintMask, shapeAt, shapeCorners, shapePath } from './shapes.js';
 import {
   DEFAULT_CAPTION_STYLE,
@@ -399,6 +400,7 @@ export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmaske
   const alpha = visualOpacity(clip, T) * alphaMul;
   if (alpha <= 0.001) return;
   if (clip.type === 'adjustment') return drawAdjustment(ctx, project, clip, T, alpha);
+  if (clip.type === 'redact' && clip.props.mode === 'highlight') return drawHighlight(ctx, clip, T, W, H, alpha);
   if (clip.type === 'redact') return drawRedact(ctx, clip, T, W, H, alpha);
   if (!unmasked && clip.type !== 'caption' && maskList(clip).length) return drawMasked(ctx, project, clip, T, getSource, alphaMul);
   const media = project.media[clip.mediaId];

@@ -1,6 +1,6 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
-import { addSequence, currentSequence, deleteSequence, sequenceList, hasFreeTransitions, CAPTION_LANE, CLIP_COLORS, EFFECTS, parseTransitionSelection, transitionSelection, nearestEdit, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, componentVolumeProp, kfTime, valueAt } from '../../shared/model.js';
+import { addSequence, currentSequence, deleteSequence, sequenceList, hasFreeTransitions, CAPTION_LANE, CLIP_COLORS, EFFECTS, parseTransitionSelection, transitionSelection, nearestEdit, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, componentVolumeProp, kfTime, valueAt, HIGHLIGHT_DEFAULTS } from '../../shared/model.js';
 import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates.js';
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
 import { addMask, canMask, removeMask } from '../../shared/shapes.js';
@@ -213,15 +213,21 @@ export function addRedact(mode = 'pixelate', T = getTime(), laneHint = null, ext
   const { start, dur, lane } = frameEffectPlacement(p, T, laneHint);
   const W = p.width;
   const H = p.height;
-  const clip = makeClip('redact', { start, dur, lane, props: { mode, w: Math.round(W * 0.3), h: Math.round(H * 0.12), ...extra } });
+  const size = mode === 'highlight' ? { ...HIGHLIGHT_DEFAULTS, w: Math.round(W * 0.3), h: Math.round(H * 0.25) } : { w: Math.round(W * 0.3), h: Math.round(H * 0.12) };
+  const clip = makeClip('redact', { start, dur, lane, props: { mode, ...size, ...extra } });
   commit((q) => placeFree(q, clip, start, lane));
   selection.value = [clip.id];
-  inspectorTab.value = extra.shape === 'full' ? 'masks' : 'redact';
+  inspectorTab.value = extra.shape === 'full' ? 'masks' : mode === 'highlight' ? 'highlight' : 'redact';
   return clip.id;
 }
 
 // Effekter som dekker hele bildet (Blur, Pixelate og så videre), som et justeringslag.
 // Tegn en maske med pennen for å begrense hvor effekten virker.
+// Highlight Area: et område som tegnes opp med en strek og forstørres, mens resten blir mørkere.
+export function addHighlight(T = getTime(), laneHint = null) {
+  return addRedact('highlight', T, laneHint);
+}
+
 export function addFrameEffect(mode = 'blur', T = getTime(), laneHint = null) {
   const id = addRedact(mode, T, laneHint, { shape: 'full', name: null });
   return id;

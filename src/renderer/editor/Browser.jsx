@@ -25,7 +25,7 @@ import {
   Wand2,
 } from 'lucide-preact';
 import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { renameSequence, sequenceList, timelines, CAPTION_LANE, EFFECTS, REDACT_MODES, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject } from '../../shared/model.js';
+import { renameSequence, sequenceList, timelines, CAPTION_LANE, EFFECTS, REDACT_MODES, HIGHLIGHT_DEFAULTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { parseSrt, speechSources, toSrt, toVtt } from '../../shared/srt.js';
 import { addMediaRecords, switchSequence, usedMedia, projectFolders, audioSkimming, commit, endPreview, getWave, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
@@ -880,6 +880,19 @@ function redactFrameAt(mode) {
   return redactFrames.get(mode);
 }
 
+// Highlight Area: streken tegnes opp, området forstørres og bakgrunnen blir mørkere.
+let highlightFrames = null;
+function highlightFrameAt() {
+  if (!highlightFrames) {
+    highlightFrames = (t) => {
+      const bg = imageClip('login', 0, 3);
+      const r = { id: 'r', type: 'redact', lane: 1, start: 0, in: 0, dur: 3, enabled: true, kf: {}, props: { ...defaultProps('redact'), ...HIGHLIGHT_DEFAULTS, mode: 'highlight', x: 0, y: 115 - 90, w: 190, h: 40, strokeWidth: 3, speed: 0.8 } };
+      return { project: { ...PREVIEW_PROJECT }, frame: { layers: [{ clip: bg, T: t }, { clip: r, T: t }], captions: [] } };
+    };
+  }
+  return highlightFrames;
+}
+
 // Effekter som dekker hele bildet, med en maske tegnet med pennen i forhåndsvisningen.
 const frameFxFrames = new Map();
 function frameFxFrameAt(mode) {
@@ -957,6 +970,14 @@ function EffectsTab() {
         ))}
       </div>
       <p class="hint small">Covers the whole picture, like an adjustment layer. Draw a mask with the pen ({window.api.platform === 'darwin' ? 'Option Cmd M' : 'Ctrl Alt M'}) to choose where it works, and animate the mask with keyframes.</p>
+      <div class="sub-head">Highlight</div>
+      <div class="card-grid">
+        <button class="gen-card" data-highlight="area" draggable onDragStart={(e) => dragData(e, { kind: 'redact', id: 'highlight' })} onClick={() => commands.addHighlight()} title="Outline an area, zoom in on it and darken the rest. Click to add above everything at the playhead, or drag to the timeline. Draw the area in the viewer.">
+          <MiniPreview frameAt={highlightFrameAt()} duration={1.6} still={1.4} label="Highlight Area" />
+          <span>Highlight Area</span>
+        </button>
+      </div>
+      <p class="hint small">The outline draws in, the area zooms and the background darkens. It animates back out at the end of the clip, so the clip length sets how long it is shown.</p>
       <div class="sub-head">Redact</div>
       <div class="card-grid">
         {REDACT_MODES.map((m) => (

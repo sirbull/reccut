@@ -1209,7 +1209,7 @@ const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0,
   const busy = media ? busyMedia.value.get(media.id) : null;
   const colorTag = CLIP_COLORS.find((c) => c.id === clip.colorLabel);
   const cls = ['tl-clip', `t-${clip.type}`, !inEditingGroup(clip) && 'group-outside', busy && 'busy', colorTag && 'labeled', selected && 'selected', !clip.enabled && 'disabled', row.kind === 'primary' && 'primary', clip.group && 'grouped', media?.offline && 'offline', audioComponents(clip, media).length > 0 && audioComponents(clip, media).every((c) => c.off) && 'audio-off'].filter(Boolean).join(' ');
-  const label = clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? `${redactLabel(clip)} (redact)` : clip.type === 'caption' ? clip.props.text || 'Caption' : clip.name || media?.name || clip.type;
+  const label = clip.type === 'title' ? titleText(clip) : clip.type === 'redact' ? (clip.props.mode === 'highlight' ? redactLabel(clip) : `${redactLabel(clip)} (redact)`) : clip.type === 'caption' ? clip.props.text || 'Caption' : clip.name || media?.name || clip.type;
   const narrow = w < 24;
   const thumbStream = clip.recordingPart === 'keys' ? null : clip.recordingPart === 'camera' ? media?.streams?.camera : media?.streams?.screen || media?.streams?.main || media?.streams?.camera;
   const audioComp = primaryComponent(clip, media);
