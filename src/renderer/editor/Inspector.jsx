@@ -552,7 +552,7 @@ function HighlightTab({ clip }) {
     <>
       <Section title="Area">
         <Segmented value={shape} onChange={(v) => set({ shape: v })} options={HIGHLIGHT_SHAPES.map((s) => ({ value: s.id, label: s.label }))} />
-        {shape === 'rect' && <Param clip={clip} prop="corner" label="Rounded corners" min={0} max={100} scale={100} unit="%" def={HIGHLIGHT_DEFAULTS.corner} />}
+        {shape === 'rect' && <Param clip={clip} prop="corner" label="Roundness" min={0} max={100} scale={100} unit="%" def={HIGHLIGHT_DEFAULTS.corner} />}
         <Param clip={clip} prop="x" label="Position X" min={-p.width} max={p.width} unit="px" slider={false} />
         <Param clip={clip} prop="y" label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} />
         <Param clip={clip} prop="w" label="Width" min={8} max={p.width * 1.5} unit="px" />
@@ -695,7 +695,7 @@ function FollowSection({ clip }) {
         )}
       </div>
       <p class="hint">
-        Attach makes this clip follow the track, keeping the place it has at the playhead relative to the object. {live ? 'Live always uses the track as it is now, and moving the clip moves it relative to the object. ' : 'Keyframes writes position and rotation keyframes you can adjust one by one. '}{redact ? 'Track Forward follows what the redaction covers in the video below and attaches it in one step. ' : ''}Scale follows the object as it gets closer or further away.
+        Attach makes this clip follow the track, keeping the place it has at the playhead relative to the object. {live ? 'Live always uses the track as it is now, and moving the clip moves it relative to the object. ' : 'Keyframes writes position and rotation keyframes you can adjust one by one. '}{redact ? `Track Forward follows what the ${clip.props.mode === 'highlight' ? 'highlight area' : 'redaction'} covers in the video below and attaches it in one step. ` : ''}Scale follows the object as it gets closer or further away.
       </p>
     </Section>
   );
