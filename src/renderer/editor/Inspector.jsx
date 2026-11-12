@@ -588,8 +588,12 @@ function HighlightTab({ clip }) {
         </Row>
         {pr.dropShadow !== false && (
           <>
-            <Param clip={clip} prop="shadowSize" label="Strength" min={0} max={100} scale={100} unit="%" def={HIGHLIGHT_DEFAULTS.shadowSize} />
+            <Param clip={clip} prop="shadowSize" label="Size" min={0} max={200} unit="px" def={HIGHLIGHT_DEFAULTS.shadowSize} />
+            <Param clip={clip} prop="shadowStrength" label="Strength" min={0} max={100} scale={100} unit="%" def={HIGHLIGHT_DEFAULTS.shadowStrength} />
             <Param clip={clip} prop="shadowOpacity" label="Opacity" min={0} max={100} scale={100} unit="%" def={HIGHLIGHT_DEFAULTS.shadowOpacity} />
+            <Param clip={clip} prop="shadowAngle" label="Angle" min={-180} max={180} unit="°" center={0} def={HIGHLIGHT_DEFAULTS.shadowAngle} />
+            <Param clip={clip} prop="shadowDistance" label="Distance" min={0} max={100} unit="px" def={HIGHLIGHT_DEFAULTS.shadowDistance} />
+            <p class="hint">Size is how far the shadow reaches. Strength makes its edge harder: 0 % is fully soft, 100 % is a sharp edge. Angle 90° casts it straight down.</p>
           </>
         )}
       </Section>

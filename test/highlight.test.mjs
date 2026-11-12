@@ -53,3 +53,14 @@ test('highlight: eget navn og standardverdier med strek og skygge på', () => {
   assert.equal(c.props.dropShadow, true);
   assert.ok(c.props.zoom > 1);
 });
+
+test('highlight: skyggens hardhet deler størrelsen mellom spredning og uskarphet, og vinkelen flytter den', async () => {
+  const { shadowParams } = await import('../src/shared/highlight.js');
+  const c = makeClip('redact', { props: { mode: 'highlight', ...HIGHLIGHT_DEFAULTS, shadowSize: 40, shadowStrength: 0.25, shadowAngle: 90, shadowDistance: 10 } });
+  const s = shadowParams(c, 0);
+  assert.equal(s.spread, 10);
+  assert.equal(s.blur, 30);
+  assert.ok(Math.abs(s.dx) < 1e-9 && Math.abs(s.dy - 10) < 1e-9);
+  c.props.shadowAngle = 0;
+  assert.ok(Math.abs(shadowParams(c, 0).dx - 10) < 1e-9);
+});

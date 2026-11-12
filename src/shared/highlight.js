@@ -79,6 +79,38 @@ function partialPath(pts, part) {
   return path;
 }
 
+/**
+ * Skyggen under området. Size er hvor langt den når ut (px), Strength hvor hard kanten er:
+ * 0 er bare uskarphet, 1 er en skarp kant. Angle (grader, 90 er rett ned) og Distance flytter den.
+ */
+export function shadowParams(clip, T) {
+  const size = Math.max(0, prop(clip, 'shadowSize', T));
+  const hard = clamp01(prop(clip, 'shadowStrength', T));
+  const angle = ((prop(clip, 'shadowAngle', T) || 0) * Math.PI) / 180;
+  const dist = Math.max(0, prop(clip, 'shadowDistance', T));
+  return { spread: size * hard, blur: size * (1 - hard), dx: Math.cos(angle) * dist, dy: Math.sin(angle) * dist, opacity: clamp01(prop(clip, 'shadowOpacity', T)) };
+}
+
+function drawShadow(o, clip, T, area, k, z, cw, ch) {
+  const s = shadowParams(clip, T);
+  const opacity = s.opacity * z;
+  if (opacity <= 0.001) return;
+  const { c: sh, g } = scratch(2, cw, ch);
+  g.fillStyle = '#000';
+  g.fill(area);
+  if (s.spread > 0.25) {
+    g.strokeStyle = '#000';
+    g.lineJoin = 'round';
+    g.lineWidth = s.spread * 2 * k;
+    g.stroke(area);
+  }
+  o.save();
+  o.globalAlpha = opacity;
+  if (s.blur * k > 0.3) o.filter = `blur(${((s.blur * k) / 2).toFixed(1)}px)`;
+  o.drawImage(sh, s.dx * k, s.dy * k);
+  o.restore();
+}
+
 export function drawHighlight(ctx, clip, T, W, H, alpha) {
   const withStroke = flag(clip, 'stroke');
   const { stroke, zoom: z } = highlightProgress(T - clip.start, clip.dur, Math.max(0.05, prop(clip, 'speed', T)), withStroke);
@@ -117,19 +149,7 @@ export function drawHighlight(ctx, clip, T, W, H, alpha) {
     }
   }
   const area = polyPath(dev);
-  if (z > 0.001 && flag(clip, 'dropShadow')) {
-    const size = clamp01(prop(clip, 'shadowSize', T));
-    const op = clamp01(prop(clip, 'shadowOpacity', T)) * z;
-    if (size > 0 && op > 0) {
-      o.save();
-      o.shadowColor = `rgba(0,0,0,${op.toFixed(3)})`;
-      o.shadowBlur = size * 0.06 * H * k;
-      o.shadowOffsetY = size * 0.015 * H * k;
-      o.fillStyle = '#000';
-      o.fill(area);
-      o.restore();
-    }
-  }
+  if (z > 0.001 && flag(clip, 'dropShadow')) drawShadow(o, clip, T, area, k, z, cw, ch);
   // Området selv, forstørret rundt midten.
   o.save();
   o.clip(area);

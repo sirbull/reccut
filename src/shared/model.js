@@ -260,8 +260,11 @@ export const HIGHLIGHT_DEFAULTS = {
   strokeWidth: 6,
   speed: 0.9,
   dropShadow: true,
-  shadowSize: 0.5,
+  shadowSize: 40,
+  shadowStrength: 0.3,
   shadowOpacity: 0.6,
+  shadowAngle: 90,
+  shadowDistance: 12,
 };
 export function redactLabel(clip) {
   if (clip.props?.mode === 'highlight') return clip.name || 'Highlight Area';
