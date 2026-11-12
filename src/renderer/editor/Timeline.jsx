@@ -622,8 +622,12 @@ export function Timeline() {
     }
     if (d.kind === 'roll') {
       const s1 = snap(d.cut + dt, new Set([d.a, d.b]));
-      setSnapLine(s1.snapped ? s1.t : null);
-      updateTransient((p) => rollEdit(p, d.a, d.b, s1.t - d.cut));
+      // Begge sider av kuttet redigeres, selv om bare ett klipp er valgt inne i en gruppe.
+      const ids = new Set([d.a, d.b, recordingEditId(project.value, d.a), recordingEditId(project.value, d.b)]);
+      for (const c of Object.values(project.value.clips)) if (ids.has(c.linkedTo || c.slideshowParent)) ids.add(c.id);
+      updateTransient((p) => rollEdit(p, d.a, d.b, s1.t - d.cut), [...ids]);
+      const cut = project.value.clips[d.b].start;
+      setSnapLine(s1.snapped && Math.abs(cut - s1.t) < 1 / project.value.fps ? cut : null);
       return;
     }
     if (d.kind === 'slip') {

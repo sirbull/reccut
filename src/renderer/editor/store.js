@@ -285,8 +285,8 @@ export function commitClipEdit(mutator) {
   return commit((p) => editGroupContents(p, editingGroup.value, selection.value, mutator));
 }
 
-export function updateClipEdit(mutator) {
-  updateTransient((p) => editGroupContents(p, editingGroup.value, selection.value, mutator));
+export function updateClipEdit(mutator, ids = selection.value) {
+  updateTransient((p) => editGroupContents(p, editingGroup.value, ids, mutator));
 }
 
 let transientBase = null;

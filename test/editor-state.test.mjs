@@ -70,6 +70,28 @@ test('rolling caption timing previews from the drag start and commits as one und
   assert.deepEqual(timing(), [[2, 4], [6, 2]]);
 });
 
+test('rolling inside a group changes both neighbours even when only the first is selected', () => {
+  const { store: s, id } = setup();
+  const next = s.makeCaptionClip(5, 'Next caption', 3);
+  const last = s.makeCaptionClip(8, 'Untouched caption', 3);
+  s.commit(p => {
+    p.clips[next.id] = next;
+    p.clips[last.id] = last;
+    for (const c of Object.values(p.clips)) c.group = 'captions';
+  });
+  s.enterGroup(id);
+  s.beginTransient();
+  s.updateClipEdit(p => rollEdit(p, id, next.id, 1), [id, next.id]);
+  s.endTransient(true);
+  assert.equal(s.project.value.clips[id].dur, 4);
+  assert.deepEqual([s.project.value.clips[next.id].start, s.project.value.clips[next.id].dur], [6, 2]);
+  assert.equal(s.project.value.clips[last.id].start, 8);
+  assert.ok(Object.values(s.project.value.clips).every(c => c.group === 'captions'));
+  s.undo();
+  assert.equal(s.project.value.clips[id].dur, 3);
+  assert.equal(s.project.value.clips[next.id].start, 5);
+});
+
 test('an empty video track goes away when its last clip leaves it', () => {
   const { store: s } = setup();
   s.commit(p => { p.tracks = { video: 2, audio: 1 }; });
