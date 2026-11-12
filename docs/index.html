@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reccut — Open-source video editor and screen recorder</title>
-<meta name="description" content="Edit videos, record your screen and camera, create thumbnails and edit images. Free and open source for Mac, Windows and Linux, with optional AI agents.">
+<meta name="description" content="Edit videos, record your screen and voice, clean up audio with local AI and export closed captions. Free and open source for Mac, Windows and Linux.">
 <meta property="og:title" content="Reccut — Open-source video editor and screen recorder">
-<meta property="og:description" content="Edit videos, record your screen and camera, create thumbnails and edit images in one open-source app for Mac, Windows and Linux.">
+<meta property="og:description" content="Video editing, screen recording, Voice Over Studio, local AI audio cleanup and closed caption exports in one free, open-source app.">
 <meta property="og:image" content="media/overview.jpg">
 <meta name="theme-color" content="#0b0c0e">
 <link rel="icon" type="image/png" href="media/icon-192.png">
@@ -275,8 +275,9 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <a class="brand" href="#"><img src="media/reccut-wordmark.svg" alt="Reccut" width="94" height="28"></a>
     <div class="links">
-      <a href="#edit">Video editing</a>
+      <a href="#edit">Edit</a>
       <a href="#record">Record</a>
+      <a href="#voiceover">Voice over</a>
       <a href="#looks">Color</a>
       <a href="#design">Design</a>
       <a href="#export">Export</a>
@@ -386,6 +387,35 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 </section>
 
 
+
+<section id="voiceover" aria-labelledby="voiceover-title">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Voice Over Studio</div>
+      <h2 id="voiceover-title">Your script. Your voice.<br><span class="serif">Your best take.</span></h2>
+      <p class="sub">Record narration or a talking head, one line at a time. Keep your best takes, adjust the pauses and send the finished voice over straight to your timeline, with subtitles from your script.</p>
+    </div>
+    <figure class="reveal" style="margin-top:40px">
+      <div class="frame"><img src="media/voice-over-studio.jpg" alt="Voice Over Studio in Reccut with a four-line demo script, a starred take, narration waveforms, audio effect templates, AI Clean Voice and Send to Edit with subtitles" loading="lazy" width="2000" height="1141"></div>
+      <figcaption class="caption">The script, takes, sound controls and narration timeline together in Voice Over Studio. Click to enlarge.</figcaption>
+    </figure>
+    <div class="rooms reveal">
+      <div class="room">
+        <h3>Keep the take you like</h3>
+        <p>Read from your script or use the teleprompter. Record another take, star your favourite and trim to where the voice starts and ends. Set the pauses between lines and fill them with room tone.</p>
+      </div>
+      <div class="room">
+        <h3>Clean up and shape your sound</h3>
+        <p>AI Clean Voice reduces background noise on your computer. Then shape the voice with EQ, compression, de-essing and other effects, or start with the Studio Voice preset. Preview the result as you work.</p>
+      </div>
+      <div class="room">
+        <h3>Your voice, or a local AI voice</h3>
+        <p>Record with your microphone or download an AI voice to read the script locally. Send the chosen takes to Edit in one step. After a retake, send them again to update the previous assembly.</p>
+      </div>
+    </div>
+    <p class="caption">AI voices and audio cleanup run on your computer. No subscription or cloud upload is needed.</p>
+  </div>
+</section>
 
 <section id="keying">
   <div class="wrap">
@@ -547,11 +577,13 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 <section id="subtitles" style="padding-top:0" aria-labelledby="subtitles-title">
   <div class="wrap">
     <div class="format-card reveal">
-      <div class="kicker">Free local AI</div>
+      <div class="kicker">Closed captions &amp; subtitle export</div>
       <h2 id="subtitles-title" style="font-size:clamp(28px,4vw,40px)">Closed captions, <span class="serif">on your computer</span></h2>
-      <p>Generate closed captions (subtitles) with free AI models that run locally. Choose a model to balance speed and accuracy, then review and edit the captions on the timeline.</p>
-      <p class="providers">Whisper Base is included. Download additional models in Settings → AI → Manage Models and use them offline, with no account or API key. Export SRT/WebVTT files or embed a subtitle track.</p>
+      <p>Generate captions from speech with free, local AI models, or bring them in from your Voice Over Studio script. Review the text and timing on the timeline, then export your closed captions directly from Reccut.</p>
+      <p><b>Need just the captions?</b> Use <b>Export Captions Only</b> to save an SRT or WebVTT file without rendering the video again. You can also embed a subtitle track that viewers can switch on and off, or burn subtitles into the picture.</p>
+      <p class="providers">Download the speech model you need in Settings → AI, then use it offline with no account or API key. Choose a smaller model for speed or a larger one for accuracy.</p>
       <div class="chips">
+        <span class="chip hot">SRT</span><span class="chip hot">WebVTT</span><span class="chip hot">Embedded subtitle track</span>
         <span class="chip">Whisper Tiny</span><span class="chip">Whisper Base</span><span class="chip">Whisper Small</span><span class="chip">Whisper Medium</span><span class="chip">Whisper Large V3 Turbo</span>
       </div>
     </div>
@@ -601,7 +633,11 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     </div>
     <div class="grid reveal">
       <div><h4>Video &amp; audio import</h4><p>H.264, H.265, ProRes, MP3, WAV, FLAC and many more. <a href="#formats">See formats and codecs</a>.</p></div>
-      <div><h4>Audio cleanup</h4><p>Noise reduction, hum removal, EQ, compressor and 30+ presets like Podcast Voice.</p></div>
+      <div><h4>AI Clean Voice</h4><p>Reduce background noise locally in Voice Over Studio or on audio clips in Edit. Preview the result before exporting.</p></div>
+      <div><h4>Audio effects &amp; presets</h4><p>EQ, compression, de-essing, hum removal and voice character effects. Start with Studio Voice or Podcast Voice, then adjust the sound.</p></div>
+      <div><h4>Voice Over Studio</h4><p>A script, teleprompter, retakes and a timeline for your narration. <a href="#voiceover">See the studio</a>.</p></div>
+      <div><h4>Quick audio recording</h4><p>Need a short voice clip? Open Record Audio, choose your microphone and record straight into the media library.</p></div>
+      <div><h4>Closed caption exports</h4><p>Save SRT or WebVTT files directly, or include a switchable subtitle track with the video. <a href="#subtitles">See caption options</a>.</p></div>
       <div><h4>One-click background removal</h4><p>Auto-sampled chroma key, with advanced edge and matte controls for demanding shots. <a href="#keying">Compare before and after</a>.</p></div>
       <div><h4>Photoshop layers</h4><p>Import PSD and SVG files as separate, stacked layers ready to animate.</p></div>
       <div><h4>Redaction</h4><p>Pixelate or blur faces, passwords and number plates, and follow them with keyframes.</p></div>
