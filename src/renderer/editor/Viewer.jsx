@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { Activity, Maximize2, Minimize2, Settings2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-preact';
 import { deepClone, formatTimecode, isVisual, kfTime, valueAt } from '../../shared/model.js';
 import { captionLayout, wrapText } from '../../shared/render.js';
-import { clipBox, clipMatrix, clipPivot, maskList, shapeAt } from '../../shared/shapes.js';
+import { clipBox, clipMatrix, clipPivot, highlightOutline, maskList, shapeAt } from '../../shared/shapes.js';
 import { followMatrix } from '../../shared/follow.js';
 import { beginTransient, browserPlayhead, commit, endTransient, getTime, playing, project, selectedClips, room, selectedTransition, selection, skim, timeSig, updateTransient } from './store.js';
 import * as playback from './playback.js';
@@ -141,7 +141,7 @@ export function Viewer() {
       <div class="viewer-box" ref={boxRef} onDblClick={toggleFullscreen}>
         <canvas ref={canvasRef} class={draggable ? (sel.type === 'redact' ? 'drawable' : 'movable') : ''} onPointerDown={onCanvasDown} />
         {pen && sel?.id === pen.clipId && <PenOverlay clip={sel} canvasRef={canvasRef} />}
-        {sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} label="Redaction. Drag to move, drag the handles to resize." />}
+        {sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} corner={sel.props.mode === 'highlight' && sel.props.shape !== 'ellipse' ? valueAt(sel, 'corner', clipTime(sel)) ?? 0 : null} label={sel.props.mode === 'highlight' ? 'Highlight area. Drag to move, drag the handles to resize, and the round handle to rotate.' : 'Redaction. Drag to move, drag the handles to resize.'} />}
         {sel && sel.type !== 'redact' && trackArea.value === sel.id && !pen && <ShapeEditor clip={sel} prefix="track." shape="rect" smooth={false} canvasRef={canvasRef} label="Tracking area. Put it over what the clip should follow." />}
         {draggable && sel.type !== 'redact' && sel.type !== 'caption' && (commands.shownInspectorTab.value === 'video' || (commands.shownInspectorTab.value === 'recording' && sel.recordingPart === 'camera')) && !pen && !editMask && trackArea.value !== sel.id && <TransformBox clip={sel} canvasRef={canvasRef} />}
         {editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
@@ -210,15 +210,24 @@ function drawRedactBox(e, clip, canvas, p) {
   beginTransient();
   canvas.setPointerCapture(e.pointerId);
   const move = (ev) => {
-    const x1 = (ev.clientX - r.left) * k;
-    const y1 = (ev.clientY - r.top) * k;
-    const w = Math.abs(x1 - x0);
-    const h = Math.abs(y1 - y0);
+    let dx = (ev.clientX - r.left) * k - x0;
+    let dy = (ev.clientY - r.top) * k - y0;
+    // Shift: like sider (kvadrat eller sirkel). Alt: tegnes ut fra midten.
+    if (ev.shiftKey) {
+      const d = Math.max(Math.abs(dx), Math.abs(dy));
+      dx = Math.sign(dx || 1) * d;
+      dy = Math.sign(dy || 1) * d;
+    }
+    const alt = ev.altKey;
+    const w = Math.abs(dx) * (alt ? 2 : 1);
+    const h = Math.abs(dy) * (alt ? 2 : 1);
     if (w < 6 && h < 6) return;
+    const cx = alt ? x0 : x0 + dx / 2;
+    const cy = alt ? y0 : y0 + dy / 2;
     updateTransient((q) => {
       const c = q.clips[clip.id];
-      putValue(c, 'x', Math.round((x0 + x1) / 2 - p.width / 2), T);
-      putValue(c, 'y', Math.round((y0 + y1) / 2 - p.height / 2), T);
+      putValue(c, 'x', Math.round(cx - p.width / 2), T);
+      putValue(c, 'y', Math.round(cy - p.height / 2), T);
       putValue(c, 'w', Math.round(Math.max(8, w)), T);
       putValue(c, 'h', Math.round(Math.max(8, h)), T);
       putValue(c, 'rotation', 0, T);
@@ -381,7 +390,7 @@ function outlinePoints(g) {
   return out;
 }
 
-export function ShapeEditor({ clip, prefix, shape, smooth, canvasRef, label }) {
+export function ShapeEditor({ clip, prefix, shape, smooth, canvasRef, label, corner = null }) {
   const p = project.value;
   const T = timeSig.value;
   const [box, setBox] = useState(null);
@@ -405,7 +414,7 @@ export function ShapeEditor({ clip, prefix, shape, smooth, canvasRef, label }) {
     const q = M.transformPoint(new DOMPoint(x, y));
     return [q.x, q.y];
   };
-  const outline = outlinePoints(g).map(toView);
+  const outline = (corner != null && shape === 'rect' ? highlightOutline(g, corner) : outlinePoints(g)).map(toView);
   const r = 5.5 / k;
   // Skjermpunkt til klippets rom.
   const toClip = (ev, svg) => {
@@ -444,7 +453,12 @@ export function ShapeEditor({ clip, prefix, shape, smooth, canvasRef, label }) {
       const dy = now[1] - start[1];
       updateTransient((q) => {
         const c = q.clips[clip.id];
-        if (kind === 'move') {
+        if (kind === 'rotate') {
+          const turn = Math.atan2(now[1] - g0.cy, now[0] - g0.cx) - Math.atan2(start[1] - g0.cy, start[0] - g0.cx);
+          const v = ((g0.rot + turn) * 180) / Math.PI;
+          const deg = ev.shiftKey ? Math.round(v / 15) * 15 : Math.round(v * 10) / 10;
+          putValue(c, prefix + 'rotation', ((deg + 540) % 360) - 180, Tc);
+        } else if (kind === 'move') {
           putValue(c, prefix + 'x', Math.round(g0.cx + dx - W / 2), Tc);
           putValue(c, prefix + 'y', Math.round(g0.cy + dy - H / 2), Tc);
         } else if (kind === 'point') {
@@ -526,6 +540,10 @@ export function ShapeEditor({ clip, prefix, shape, smooth, canvasRef, label }) {
   };
 
   const handles = shape === 'path' ? g.pts.map(toView) : HANDLES.map(([hx, hy]) => toView([g.cx + (hx * g.w * Math.cos(g.rot)) / 2 - (hy * g.h * Math.sin(g.rot)) / 2, g.cy + (hx * g.w * Math.sin(g.rot)) / 2 + (hy * g.h * Math.cos(g.rot)) / 2]));
+  // Rotasjonshåndtaket står over midten av den øverste kanten.
+  const lift = g.h / 2 + 26 / k;
+  const rotTop = toView([g.cx + (g.h / 2) * Math.sin(g.rot), g.cy - (g.h / 2) * Math.cos(g.rot)]);
+  const rotHandle = shape === 'path' ? null : toView([g.cx + lift * Math.sin(g.rot), g.cy - lift * Math.cos(g.rot)]);
   const d = smooth && shape === 'path' && outline.length > 2 ? smoothD(outline) : `M${outline.map((q) => q.join(',')).join('L')}Z`;
   return (
     <svg class="shape-editor" style={{ left: box.left, top: box.top, width: box.width, height: box.height }} viewBox={`0 0 ${W} ${H}`}>
@@ -533,6 +551,12 @@ export function ShapeEditor({ clip, prefix, shape, smooth, canvasRef, label }) {
         <title>{label}</title>
       </path>
       <path d={d} class="shape-edge" style={{ strokeWidth: 10 / k }} onDblClick={addPoint} onPointerDown={(e) => drag(e, 'move')} />
+      {rotHandle && <line x1={rotTop[0]} y1={rotTop[1]} x2={rotHandle[0]} y2={rotHandle[1]} class="transform-outline" style={{ strokeWidth: 1.5 / k, fill: 'none', stroke: 'var(--yellow)' }} />}
+      {rotHandle && (
+        <circle cx={rotHandle[0]} cy={rotHandle[1]} r={r} class="shape-handle" style={{ strokeWidth: 1 / k, cursor: 'grab' }} onPointerDown={(e) => drag(e, 'rotate')}>
+          <title>Drag to rotate. Hold Shift for 15° steps.</title>
+        </circle>
+      )}
       {handles.map(([x, y], i) =>
         shape === 'path' ? (
           <circle key={i} cx={x} cy={y} r={r} class="shape-handle point" style={{ strokeWidth: 1 / k }} onPointerDown={(e) => drag(e, 'point', i)}>

@@ -255,3 +255,41 @@ export function paintMask(g, clip, T, W, H, base, cw, ch, project) {
   g.globalCompositeOperation = 'source-over';
   return true;
 }
+
+/* Highlight Area */
+
+// Omrisset til et highlight-område som punkter i bildets rom, med klokka fra øvre venstre hjørne
+// (der streken starter). corner er hjørneradiusen som andel av halve den korteste siden (0 til 1).
+export function highlightOutline(g, corner = 0) {
+  const out = [];
+  const hw = g.w / 2;
+  const hh = g.h / 2;
+  if (g.shape === 'ellipse') {
+    const n = 160;
+    for (let i = 0; i < n; i++) {
+      const a = (-3 * Math.PI) / 4 + (i / n) * Math.PI * 2;
+      out.push([Math.cos(a) * hw, Math.sin(a) * hh]);
+    }
+  } else {
+    const r = Math.max(0, Math.min(1, corner || 0)) * Math.min(hw, hh);
+    // Hjørnene i rekkefølge: øverst til høyre, nederst til høyre, nederst til venstre, øverst til venstre.
+    const corners = [[hw - r, -hh + r, -Math.PI / 2], [hw - r, hh - r, 0], [-hw + r, hh - r, Math.PI / 2], [-hw + r, -hh + r, Math.PI]];
+    const seg = r > 0.5 ? 14 : 0;
+    out.push([-hw + r, -hh]);
+    for (const [x, y, a0] of corners) {
+      if (!seg) {
+        out.push([x, y]);
+        continue;
+      }
+      for (let i = 0; i <= seg; i++) {
+        const a = a0 + (i / seg) * (Math.PI / 2);
+        out.push([x + Math.cos(a) * r, y + Math.sin(a) * r]);
+      }
+    }
+    // Siste bue ender der streken startet.
+    if (seg) out.pop();
+  }
+  const c = Math.cos(g.rot);
+  const s = Math.sin(g.rot);
+  return out.map(([u, v]) => [g.cx + u * c - v * s, g.cy + u * s + v * c]);
+}

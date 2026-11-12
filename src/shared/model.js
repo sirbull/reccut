@@ -243,7 +243,31 @@ export const REDACT_SHAPES = [
   { id: 'ellipse', label: 'Ellipse' },
   { id: 'path', label: 'Freeform' },
 ];
+// Highlight Area: et område tegnes opp med en strek, forstørres, og resten av bildet blir mørkere og
+// uskarpt. Det ligger som et sladdeklipp med mode 'highlight', så form, tegning i bildet og sporing er de samme.
+export const HIGHLIGHT_SHAPES = [
+  { id: 'rect', label: 'Square' },
+  { id: 'ellipse', label: 'Circle' },
+];
+export const HIGHLIGHT_DEFAULTS = {
+  shape: 'rect',
+  corner: 0.35,
+  zoom: 1.3,
+  dim: 0.55,
+  bgBlur: 0.35,
+  stroke: true,
+  strokeColor: '#ffb020',
+  strokeWidth: 6,
+  speed: 0.9,
+  dropShadow: true,
+  shadowSize: 40,
+  shadowStrength: 0.3,
+  shadowOpacity: 0.6,
+  shadowAngle: 90,
+  shadowDistance: 12,
+};
 export function redactLabel(clip) {
+  if (clip.props?.mode === 'highlight') return clip.name || 'Highlight Area';
   const m = REDACT_MODES.find((x) => x.id === clip.props?.mode);
   return clip.name || (m ? m.label : 'Redact');
 }

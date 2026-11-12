@@ -8,7 +8,7 @@ import { RemoveEffectButton } from './RemoveEffectButton.jsx';
 import { VideoEffects } from './VideoEffects.jsx';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
-import { ArrowDown, ArrowUp, Captions, ChevronLeft, ChevronRight, Circle, Diamond, EyeOff, Film, PanelLeft, PanelRight, PenTool, RectangleHorizontal, SquareDashed, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
+import { ArrowDown, ArrowUp, Captions, ChevronLeft, ChevronRight, Circle, Diamond, EyeOff, Film, Focus, PanelLeft, PanelRight, PenTool, RectangleHorizontal, SquareDashed, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
 import {
   audioComponents,
   CLIP_COLORS,
@@ -23,6 +23,8 @@ import {
   EFFECTS,
   SHADOW_DEFAULTS,
   REDACT_MODES,
+  HIGHLIGHT_DEFAULTS,
+  HIGHLIGHT_SHAPES,
   REDACT_SHAPES,
   redactLabel,
   TITLE_STYLES,
@@ -148,7 +150,8 @@ function tabsFor(clip, media) {
   if (clip.type === 'title' && !clip.props.patternKind) tabs.push({ id: 'text', label: 'Text', icon: Type });
   if (clip.type === 'caption') tabs.push({ id: 'caption', label: 'Caption', icon: Captions });
   if (clip.type === 'recording') tabs.push({ id: 'recording', label: 'Recording', icon: MonitorPlay });
-  if (clip.type === 'redact') tabs.push({ id: 'redact', label: 'Redact', icon: EyeOff });
+  if (clip.type === 'redact' && clip.props.mode === 'highlight') tabs.push({ id: 'highlight', label: 'Highlight', icon: Focus });
+  else if (clip.type === 'redact') tabs.push({ id: 'redact', label: 'Redact', icon: EyeOff });
   if (isVisual(clip) && clip.type !== 'gap' && clip.type !== 'redact') tabs.push({ id: 'video', label: 'Video', icon: Film });
   const keys = clip.recordingPart === 'keys'; // Bare tegnede taster, ingen bilder å fargekorrigere.
   if (!keys && (clip.type === 'video' || clip.type === 'image' || clip.type === 'recording' || clip.type === 'adjustment')) tabs.push({ id: 'color', label: 'Color', icon: Palette });
@@ -214,6 +217,7 @@ function ClipInspector({ clip, clips = [clip], group = false }) {
         {tab === 'recording' && <RecordingTab clip={clip} media={media} />}
         {tab === 'video' && (group ? <GroupVideoTab clips={clips} /> : <VideoTab clip={clip} />)}
         {tab === 'redact' && <RedactTab clip={clip} />}
+        {tab === 'highlight' && <HighlightTab clip={clip} />}
         {tab === 'masks' && <MasksTab clip={clip} />}
         {tab === 'effects' && <EffectsTab clip={clip} multi={multi} />}
         {tab === 'audio' && <AudioTab clip={clip} />}
@@ -537,6 +541,72 @@ function RedactTab({ clip }) {
   );
 }
 
+// Highlight Area: området forstørres og streken tegnes opp. Animasjonen følger starten og slutten på klippet.
+function HighlightTab({ clip }) {
+  const p = project.value;
+  const pr = { ...HIGHLIGHT_DEFAULTS, ...clip.props };
+  const set = (patch) => commit((q) => Object.assign(q.clips[clip.id].props, patch));
+  const live = (key) => (v) => updateTransient((q) => (q.clips[clip.id].props[key] = v));
+  const shape = pr.shape === 'ellipse' ? 'ellipse' : 'rect';
+  return (
+    <>
+      <Section title="Area">
+        <Segmented value={shape} onChange={(v) => set({ shape: v })} options={HIGHLIGHT_SHAPES.map((s) => ({ value: s.id, label: s.label }))} />
+        {shape === 'rect' && <Param clip={clip} prop="corner" label="Roundness" min={0} max={100} scale={100} unit="%" def={HIGHLIGHT_DEFAULTS.corner} />}
+        <Param clip={clip} prop="x" label="Position X" min={-p.width} max={p.width} unit="px" slider={false} />
+        <Param clip={clip} prop="y" label="Position Y" min={-p.height} max={p.height} unit="px" slider={false} />
+        <Param clip={clip} prop="w" label="Width" min={8} max={p.width * 1.5} unit="px" />
+        <Param clip={clip} prop="h" label="Height" min={8} max={p.height * 1.5} unit="px" />
+        <Param clip={clip} prop="rotation" label="Rotation" min={-180} max={180} unit="°" center={0} />
+        <p class="hint">Drag outside the area in the viewer to draw a new one. Hold Shift for a perfect square or circle, and Option (Alt) to draw from the center. Drag the corners to resize and the round handle to rotate.</p>
+      </Section>
+      <Section title="Zoom">
+        <Param clip={clip} prop="zoom" label="Magnification" min={100} max={300} scale={100} unit="%" def={HIGHLIGHT_DEFAULTS.zoom} />
+        <PlainNumber clip={clip} prop="speed" label="Animation time" min={0.1} max={5} step={0.1} unit="s" />
+        <p class="hint">The outline draws in from the start of the clip, then the area grows. Near the end it plays backwards. Trim the clip to change how long the area is shown.</p>
+      </Section>
+      <Section title="Background">
+        <Param clip={clip} prop="dim" label="Darken" min={0} max={100} scale={100} unit="%" def={HIGHLIGHT_DEFAULTS.dim} />
+        <Param clip={clip} prop="bgBlur" label="Blur" min={0} max={100} scale={100} unit="%" def={HIGHLIGHT_DEFAULTS.bgBlur} />
+      </Section>
+      <Section title="Outline">
+        <Row label="Show outline">
+          <Toggle checked={pr.stroke !== false} onChange={(v) => set({ stroke: v })} />
+        </Row>
+        {pr.stroke !== false && (
+          <>
+            <Row label="Color">
+              <ColorField value={pr.strokeColor} onLive={live('strokeColor')} />
+            </Row>
+            <Param clip={clip} prop="strokeWidth" label="Thickness" min={1} max={40} unit="px" def={HIGHLIGHT_DEFAULTS.strokeWidth} />
+          </>
+        )}
+      </Section>
+      <Section title="Drop shadow">
+        <Row label="Show shadow">
+          <Toggle checked={pr.dropShadow !== false} onChange={(v) => set({ dropShadow: v })} />
+        </Row>
+        {pr.dropShadow !== false && (
+          <>
+            <Param clip={clip} prop="shadowSize" label="Size" min={0} max={200} unit="px" def={HIGHLIGHT_DEFAULTS.shadowSize} />
+            <Param clip={clip} prop="shadowStrength" label="Strength" min={0} max={100} scale={100} unit="%" def={HIGHLIGHT_DEFAULTS.shadowStrength} />
+            <Param clip={clip} prop="shadowOpacity" label="Opacity" min={0} max={100} scale={100} unit="%" def={HIGHLIGHT_DEFAULTS.shadowOpacity} />
+            <Param clip={clip} prop="shadowAngle" label="Angle" min={-180} max={180} unit="°" center={0} def={HIGHLIGHT_DEFAULTS.shadowAngle} />
+            <Param clip={clip} prop="shadowDistance" label="Distance" min={0} max={100} unit="px" def={HIGHLIGHT_DEFAULTS.shadowDistance} />
+            <p class="hint">Size is how far the shadow reaches. Strength makes its edge harder: 0 % is fully soft, 100 % is a sharp edge. Angle 90° casts it straight down.</p>
+          </>
+        )}
+      </Section>
+      <FollowSection clip={clip} />
+      <Section title="Fade">
+        <Param clip={clip} prop="opacity" label="Opacity" min={0} max={100} scale={100} unit="%" />
+        <PlainNumber clip={clip} prop="vFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
+        <PlainNumber clip={clip} prop="vFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
+      </Section>
+    </>
+  );
+}
+
 const trackBusy = () => tasks.value.find((t) => t.title === 'Tracking motion' && (t.state === 'running' || t.state === 'queued'));
 const trackLabel = (job) => (job ? `Tracking ${Math.round((job.progress || 0) * 100)} %` : 'Track Forward');
 
@@ -629,7 +699,7 @@ function FollowSection({ clip }) {
         )}
       </div>
       <p class="hint">
-        Attach makes this clip follow the track, keeping the place it has at the playhead relative to the object. {live ? 'Live always uses the track as it is now, and moving the clip moves it relative to the object. ' : 'Keyframes writes position and rotation keyframes you can adjust one by one. '}{redact ? 'Track Forward follows what the redaction covers in the video below and attaches it in one step. ' : ''}Scale follows the object as it gets closer or further away.
+        Attach makes this clip follow the track, keeping the place it has at the playhead relative to the object. {live ? 'Live always uses the track as it is now, and moving the clip moves it relative to the object. ' : 'Keyframes writes position and rotation keyframes you can adjust one by one. '}{redact ? `Track Forward follows what the ${clip.props.mode === 'highlight' ? 'highlight area' : 'redaction'} covers in the video below and attaches it in one step. ` : ''}Scale follows the object as it gets closer or further away.
       </p>
     </Section>
   );
