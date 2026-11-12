@@ -85,7 +85,9 @@ development repository.
 
 `scripts/build-licenses.mjs` generates the offline reader during `npm run build`
 and `npm start`. It reads versions and license files from installed dependencies
-and the pinned background-model catalogue. Missing required license files stop
+and checked-in model notices verified against the pinned background-model catalogue.
+Model weights in `vendor/` are not needed to build this reader or start the app.
+Missing required license files stop
 the build rather than silently omitting their texts. No network request is needed
 by this generation step. Review `assets/licenses/README.md` when updating ONNX
 Runtime or other supplemental notices. Add newly bundled components to the

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
 const require = createRequire(import.meta.url);
@@ -73,9 +74,14 @@ export function buildLicenses({ root = projectRoot, out = path.join(root, 'build
   for (const model of models) {
     const licenseFile = model.files.find((file) => /^LICENSE(?:\.txt)?$/.test(file.file));
     if (!licenseFile) throw new Error(`Missing license reference for ${model.id}.`);
+    // Keep notices available offline, even before optional model weights are fetched.
+    const licensePath = `assets/licenses/models/${model.id}/${licenseFile.file}`;
+    if (createHash('sha256').update(read(licensePath)).digest('hex') !== licenseFile.sha256) {
+      throw new Error(`Model license changed: update ${licensePath} to match the pinned model catalogue.`);
+    }
     add(model.id.replaceAll('/', '-'), model.id, model.license, `https://huggingface.co/${model.id}/tree/${model.revision}`,
       'BiRefNet background-removal model weights; model terms are separate from the inference runtime.',
-      [`vendor/models/${model.id}/${licenseFile.file}`], model.revision);
+      [licensePath], model.revision);
   }
   // RAW support depends on platform and SDK availability. Do not label its proprietary SDK as open source.
   components.push({ id: 'blackmagic-raw', name: 'Blackmagic RAW (when included)', version: '', license: 'Blackmagic RAW SDK agreement',
