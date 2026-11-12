@@ -95,7 +95,7 @@ function fixOldPaths(text) {
 
 // Hver mediefil lagres også med en sti i forhold til prosjektfilen. Er prosjektmappen flyttet
 // eller kopiert (for eksempel en pakket mappe på en annen maskin), finnes filene likevel.
-const LINK_FIELDS = ['path', 'proxy', 'optimized', 'reversed', 'motion', 'wave'];
+const LINK_FIELDS = ['path', 'proxy', 'optimized', 'reversed', 'cleaned', 'motion', 'wave'];
 
 function addRelative(project, dir) {
   project.designs ||= {};
@@ -127,7 +127,7 @@ function resolveRelative(project, dir) {
     for (const st of Object.values(m.streams || {})) {
       for (const f of LINK_FIELDS) if (st.rel?.[f]) st[f] = fix(st[f], st.rel[f]);
       // Buffer som mangler (tømt buffer eller ny maskin), fjernes så den lages på nytt.
-      for (const f of ['proxy', 'optimized', 'reversed', 'motion', 'wave']) if (typeof st[f] === 'string' && !fs.existsSync(st[f])) delete st[f];
+      for (const f of ['proxy', 'optimized', 'reversed', 'cleaned', 'motion', 'wave']) if (typeof st[f] === 'string' && !fs.existsSync(st[f])) delete st[f];
       if (st.thumbs?.files?.length && !fs.existsSync(st.thumbs.files[0])) delete st.thumbs;
     }
   }

@@ -543,9 +543,15 @@ export function placeFree(project, clip, start, lane) {
 
 // Legger til media på tidslinjen: append (E), insert (W) eller connect (Q).
 // opts: { in, dur, includeAudio } for et utvalg fra biblioteket.
+// media.clipDefaults: innstillinger et klipp fra dette mediet starter med (opptak fra Voice Over Studio:
+// trim, volum, nøkkelbilder, fades og effekter). Et utsnitt valgt i nettleseren går foran trimmen.
 export function mediaClip(media, opts = {}) {
   const type = mediaClipType(media);
-  const clip = makeClip(type, { media, ...(opts.in != null ? { in: opts.in } : {}), ...(opts.dur ? { dur: opts.dur } : {}) });
+  const d = media.clipDefaults;
+  const range = opts.in != null ? { in: opts.in, ...(opts.dur ? { dur: opts.dur } : {}) } : d?.in != null ? { in: d.in, dur: d.dur } : opts.dur ? { dur: opts.dur } : {};
+  const clip = makeClip(type, { media, ...range });
+  if (d?.props) Object.assign(clip.props, deepClone(d.props), d.props.afx ? { afx: d.props.afx.map((e) => ({ ...deepClone(e), id: uid() })) } : {});
+  if (d?.kf) clip.kf = deepClone(d.kf);
   if (type !== 'audio' && (opts.includeAudio ?? media.includeAudio) === false) {
     clip.props.audioOff = { ...clip.props.audioOff, ...Object.fromEntries(Object.entries(media.streams).filter(([, stream]) => stream.hasAudio).map(([key]) => [key, true])) };
   }
@@ -963,19 +969,48 @@ export function adjacentAudioPairs(project, ids) {
 
 /* Trimverktøyet: roll, slip og slide */
 
-// Flytter kuttet mellom to klipp i hovedsporet. Total lengde er uendret.
+// Finn den felles kanten i samme spor, også for lyd og undertekster.
+// Mellomrom og overlapp er ikke en felles kant; tvetydige naboer skal ikke velges vilkårlig.
+export function rollPair(project, id, edge) {
+  const c = project.clips[id];
+  if (!c || !['start', 'end'].includes(edge)) return null;
+  const cut = edge === 'start' ? c.start : c.start + c.dur;
+  const lane = Object.values(project.clips).filter((x) => x.id !== id && x.lane === c.lane);
+  const epsilon = 1e-5;
+  if (lane.some((x) => x.start < cut - epsilon && x.start + x.dur > cut + epsilon)) return null;
+  const neighbours = lane.filter((x) => Math.abs((edge === 'start' ? x.start + x.dur : x.start) - cut) <= epsilon);
+  if (neighbours.length !== 1) return null;
+  const pair = edge === 'start' ? [neighbours[0].id, id] : [id, neighbours[0].id];
+  if (c.lane === 0 && project.primary[project.primary.indexOf(pair[0]) + 1] !== pair[1]) return null;
+  return pair;
+}
+
+// Flytter kuttet mellom to klipp i samme spor. Ytterkantene og total lengde er uendret.
 export function rollEdit(project, aId, bId, delta) {
+  if (!Number.isFinite(delta) || rollPair(project, aId, 'end')?.[1] !== bId) return;
+  // PiP, tastelag og bildesekvenser redigerer tidskoblingen gjennom hovedklippet.
+  aId = recordingEditId(project, aId);
+  bId = recordingEditId(project, bId);
+  if (aId === bId || rollPair(project, aId, 'end')?.[1] !== bId || recordingTimingLocked(project, aId) || recordingTimingLocked(project, bId)) return;
   const a = project.clips[aId];
   const b = project.clips[bId];
-  if (!a || !b) return;
-  const [, aHi] = trimLimits(project, a, 'end');
-  const [aLo] = trimLimits(project, a, 'end');
+  const [aLo, aHi] = trimLimits(project, a, 'end');
   const [bLo, bHi] = trimLimits(project, b, 'start');
-  const d = Math.max(Math.max(aLo, bLo), Math.min(Math.min(aHi, bHi), delta));
-  withSync(project, () => {
+  const lo = Math.max(aLo, bLo);
+  const hi = Math.min(aHi, bHi);
+  if (lo > hi) return;
+  const d = Math.max(lo, Math.min(hi, delta));
+  const apply = () => {
     applyTrim(project, a, 'end', d);
     applyTrim(project, b, 'start', d);
-  });
+    if (b.lane !== 0) b.start = round(b.start + d);
+  };
+  if (a.lane === 0) withSync(project, apply);
+  else {
+    apply();
+    syncRecordingTracks(project);
+    updateDuration(project);
+  }
 }
 
 // Viser en annen del av kildefilen uten å flytte klippet.

@@ -23,8 +23,10 @@ import {
   Type,
   Video,
   Wand2,
+  ChevronRight,
 } from 'lucide-preact';
 import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
+import { AudioFxIcon } from './audioIcons.jsx';
 import { renameSequence, sequenceList, timelines, CAPTION_LANE, EFFECTS, REDACT_MODES, HIGHLIGHT_DEFAULTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { parseSrt, speechSources, toSrt, toVtt } from '../../shared/srt.js';
@@ -37,7 +39,7 @@ import { startLibraryDrag } from './libraryDrag.js';
 import { CaptionStyleEditor } from './Inspector.jsx';
 import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
 import { prefs } from '../prefs.js';
-import { AUDIO_EFFECTS, AUDIO_FX_CATEGORIES, AUDIO_PRESETS } from '../../shared/audiofx.js';
+import { AUDIO_EFFECTS, AUDIO_FX_CATEGORIES, AUDIO_PRESETS, AUDIO_PRESET_CATEGORIES } from '../../shared/audiofx.js';
 import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../../shared/videoEffects.js';
 
 const api = window.api;
@@ -111,8 +113,24 @@ function MediaBadges({ m }) {
 function MediaTab() {
   const p = project.value;
   const [query, setQuery] = useState('');
-  const items = Object.values(p.media).filter((m) => !query || m.name.toLowerCase().includes(query.toLowerCase()));
+  const found = Object.values(p.media).filter((m) => !query || m.name.toLowerCase().includes(query.toLowerCase()));
+  // Opptak fra Voice Over Studio ligger øverst i en egen kategori, med innstillingene fra studioet.
+  const voice = found.filter((m) => m.voiceover);
+  const others = found.filter((m) => !m.voiceover);
+  const items = [...voice, ...others];
   mediaOrder = items.map((m) => m.id);
+  const [voiceOpen, setVoiceOpen] = useState(() => localStorage.getItem('browserVoiceOpen') !== '0');
+  const toggleVoice = () => {
+    setVoiceOpen(!voiceOpen);
+    localStorage.setItem('browserVoiceOpen', voiceOpen ? '0' : '1');
+  };
+  const section = voice.length > 0 && (
+    <button class="media-section" onClick={toggleVoice} aria-expanded={voiceOpen} title="Takes from the Voice Over Studio, with the trim, volume, fades and effects from the studio. Drag one out and it sounds like the stitched clips.">
+      <ChevronRight size={12} class={voiceOpen ? 'open' : ''} /> Voice Over <span class="dim">· {voice.length}</span>
+    </button>
+  );
+  const shown = (list) => (voiceOpen ? list : list.filter((m) => !m.voiceover));
+  const othersHead = voice.length > 0 && others.length > 0 && <div class="media-section static">All media <span class="dim">· {others.length}</span></div>;
   const [over, setOver] = useState(false);
   const [mode, setMode] = useState(localStorage.getItem('browserView') || 'filmstrip');
   const setView = (v) => {
@@ -211,13 +229,23 @@ function MediaTab() {
       ) : (
         mode === 'filmstrip' ? (
           <div class="media-list">
-            {items.map((m) => (
+            {section}
+            {shown(voice).map((m) => (
+              <FilmstripRow key={m.id} m={m} span={SPANS[spanIdx]} height={stripH} />
+            ))}
+            {othersHead}
+            {others.map((m) => (
               <FilmstripRow key={m.id} m={m} span={SPANS[spanIdx]} height={stripH} />
             ))}
           </div>
         ) : (
           <div class="media-grid">
-            {items.map((m) => (
+            {section}
+            {shown(voice).map((m) => (
+              <MediaCard key={m.id} m={m} />
+            ))}
+            {othersHead}
+            {others.map((m) => (
               <MediaCard key={m.id} m={m} />
             ))}
           </div>
@@ -1021,7 +1049,6 @@ function EffectsTab() {
 function AudioFxTab() {
   const [q, setQ] = useState('');
   const match = (x) => !q || `${x.label} ${x.desc} ${x.category}`.toLowerCase().includes(q.toLowerCase());
-  const presetCats = ['Repair', 'Space', 'Creative', 'Lo-fi'];
   const card = (kind, id, item) => (
     <button
       key={`${kind}${id}`}
@@ -1032,7 +1059,9 @@ function AudioFxTab() {
       onClick={() => (kind === 'apreset' ? commands.applyAudioPreset(id) : commands.addAudioEffect(id))}
       title={`${item.desc} Click to add to the selected clips, or drag onto a clip.`}
     >
-      <b>{item.label}</b>
+      <b>
+        <AudioFxIcon kind={kind} id={id} size={14} /> {item.label}
+      </b>
       <span>{item.desc}</span>
     </button>
   );
@@ -1042,7 +1071,7 @@ function AudioFxTab() {
         <Search size={13} />
         <input placeholder="Search audio effects" value={q} onInput={(e) => setQ(e.currentTarget.value)} onKeyDown={(e) => e.stopPropagation()} />
       </div>
-      {presetCats.map((cat) => {
+      {AUDIO_PRESET_CATEGORIES.map((cat) => {
         const list = AUDIO_PRESETS.filter((x) => x.category === cat && match(x));
         if (!list.length) return null;
         return (

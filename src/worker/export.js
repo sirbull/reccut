@@ -8,7 +8,7 @@ import { drawFrame } from '../shared/render.js';
 import { AUDIO_FORMATS, QUALITIES, audioKbps, outputGeometry, videoBitrate, videoFormat } from '../shared/formats.js';
 import { FRAME_FORMATS, frameExportSettings, frameGeometry } from '../shared/frameExport.js';
 import { captionItems, toSrt, toVtt } from '../shared/srt.js';
-import { componentEffects, createChain } from '../shared/audiofx.js';
+import { cleanAmount, cleanNoiseGain, componentEffects, createChain } from '../shared/audiofx.js';
 
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
@@ -213,15 +213,21 @@ async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
       const from = Math.max(0, Math.min(s0, s1) - info.offset);
       const to = Math.max(s0, s1) - info.offset;
       if (to <= from) continue;
-      pairs.set(`${c.id}:${key}`, { path: info.path, from, to, speed: generic ? 1 : speed, generic, tempo: generic ? null : tempoFilter(speed, c.props.preservePitch), afx: componentEffects(c, key), file: path.join(tmp, `a_${pairs.size}.f32`) });
+      // Clean Voice: den rensede filen har original og renset lyd, som blandes med styrken.
+      const st = m.streams[key];
+      const clean = cleanAmount(c, key) > 0 && exists(st.cleaned);
+      const g = cleanNoiseGain(cleanAmount(c, key));
+      const pan = clean ? `pan=stereo|c0=${1 - g}*c2+${g}*c0|c1=${1 - g}*c3+${g}*c1` : null;
+      pairs.set(`${c.id}:${key}`, { path: clean ? st.cleaned : info.path, pan, from, to, speed: generic ? 1 : speed, generic, tempo: generic ? null : tempoFilter(speed, c.props.preservePitch), afx: componentEffects(c, key), file: path.join(tmp, `a_${pairs.size}.f32`) });
     }
   }
 
   let i = 0;
   for (const pair of pairs.values()) {
     checkCancel(jobId);
-    const args = ['-ss', String(pair.from), '-t', String(pair.to - pair.from), '-i', pair.path, '-map', '0:a:0', '-ac', '2', '-ar', String(RATE)];
-    if (pair.tempo) args.push('-af', `aresample=${RATE},${pair.tempo}`);
+    const args = ['-ss', String(pair.from), '-t', String(pair.to - pair.from), '-i', pair.path, '-map', '0:a:0', ...(pair.pan ? [] : ['-ac', '2']), '-ar', String(RATE)];
+    const af = [pair.pan, pair.tempo && `aresample=${RATE},${pair.tempo}`].filter(Boolean).join(',');
+    if (af) args.push('-af', af);
     args.push('-f', 'f32le', pair.file);
     const job = ffmpeg(ffmpegBin, args);
     await job.done.catch(() => fs.writeFileSync(pair.file, Buffer.alloc(0)));

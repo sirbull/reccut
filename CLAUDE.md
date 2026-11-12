@@ -17,3 +17,24 @@ Når vi lager en ny versjon av Reccut, må About-vinduet også vise det nye vers
 - Filteret (bare snarveier, aldri vanlig skriving) ligger i selve hjelpeprogrammet, slik at vanlige tegn aldri når Reccut.
 - Unntakene er venstre tastaturhalvdel (`--game`) og hele tastaturet (`--full-keyboard`), med listene `GAME_KEYS` og `FULL_KEYS` i [native/keystrokes/filter.h](native/keystrokes/filter.h). Hvert av dem krever et eget samtykke som lagres i hovedprosessen, og begge er av som standard. Listene skal ikke utvides uten at brukeren ber om det.
 - Tastetrykk (`inputs` i `recording.json`) skal aldri sendes til AI-verktøyene.
+
+## AI-stemmer (Voice Over Studio)
+
+- AI-stemmene er Kokoro-82M (Apache 2.0) og kjører lokalt i et skjult arbeidsvindu ([src/worker/tts.js](src/worker/tts.js)). Nedlastingen er i [src/main/tts.js](src/main/tts.js).
+- Uttalen kommer fra phonemizer.js, som inneholder eSpeak NG (GPLv3). Den skal aldri pakkes inn i installasjonsfilen eller legges i `dependencies`. Den lastes ned fra npm når brukeren ber om AI-stemmer. Testen `test/tts.test.mjs` sjekker dette.
+- Alle filer er låst i [src/main/ttsCatalog.json](src/main/ttsCatalog.json): modellen og stemmene med fast revisjon og SHA-256, uttalepakken med npm sin sha512. Endres versjonen, må kontrollsummene regnes ut på nytt.
+- Ingenting lastes ned før brukeren trykker Download AI Voices, og manuset sendes aldri ut av maskinen.
+- Språk som Kokoro ikke har egne stemmer for (norsk, svensk, dansk, tysk og flere), får Piper-stemmer fra `rhasspy/piper-voices`, låst under `piper` i `ttsCatalog.json`. Bare stemmer med åpen lisens (CC0, CC BY 4.0, Apache 2.0 eller MIT) skal inn i katalogen, aldri AGPL, ikke-kommersielle eller uklare. Testen i `test/tts.test.mjs` sjekker dette.
+
+## KI-modeller lastes ned ved behov
+
+- Ingen modellvekter skal pakkes inn i installasjonsfilen: verken Whisper, BiRefNet eller Kokoro. `extraResources` skal ikke ha `subtitle-models` eller `models`, og `postinstall` og `dist` skal ikke laste ned modeller. Testene i `test/subtitle-models.test.mjs` og `test/tts.test.mjs` sjekker dette.
+- Første gang appen startes, spør den én gang hvilke modeller brukeren vil laste ned ([src/renderer/AiModels.jsx](src/renderer/AiModels.jsx)). Vinduet skal alltid si hva hver modell brukes til og hvor stor den er.
+- En funksjon som mangler modellen sin, kaster `MODEL_MISSING:<captions|background|voices>` og åpner det samme vinduet i stedet for å vise en feilmelding.
+- Lisenstekstene til modellene ligger i `assets/licenses`, så lisensoversikten kan bygges uten modellene.
+- Unntak: støyfjerningsmodellen til Clean Voice (DeepFilterNet 3, MIT/Apache 2.0, 16 MB) følger med appen, etter ønske fra brukeren. Den ligger i `assets/denoise`, kopieres til `build/denoise` og er låst med SHA-256 i `test/clean-voice.test.mjs`. Ingen andre modeller skal pakkes inn.
+
+## Clean Voice (AI-støyfjerning)
+
+- Slås på per lydkomponent i Audio-fanen (`props.cleanVoice[key]` = styrke 0 til 1). Kjører lokalt i et skjult arbeidsvindu ([src/worker/denoise.js](src/worker/denoise.js)).
+- Hver kildefil renses én gang til `clean-voice.flac` i hurtigbufferen, med fire kanaler: original V/H og renset V/H. Styrken blandes inn med `cleanNoiseGain` i avspillingen (lydtråden) og eksporten (ffmpeg `pan`), så slideren virker med en gang.

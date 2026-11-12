@@ -66,13 +66,16 @@ export function buildLicenses({ root = projectRoot, out = path.join(root, 'build
   add('whisper', 'Whisper models', 'MIT', 'https://github.com/openai/whisper',
     'Local speech recognition. Converted models are obtained from onnx-community; the model manager identifies the installed revision.',
     ['assets/licenses/whisper-MIT.txt']);
+  add('deepfilternet', 'DeepFilterNet 3 model', 'MIT OR Apache-2.0', 'https://github.com/Rikorose/DeepFilterNet',
+    'AI noise removal (Clean Voice). The model is included with the app and runs on the computer.',
+    ['assets/licenses/DeepFilterNet-MIT.txt']);
   const { models } = require(path.join(root, 'src/main/designModels.js'));
   for (const model of models) {
     const licenseFile = model.files.find((file) => /^LICENSE(?:\.txt)?$/.test(file.file));
     if (!licenseFile) throw new Error(`Missing license reference for ${model.id}.`);
     add(model.id.replaceAll('/', '-'), model.id, model.license, `https://huggingface.co/${model.id}/tree/${model.revision}`,
-      'BiRefNet background-removal model weights; model terms are separate from the inference runtime.',
-      [`vendor/models/${model.id}/${licenseFile.file}`], model.revision);
+      'BiRefNet background-removal model weights, downloaded when the user asks for them; model terms are separate from the inference runtime.',
+      [model.licenseText], model.revision);
   }
   // RAW support depends on platform and SDK availability. Do not label its proprietary SDK as open source.
   components.push({ id: 'blackmagic-raw', name: 'Blackmagic RAW (when included)', version: '', license: 'Blackmagic RAW SDK agreement',

@@ -498,6 +498,37 @@ function reverseStream(stream, ctx, share = [0, 1]) {
   return job;
 }
 
+// AI-støyfjerning (Clean Voice): en fil med fire kanaler, original og renset lyd på samme tid,
+// så styrken kan endres uten å kjøre modellen på nytt. Lages én gang per kildefil.
+const DENOISE_MODEL = path.join(__dirname, '..', '..', 'build', 'denoise', 'denoiser_model.onnx');
+const cleaning = new Map();
+function cleanAudio(source, ctx) {
+  if (cleaning.has(source)) return cleaning.get(source);
+  const job = (async () => {
+    const dir = await cacheDirFor(source);
+    const out = path.join(dir, 'clean-voice.flac');
+    if (fs.existsSync(out)) return out;
+    const input = path.join(dir, 'clean-voice.in.f32');
+    const mixed = path.join(dir, 'clean-voice.out.f32');
+    const tmp = `${out}.tmp.flac`;
+    try {
+      ctx?.progress(0, 'Reading audio');
+      const r = ff.run(['-i', source, '-map', '0:a:0', '-ac', '2', '-ar', '48000', '-f', 'f32le', input]);
+      ctx?.setCancel(r.kill);
+      await r.promise;
+      await jobs.runInWorker('denoise', { input, output: mixed, model: DENOISE_MODEL }, ctx);
+      await ff.run(['-f', 'f32le', '-ar', '48000', '-ac', '4', '-i', mixed, '-c:a', 'flac', tmp]).promise;
+      await fs.promises.rename(tmp, out);
+      return out;
+    } finally {
+      for (const f of [input, mixed, tmp]) await fs.promises.unlink(f).catch(() => {});
+    }
+  })();
+  cleaning.set(source, job);
+  job.finally(() => cleaning.delete(source)).catch(() => {});
+  return job;
+}
+
 // Lager baklengs kopier av alle strømmene i et medium. Resultatet meldes som en vanlig analyse.
 function scheduleReverse(media, notify) {
   return jobs.add({
@@ -741,4 +772,4 @@ function extensions() {
   return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT, ...raw.RAW_EXT, '.psb', '.reccut-title'].map((e) => e.slice(1));
 }
 
-module.exports = { browseDir, browseThumb, browsePlaces, scheduleMotion, isOffline, relink, scheduleOptimize, reverseStream, scheduleReverse, extensions, imageExtensions, readableImage, importFiles, recordingMedia, recordingPaths, kindOf, cacheRoot, newId };
+module.exports = { browseDir, browseThumb, browsePlaces, scheduleMotion, isOffline, relink, scheduleOptimize, reverseStream, scheduleReverse, cleanAudio, extensions, imageExtensions, readableImage, importFiles, recordingMedia, recordingPaths, kindOf, cacheRoot, newId };

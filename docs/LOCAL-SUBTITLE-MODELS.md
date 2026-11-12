@@ -13,8 +13,11 @@ Faster-Whisper. Previously `base` and `small` mapped to ONNX Community's
 `whisper-base_timestamped` and `whisper-small_timestamped` repositories, with
 first-use downloads into SHA-1 URL-keyed files under `userData/models`.
 Despite the original feature brief, the repository did not bundle Whisper.
-Build preparation now bundles only the existing default **Whisper Base**. No
-model download is triggered by startup, selection, or transcription.
+No model is bundled any more, Whisper Base included. Reccut asks once at first
+start which AI models to download (Whisper Base is suggested), and making
+captions without a model opens the same window instead of an error
+(`MODEL_MISSING:captions`). The first model that is downloaded becomes active,
+and the last one can be removed.
 
 The existing job queue, FFmpeg mono 16 kHz decode, word alignment, measured
 pauses and phrase grouping are reused. Only installed files can reach the
@@ -35,7 +38,7 @@ feature brief. Exact package sizes include tokenizer/configuration files:
 | Model | Bytes | Approximate download | Minimum system RAM |
 | --- | ---: | ---: | ---: |
 | Whisper Tiny | 45,217,324 | 45 MB | 2 GB |
-| Whisper Base (default, protected) | 81,261,885 | 81 MB | 3 GB |
+| Whisper Base (suggested at first start) | 81,261,885 | 81 MB | 3 GB |
 | Whisper Small (general-purpose recommendation) | 253,426,306 | 253 MB | 4 GB |
 | Whisper Medium | 991,556,562 | 992 MB | 8 GB |
 | Whisper Large V3 Turbo | 1,089,270,226 | 1.09 GB | 12 GB |

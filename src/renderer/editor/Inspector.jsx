@@ -5,8 +5,11 @@ import { ExpressionControls } from './ExpressionControls.jsx';
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
 import { ProcessorEffects } from './ProcessorEffects.jsx';
 import { RemoveEffectButton } from './RemoveEffectButton.jsx';
+import { AudioFxChain } from './AudioFxChain.jsx';
+import { FadeInIcon, FadeOutIcon } from './audioIcons.jsx';
 import { VideoEffects } from './VideoEffects.jsx';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { Fragment } from 'preact';
 import { signal } from '@preact/signals';
 import { ArrowDown, ArrowUp, Captions, ChevronLeft, ChevronRight, Circle, Diamond, EyeOff, Film, Focus, PanelLeft, PanelRight, PenTool, RectangleHorizontal, SquareDashed, Gauge, Info, MonitorPlay, Palette, Plus, RotateCcw, Sparkles, Trash2, Type, Volume2, Wand2 } from 'lucide-preact';
 import {
@@ -58,7 +61,7 @@ import { beginTransient, commit, endPreview, projectPath, renameProject, endTran
 import { groupPositionClips, groupVisuals, setGroupOpacity, setGroupPosition } from '../../shared/groupSettings.js';
 import { seek } from './playback.js';
 import { setKeyframe } from './keyframes.js';
-import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, shownInspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, setComponentMono, toggleComponent } from './commands.js';
+import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, shownInspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, setCleanVoice, setComponentMono, toggleComponent } from './commands.js';
 import { prefs } from '../prefs.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { attachToTrack, deleteTrack, detach, removeTrackingKeyframes, trackArea, trackForward, trackRedaction, tracksFor } from './track.js';
@@ -708,143 +711,17 @@ function FollowSection({ clip }) {
 /* Lydeffekter på klippet: en kjede som behandles ovenfra og ned. */
 
 function AudioFxSection({ clip }) {
-  const list = clip.props.afx || [];
-  const edit = (fn) => commit((q) => fn(q.clips[clip.id].props));
-  const live = (id, patch) => updateTransient((q) => Object.assign(q.clips[clip.id].props.afx.find((e) => e.id === id).p, patch));
-  const move = (i, d) =>
-    edit((pr) => {
-      const a = [...pr.afx];
-      const j = i + d;
-      if (j < 0 || j >= a.length) return;
-      [a[i], a[j]] = [a[j], a[i]];
-      pr.afx = a;
-    });
-  const addOptions = [
-    { value: '', label: 'Add Effect…' },
-    ...Object.entries(AUDIO_EFFECTS).map(([id, e]) => ({ value: id, label: `${e.category}: ${e.label}` })),
-  ];
-  const presetOptions = [{ value: '', label: 'Add Template…' }, ...AUDIO_PRESETS.map((p) => ({ value: p.id, label: `${p.category === 'Repair' ? 'Fix' : p.category}: ${p.label}` }))];
   return (
     <Section title="Audio Effects" data-section="afx">
-      <div class="afx-add">
-        <Select value="" options={addOptions} onChange={(v) => v && edit((pr) => (pr.afx = [...(pr.afx || []), makeEffect(v)]))} />
-        <Select value="" options={presetOptions} onChange={(v) => v && edit((pr) => (pr.afx = [...(pr.afx || []), ...presetEffects(v)]))} />
-      </div>
-      {!list.length && <p class="hint">Add an equalizer, noise reduction, reverb, distortion and more, or a template such as Voice Clean Up or Telephone. You can also drag effects from the Audio Effects browser onto the clip.</p>}
-      {list.map((e, i) => {
-        const def = AUDIO_EFFECTS[e.type];
-        if (!def) return null;
-        return (
-          <div key={e.id} class={`afx-item${e.on === false ? ' off' : ''}`} data-afx-item={e.type}>
-            <div class="afx-head">
-              <Toggle checked={e.on !== false} onChange={(v) => edit((pr) => (pr.afx.find((x) => x.id === e.id).on = v))} />
-              <b title={def.desc}>{def.label}</b>
-              <IconButton icon={ArrowUp} size={12} title="Move up" disabled={i === 0} onClick={() => move(i, -1)} />
-              <IconButton icon={ArrowDown} size={12} title="Move down" disabled={i === list.length - 1} onClick={() => move(i, 1)} />
-              <RemoveEffectButton label={def.label} adjusted={def.params.some((p) => (e.p[p.id] ?? p.def) !== p.def)} onRemove={() => edit((pr) => (pr.afx = pr.afx.filter((x) => x.id !== e.id)))} />
-            </div>
-            {e.type === 'eq' ? (
-              <EqEditor effect={e} onLive={(patch) => live(e.id, patch)} onSet={(patch) => edit((pr) => Object.assign(pr.afx.find((x) => x.id === e.id).p, patch))} />
-            ) : (
-              def.params.map((prm) => <FxParam key={prm.id} prm={prm} value={e.p[prm.id] ?? prm.def} onLive={(v) => live(e.id, { [prm.id]: v })} onSet={(v) => edit((pr) => (pr.afx.find((x) => x.id === e.id).p[prm.id] = v))} />)
-            )}
-          </div>
-        );
-      })}
+      <AudioFxChain
+        list={clip.props.afx || []}
+        onSet={(list) => commit((q) => void (q.clips[clip.id].props.afx = list))}
+        onLive={(id, patch) => updateTransient((q) => Object.assign(q.clips[clip.id].props.afx.find((e) => e.id === id).p, patch))}
+        onStart={beginTransient}
+        onCommit={endTransient}
+        hint="Add an equalizer, noise reduction, reverb, distortion and more, or a template such as Voice Clean Up or Telephone. You can also drag effects from the Audio Effects browser onto the clip."
+      />
     </Section>
-  );
-}
-
-// Én parameter i en lydeffekt: glidebryter (logaritmisk for frekvenser), valg eller av og på.
-function FxParam({ prm, value, onLive, onSet }) {
-  if (prm.toggle)
-    return (
-      <Row label={prm.label}>
-        <Toggle checked={Boolean(value)} onChange={(v) => onSet(v ? 1 : 0)} />
-      </Row>
-    );
-  if (prm.choices)
-    return (
-      <Row label={prm.label}>
-        <Segmented value={value} onChange={onSet} options={prm.choices.map((c, i) => ({ value: c, label: prm.labels?.[i] ?? `${c} ${prm.unit}`.trim() }))} />
-      </Row>
-    );
-  const scale = prm.scale || 1;
-  const toSlider = (v) => (prm.log ? Math.log(v / prm.min) / Math.log(prm.max / prm.min) : v);
-  const fromSlider = (t) => (prm.log ? Math.round(prm.min * Math.pow(prm.max / prm.min, t)) : t);
-  return (
-    <div class="param">
-      <span class="param-label" title={prm.label}>
-        {prm.label}
-      </span>
-      <Slider value={toSlider(value)} min={prm.log ? 0 : prm.min} max={prm.log ? 1 : prm.max} step={prm.log ? 0.001 : prm.step} center={prm.center} onStart={beginTransient} onInput={(t) => onLive(fromSlider(t))} onCommit={() => endTransient(true)} />
-      <NumberField value={value * scale} min={prm.min * scale} max={prm.max * scale} step={prm.step * scale} precision={scale !== 1 || prm.step >= 1 ? 0 : prm.step >= 0.1 ? 1 : 2} unit={prm.unit} onStart={beginTransient} onChange={(v) => onLive(v / scale)} onCommit={() => endTransient(true)} />
-      <span />
-      <span />
-    </div>
-  );
-}
-
-// Grafisk equalizer: ti bånd med kurve over, og ferdige innstillinger.
-function EqEditor({ effect, onLive, onSet }) {
-  const ref = useRef(null);
-  const g = EQ_BANDS.map((_, i) => effect.p[`b${i}`] || 0);
-  useEffect(() => {
-    const cv = ref.current;
-    if (!cv) return;
-    const dpr = window.devicePixelRatio || 1;
-    cv.width = cv.clientWidth * dpr;
-    cv.height = cv.clientHeight * dpr;
-    const c = cv.getContext('2d');
-    const W = cv.width;
-    const H = cv.height;
-    c.clearRect(0, 0, W, H);
-    c.strokeStyle = 'rgba(255,255,255,0.08)';
-    c.lineWidth = 1;
-    for (const db of [-12, -6, 0, 6, 12]) {
-      const y = H / 2 - (db / 18) * (H / 2);
-      c.beginPath();
-      c.moveTo(0, y);
-      c.lineTo(W, y);
-      c.stroke();
-    }
-    const coefs = eqCoefs(effect.p, 48000);
-    c.strokeStyle = '#f7c948';
-    c.lineWidth = 2 * dpr;
-    c.beginPath();
-    for (let x = 0; x <= W; x += 2) {
-      const f = 20 * Math.pow(1000, x / W);
-      const db = coefs.reduce((s, k) => s + biquadResponse(k, f, 48000), 0);
-      const y = H / 2 - (Math.max(-18, Math.min(18, db)) / 18) * (H / 2);
-      x === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
-    }
-    c.stroke();
-  }, [JSON.stringify(effect.p)]);
-  return (
-    <div class="eq">
-      <Row label="Preset">
-        <Select value={EQ_PRESETS.find((pr) => pr.g.every((v, i) => v === g[i]))?.id || ''} options={[{ value: '', label: 'Custom' }, ...EQ_PRESETS.map((pr) => ({ value: pr.id, label: pr.label }))]} onChange={(v) => v && onSet(Object.fromEntries(EQ_PRESETS.find((pr) => pr.id === v).g.map((x, i) => [`b${i}`, x])))} />
-      </Row>
-      <canvas ref={ref} class="eq-curve" />
-      <div class="eq-bands">
-        {EQ_BANDS.map((f, i) => (
-          <label key={f} title={`${f >= 1000 ? `${f / 1000} kHz` : `${f} Hz`}: ${g[i] > 0 ? '+' : ''}${g[i]} dB. Double click to reset.`}>
-            <input
-              type="range"
-              min={-18}
-              max={18}
-              step={0.5}
-              value={g[i]}
-              onPointerDown={beginTransient}
-              onInput={(ev) => onLive({ [`b${i}`]: Number(ev.currentTarget.value) })}
-              onChange={() => endTransient(true)}
-              onDblClick={() => onSet({ [`b${i}`]: 0 })}
-            />
-            <span>{f >= 1000 ? `${f / 1000}k` : f}</span>
-          </label>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -1124,6 +1001,36 @@ function AudioChannelsSection({ clip, comps }) {
   );
 }
 
+// Clean Voice: AI-støyfjerning (DeepFilterNet 3) for tale. Lyden renses én gang i bakgrunnen,
+// og styrken blandes inn med en gang, i avspilling og eksport.
+function CleanVoiceSection({ clip, comps }) {
+  if (!comps.length) return null;
+  const busy = (file) => tasks.value.find((t) => t.title === `Removing background noise from ${file.split(/[\\/]/).pop()}` && (t.state === 'running' || t.state === 'queued'));
+  return (
+    <Section title="AI Clean Voice" data-section="clean-voice">
+      {comps.map((c) => {
+        const amount = clip.props.cleanVoice?.[c.key];
+        const job = amount != null && !c.stream.cleaned && busy(c.stream.path);
+        return (
+          <Fragment key={c.key}>
+            <Row label={comps.length > 1 ? c.label : 'Remove noise'}>
+              <Toggle checked={amount != null} onChange={(v) => setCleanVoice(clip.id, c.key, v ? 0.8 : null)} />
+            </Row>
+            {amount != null && (
+              <Row label="Strength">
+                <Slider value={amount} min={0} max={1} step={0.01} onStart={beginTransient} onInput={(v) => updateTransient((q) => void (q.clips[clip.id].props.cleanVoice[c.key] = v))} onCommit={() => endTransient(true)} />
+                <span class="value narrow">{Math.round(amount * 100)} %</span>
+              </Row>
+            )}
+            {amount != null && !c.stream.cleaned && <p class="hint">{job ? `Cleaning the audio: ${Math.round((job.progress || 0) * 100)} %. You hear the original until it is done.` : 'Preparing the cleaned audio.'}</p>}
+          </Fragment>
+        );
+      })}
+      <p class="hint">AI removes background noise such as fans, traffic, hum and room sound from speech. It runs on this computer, and nothing is sent anywhere.</p>
+    </Section>
+  );
+}
+
 // Nivåer fra lydbølgen innenfor klippet: topp og gjennomsnitt i dBFS, etter volumet på klippet.
 function clipLevels(clip, comp, wave) {
   if (!wave || !comp) return null;
@@ -1203,6 +1110,7 @@ function AudioTab({ clip }) {
       </Section>
       <AudioComponentsSection clip={clip} />
       <AudioChannelsSection clip={clip} comps={comps} />
+      <CleanVoiceSection clip={clip} comps={comps.filter((c) => !c.off)} />
       <Section title="Volume">
         {props.length <= 1 ? (
           <Param clip={clip} prop={props[0] || 'volume'} label="Volume" min={-60} max={12} step={0.5} precision={1} unit="dB" center={0} />
@@ -1214,8 +1122,8 @@ function AudioTab({ clip }) {
         <p class="hint">{isMac ? 'Option' : 'Alt'} click the volume line on the clip to add keyframes. {isMac ? 'Control' : 'Alt'} + and {isMac ? 'Control' : 'Alt'} - change the level by 1 dB.</p>
       </Section>
       <Section title="Fade">
-        <PlainNumber clip={clip} prop="aFadeIn" label="Fade in" min={0} max={clip.dur / 2} step={0.1} unit="s" />
-        <PlainNumber clip={clip} prop="aFadeOut" label="Fade out" min={0} max={clip.dur / 2} step={0.1} unit="s" />
+        <PlainNumber clip={clip} prop="aFadeIn" label={<span class="afx-name"><FadeInIcon size={13} /> Fade in</span>} min={0} max={clip.dur / 2} step={0.1} unit="s" />
+        <PlainNumber clip={clip} prop="aFadeOut" label={<span class="afx-name"><FadeOutIcon size={13} /> Fade out</span>} min={0} max={clip.dur / 2} step={0.1} unit="s" />
       </Section>
       <AudioFxSection clip={clip} />
       {a && (

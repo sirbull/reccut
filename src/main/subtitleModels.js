@@ -101,11 +101,13 @@ class SubtitleModelManager {
     // Revalidate at use as files can disappear while the app is open.
     if (r && !await this.validate(m, r.localPath, r.source, r.profile)) { this.installed.delete(id); r = null; }
     if (!r) {
-      id = this.models.find(m => m.bundled)?.id; m = this.model(id); r = this.installed.get(id);
+      // Den valgte modellen mangler: bruk en annen som er lastet ned, helst den som anbefales.
+      id = [...this.models].sort((a, b) => (b.recommended === true) - (a.recommended === true)).find(x => this.installed.has(x.id) && this.compatible(x))?.id || this.models.find(x => x.bundled)?.id || this.active;
+      m = this.model(id); r = this.installed.get(id);
       if (r && !await this.validate(m, r.localPath, r.source, r.profile)) { this.installed.delete(id); r = null; }
       this.active = id; await this.persist(); this.emit();
     }
-    if (!r) throw new Error('Install Whisper Base in Settings → AI → Manage Models before generating captions.');
+    if (!r) throw new Error('MODEL_MISSING:captions Download a speech model in Settings → AI before making captions.');
     if (!this.compatible(m)) throw new Error('This model requires more memory or a supported device. Select a smaller model.');
     if (r.gpu && !await this.validate(m, r.gpu.localPath, r.gpu.source, 'gpu')) delete r.gpu;
     this.leases.set(id, (this.leases.get(id) || 0) + 1); this.emit();
@@ -203,6 +205,8 @@ class SubtitleModelManager {
       await fs.rm(destination, { recursive: true, force: true });
       await fs.rename(staging, destination);
       record.localPath = destination; this.installed.set(m.id, record); this.states.delete(m.id);
+      // Den første modellen som lastes ned, blir den som brukes.
+      if (!this.installed.has(this.active) || this.active === m.id) this.active = m.id;
       await this.persist();
     } catch (e) {
       this.states.set(m.id, signal.aborted ? { status: 'not-installed' } : { status: 'failed', error: String(e.message || e) });
@@ -217,7 +221,8 @@ class SubtitleModelManager {
   async removeModel(id) {
     await this.ready; const m = this.model(id), r = this.installed.get(id);
     if (!m.removable || r?.source === 'bundled') throw new Error('The default Whisper Base model is protected.');
-    if (this.active === id) throw new Error('Select another installed model before deleting this model.');
+    const others = [...this.installed.keys()].filter(x => x !== id);
+    if (this.active === id && others.length) throw new Error('Select another installed model before deleting this model.');
     if (this.leases.get(id)) throw new Error('This model is being used by a transcription. Wait or cancel the task first.');
     if (this.downloads.has(id)) throw new Error('Cancel the download before deleting this model.');
     await this.unload();

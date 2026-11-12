@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { build } from 'esbuild';
+import { rollEdit } from '../src/shared/ops.js';
 
 const bundle = (await build({
   entryPoints: ['src/renderer/editor/store.js'], bundle: true, write: false,
@@ -47,6 +48,48 @@ test('caption time changes update duration live and can be cancelled', () => {
   assert.equal(s.project.value.clips[id].start, 2);
   assert.equal(s.project.value.clips[id].dur, 3);
   assert.equal(s.project.value.duration, 5);
+});
+
+test('rolling caption timing previews from the drag start and commits as one undoable edit', () => {
+  const { store: s, id } = setup();
+  const next = s.makeCaptionClip(5, 'Next caption', 3);
+  s.commit(p => { p.clips[next.id] = next; });
+  const timing = () => [s.project.value.clips[id], s.project.value.clips[next.id]].map(c => [c.start, c.dur]);
+  s.beginTransient();
+  s.updateTransient(p => rollEdit(p, id, next.id, 0.5));
+  s.updateTransient(p => rollEdit(p, id, next.id, 1));
+  assert.deepEqual(timing(), [[2, 4], [6, 2]]);
+  s.endTransient(true);
+  s.undo();
+  assert.deepEqual(timing(), [[2, 3], [5, 3]]);
+  s.redo();
+  assert.deepEqual(timing(), [[2, 4], [6, 2]]);
+  s.beginTransient();
+  s.updateTransient(p => rollEdit(p, id, next.id, -0.5));
+  s.endTransient(false);
+  assert.deepEqual(timing(), [[2, 4], [6, 2]]);
+});
+
+test('rolling inside a group changes both neighbours even when only the first is selected', () => {
+  const { store: s, id } = setup();
+  const next = s.makeCaptionClip(5, 'Next caption', 3);
+  const last = s.makeCaptionClip(8, 'Untouched caption', 3);
+  s.commit(p => {
+    p.clips[next.id] = next;
+    p.clips[last.id] = last;
+    for (const c of Object.values(p.clips)) c.group = 'captions';
+  });
+  s.enterGroup(id);
+  s.beginTransient();
+  s.updateClipEdit(p => rollEdit(p, id, next.id, 1), [id, next.id]);
+  s.endTransient(true);
+  assert.equal(s.project.value.clips[id].dur, 4);
+  assert.deepEqual([s.project.value.clips[next.id].start, s.project.value.clips[next.id].dur], [6, 2]);
+  assert.equal(s.project.value.clips[last.id].start, 8);
+  assert.ok(Object.values(s.project.value.clips).every(c => c.group === 'captions'));
+  s.undo();
+  assert.equal(s.project.value.clips[id].dur, 3);
+  assert.equal(s.project.value.clips[next.id].start, 5);
 });
 
 test('an empty video track goes away when its last clip leaves it', () => {

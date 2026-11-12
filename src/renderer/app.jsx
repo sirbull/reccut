@@ -59,10 +59,17 @@ import { SettingsWindow } from './Settings.jsx';
 import { prefs } from './prefs.js';
 import { helpOpen, paletteOpen } from './registry.js';
 import wordmark from '../../assets/reccut-wordmark.svg';
-import { isTyping, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } from './keyboard.js';
+import { isTyping, isSpaceInput, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } from './keyboard.js';
 import { installFileDrop } from './fileDrop.js';
 import { UpdateDialog } from './UpdateDialog.jsx';
 import { startUpdateChecks } from './updates.js';
+import { VoiceoverBooth } from './voiceover/Booth.jsx';
+import { studioMenu } from './voiceover/VoTimeline.jsx';
+import { boothOpen, openBooth } from './voiceover/state.js';
+import { StudioIcon } from './voiceover/StudioIcon.jsx';
+import { QuickRecord } from './voiceover/QuickRecord.jsx';
+import { quickOpen } from './voiceover/quick.js';
+import { AiModelsDialog, aiModelsOpen, maybeAskFirstRun } from './AiModels.jsx';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -204,6 +211,10 @@ function TitleBar() {
           <span class="sep" />
           <IconButton icon={Settings} title={`Settings (${isMac ? '⌘' : 'Ctrl+'},)`} onClick={() => (commands.prefsOpen.value = true)} />
           <IconButton icon={Plus} title={`Import media (${isMac ? '⌘' : 'Ctrl+'}I)`} onClick={() => commands.importDialog()} />
+          <button class="btn secondary vo-open-btn" onClick={openBooth} title={`Voice Over Studio: record narration or a talking head from a script, with retakes, and stitch it to the timeline (${isMac ? '⌥⌘' : 'Ctrl+Alt+'}B)`}>
+            <StudioIcon size={15} />
+            Voice Over Studio
+          </button>
           <button class="btn primary" onClick={prepareProjectExport} title="Prepare project in Export">
             <Share size={15} />
             Export Project
@@ -261,9 +272,10 @@ function Notice() {
 
 // Tastetrykk går gjennom kommandoregisteret. Taster i tekstfelt og åpne dialoger røres ikke.
 function onKeyDownCapture(e) {
-  if (commandsBlocked(e) || e.defaultPrevented) return;
-  // Mellomrom spiller av utenfor felt og dialoger. Tallfelt eier også sine taster.
-  if (e.code === 'Space') {
+  if (e.defaultPrevented || e.isComposing || document.hasFocus() === false) return;
+  // Mellomrom spiller alltid av, også fra knapper, glidebrytere, valglister og rullbare lister.
+  // Bare tekstfelt som tar mellomrom, og åpne dialoger, beholder tasten.
+  if (e.code === 'Space' && !isSpaceInput(e) && !dialogOwnsKeyboard(e)) {
     const cmd = commandForEvent(e, room.value);
     if (cmd?.id === 'play' || cmd?.id === 'playReverse') {
       e.preventDefault();
@@ -273,6 +285,7 @@ function onKeyDownCapture(e) {
       return;
     }
   }
+  if (commandsBlocked(e)) return;
   const any = commandForEvent(e, room.value);
   if (!any?.anywhere) return;
   e.preventDefault();
@@ -295,7 +308,8 @@ function handleMenu(id) {
   const cmd = byId.get(id);
   if (isTyping()) {
     if (cmd?.text) {
-      document.execCommand(cmd.text);
+      // execCommand('paste') er sperret i Chromium; webContents limer inn som en ekte Cmd V.
+      api.editText(cmd.text);
       return;
     }
     // Export dialogs are explicit actions, also when an inspector/search field
@@ -303,6 +317,8 @@ function handleMenu(id) {
     if (!cmd?.allowWhileTyping) return;
     document.activeElement?.blur?.();
   }
+  // Voice Over Studio har sin egen angrehistorikk og sitt eget utvalg (Cmd Z, Shift Cmd Z, Cmd A).
+  if (boothOpen.value && studioMenu(id)) return;
   // Menyen bygges om etter et rombytte, så et tastetrykk rett etter byttet kan treffe den gamle menyen.
   if (dialogOwnsKeyboard() || !cmd || !inRoom(cmd)) return;
   runCommand(id);
@@ -330,6 +346,11 @@ effect(() => {
 function App() {
   const r = room.value;
   const [fileHover, setFileHover] = useState(false);
+  const [started, setStarted] = useState(false);
+  // Første oppstart: når prosjektet er valgt, spør appen én gang om KI-modeller.
+  useEffect(() => {
+    if (started && !needsProject.value) setTimeout(maybeAskFirstRun, 600);
+  }, [started, needsProject.value]);
   useEffect(() => installFileDrop(window, {
     pathForFile: api.pathForFile,
     onFiles: commands.importDroppedFiles,
@@ -356,6 +377,7 @@ function App() {
       } finally {
         // Let Preact commit the restored project and paint before replacing the splash.
         requestAnimationFrame(() => requestAnimationFrame(() => api.startupStage?.('ready')));
+        setStarted(true);
       }
     })();
     // Nye versjoner sjekkes litt etter start, så det ikke sinker oppstarten.
@@ -418,6 +440,9 @@ function App() {
       {commands.historyOpen.value && <HistoryDialog />}
       {aiChatOpen.value && <AIChat key={project.value.id} />}
       <PluginWindows />
+      {boothOpen.value && r === 'edit' && <VoiceoverBooth />}
+      {quickOpen.value && r === 'edit' && <QuickRecord />}
+      {aiModelsOpen.value && !needsProject.value && <AiModelsDialog key={String(aiModelsOpen.value.focus)} />}
       {commands.prefsOpen.value && <SettingsWindow />}
       {helpOpen.value && <HelpCenter />}
       {paletteOpen.value && <CommandPalette />}

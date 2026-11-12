@@ -2,6 +2,8 @@
 
 ## What is implemented
 
+The color key, the background reference key and the luma key are classic keyers. They need no AI model and run in the preview and the export. **Remove Background** in Design is a different feature: BiRefNet segments people and objects in still images, with a model downloaded when needed. AI keying of green and blue screen video is the optional CorridorKey add-on, described below.
+
 The Effects tab on a video, image or recording clip has **Keying & effect stack**. On recordings, choose camera or screen before you add an effect.
 
 - **Remove solid background** reads the source frame at the playhead, finds the most common edge color and applies a color keyer.
@@ -39,7 +41,11 @@ The contract is:
 
 Choose the processor under **Effects → External processing** on a regular video clip. The result is only used on that clip. The original media is kept in the library, the original audio is kept, and the source swap can be undone. The background task can be canceled. If it fails or the source changes along the way, the clip is not swapped automatically.
 
-There is currently **no native OFX/Adobe host or ready-made CorridorKey adapter**. Installing an OFX bundle is therefore not enough. The purchased CorridorKey app can be used separately; then import a video with alpha. A local CLI tool or the open model can be connected through an adapter that fulfils the contract above. Models, the Python/GPU environment and any licenses are installed separately; no models are distributed with Reccut.
+There is **no native OFX/Adobe host**, so installing an OFX bundle is not enough. **CorridorKey is available as an optional add-on** ([src/main/corridorkey.js](../src/main/corridorkey.js), [src/renderer/CorridorKeyAddon.jsx](../src/renderer/CorridorKeyAddon.jsx)). After the user has read what it needs and accepted its licence, Reccut downloads uv, the CorridorKey source at a fixed commit, the Python packages from its lock file and the green and blue screen weights, each checked against a known hash, and installs it as a processor plugin. Nothing of it ships with Reccut.
+
+It is reached from **Plugins** only, like other processor plugins: choose CorridorKey there, read the facts and licence, install, then select a clip and apply it in the CorridorKey window.
+
+Licence: CorridorKey Licence 1.0, which is CC BY-NC-SA 4.0 with additional terms. Users may process images as part of a commercial project. Section 2c says that a commercial software package that wants to incorporate the tool needs a separate written agreement with Corridor Digital (contact@corridordigital.com). That must be clarified before Reccut is sold with this integration.
 
 Check the version you use against [CorridorKey's official documentation](https://help.corridorkey.com/docs/getting-started/), [the runtime project's CLI documentation](https://github.com/alexandremendoncaalvaro/CorridorKey-Runtime#cli-usage) and [the model project](https://github.com/nikopueringer/CorridorKey2.0). These have different input and output layouts. The example manifest is an adapter format, not confirmation that a specific CorridorKey version has been tested with Reccut.
 

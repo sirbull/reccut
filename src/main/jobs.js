@@ -39,7 +39,7 @@ function update(id, patch) {
 
 // Køer: analyse kan gå to samtidig, tunge jobber én om gangen.
 // Optimalisering har sin egen kø, så den ikke stopper eksport og analyse.
-const queues = { light: { limit: 2, running: 0, items: [] }, heavy: { limit: 1, running: 0, items: [] }, optimize: { limit: 1, running: 0, items: [] } };
+const queues = { light: { limit: 2, running: 0, items: [] }, heavy: { limit: 1, running: 0, items: [] }, optimize: { limit: 1, running: 0, items: [] }, speech: { limit: 1, running: 0, items: [] } };
 
 // mediaId: mediet jobben arbeider med, så klippene kan vise at de analyseres.
 function add({ kind, title, queue = 'light', run, silent = false, mediaId = null }) {
@@ -125,7 +125,7 @@ let jobSeq = 1;
 
 function getWorker(kind) {
   if (workers[kind] && !workers[kind].isDestroyed()) return workers[kind];
-  const node = kind === 'export';
+  const node = kind === 'export' || kind === 'denoise';
   const win = new BrowserWindow({
     show: false,
     width: 400,
@@ -162,7 +162,7 @@ function runInWorker(kind, payload, ctx) {
     if (win.webContents.isLoading()) win.webContents.once('did-finish-load', sendJob);
     else sendJob();
     ctx?.setCancel(() => {
-      if (kind === 'transcribe') {
+      if (kind === 'transcribe' || kind === 'tts') {
         // Interrupt inference and release its WASM/GPU memory immediately.
         pending.delete(jobId);
         reject(new Error('Canceled'));
@@ -174,8 +174,8 @@ function runInWorker(kind, payload, ctx) {
   });
 }
 
-ipcMain.on('worker:progress', (_e, { jobId, progress, stage }) => {
-  pending.get(jobId)?.ctx?.progress(progress, stage);
+ipcMain.on('worker:progress', (_e, { jobId, progress, stage, detail }) => {
+  pending.get(jobId)?.ctx?.progress(progress, stage, detail);
 });
 ipcMain.on('worker:done', (_e, { jobId, result }) => {
   const p = pending.get(jobId);

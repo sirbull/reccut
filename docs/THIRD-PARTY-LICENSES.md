@@ -31,10 +31,13 @@ also have their own license files in the installed application's resources.
 | Mediabunny | Media reading and export | MPL 2.0. Source availability applies to its covered files, including distributed modifications. Minified library code is not a replacement for its readable source. |
 | Transformers.js and ONNX Runtime | Local inference | Apache 2.0 and MIT, with additional ONNX Runtime third-party notices. These runtime licenses are separate from model licenses. |
 | Whisper model weights | Local transcription | MIT. Converted models have their own repository and pinned revision, shown by the model manager. |
-| BiRefNet model weights | Background removal | The bundled model variants declare MIT. Their pinned revisions and original license texts are listed in the reader. |
+| BiRefNet model weights, downloaded on request | Background removal | The model variants declare MIT. They are not in the installer; their pinned revisions and original license texts are listed in the reader. |
 | OpenMoji | Color and outline emoji | CC BY-SA 4.0. Preserve attribution, the license reference and applicable ShareAlike terms when adapting the artwork. |
 | Unicode data | Emoji names and sequences | Unicode License V3. System-style emoji are rendered with installed fonts. |
 | PDF.js | PDF import | Apache 2.0, plus the licenses for bundled fonts, character maps, color profiles and decoder components. These additional texts are included in the reader. |
+| Kokoro-82M (AI voices), downloaded on request | Voice Over Studio | The model and voices are Apache 2.0 (onnx-community/Kokoro-82M-v1.0-ONNX, pinned revision, checked with SHA-256). The text normalization in Reccut follows kokoro-js (Apache 2.0). Not included in the installer. |
+| Piper voices (rhasspy/piper-voices), downloaded on request | Voices made for Norwegian, Swedish, Danish, German, Dutch, Finnish, Polish, Spanish, French, Italian and Portuguese in the Voice Over Studio | Each voice has its own licence, listed in the catalogue and shown before download: most are CC0; fr_FR-siwis-medium and it_IT-serena-medium are CC BY 4.0 (credit the voice and its dataset); es_MX-claude-high is Apache 2.0. Voices with AGPL, non-commercial or unclear licences are not offered. Pinned revision, checked with SHA-256, not included in the installer. |
+| phonemizer.js with eSpeak NG, downloaded on request | Pronunciation for the AI voices | The npm package says Apache 2.0, but it contains eSpeak NG, which is GPLv3 or later. It is never included in the installer: it is downloaded from npm when the user asks for AI voices, checked against its npm integrity hash and loaded in a separate worker window. |
 | Blackmagic RAW, when included | Native RAW decoding | Separate proprietary SDK terms. Availability depends on the platform and build. The SDK is not covered by Reccut's or FFmpeg's open-source license. |
 
 The full license texts govern; this table is a guide to the main components.

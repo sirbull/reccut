@@ -36,7 +36,7 @@ export function RemoveEffectButton({ label, adjusted, onRemove }) {
         <p>Your adjustments to this effect will be lost. You can restore the effect and its settings with Undo.</p>
         <label class="effect-remove-preference"><input type="checkbox" checked={skip}
           onChange={(event) => setSkip(event.currentTarget.checked)} /> Don’t show this again</label>
-      </Modal>, document.body,
+      </Modal>, trigger.current?.closest('.vo-booth') || document.body, // Voice Over Studio ligger over body (z-index 900), så dialogen må inn i den.
     )}
   </>;
 }

@@ -25,6 +25,17 @@ const path = require('path');
 // silently intercept npm start. Keep installed projects/settings in their existing profile.
 const developmentMode = !app.isPackaged && process.argv.includes('--reccut-development');
 if (developmentMode) app.setPath('userData', path.join(app.getPath('appData'), 'Reccut Development'));
+// npm start uses electron.exe, whose default icon and taskbar identity belong to Electron.
+// Set the identity before creating windows, and brand secondary windows as well.
+if (process.platform === 'win32') {
+  const appId = 'no.sirbull.reccut'; // Matches build.appId; builder removes build from the packaged manifest.
+  app.setAppUserModelId(developmentMode ? `${appId}.development` : appId);
+}
+if (process.platform !== 'darwin') {
+  app.on('browser-window-created', (_event, window) => {
+    window.setIcon(path.join(__dirname, '../../assets/icon.png'));
+  });
+}
 const ff = require('./ffmpeg');
 const { finalizeRecordingStream } = require('./recording');
 const jobs = require('./jobs');
@@ -671,6 +682,18 @@ ipcMain.handle('rec:recover', async (_e, dir) => {
   return dir;
 });
 
+// Opptak fra Voice Over Studio som ikke brukes, flyttes til papirkurven når studioet sendes til Edit.
+// Bare lyd- og videofiler i en Voiceover-mappe, så ingenting annet kan slettes herfra.
+ipcMain.handle('vo:trashTakes', async (_e, files) => {
+  let n = 0;
+  for (const file of Array.isArray(files) ? files : []) {
+    const f = path.resolve(String(file));
+    if (path.basename(path.dirname(f)) !== 'Voiceover' || !['.wav', '.webm'].includes(path.extname(f).toLowerCase())) continue;
+    if (await shell.trashItem(f).then(() => true, () => false)) n++;
+  }
+  return n;
+});
+
 ipcMain.handle('rec:discard', async (_e, dir) => {
   await fs.promises.unlink(markerFile()).catch(() => {});
   if (dir) await shell.trashItem(dir).catch(() => {});
@@ -724,6 +747,19 @@ ipcMain.handle('media:reanalyze', async (_e, items) => {
 });
 ipcMain.handle('media:reverse', (_e, m) => {
   media.scheduleReverse(m, notifyAnalyzed);
+});
+// Clean Voice: renser en lydfil i bakgrunnen. Med mediaId meldes kopien som en analyse.
+const cleanTasks = new Map();
+ipcMain.handle('media:clean', (_e, { file, mediaId = null, stream = null }) => {
+  if (!cleanTasks.has(file)) {
+    const { done } = jobs.add({ kind: 'analyze', mediaId, title: `Removing background noise from ${path.basename(file)}`, queue: 'light', run: (ctx) => media.cleanAudio(file, ctx) });
+    cleanTasks.set(file, done);
+    done.finally(() => cleanTasks.delete(file)).catch(() => {});
+  }
+  return cleanTasks.get(file).then((cleaned) => {
+    if (mediaId) notifyAnalyzed({ mediaId, stream, patch: { cleaned } });
+    return cleaned;
+  });
 });
 // Malpakken: kopierer skriptene og beskrivelsen til en mappe brukeren velger, pluss eksempelmalen.
 ipcMain.handle('kit:save', async (_e, exampleJson) => {
@@ -795,20 +831,66 @@ ipcMain.handle('design:templates:save',(_e,data,id)=>getDesignLibrary().save(dat
 ipcMain.handle('design:templates:remove',(_e,id)=>getDesignLibrary().remove(id));
 ipcMain.handle('design:brand:logo',()=>getDesignLibrary().logo());
 ipcMain.handle('design:brand:setLogo',(_e,file)=>getDesignLibrary().setLogo(file));
-function startDesignSegment(payload) {
+// Modellene for å fjerne bakgrunn lastes ned når de trengs (Settings → AI eller spørsmålet i Design).
+const backgroundModels = require('./modelPacks').createModelPacks({
+  dir: path.join(app.getPath('userData'), 'background-models'),
+  models: require('./designModels').models,
+  fetchImpl: (url, opts) => net.fetch(url, { ...opts, headers: { 'User-Agent': `Reccut/${app.getVersion()}` } }),
+  onChange: () => backgroundModels.status().then((list) => send('background-models:changed', list)).catch(() => {}),
+});
+async function startDesignSegment(payload) {
   if (!payload || typeof payload.path !== 'string' || !path.isAbsolute(payload.path)) throw new Error('Choose a local image to remove its background.');
   const model = require('./designModels');
-  const modelDir = app.isPackaged ? path.join(process.resourcesPath, 'models') : path.join(__dirname, '..', '..', 'vendor', 'models');
+  // Bare modellene som er lastet ned, sendes til arbeidsvinduet. Mangler begge, spør appen om nedlasting.
+  const gpu = (await backgroundModels.installed(model.id)) ? model.id : null;
+  const cpu = (await backgroundModels.installed(model.fallback)) ? model.fallback : null;
+  if (!gpu && !cpu) throw new Error('MODEL_MISSING:background Download a background removal model in Settings → AI.');
   let result;
-  const task=jobs.add({ kind: 'segment', title: 'Removing background', queue: 'heavy', run: async (ctx) => { result=await jobs.runInWorker('segment', { path: payload.path, maxSide: Math.max(1, Math.min(2048, Number(payload.maxSide) || 1024)), model: model.id, fallback: model.fallback, modelDir }, ctx);return {width:result.width,height:result.height,model:result.model,device:result.device}; } });
+  const task=jobs.add({ kind: 'segment', title: 'Removing background', queue: 'heavy', run: async (ctx) => { result=await jobs.runInWorker('segment', { path: payload.path, maxSide: Math.max(1, Math.min(2048, Number(payload.maxSide) || 1024)), model: gpu || cpu, fallback: cpu, gpuOnly: !cpu, modelDir: backgroundModels.dir }, ctx);return {width:result.width,height:result.height,model:result.model,device:result.device}; } });
   return {id:task.id,done:task.done.then(()=>result)};
 }
-ipcMain.handle('design:segment', (_e, payload) => startDesignSegment(payload).done);
-ipcMain.handle('design:segmentStart', (_e, payload) => {
-  const { id, done } = startDesignSegment(payload);
+extensionHandler('background-models:list', () => backgroundModels.status());
+extensionHandler('background-models:download', async (id) => {
+  const m = require('./designModels').models.find((x) => x.id === id);
+  if (!m) throw new Error('Unknown model.');
+  const { done } = jobs.add({ kind: 'download', title: `Downloading background model (${m.label})`, queue: 'light', run: (ctx) => {
+    ctx.setCancel(() => backgroundModels.cancel(id));
+    return backgroundModels.install(id, (p) => ctx.progress(p, 'Downloading'));
+  } });
+  await done;
+  return backgroundModels.status();
+});
+extensionHandler('background-models:cancel', (id) => backgroundModels.cancel(id));
+extensionHandler('background-models:remove', async (id) => {
+  await backgroundModels.remove(id);
+  return backgroundModels.status();
+});
+ipcMain.handle('design:segment', async (_e, payload) => (await startDesignSegment(payload)).done);
+ipcMain.handle('design:segmentStart', async (_e, payload) => {
+  const { id, done } = await startDesignSegment(payload);
   done.then((result) => send('design:segmentDone', { id, result }), (err) => send('design:segmentDone', { id, error: String(err.message || err) }));
   return id;
 });
+// Tekstkommandoer fra menyen kjøres av webContents, så lim inn virker (execCommand('paste') er sperret).
+const TEXT_EDITS = ['undo', 'redo', 'cut', 'copy', 'paste', 'pasteAndMatchStyle', 'selectAll'];
+ipcMain.handle('edit:text', (e, role) => { if (TEXT_EDITS.includes(role)) e.sender[role](); });
+
+// Høyreklikk i tekstfelt: vanlig lim inn (med formatering) eller som ren tekst.
+app.on('web-contents-created', (_e, contents) => contents.on('context-menu', (_ev, p) => {
+  if (!p.isEditable) return;
+  const f = p.editFlags;
+  Menu.buildFromTemplate([
+    { role: 'undo', enabled: f.canUndo },
+    { role: 'redo', enabled: f.canRedo },
+    { type: 'separator' },
+    { role: 'cut', enabled: f.canCut },
+    { role: 'copy', enabled: f.canCopy },
+    { role: 'paste', enabled: f.canPaste },
+    { role: 'pasteAndMatchStyle', label: 'Paste as Plain Text', accelerator: 'Shift+CmdOrCtrl+V', enabled: f.canPaste },
+    { type: 'separator' },
+    { role: 'selectAll', enabled: f.canSelectAll },
+  ]).popup();
+}));
 ipcMain.handle('design:clipboardRead', () => require('./design').readClipboard(clipboard, (bytes) => nativeImage.createFromBuffer(bytes).toPNG()));
 ipcMain.handle('design:clipboardWrite', (_e, text) => clipboard.writeText(String(text)));
 
@@ -1036,6 +1118,17 @@ ipcMain.handle('export:start', (_e, payload) => {
           notifyAnalyzed({ mediaId: m.id, stream: key, patch: { reversed: st.reversed } });
         }
       }
+      // Clean Voice: den rensede kopien lages nå hvis den ikke er klar.
+      for (const c of payload.settings.frame ? [] : Object.values(p.clips)) {
+        const m = !p.media[c.mediaId]?.offline && p.media[c.mediaId];
+        for (const [key, amount] of Object.entries((m && c.props?.cleanVoice) || {})) {
+          const st = m.streams[key];
+          if (!(amount > 0) || !st?.hasAudio || (st.cleaned && fs.existsSync(st.cleaned))) continue;
+          ctx.progress(0, 'Removing background noise');
+          st.cleaned = await media.cleanAudio(st.path, ctx);
+          notifyAnalyzed({ mediaId: m.id, stream: key, patch: { cleaned: st.cleaned } });
+        }
+      }
       return jobs.runInWorker('export', { ...payload, ffmpeg: ff.getFfmpegPath(), tmpDir: path.join(os.tmpdir(), 'reccut-export') }, ctx);
     },
   });
@@ -1098,6 +1191,8 @@ function modelCachePath(key) {
 ipcMain.handle('modelcache:get', async (_e, key) => {
   const subtitleFile = await subtitleModels.readModelFile(key);
   if (subtitleFile) return subtitleFile;
+  const ttsFile = await tts.readModelFile(key);
+  if (ttsFile) return ttsFile;
   const file = modelCachePath(key);
   return fs.existsSync(file) ? new Uint8Array(await fs.promises.readFile(file)) : null;
 });
@@ -1224,6 +1319,69 @@ function extensionHandler(channel, handler) {
     return handler(...args);
   });
 }
+// AI-stemmer (Kokoro) til Voice Over Studio. Ingenting lastes ned før brukeren ber om det.
+const tts = require('./tts').createTts({
+  dir: path.join(app.getPath('userData'), 'tts'),
+  fetchImpl: (url, opts) => net.fetch(url, { ...opts, headers: { 'User-Agent': `Reccut/${app.getVersion()}` } }),
+  onChange: () => tts.status().then((state) => send('tts:changed', state)).catch(() => {}),
+});
+extensionHandler('tts:status', () => tts.status());
+extensionHandler('tts:install', async () => {
+  const { done } = jobs.add({ kind: 'download', title: 'Downloading AI voices', queue: 'light', run: (ctx) => {
+    ctx.setCancel(() => tts.cancel());
+    return tts.install((p) => ctx.progress(p, 'Downloading'));
+  } });
+  await done;
+  return tts.status();
+});
+extensionHandler('tts:cancel', () => tts.cancel());
+extensionHandler('tts:piperInstall', async (id) => {
+  const v = tts.piperVoice(String(id));
+  if (!v) throw new Error('Unknown voice.');
+  const { done } = jobs.add({ kind: 'download', title: `Downloading voice ${v.name}`, queue: 'light', run: (ctx) => {
+    ctx.setCancel(() => tts.cancelPiper(v.id));
+    return tts.installPiper(v.id, (p) => ctx.progress(p, 'Downloading'));
+  } });
+  await done;
+  return tts.status();
+});
+extensionHandler('tts:piperCancel', (id) => tts.cancelPiper(String(id)));
+extensionHandler('tts:piperRemove', async (id) => {
+  await tts.removePiper(String(id));
+  return tts.status();
+});
+extensionHandler('tts:remove', async () => {
+  const { response } = await dialog.showMessageBox(win, { type: 'question', title: 'Remove the AI voices?', message: 'Remove the AI voices?', detail: 'The voice model and the pronunciation add-on are deleted from this computer. Takes you have generated stay in your projects. You can download the voices again later.', buttons: ['Cancel', 'Remove'], defaultId: 0, cancelId: 0, noLink: true });
+  if (response === 1) await tts.remove();
+  return tts.status();
+});
+// Én linje om gangen i et skjult arbeidsvindu. Gir lyd som Float32 (24 kHz, mono).
+const generateTts = require('./ttsJobs').createTtsJobs({ jobs, onProgress: (state) => send('tts:progress', state) });
+extensionHandler('tts:generate', (payload) => generateTts(payload, async (payload, ctx) => {
+  const text = String(payload?.text || '').slice(0, 5000);
+  if (!text.trim()) throw new Error('There is no text to read.');
+  const speed = Math.min(2, Math.max(0.5, Number(payload?.speed) || 1));
+  // Uttaletillegget hentes her om det mangler eller er en eldre versjon (bare engelsk), før første linje leses.
+  const addon = { addon: tts.PHONEMIZER_KEY, addonData: tts.ESPEAK_DATA_KEY };
+  // Piper: én stemme per språk. Bare stemmer fra katalogen som er lastet ned.
+  if (payload?.engine === 'piper') {
+    const v = tts.piperVoice(String(payload.voice));
+    const state = v && (await tts.status()).piper[v.id];
+    if (!v || !state?.installed) throw new Error('MODEL_MISSING:voices Download this voice first.');
+    const base = `https://huggingface.co/${tts.piper.repository}/resolve/${tts.piper.revision}/`;
+    const url = (ext) => base + v.files.find((f) => f.path.endsWith(ext)).path.split('/').map(encodeURIComponent).join('/');
+    const speaker = Math.max(0, v.speakers.indexOf(String(payload.speaker || '')));
+    await tts.ensureAddon();
+    if (ctx.isCanceled()) throw new Error('Canceled');
+    return jobs.runInWorker('tts', { engine: 'piper', text, speed, model: url('.onnx'), config: url('.onnx.json'), speaker, ...addon }, ctx);
+  }
+  if (!(await tts.status()).installed) throw new Error('MODEL_MISSING:voices Download the AI voices first.');
+  const voice = String(payload.voice || 'af_heart');
+  if (!/^[a-z]{2}_[a-z]+(:\d+(\.\d+)?)?(,[a-z]{2}_[a-z]+(:\d+(\.\d+)?)?){0,3}$/.test(voice)) throw new Error('Unknown voice.');
+  await tts.ensureAddon();
+  if (ctx.isCanceled()) throw new Error('Canceled');
+  return jobs.runInWorker('tts', { text, voice, lang: String(payload.lang || ''), speed, repository: tts.repository, revision: tts.revision, ...addon }, ctx);
+}));
 extensionHandler('ai:config', () => extensions.aiConfig());
 extensionHandler('subtitle-models:list', () => subtitleModels.listAvailableModels());
 extensionHandler('subtitle-models:download', id => subtitleModels.downloadModel(id));

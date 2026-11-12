@@ -4,10 +4,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { signal } from '@preact/signals';
 import { createPortal, memo } from 'preact/compat';
 import {
+  Mic,
   AudioLines,
   Captions,
   Spline,
-  Brackets,
   Eye,
   EyeOff,
   Hand,
@@ -57,7 +57,7 @@ import {
   valueAt,
   removeKeyframe,
 } from '../../shared/model.js';
-import { groupLead, mediaClip, moveClip, positionMove, positionTrim, recordingEditId, removeTransition, rollEdit, setTransition, slideClip, slipClip, splitClip, syncRecordingTracks, trimClip } from '../../shared/ops.js';
+import { groupLead, mediaClip, moveClip, positionMove, positionTrim, recordingEditId, removeTransition, rollEdit, rollPair, setTransition, slideClip, slipClip, splitClip, syncRecordingTracks, trimClip } from '../../shared/ops.js';
 import {
   beginTransient,
   commitClipEdit as commit,
@@ -88,6 +88,9 @@ import {
   clipSelection,
 } from './store.js';
 import { fileUrl, scrubAudio, seek, showTimeline, sourceProject } from './playback.js';
+import { openBooth } from '../voiceover/state.js';
+import { StudioIcon } from '../voiceover/StudioIcon.jsx';
+import { openQuick, quickOpen } from '../voiceover/quick.js';
 import { Button, IconButton } from '../ui.jsx';
 import * as commands from './commands.js';
 import { prefs, setPrefs } from '../prefs.js';
@@ -390,6 +393,12 @@ export function Timeline() {
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
+    if (tool.value === 'blade' && hitClip && ['clip', 'edge', 'vol', 'fade', 'kf', 'comp'].includes(hit)) {
+      if (proj.lanes?.[hitClip.lane]?.locked) return;
+      const t = snap(T, new Set([hitClip.id])).t;
+      commit((p) => splitClip(p, hitClip.id, t));
+      return;
+    }
     if (hit === 'comp') {
       selection.value = [el.dataset.clip];
       selectedComponent.value = { clipId: el.dataset.clip, key: el.dataset.key };
@@ -453,12 +462,6 @@ export function Timeline() {
       return;
     }
 
-    if (tool.value === 'blade' && (hit === 'clip' || hit === 'edge')) {
-      const t = snap(T, new Set([clipId])).t;
-      commit((p) => splitClip(p, clipId, t));
-      return;
-    }
-
     if (e.metaKey || e.ctrlKey || e.shiftKey) {
       const set = new Set(selection.value);
       const ids = clipSelection(clipId, e.altKey);
@@ -499,15 +502,17 @@ export function Timeline() {
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
+    if (tool.value === 'trim' && hit === 'edge') {
+      // Den felles kanten rulles i alle spor, inkludert CC. En fri ytterkant trimmes vanlig.
+      const pair = rollPair(proj, clip.id, el.dataset.edge);
+      if (pair && pair.every((id) => inEditingGroup(proj.clips[id]))) dragRef.current = { ...base, kind: 'roll', a: pair[0], b: pair[1], cut: proj.clips[pair[1]].start };
+      else dragRef.current = { ...base, kind: 'trim', edge: el.dataset.edge };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     if (tool.value === 'trim' && clip.type !== 'caption') {
-      // Trimverktøyet: kant mellom to klipp ruller kuttet, klippet selv slippes, Option glir.
-      const idx = proj.primary.indexOf(clip.id);
-      if (hit === 'edge' && clip.lane === 0) {
-        const pair = el.dataset.edge === 'end' ? [clip.id, proj.primary[idx + 1]] : [proj.primary[idx - 1], clip.id];
-        if (pair[0] && pair[1]) dragRef.current = { ...base, kind: 'roll', a: pair[0], b: pair[1], cut: proj.clips[pair[1]].start };
-        else dragRef.current = { ...base, kind: 'trim', edge: el.dataset.edge };
-      } else if (hit === 'edge') dragRef.current = { ...base, kind: 'trim', edge: el.dataset.edge };
-      else dragRef.current = { ...base, kind: e.altKey && clip.lane === 0 ? 'slide' : 'slip' };
+      // Inne i medieklipp slippes innholdet, Option glir i hovedsporet.
+      dragRef.current = { ...base, kind: e.altKey && clip.lane === 0 ? 'slide' : 'slip' };
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
@@ -616,8 +621,12 @@ export function Timeline() {
     }
     if (d.kind === 'roll') {
       const s1 = snap(d.cut + dt, new Set([d.a, d.b]));
-      setSnapLine(s1.snapped ? s1.t : null);
-      updateTransient((p) => rollEdit(p, d.a, d.b, s1.t - d.cut));
+      // Begge sider av kuttet redigeres, selv om bare ett klipp er valgt inne i en gruppe.
+      const ids = new Set([d.a, d.b, recordingEditId(project.value, d.a), recordingEditId(project.value, d.b)]);
+      for (const c of Object.values(project.value.clips)) if (ids.has(c.linkedTo || c.slideshowParent)) ids.add(c.id);
+      updateTransient((p) => rollEdit(p, d.a, d.b, s1.t - d.cut), [...ids]);
+      const cut = project.value.clips[d.b].start;
+      setSnapLine(s1.snapped && Math.abs(cut - s1.t) < 1 / project.value.fps ? cut : null);
       return;
     }
     if (d.kind === 'slip') {
@@ -1099,10 +1108,21 @@ function TrackHeaders({ rows, p, scrollRef }) {
 }
 
 const isMac = window.api.platform === 'darwin';
+
+// Rullende trim: to kanter med piler utover, som viser at begge sider kan justeres.
+function TrimIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 3h3v18H7M17 3h-3v18h3" />
+      <path d="M1 12l4-4v8ZM23 12l-4-4v8Z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 const TOOLS = [
   { id: 'select', icon: MousePointer2, label: 'Select', key: 'A' },
   { id: 'position', icon: MoveHorizontal, label: 'Position (move clips and leave gaps)', key: 'P' },
-  { id: 'trim', icon: Brackets, label: 'Trim (roll at a cut, slip in a clip, Option drag to slide)', key: 'T' },
+  { id: 'trim', icon: TrimIcon, label: 'Trim (roll at a cut, slip in a clip, Option drag to slide)', key: 'T' },
   { id: 'range', icon: SquareDashed, label: 'Range Selection', key: 'R' },
   { id: 'blade', icon: Scissors, label: 'Blade', key: 'B' },
   { id: 'zoom', icon: Search, label: 'Zoom (Option click to zoom out)', key: 'Z' },
@@ -1132,6 +1152,10 @@ function TimelineToolbar() {
       <div class="group">
         <IconButton icon={Type} title={`Add Title (${isMac ? '⌃T' : 'Alt+T'})`} onClick={() => commands.addTitle('center')} />
         <IconButton icon={Captions} title={`Add Caption (${isMac ? '⌥C' : 'Alt+C'})`} onClick={() => commands.addCaption()} />
+        <button type="button" class="icon-btn vo-tl-btn" title={`Voice Over Studio: record narration or a talking head (${isMac ? '⌥⌘B' : 'Ctrl+Alt+B'})`} aria-label="Voice Over Studio" onClick={openBooth}>
+          <StudioIcon size={15} />
+        </button>
+        <IconButton icon={Mic} class={`quick-rec-btn${quickOpen.value ? ' active' : ''}`} title="Record Audio: pick a microphone and press Rec. The clip goes to the Media browser." onClick={(e) => openQuick(e.currentTarget.getBoundingClientRect())} />
         <span class="sep" />
         <IconButton icon={ZoomOut} title={`Zoom Out (${isMac ? '⌘-' : 'Ctrl+-'})`} onClick={() => commands.zoom(1 / 1.5)} />
         <input
@@ -1195,6 +1219,19 @@ function LaneBg({ row, p }) {
   );
 }
 
+// Beregn ved hover, så nye naboer og spor-/gruppelåser gjelder uten å tegne alle klipp på nytt.
+function updateRollCursor(e) {
+  const el = e.currentTarget;
+  const p = project.value;
+  const pair = tool.value === 'trim' && rollPair(p, el.dataset.clip, el.dataset.edge);
+  const parents = pair && pair.map((id) => recordingEditId(p, id));
+  const affected = parents && Object.values(p.clips).filter((c) => parents.includes(c.id) || parents.includes(c.linkedTo) || parents.includes(c.slideshowParent));
+  const allowed = pair && pair.every((id) => inEditingGroup(p.clips[id])) &&
+    rollPair(p, parents[0], 'end')?.[1] === parents[1] &&
+    affected.every((c) => !p.lanes?.[c.lane]?.locked);
+  el.classList.toggle('roll-edge', Boolean(allowed));
+}
+
 const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0, labelEnd = 0 }) {
   waveVersion.value;
   const x = PAD + clip.start * z;
@@ -1250,8 +1287,8 @@ const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0,
           <div class="tl-busy-bar" style={{ width: `${Math.max(3, busy.progress * 100)}%` }} />
         </div>
       )}
-      <div class="edge start" data-hit="edge" data-edge="start" data-clip={clip.id} />
-      <div class="edge end" data-hit="edge" data-edge="end" data-clip={clip.id} />
+      <div class="edge start" data-hit="edge" data-edge="start" data-clip={clip.id} onPointerEnter={updateRollCursor} onPointerMove={updateRollCursor} />
+      <div class="edge end" data-hit="edge" data-edge="end" data-clip={clip.id} onPointerEnter={updateRollCursor} onPointerMove={updateRollCursor} />
     </div>
   );
 });

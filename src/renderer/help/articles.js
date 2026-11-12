@@ -19,7 +19,7 @@ Reccut uses Electron, Preact, Signals, Immer, Lucide, Tabler, PDF.js, Mediabunny
 
 FFmpeg is used as a separate command-line program under GPLv3 or later. Mediabunny is MPL 2.0. The MIT-licensed uiohook-napi wrapper contains the LGPL-licensed libuiohook native library. These licenses include source-code and distribution rights, beyond the notices shown in About.
 
-Whisper and the bundled BiRefNet models declare MIT licenses. OpenMoji graphics use CC BY-SA 4.0, and Unicode emoji data has its own license. When included, Blackmagic RAW libraries have separate proprietary SDK terms.
+Whisper and the BiRefNet models, which are downloaded when you ask for them, declare MIT licenses. OpenMoji graphics use CC BY-SA 4.0, and Unicode emoji data has its own license. When included, Blackmagic RAW libraries have separate proprietary SDK terms.
 
 ## Your recordings and artwork
 
@@ -701,7 +701,7 @@ Press A, click a clip, and drag it to reorder it or change its lane. Drag an edg
 
 ## Trim: roll, slip and slide
 
-Press T. Drag the edit between two adjacent clips to **roll** it: one clip grows while the other shrinks, keeping their combined duration. **Example:** move a cut later because the first shot ends too soon.
+Press T. Drag the shared edge between two adjacent clips on the same track to **roll** it: one clip grows while the other shrinks, keeping their combined duration and outer edges. This works on every video and audio track, including voice-over and the captions track. The clips must touch; an edge next to a gap trims only that clip. **Example:** move a cut later because the first shot ends too soon, or move the boundary between two captions without changing when the pair starts and ends.
 
 Drag inside a clip to **slip** its source content while its timeline position and duration stay fixed. **Example:** show a later part of a screen recording without changing the surrounding narration. Hold Option/Alt while dragging for a **slide**, which moves the clip and adjusts its neighbours. Available source material limits these edits.
 
@@ -796,7 +796,7 @@ When you cut through every clip in a group, the right hand pieces become a new g
 Drag the start or end of a clip to trim it. In the storyline, the following clips move along.
 
 - Trim Start ({{key:trimStart}}) and Trim End ({{key:trimEnd}}) trim the selected clip to the playhead.
-- With the Trim tool, drag an edit point to roll it, drag inside a clip to slip it, and hold Option (Alt) to slide it.
+- With the Trim tool, drag a shared edge to roll it on any video or audio track, including voice-over and captions. The outer edges stay fixed. Drag inside a media clip to slip it, and hold Option (Alt) to slide it on the main storyline.
 - With expanded audio you can drag the audio edges past the video, for J and L cuts.
 `,
     see: ['tools', 'audio'],
@@ -809,6 +809,8 @@ Drag the start or end of a clip to trim it. In the storyline, the following clip
     keywords: 'disable enable v toggle grey component mute',
     body: `
 Enable or Disable ({{key:toggleEnabled}}) switches the selected clips off and on. A clip that is off stays on the timeline, but greyed out, and is not seen or heard.
+
+Disable All Other Clips ({{key:disableOthers}}) does the opposite: every clip except the selected ones is switched off, and the selected ones are switched on. Press it again to switch the others back on.
 
 It works the same for audio components: expand the audio ({{key:expandAudio}}), click one of the audio tracks in the clip, and press {{key:toggleEnabled}} to switch only that track off or on.
 `,
@@ -1218,9 +1220,13 @@ Drag a color handle down off the color bar to remove it, or select it and press 
     section: 'Editing',
     title: 'Keying and Background Removal',
     summary: 'Remove a solid or static background, refine edges and stack multiple keys.',
-    keywords: 'greenscreen blue screen chroma key keyer matte gamma despill hair fine detail shadow edge color background remove clean plate difference stack',
+    keywords: 'corridorkey corridor key ai keying greenscreen blue screen chroma key keyer matte gamma despill hair fine detail shadow edge color background remove clean plate difference stack',
     body: `
-Select a video, image or recording clip and open the Effects inspector. **Remove solid background** samples the source border at the playhead and adds a color key. Use **Screen color** to select a different color.
+Select a video, image or recording clip and open the Effects inspector. **Remove solid background** samples the source border at the playhead and adds a color key. Use **Screen color** to select a different color. The color key, the background reference key and the luma key work without any AI model, in preview and export.
+
+## CorridorKey plugin
+
+For hard green and blue screen shots, with hair, motion blur and see-through edges, **CorridorKey** from Corridor Digital is available as a plugin. Open **Plugins** and choose CorridorKey. It explains what is downloaded (Python, PyTorch, the program and two model files, 2 to 8 GB depending on the computer), what it needs (Apple Silicon or an NVIDIA graphics card) and its licence, and nothing is downloaded until you accept. It is slow, seconds per frame, and makes a new file with transparency. Remove Background in Design is something else: it cuts out people and objects in still images, with a small separate model.
 
 **Remove static background** estimates a background reference from nine source frames. Keep the camera and lighting fixed. The subject must move enough to reveal the background in most samples. A stationary subject may become part of the reference. For better control, add a **Background reference key**, put the playhead on a frame with the subject out of shot, and choose **Capture clean background**.
 
@@ -1283,7 +1289,7 @@ The agent cannot yet create voice-over or music, or export. What is sent to the 
 
 **External video processors** install from a Reccut JSON manifest pointing to a trusted local executable. On a video clip, open Effects → External processing to process the full source and apply the result to that clip. The source timing must be preserved; original audio and media remain available. Cancel through Background tasks.
 
-Native OFX and Adobe plugins cannot be loaded directly. CorridorKey needs an adapter that writes an alpha video, or processing in its standalone app followed by importing the result. Models, licences and runtimes are installed separately. There is no bundled CorridorKey adapter or AI matting model.
+Native OFX and Adobe plugins cannot be loaded directly. CorridorKey from Corridor Digital is available as an optional plugin: install it from Plugins. It is downloaded only after you have read what it needs and accepted its licence, and nothing of it is included in Reccut.
 `,
     see: ['ai-setup', 'ai-local', 'ai-recipes', 'plugins-guide', 'processor-guide', 'keying'],
   },
@@ -1414,6 +1420,145 @@ When a clip follows a track in **Live** mode, the track controls position and ro
 
   /* Lyd */
   {
+    id: 'voiceover',
+    section: 'Audio',
+    title: 'Voice Over Studio: Narration and Talking Head',
+    summary: 'Record a script line by line with retakes, read it as a teleprompter, and stitch the takes together on the timeline.',
+    keywords: 'ai voice style dark bright deep cinematic trailer narrator documentary text to speech tts kokoro narrator generate read aloud record audio quick microphone voice over studio voiceover narration narrator script teleprompter prompter talking head monologue dialogue retake takes pickup punch in stitch assemble room tone typeloom word pdf markdown fountain final draft read mirror',
+    body: `
+Open the studio with **Voice Over Studio** in the toolbar of Edit, the headset and microphone button in the timeline toolbar, or {{key:voiceover}}.
+
+## Just record audio
+
+For a quick recording without a script, click the **microphone** in the timeline toolbar, or {{key:recordAudio}}. A small window opens. Choose the microphone in the **Input** menu, then press **Rec** (or Space) and press again to stop. The recording is saved as 24-bit WAV in Recordings/Audio in the project folder and added to the Media browser as Audio 1, Audio 2 and so on. Nothing is trimmed. Esc stops a recording, or closes the window.
+
+## Where the voice ends up
+
+The studio does not have a track of its own. It keeps the script with the takes for each line, and **Send to Edit** builds the voice on the timeline of the open sequence.
+
+## First: room tone
+
+The first time you open the studio in a project, it asks for five seconds of room tone. Sit where you will record, click **Record Room Tone** (or press R), and stay quiet. It counts down from 3, records 5 seconds and stops by itself. If it hears a voice or a knock, it asks you to try again. You can skip it and record it later.
+
+Record a **new room tone** with **New** next to Room tone at the top, or **New Room Tone** in the side panel, for example when you move to another room or change the microphone. All room tones in the project are kept in a list. Choose the one to use in the Room tone menu at the top or click it in the list. It is used for new takes and for the pauses the next time you stitch. Listen to a room tone with the play button, and remove it from the list with the bin (the file stays in the project). It opens over the editor with the script on the left and the recording tools on the right. Everything you do in the studio is saved in the project, so you can close it and continue later.
+
+## The script
+
+Click **Open Script…** or drop a file on the left side. Typeloom projects, Word (.docx), PDF, Markdown, plain text, Fountain, Final Draft and RTF all work. You can also **Write or Paste** a script, or choose a document that is already attached to the project.
+
+- From **Typeloom**, the binder order is kept. Folders and documents become sections, and the corkboard synopsis is shown as a note that is not read.
+- In a **screenplay**, the character name is shown above each line of dialogue, with the parenthetical as a direction.
+- In **Markdown**, # headings are sections, and bold, links and lists are read as plain text.
+- Words in [brackets] or (parentheses) are shown dimmed, as directions.
+
+Choose **Paragraphs**, **Sentences** or **Lines** to decide how much is one take. Sentences suit dense or technical text, paragraphs suit storytelling.
+
+The line you are reading is highlighted and kept a third down the window, like on a teleprompter. Click any line to go there. **Prompter view** (M) hides the side panel and shows only the script in large text, and the mirror button flips it for a prompter with a beam splitter glass. Change the text size with + and -.
+
+## Recording and retakes
+
+Press **R** to record the line and R again to keep the take. The studio goes to the next line, so you can read the whole script with R alone. **Space** plays the timeline, and clicking a line moves the playhead to where its clip is, or where it will go.
+
+- **Shift R** discards what you are recording and starts the line again right away. Use it the moment you stumble.
+- **Esc** discards the take that is recording.
+- **Backspace** marks the last take as not usable and goes back to its line, ready for a new try.
+- **Up** and **Down** move between lines, **Shift** with the arrows moves between sections, and **Shift N** goes to the next line without a take.
+- **P** plays the chosen take of the line, and **F** stars it.
+
+Each line keeps all its takes. The latest take is used, unless you star one or click another one in the list. A crossed out take is never used.
+
+**Count in** waits one or three seconds before recording. **Cue last line** plays the end of the take before, so the new line matches its tone and pace.
+
+## Clean edits without work
+
+Each take is trimmed where your voice starts and ends, with a little **air before** and **air after**. Soft starts such as a breath or an s are kept. Adjust a take with the scissors in the list if needed. Takes that clip or where no voice was found are marked.
+
+The **room tone** is used as the noise floor when the studio listens for your voice, and it fills the pauses between lines on the timeline, so the voice never drops to digital silence.
+
+Aim for peaks between -12 and -6 dB on the meter. The studio records 24-bit WAV without echo cancellation, noise suppression or automatic gain. Choose the input channel if your interface has the microphone on input 2.
+
+## Talking head
+
+Turn on **Camera** to record video with each take. The takes are WebM files with the picture and the sound, and they are trimmed the same way.
+
+## Sound: Studio Voice out of the box
+
+Every person starts with **Studio Voice**: rumble and light noise removed, warmth and presence, soft S sounds and an even level, so it sounds like voice over straight away. Adjust it under **Sound for** in the side panel. It works like Audio Effects on a clip: add effects or templates, turn each one on or off, change the order, adjust it or remove it. **Volume** sets the level for all of the person's takes, and **Reset to Studio Voice** starts over. You hear the changes in the studio timeline while it plays, and they go with the clips when you stitch.
+
+**A deeper voice**: the **Voice** templates **Warm Narrator**, **Deep Voice** and **Trailer Voice** make a voice deeper, bigger and closer the way a studio does it, without the artificial sound of strong pitch. They use **Voice Character**, one effect with the controls that matter: **Depth** (body in the low end), **Presence** (clarity), **Density** (compression), **Warmth** (soft saturation) and a small **Pitch** range for a touch more depth. Add a template from the Audio Effects browser and adjust it under **Sound for**. It works on recordings and AI voices, also on existing takes, and follows the clips into Edit and export.
+
+## AI voices
+
+Let an AI voice read the script. Click **AI Voice** at the top of the side panel. Click **Record** to go back to your own voice. To use another AI voice, click the sparkle next to Record as. The first time, Reccut downloads the voices: about 127 MB, once. They come from **Kokoro**, an open model that runs on this computer, so it is free, needs no account or key, and the script never leaves the computer.
+
+Choose the **Language** first, so the words are pronounced right.
+
+For Norwegian, Swedish, Danish, German, Dutch, Finnish and Polish, and as an alternative for Spanish, French, Italian and Portuguese, **voices made for the language** are listed first. They come from Piper, are about 63 to 77 MB each, and you download only the ones you want. They have open licences (most are CC0, the French and Italian voices are CC BY 4.0). The Norwegian Dialects voice has ten speakers from five parts of Norway, and the German Thorsten voice has emotions such as whisper, sleepy and surprised. Choose them in the list before you add the voice, or later under Sound. Reccut suggests the language the script looks like it is written in. Kokoro has voices made for English (US and UK), Spanish, French, Italian, Brazilian Portuguese and Hindi, and English sounds best. Norwegian, Swedish, Danish, German, Dutch, Finnish, Polish and Portuguese (Portugal) are pronounced in that language, but read by a voice made for another language, so they have an accent. Listen to a few voices and pick the one you like. You can hear a sample of each voice before you download it.
+
+**Styles** are ready made voices for different moods: dark or bright, cinematic or natural, calm or energetic, female or male. Trailer, Noir and Epic are deep and cinematic, with a little compression and hall. Deep Narrator, Documentary and Storyteller are natural narrators. Clear Guide, Calm Guide and Newsreader suit tutorials and updates. Bright Explainer, Upbeat Host and Fresh are light and lively. Many styles blend two voices into a new one. Filter the list, listen with the effects, and add the one you like. The style's effects are put under Sound for the person, where you can change them.
+
+Under **Voices** you find the 41 voices on their own. Pick a voice from the list. **Listen** plays a short sample, and **Generation speed** below 1 reads slower, which often suits voice over. Each AI voice is added as a person on its own track.
+
+- Press **R** (or **Read line**) to let the voice read the selected line. **Shift R** or **Read Again** makes a new take. **Read All Missing Lines** reads every line without a take, one after another, and R or Esc stops it.
+- **Say it as** under the takes is what the voice reads. If it says a name, a number or an abbreviation wrong, write it the way it sounds. The script itself is not changed. Words in [brackets] are never read.
+- Takes from an AI voice work like recorded takes: trim, fades, volume, pauses, compare with other people and stitch. They are saved as WAV files in Recordings/Voiceover.
+- Change the language, voice and **Generation speed** under **Sound for** before generating. These settings apply to new takes; generate the lines again to change existing speech. Effects such as **Voice Character** change existing takes immediately without regenerating. AI voices start without effects, since they are already clean. Add Studio Voice or other effects if you like.
+
+The pronunciation part is an add-on (eSpeak NG with all its languages, about 13 MB, which is GPL software). Voices downloaded with an earlier version of Reccut get the new add-on the first time they read a line. It is not part of Reccut, and is downloaded from npm and checked before use. Download or remove the AI voices in **Settings → AI**, or at the bottom of the AI Voices window.
+
+## More than one person
+
+Click **Add Person** to add another voice on its own track, with their own takes and their own sound. If the script has roles, the new person gets the next role name. Choose who is recording in **Record as** above the record button, or click a track. In a script with roles, going to a line switches to the person with that name.
+
+- Lines are laid out in script order in shared slots. When two people read the same lines, their takes line up so you can compare them line by line. In a dialogue, the lines interleave as in the script.
+- Press **V** to disable the selected clips (or right-click, Disable Clip). They stay in place, are not heard, and **Send to Edit** keeps them as disabled clips. V again turns them back on. **Shift V** does the opposite: every other clip is disabled. Press it again to turn them back on.
+- On each track: **mute** disables all clips on that track, like selecting them and pressing V. The button lights up while the track is muted. Their positions, lengths and pauses stay the same, including the room tone. **Send to Edit** keeps them as disabled clips. **S** (solo) activates only this person's track without moving any clips. Mute and solo also work during playback without stopping the playhead. The **eye** hides the track and **X** removes the person from the studio (the files stay in the Media browser). Double click the name to rename.
+- Choices, deletes and adjustments are per person. Stitching puts each person on their own track.
+
+## The studio timeline
+
+At the bottom of the studio, the takes you keep are laid out in script order, the way they will be stitched. **Space** plays from the yellow line when the pointer is over the timeline, or from the playhead otherwise. Click the ruler or an empty spot to move the playhead, and drag to scrub. Hover to skim, pinch or Cmd/Ctrl scroll to zoom, and drag the top edge of the timeline to make it taller.
+
+The timeline toolbar has the same three tools and shortcuts as Edit: the **magnet** toggles Snapping (**N**) to clip edges and the playhead, **Skimming** (**S**) toggles the yellow line that follows the pointer, and the **headphones** toggle Audio skimming (**Shift S**). Audio skimming is available while Skimming is on. These switches share their settings with Edit. Snapping works when moving or trimming clips, adjusting pauses, placing the playhead and cutting. Skimming pauses during playback and recording. With **Playback from skimmer** enabled in Settings, Space starts at the yellow line; otherwise it starts at the playhead.
+
+With the select tool (**A**), drag a clip sideways to move it and all the clips after it. The new pause is filled with the selected room tone when **Room tone in pauses** is on. You can move the first clip too, to leave room tone before the voice starts. Drag the end of an existing pause to make it shorter or longer.
+
+Right click a clip for **Fade In**, **Fade Out**, **Split Here** and **Delete**. The left panel has two collapsible groups, **Templates** first and **Effects** below, with icons and search. Click a group heading to collapse or expand it, or scroll down through both groups. The studio remembers which groups are open. Point at a card for its description. Drag an effect or template onto a track or one of its clips to apply it to the whole person track, including its room tone. You can also right click a card and choose **Add to track**. Drop a fade onto a clip for that clip, or onto the track header or an empty spot on the track for all its clips. Adjust the track effects under **Sound** in the right panel. Click the track header to choose the track that receives effects when you click a card. Use the left and right panel icons in the top bar to show or hide each panel; the studio remembers your choices.
+
+Press **B** for the cut tool, shown as scissors in both Edit and Voice Over Studio. The scissors pointer and the cut line show where the split will land. Click to make two separate clips, each with its own trim, volume, volume keyframes and fades. Press **A** or Esc to return to selecting, then click a piece to edit or move it independently. Delete removes only the selected clip and closes up the following material. The original recording stays in the take list, and each cut can be undone on its own. The yellow line in each clip is its volume: drag it, or Option/Alt click to add keyframes, like in Edit. **Trim to Voice** finds where the voice starts and ends in every clip. **AI Clean Voice** under Sound removes steady noise from the takes and their room tone, and the waveforms show the result.
+
+Click a clip or a piece of room tone to select it, Shift or Cmd/Ctrl click to select more, or Cmd/Ctrl A to select everything. Delete removes the selected material; **Restore Deleted** brings it back. Cmd/Ctrl Z undoes changes, and Shift Cmd/Ctrl Z redoes them. A whole drag is one undo step. The studio keeps its own undo history, separate from Edit.
+
+Click a clip to select it. The script jumps to its line.
+
+- Drag the **yellow edges** to trim the start or the end. The clips after it move along.
+- Drag the **round handles** at the top to fade in and out.
+- The toolbar under the timeline always stays in place. With no clip selected, its fields are empty and disabled. Select a clip to adjust **Volume**, **Fade in**, **Fade out**, **Pause after**, and exact **Start** and **End**. The yellow line, clip badge and Volume field show the combined clip and track volume, including changes under Sound. Changing the toolbar volume adjusts only that clip. With keyframes, the field follows the playhead and adjusts the whole volume curve; the diamond button removes the keyframes while keeping the current level. **Normalize** sets the combined peak to -3 dB.
+- **Delete** (or Backspace) removes the clip from the timeline. The takes are kept, the line is crossed out in the script, and clicking **deleted** on the line or **Restore Deleted** brings it back. Recording a new take of the line also brings it back.
+- Double click a clip to hear only that clip.
+
+Everything you adjust here goes with the clips when you stitch.
+
+## Space between clips
+
+**Pauses** above the studio timeline sets the default space between clips: **after a sentence** in the same paragraph, **after a paragraph** and **before a section** (a new heading or scene). The script decides which one is used. The same settings are in **Settings → Editing → Voice Over Studio**, together with the air kept before and after the voice when a take is trimmed.
+
+To change the space after one clip, select it and change **Pause after**. **Default** takes it back to the default, and **Use for all** makes that pause the new default for all pauses of the same kind. **Clear own pauses** in Pauses takes every clip back to the defaults.
+
+## Stitch to the timeline
+
+**Send to Edit** (Cmd or Ctrl and Return in the studio) stitches the chosen takes in script order, with room tone in the pauses, at the playhead or at the end, and opens Edit so you can keep working. The pause after each line follows the script: a short pause after a sentence, a longer one after a paragraph and the longest before a new section. Change the pauses under **Stitch**.
+
+- Voice takes go on one audio track under the picture, grouped so they move together, with room tone in the pauses.
+- Talking head takes go above all other video tracks, or on V1 when there is room for them. Existing clips keep their timing. Audio-only takes stay on audio tracks, even when the same person also has video takes. With one person and only video takes, the clips are cut back to back and the pause uses the take's own sound.
+
+Turn on **Subtitles** (next to Send to Edit, or **Subtitles from the script** under Stitch) to also get subtitles with the text from the script, timed to where each clip lands. Long lines are split into readable pieces. Fix them in the Captions tab like any other captions. After retakes, press **Send to Edit** again. The clips from the last stitch are replaced, so the timeline always has the best takes. The takes are also in the Media browser, named after the line, so you can use them by hand.
+
+The script is added to the project story, so the AI agent can use it to match the takes to the script.
+`,
+    see: ['audio', 'audio-effects', 'recording'],
+  },
+  {
     id: 'audio-effects',
     section: 'Audio',
     title: 'Audio Effects and Repair',
@@ -1422,11 +1567,13 @@ When a clip follows a track in **Live** mode, the track controls position and ro
     body: `
 Open the **Audio Effects** browser ({{key:browser:audio}}). Click an effect or a template to add it to the selected clips, or drag it onto a clip. The effects are heard right away when you play, and the export sounds exactly the same.
 
+**A deeper voice**: the Voice templates **Warm Narrator**, **Deep Voice** and **Trailer Voice** use **Voice Character**, which adds depth, presence, density and warmth in one effect. It sounds more natural than lowering the pitch. **Pitch** is still available as a separate effect for bigger changes.
+
 ## Templates
 
 Templates are ready made chains of effects that you can adjust afterwards.
 
-- **Fix and Enhance**: Voice Clean Up ({{key:audio:cleanup}}), Podcast Voice, Reduce Noise, Remove Hum (50 or 60 Hz), Remove Rumble, Even Out Levels, Broadcast Loud and Quiet Pauses.
+- **Fix and Enhance**: Studio Voice (the default in the Voice Over Studio), Voice Clean Up ({{key:audio:cleanup}}), Podcast Voice, Reduce Noise, Remove Hum (50 or 60 Hz), Remove Rumble, Even Out Levels, Broadcast Loud and Quiet Pauses.
 - **Space**: Small Room, Concert Hall, Cathedral, Canyon Echo, Slapback and Far Away.
 - **Creative and Lo-fi**: Telephone, Walkie-Talkie, Old Radio, Megaphone, Lo-fi Tape, Vinyl Record, 8-bit, Distorted, Blown Speaker, Robot, Alien, Underwater, Dreamy, Jet Flanger and Pulse.
 

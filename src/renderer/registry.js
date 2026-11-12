@@ -39,6 +39,8 @@ import { chooseImage, pasteImage, copyLayers } from './design/assets.js';
 import { toggleViewerFullscreen } from './editor/fullscreen.js';
 import { LAYOUTS, modifierInfo, settings as recordSettings } from './recorder/settings.js';
 import { addFiles, roomActions } from './export/state.js';
+import { boothOpen, openBooth } from './voiceover/state.js';
+import { openQuick } from './voiceover/quick.js';
 
 const api = window.api;
 export const isMac = api.platform === 'darwin';
@@ -140,8 +142,8 @@ export const COMMANDS = [
   { id: 'prefs', label: 'Settings', menu: isMac ? 'App' : 'File', group: 'prefs', keys: 'CmdOrCtrl+,', register: true, rooms: ALL, run: () => (commands.prefsOpen.value = true), help: 'preferences' },
 
   /* Edit */
-  { id: 'undo', label: 'Undo', menu: 'Edit', help: 'selection-clipboard', keys: 'CmdOrCtrl+Z', register: true, text: 'undo', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.designUndo() : undo(), enabled: () => room.value === 'design' ? design.canDesignUndo() : canUndo() },
-  { id: 'redo', label: 'Redo', menu: 'Edit', help: 'selection-clipboard', keys: 'Shift+CmdOrCtrl+Z', register: true, text: 'redo', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.designRedo() : redo(), enabled: () => room.value === 'design' ? design.canDesignRedo() : canRedo() },
+  { id: 'undo', label: 'Undo', menu: 'Edit', help: 'selection-clipboard', keys: 'CmdOrCtrl+Z', register: true, text: 'undo', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.designUndo() : undo(), enabled: () => boothOpen.value || (room.value === 'design' ? design.canDesignUndo() : canUndo()) },
+  { id: 'redo', label: 'Redo', menu: 'Edit', help: 'selection-clipboard', keys: 'Shift+CmdOrCtrl+Z', also: ['CmdOrCtrl+Y'], register: true, text: 'redo', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.designRedo() : redo(), enabled: () => boothOpen.value || (room.value === 'design' ? design.canDesignRedo() : canRedo()) },
   { id: 'cut', label: 'Cut', menu: 'Edit', help: 'selection-clipboard', group: 'clip', keys: 'CmdOrCtrl+X', register: true, text: 'cut', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? copyLayers(true) : commands.cutSelection() },
   { id: 'copy', label: 'Copy', menu: 'Edit', help: 'selection-clipboard', group: 'clip', keys: 'CmdOrCtrl+C', register: true, text: 'copy', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? copyLayers() : commands.copySelection() },
   { id: 'paste', label: 'Paste', menu: 'Edit', help: 'selection-clipboard', group: 'clip', keys: 'CmdOrCtrl+V', register: true, text: 'paste', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? pasteImage() : commands.paste() },
@@ -162,6 +164,8 @@ export const COMMANDS = [
   { id: 'addTitle', label: 'Add Title', menu: 'Edit', group: 'insertfx', mac: 'Ctrl+T', win: 'Alt+T', run: () => commands.addTitle('center'), help: 'titles' },
   { id: 'slideshow:create', label: 'Add Selected Photos as Slideshow…', menu: 'Edit', group: 'insertfx', run: () => commands.openSlideshow(), help: 'slideshow', keywords: 'slideshow photos images ken burns pan zoom blurry background bildeserie lysbilder', desc: 'Choose duration, transitions, image fit, motion and blurred photo backgrounds for the selected images in Media.' },
   { id: 'addLowerThird', label: 'Add Lower Third', menu: 'Edit', group: 'insertfx', mac: 'Shift+Ctrl+T', win: 'Shift+Alt+T', run: () => commands.addTitle('lt-bar'), help: 'lower-thirds', keywords: 'supring name super chyron', desc: 'Add an animated lower third at the playhead. Type the name and title in the inspector.' },
+  { id: 'voiceover', label: 'Voice Over Studio…', menu: 'Edit', group: 'insertfx', keys: 'Alt+CmdOrCtrl+B', run: openBooth, help: 'voiceover', keywords: 'voice over studio voiceover narration narrator record script teleprompter prompter talking head monologue dialogue retake takes stitch assemble typeloom read', desc: 'Record narration or a talking head line by line from a script, with retakes. Each take is trimmed where the voice starts, and the takes are stitched together on the timeline.' },
+  { id: 'recordAudio', label: 'Record Audio…', menu: 'Edit', group: 'insertfx', keys: 'Shift+Alt+CmdOrCtrl+R', run: () => openQuick(), help: 'voiceover', keywords: 'record audio sound microphone mic quick voice memo input rec', desc: 'Pick a microphone and press Rec. The recording goes to the Media browser, without a script or trimming.' },
   { id: 'addCaption', label: 'Add Caption', menu: 'Edit', group: 'insertfx', keys: 'Alt+C', run: () => commands.addCaption(), help: 'captions' },
   { id: 'audio:cleanup', label: 'Clean Up Voice', menu: 'Clip', group: 'audiofx', keys: 'Alt+CmdOrCtrl+A', run: () => commands.applyAudioPreset('voice-cleanup'), help: 'audio-effects', keywords: 'audio enhance repair fix noise hum voice clean', desc: 'Adds high pass, noise reduction, de-esser, compressor and limiter to the selected clips.' },
   { id: 'audio:eq', label: 'Add Equalizer', menu: 'Clip', group: 'audiofx', run: () => commands.addAudioEffect('eq'), help: 'audio-effects', keywords: 'eq equalizer bass treble tone' },
@@ -273,6 +277,7 @@ export const COMMANDS = [
   { id: 'nudgeLeft', label: 'Nudge Left One Frame', menu: 'Clip', keys: ',', run: () => commands.nudge(-1), help: 'trimming' },
   { id: 'nudgeRight', label: 'Nudge Right One Frame', menu: 'Clip', keys: '.', run: () => commands.nudge(1), help: 'trimming' },
   { id: 'toggleEnabled', label: 'Enable or Disable', menu: 'Clip', group: 'state', keys: 'V', run: commands.toggleEnabled, help: 'enable', desc: 'Switch the selected clip, or the selected audio component, off and on. It stays on the timeline, greyed out.' },
+  { id: 'disableOthers', label: 'Disable All Other Clips', menu: 'Clip', group: 'state', keys: 'Shift+V', run: commands.disableOthers, help: 'enable', keywords: 'solo only this clip enable disable off', desc: 'Switch off every clip except the selected ones. Press again to switch the others back on.' },
   { id: 'solo', label: 'Solo', menu: 'Clip', group: 'state', keys: 'Alt+S', run: commands.toggleSolo, help: 'audio' },
   { id: 'expandAudio', label: 'Expand Audio', menu: 'Clip', group: 'audio', mac: 'Ctrl+S', win: 'Alt+E', run: commands.toggleExpandAudio, help: 'audio', desc: 'Show the audio below the video, with one strip per audio component.' },
   { id: 'detachAudio', label: 'Detach Audio', menu: 'Clip', group: 'audio', mac: 'Ctrl+Shift+S', win: 'Alt+Shift+E', run: commands.detachSelectedAudio, help: 'audio' },

@@ -427,6 +427,18 @@ export function toggleEnabled() {
   });
 }
 
+// Shift V: det motsatte av V. Alle andre klipp slås av, og de valgte på. Er alle de andre allerede av, slås de på igjen.
+export function disableOthers() {
+  const ids = new Set(selection.value.length ? selection.value : targetClipsAtPlayhead());
+  if (!ids.size) return;
+  commit((p) => {
+    const others = Object.values(p.clips).filter((c) => inEditingGroup(c) && !ids.has(c.id));
+    const restore = others.every((c) => !c.enabled);
+    for (const c of others) c.enabled = restore;
+    for (const id of ids) if (p.clips[id]) p.clips[id].enabled = true;
+  });
+}
+
 export function toggleComponent(clipId, key, on = null) {
   const c = project.value.clips[clipId];
   if (!c) return;
@@ -443,6 +455,15 @@ export function setComponentMono(clipId, key, mono) {
     const q = p.clips[clipId];
     q.props.audioMono = { ...q.props.audioMono, [key]: mono };
     if (!mono) delete q.props.audioMono[key];
+  });
+}
+
+// Clean Voice (AI-støyfjerning) for én lydkomponent: styrke 0 til 1, null slår det av.
+export function setCleanVoice(clipId, key, amount) {
+  commit((p) => {
+    const q = p.clips[clipId];
+    q.props.cleanVoice = { ...q.props.cleanVoice, [key]: amount };
+    if (amount == null) delete q.props.cleanVoice[key];
   });
 }
 

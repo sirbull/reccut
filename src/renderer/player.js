@@ -3,7 +3,7 @@
 // Redigeringen og eksportfanen har hver sin spiller.
 import { audioWindow, computeAudio, computeFrame, instSpeed, sideBackgroundMedia, sourceTime, transitionWindow, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
-import { componentEffects } from '../shared/audiofx.js';
+import { cleanAmount, componentEffects } from '../shared/audiofx.js';
 import { effect } from '@preact/signals';
 import { audioSink, prefs, previewResolutionScale } from './prefs.js';
 
@@ -36,19 +36,21 @@ audioCtx.audioWorklet
   .catch((err) => console.warn('Could not load audio effects', err));
 
 // Kobler effektkjeden til klippet inn mellom kilden og volumet, og sender nye innstillinger.
+// Clean Voice-filen har fire kanaler, som blandes med styrken i effektkjeden.
 function applyFx(entry, clip, stream) {
   if (!entry.srcNode) return;
   const list = componentEffects(clip, stream);
-  const key = JSON.stringify(list);
+  const msg = entry.clean ? { list, clean: cleanAmount(clip, stream) } : list;
+  const key = JSON.stringify(msg);
   if (key === entry.fxKey) return;
-  if (list.length && !entry.fx) {
+  if ((list.length || entry.clean) && !entry.fx) {
     if (!fxReady) return;
-    entry.fx = new AudioWorkletNode(audioCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
+    entry.fx = new AudioWorkletNode(audioCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: entry.clean ? 4 : 2, channelCountMode: 'explicit' });
     entry.srcNode.disconnect();
     entry.srcNode.connect(entry.fx).connect(entry.gain);
   }
   entry.fxKey = key;
-  entry.fx?.port.postMessage(list);
+  entry.fx?.port.postMessage(msg);
 }
 
 /**
@@ -85,10 +87,17 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
     return { path: plain, alt: s.reversed, rev: false, hasVideo: s.hasVideo && m.kind !== 'image', hasAudio: s.hasAudio };
   }
 
-  function getEl(clip, key) {
-    const id = `${clip.id}:${key}`;
+  // Clean Voice: lyden spilles fra den rensede filen når den er klar, i et eget lydelement.
+  // ponytail: baklengs bruker originalen; rens den baklengs kopien hvis det trengs.
+  function cleanPath(clip, key) {
+    const st = getProject().media[clip.mediaId]?.streams?.[key];
+    return st?.cleaned && cleanAmount(clip, key) > 0 && !clip.reverse && !(playing.value && rate < 0) ? st.cleaned : null;
+  }
+
+  function getEl(clip, key, clean = null) {
+    const id = `${clip.id}:${key}${clean ? ':clean' : ''}`;
     let entry = pool.get(id);
-    const stream = streamFor(clip, key);
+    const stream = clean ? { path: clean, rev: false, hasVideo: false, hasAudio: true } : streamFor(clip, key);
     if (!stream) return null;
     // Stillestående kan begge kopiene vise riktig bilde, så elementet byttes ikke unødvendig.
     if (entry && entry.path !== stream.path && !(entry.path === stream.alt && !playing.value)) {
@@ -109,7 +118,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
         gain.gain.value = 0;
         srcNode.connect(gain).connect(master);
       } else el.muted = true;
-      entry = { el, gain, srcNode, fx: null, fxKey: '[]', path: stream.path, rev: stream.rev, D: stream.D, lastUsed: performance.now(), target: null, frame: null, hasFrame: false };
+      entry = { el, gain, srcNode, fx: null, fxKey: '[]', clean: Boolean(clean), path: stream.path, rev: stream.rev, D: stream.D, lastUsed: performance.now(), target: null, frame: null, hasFrame: false };
       pool.set(id, entry);
       el.addEventListener('seeked', () => {
         rememberFrame(entry);
@@ -281,9 +290,10 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
       } else addVisual(l.clip, visualT);
     }
     for (const a of computeAudio(p, T)) {
-      const id = `${a.clip.id}:${a.stream}`;
+      const clean = cleanPath(a.clip, a.stream);
+      const id = `${a.clip.id}:${a.stream}${clean ? ':clean' : ''}`;
       const prev = out.get(id);
-      out.set(id, { clip: a.clip, key: a.stream, src: a.src, gain: a.gain + (prev?.gain || 0), speed: a.speed ?? 1 });
+      out.set(id, { clip: a.clip, key: a.stream, clean, src: a.src, gain: a.gain + (prev?.gain || 0), speed: a.speed ?? 1 });
     }
     return out;
   }
@@ -297,7 +307,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
     const scrubbing = !isPlaying && performance.now() < scrubUntil;
     for (const [id, n] of active) {
       seen.add(id);
-      const entry = getEl(n.clip, n.key);
+      const entry = getEl(n.clip, n.key, n.clean);
       if (!entry) continue;
       if (entry.gain) applyFx(entry, n.clip, n.key);
       const el = entry.el;
@@ -314,14 +324,29 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
       const moving = isPlaying && eff > 0;
       el.preservesPitch = n.clip.props?.preservePitch !== false;
       if (scrubbing && entry.gain && !outside) {
-        // Lyd mens du skummer: et kort utdrag fra der pekeren er.
-        seekEntry(entry, target);
+        // Lyd mens du skummer: et kort utdrag fra der pekeren er. Hvert utdrag tones
+        // ned, flyttes og tones opp igjen, og spiller så fritt. Å hoppe mens lyden
+        // spiller, gir knitring.
+        const g = entry.gain.gain;
+        const now = audioCtx.currentTime;
         if (entry.scrubId !== scrubId) {
           entry.scrubId = scrubId;
-          el.playbackRate = 1;
-          el.play().catch(() => {});
+          entry.scrubJump = now + (el.paused ? 0 : 0.012);
+          g.cancelScheduledValues(now);
+          g.setTargetAtTime(0, now, 0.003);
         }
-        entry.gain.gain.setTargetAtTime(n.gain, audioCtx.currentTime, 0.005);
+        if (entry.scrubJump != null) {
+          if (now < entry.scrubJump) continue;
+          if (Math.abs(el.currentTime - target) > 0.5 / 60) {
+            if (!el.seeking) el.currentTime = target;
+            continue;
+          }
+          entry.scrubJump = null;
+          el.playbackRate = 1;
+          if (el.paused) el.play().catch(() => {});
+          g.cancelScheduledValues(now);
+          g.setTargetAtTime(n.gain, now, 0.005);
+        }
         continue;
       }
       if (entry.gain) entry.gain.gain.setTargetAtTime(moving && !outside ? n.gain : 0, audioCtx.currentTime, 0.015);
@@ -340,6 +365,9 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
           seekEntry(entry, target);
         }
       } else {
+        // Etter et skummeutdrag får lyden tone ut før pause, ellers klikker det.
+        if (!el.paused && entry.gain && entry.scrubId === scrubId && performance.now() < scrubUntil + 80) continue;
+        entry.scrubJump = null;
         if (!el.paused) el.pause();
         seekEntry(entry, target);
       }
@@ -348,7 +376,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
     for (const [id, n] of upcoming) {
       if (seen.has(id)) continue;
       seen.add(id);
-      const entry = getEl(n.clip, n.key);
+      const entry = getEl(n.clip, n.key, n.clean);
       if (!entry) continue;
       if (entry.gain) entry.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.015);
       if (!entry.el.paused) entry.el.pause();
@@ -360,6 +388,9 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
     for (const [id, entry] of pool) {
       if (seen.has(id)) continue;
       if (entry.gain) entry.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.015);
+      entry.scrubJump = null;
+      // Skummet du forbi et kutt, får lyden tone ut før pause.
+      if (!entry.el.paused && !isPlaying && entry.gain && entry.scrubId === scrubId && now < scrubUntil + 80) continue;
       if (!entry.el.paused) entry.el.pause();
       if (now - entry.lastUsed > keepSeconds * 1000) disposeEntry(id, entry);
     }

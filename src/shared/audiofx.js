@@ -651,9 +651,158 @@ export const AUDIO_EFFECTS = {
       };
     },
   },
+  pitch: {
+    label: 'Pitch',
+    category: 'Creative',
+    desc: 'Lower the voice for a deeper sound, or raise it, without changing the speaking speed or clip length.',
+    params: [P('semitones', 'Pitch', -12, 12, 0, 0.1, 'st', { center: 0 })],
+    create: (p, sr) => pitchShifter(p, sr),
+  },
+  // En dyp stemme lages som i studio: fylde i bunnen, mindre grums, nærvær, tetthet og varme.
+  // Pitch er med, men med lite spenn, siden mer enn et par halvtoner høres kunstig ut.
+  voice: {
+    label: 'Voice Character',
+    category: 'Voice',
+    desc: 'A deeper, bigger and closer voice in one effect: depth in the low end, presence, density and warmth. Sounds natural, unlike strong pitch.',
+    params: [
+      P('depth', 'Depth', 0, 1, 0.5, 0.01, '%', { scale: 100 }),
+      P('presence', 'Presence', 0, 1, 0.3, 0.01, '%', { scale: 100 }),
+      P('density', 'Density', 0, 1, 0.4, 0.01, '%', { scale: 100 }),
+      P('warmth', 'Warmth', 0, 1, 0.2, 0.01, '%', { scale: 100 }),
+      P('semitones', 'Pitch', -3, 3, 0, 0.1, 'st', { center: 0 }),
+    ],
+    create(p, sr) {
+      const bank = new FilterBank();
+      const pitch = pitchShifter(p, sr);
+      let q = p;
+      let env = 0;
+      const att = coefFor(5, sr);
+      const rel = coefFor(150, sr);
+      return {
+        get latency() {
+          return pitch.latency;
+        },
+        set(x) {
+          q = x;
+          pitch.set(x);
+          bank.setCoefs([
+            biquadCoefs('lowshelf', 150, 0.8, 9 * x.depth, sr),
+            biquadCoefs('peaking', 350, 1.2, -4 * x.depth, sr),
+            biquadCoefs('peaking', 4000, 0.9, 6 * x.presence, sr),
+          ]);
+        },
+        process(L, R, n) {
+          pitch.process(L, R, n);
+          bank.process(L, R, n);
+          const ratio = 1 + 5 * q.density;
+          const thr = -10 - 16 * q.density;
+          const mk = dbToLin(-thr * (1 - 1 / ratio) * 0.4);
+          const w = q.warmth;
+          const d = 1 + 3 * w;
+          for (let i = 0; i < n; i++) {
+            const x = Math.max(Math.abs(L[i]), Math.abs(R[i]));
+            env = x > env ? att * env + (1 - att) * x : rel * env + (1 - rel) * x;
+            const over = linToDb(env) - thr;
+            const g = (over > 0 ? dbToLin(-over * (1 - 1 / ratio)) : 1) * mk;
+            const l = L[i] * g;
+            const r = R[i] * g;
+            // Myk metning, lik originalen ved lavt nivå.
+            L[i] = l * (1 - w) + (Math.tanh(l * d) / d) * w;
+            R[i] = r * (1 - w) + (Math.tanh(r * d) / d) * w;
+          }
+        },
+      };
+    },
+  },
 };
 
-export const AUDIO_FX_CATEGORIES = ['Repair', 'EQ', 'Dynamics', 'Space', 'Creative', 'Lo-fi'];
+export const AUDIO_FX_CATEGORIES = ['Voice', 'Repair', 'EQ', 'Dynamics', 'Space', 'Creative', 'Lo-fi'];
+export const AUDIO_PRESET_CATEGORIES = ['Voice', 'Repair', 'Space', 'Creative', 'Lo-fi'];
+
+// Streaming phase vocoder. Analysis/synthesis share a fixed hop, so source timing
+// and duration never change. Peak phase locking keeps neighbouring speech bins
+// together instead of letting each bin drift independently. No worklet allocations.
+function pitchShifter(p, sr) {
+  const N = sr <= 24000 ? 1024 : 2048;
+  const H = N / 8;
+  const B = N / 2 + 1;
+  const win = Float64Array.from({ length: N }, (_, i) => 0.5 - 0.5 * Math.cos(TAU * i / N));
+  const wrap = (v) => v - TAU * Math.round(v / TAU);
+  const channels = [0, 1].map(() => ({
+    input: new Float64Array(N), output: new Float64Array(N),
+    re: new Float64Array(N), im: new Float64Array(N),
+    mag: new Float64Array(B), phase: new Float64Array(B), previous: new Float64Array(B),
+    synthesis: new Float64Array(B), peaks: new Int32Array(B),
+    queue: new Float32Array(N * 2), read: 0, write: H, fill: N - H,
+  }));
+  let semitones = 0;
+  let ratio = 1;
+  const frame = (c) => {
+    const { re, im, mag, phase, previous, synthesis, peaks } = c;
+    for (let i = 0; i < N; i++) { re[i] = c.input[i] * win[i]; im[i] = 0; }
+    fft(re, im, false);
+    let count = 0;
+    for (let k = 0; k < B; k++) {
+      mag[k] = Math.hypot(re[k], im[k]);
+      phase[k] = Math.atan2(im[k], re[k]);
+      const expected = TAU * k * H / N;
+      const advance = expected + wrap(phase[k] - previous[k] - expected);
+      synthesis[k] = wrap(synthesis[k] + advance * ratio);
+      previous[k] = phase[k];
+    }
+    for (let k = 1; k < B - 1; k++) if (mag[k] > mag[k - 1] && mag[k] >= mag[k + 1]) peaks[count++] = k;
+    if (!count) peaks[count++] = 0;
+    re.fill(0); im.fill(0);
+    let peak = 0;
+    for (let k = 0; k < B; k++) {
+      while (peak + 1 < count && k > (peaks[peak] + peaks[peak + 1]) / 2) peak++;
+      const pk = peaks[peak];
+      const dest = k + Math.round(pk * (ratio - 1));
+      if (dest < 0 || dest >= B) continue;
+      const angle = synthesis[pk] + wrap(phase[k] - phase[pk]);
+      re[dest] += mag[k] * Math.cos(angle);
+      im[dest] += mag[k] * Math.sin(angle);
+    }
+    im[0] = im[N / 2] = 0;
+    for (let k = 1; k < N / 2; k++) { re[N - k] = re[k]; im[N - k] = -im[k]; }
+    fft(re, im, true);
+    // Hann squared sums to 3 with eight overlapping frames.
+    for (let i = 0; i < N; i++) c.output[i] += re[i] * win[i] / 3;
+    for (let i = 0; i < H; i++) c.queue[c.write++ % c.queue.length] = c.output[i];
+    c.output.copyWithin(0, H); c.output.fill(0, N - H);
+    c.input.copyWithin(0, H); c.fill = N - H;
+  };
+  const reset = () => {
+    for (const c of channels) {
+      for (const key of ['input', 'output', 'previous', 'synthesis', 'queue']) c[key].fill(0);
+      c.read = 0; c.write = H; c.fill = N - H;
+    }
+  };
+  const inst = {
+    get latency() { return semitones === 0 ? 0 : N; },
+    set(q) {
+      const next = clamp(Number(q.semitones) || 0, -12, 12);
+      if ((next === 0) !== (semitones === 0)) reset();
+      semitones = next;
+      ratio = 2 ** (semitones / 12);
+    },
+    process(L, R, n) {
+      if (semitones === 0) return;
+      for (let ci = 0; ci < 2; ci++) {
+        const c = channels[ci], buf = ci === 0 ? L : R;
+        for (let i = 0; i < n; i++) {
+          c.input[c.fill++] = buf[i];
+          // Read before frame() writes: the compensated delay is exactly N.
+          buf[i] = c.queue[c.read % c.queue.length];
+          c.queue[c.read++ % c.queue.length] = 0;
+          if (c.fill === N) frame(c);
+        }
+      }
+    },
+  };
+  inst.set(p);
+  return inst;
+}
 
 // Koeffisientene for equalizeren: skuldre i endene, topper i midten.
 export function eqCoefs(q, sr) {
@@ -880,6 +1029,14 @@ export function activeEffects(clip) {
   return (clip?.props?.afx || []).filter((e) => e.on !== false && AUDIO_EFFECTS[e.type]);
 }
 
+// Clean Voice (AI-støyfjerning): styrken 0 til 1 for en lydkomponent i klippet.
+export function cleanAmount(clip, key) {
+  const a = clip?.props?.cleanVoice?.[key];
+  return a > 0 ? Math.min(1, a) : 0;
+}
+// Hvor mye av originalen som blandes inn: (1 - styrke)². 50 % demper støyen 12 dB, 75 % 24 dB, 100 % helt.
+export const cleanNoiseGain = (amount) => (1 - clamp(amount, 0, 1)) ** 2;
+
 // Mono is Pan and Width at zero width, first in the chain, so playback and export
 // share the same code and later effects see the mono signal.
 const MONO = { id: 'mono', type: 'stereo', p: { pan: 0, width: 0 } };
@@ -932,7 +1089,13 @@ export function createChain(sr) {
 
 const fx = (type, p = {}) => ({ type, p });
 export const AUDIO_PRESETS = [
+  // Stemme: dypere og større, med Voice Character
+  { id: 'warm-narrator', label: 'Warm Narrator', category: 'Voice', desc: 'A little more body and warmth, still natural. For narration and explainers.', chain: [fx('highpass', { freq: 70 }), fx('voice', { depth: 0.3, presence: 0.25, density: 0.3, warmth: 0.3 }), fx('deesser'), fx('limiter', { ceiling: -1 })] },
+  { id: 'deep-voice', label: 'Deep Voice', category: 'Voice', desc: 'Deeper and closer, like a voice over artist right on the microphone.', chain: [fx('highpass', { freq: 60 }), fx('voice', { depth: 0.6, presence: 0.35, density: 0.5, warmth: 0.25 }), fx('deesser'), fx('limiter', { ceiling: -1 })] },
+  { id: 'trailer-voice', label: 'Trailer Voice', category: 'Voice', desc: 'Big, dense and dark, with a touch of space. For trailers, intros and dramatic openings.', chain: [fx('highpass', { freq: 45 }), fx('voice', { depth: 0.9, presence: 0.45, density: 0.8, warmth: 0.45, semitones: -1 }), fx('deesser'), fx('reverb', { size: 0.6, damping: 0.5, mix: 0.08, predelay: 25 }), fx('limiter', { ceiling: -1 })] },
   // Reparasjon
+  // Standard i Voice Over Studio: ren, varm og jevn stemme rett ut av boksen.
+  { id: 'studio-voice', label: 'Studio Voice', category: 'Repair', desc: 'A clean, warm and even voice over sound: rumble and light noise removed, presence, soft S sounds and steady level.', chain: [fx('highpass', { freq: 80 }), fx('denoise', { amount: 0.35 }), fx('eq', eqParams('podcast')), fx('deesser'), fx('compressor', { threshold: -20, ratio: 3, makeup: 4 }), fx('limiter', { ceiling: -1 })] },
   { id: 'voice-cleanup', label: 'Voice Clean Up', category: 'Repair', desc: 'Removes rumble and background noise, softens S sounds and evens out the level.', chain: [fx('highpass', { freq: 80 }), fx('denoise', { amount: 0.55 }), fx('deesser'), fx('compressor', { threshold: -22, ratio: 2.5, makeup: 3 }), fx('limiter', { ceiling: -1 })] },
   { id: 'podcast', label: 'Podcast Voice', category: 'Repair', desc: 'Warm, clear and present, with steady level.', chain: [fx('highpass', { freq: 90 }), fx('eq', eqParams('podcast')), fx('compressor', { threshold: -24, ratio: 3, makeup: 5 }), fx('deesser'), fx('limiter', { ceiling: -1 })] },
   { id: 'reduce-noise', label: 'Reduce Noise', category: 'Repair', desc: 'Removes steady hiss, fans and air conditioning.', chain: [fx('denoise', { amount: 0.85 })] },

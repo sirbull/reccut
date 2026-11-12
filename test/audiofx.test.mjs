@@ -121,3 +121,63 @@ test('mono applies to the chosen component only, averages both channels and runs
   assert.deepEqual([...L], [...expected]);
   assert.deepEqual([...R], [...expected]);
 });
+
+test('neutral pitch is sample exact with no delay; disabling it restores the original', () => {
+  const input = sine(187, SR);
+  const { L, latency } = run([makeEffect('pitch')], input.slice());
+  assert.deepEqual(L, input);
+  assert.equal(latency, 0);
+  assert.deepEqual(run([{ ...makeEffect('pitch', { semitones: -4 }), on: false }], input.slice()).L, input);
+});
+
+test('Voice Character adds low end without changing length, and delays only when it pitches', () => {
+  const gainAt = (f, p) => rms(run([makeEffect('voice', { presence: 0, density: 0, warmth: 0, ...p })], sine(f, SR, 0.05)).L, SR / 2);
+  const low = gainAt(110, { depth: 1 }) / gainAt(110, { depth: 0 });
+  const mid = gainAt(1000, { depth: 1 }) / gainAt(1000, { depth: 0 });
+  assert.ok(low > 2 && mid < 1.2, `low ${low}, mid ${mid}`);
+  assert.ok(gainAt(4000, { presence: 1 }) / gainAt(4000, { presence: 0 }) > 1.5, 'presence lifts 4 kHz');
+  const { L, latency } = run([makeEffect('voice')], sine(220, SR));
+  assert.equal(L.length, SR);
+  assert.equal(latency, 0);
+  assert.equal(run([makeEffect('voice', { semitones: -1 })], sine(220, SR)).latency, 2048);
+  for (const id of ['warm-narrator', 'deep-voice', 'trailer-voice']) assert.equal(AUDIO_PRESETS.find((x) => x.id === id).category, 'Voice');
+});
+
+// Count periods after the analysis window has settled. Tests the sound produced,
+// rather than just the slider or saved parameter.
+const frequency = (x, sr) => {
+  const crossings = [];
+  for (let i = sr; i < x.length; i++) if (x[i - 1] <= 0 && x[i] > 0) crossings.push(i);
+  return (crossings.length - 1) * sr / (crossings.at(-1) - crossings[0]);
+};
+test('pitch shifts both channels in either direction without changing their duration', () => {
+  for (const sr of [22050, 24000, 44100, 48000]) for (const st of [-12, -3, 2, 12]) {
+    const input = Float32Array.from({ length: sr * 2 }, (_, i) => 0.4 * Math.sin(2 * Math.PI * 220 * i / sr));
+    const L = input.slice(), R = input.map((v) => v * 0.3);
+    const chain = createChain(sr);
+    chain.update([makeEffect('pitch', { semitones: st })]);
+    for (let i = 0; i < L.length; i += 128) chain.process(L.subarray(i, i + 128), R.subarray(i, i + 128), Math.min(128, L.length - i));
+    assert.equal(L.length, input.length);
+    assert.ok(L.every(Number.isFinite) && R.every(Number.isFinite));
+    assert.ok(Math.abs(frequency(L, sr) - 220 * 2 ** (st / 12)) < 2, `${sr} Hz, ${st} st: ${frequency(L, sr)} Hz`);
+    assert.ok(rms(L, sr) > 0.1, 'shifted voice stays audible');
+    assert.ok(rms(R.map((v, i) => v - L[i] * 0.3)) / rms(L) < 0.001, 'stereo balance stays intact');
+  }
+});
+
+test('pitch is identical in worklet sized and export sized blocks and resets to neutral', () => {
+  const effect = makeEffect('pitch', { semitones: -3 });
+  const input = sine(173, SR * 2);
+  const live = run([effect], input.slice());
+  const chain = createChain(SR);
+  chain.update([effect]);
+  const offline = input.slice(), right = input.slice();
+  chain.process(offline, right, offline.length);
+  assert.deepEqual(offline, live.L);
+  assert.equal(chain.latency, 2048);
+  chain.update([{ ...effect, p: { semitones: 0 } }]);
+  const neutral = input.slice();
+  chain.process(neutral, neutral.slice(), neutral.length);
+  assert.equal(chain.latency, 0);
+  assert.deepEqual(neutral, input);
+});
