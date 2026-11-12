@@ -278,11 +278,39 @@ test('subtitles from the script follow each clip, split long lines and leave out
     { text: 'Noen synes det er spennende. Andre synes det er skremmende.', start: 10, dur: 4 },
     { text: '[smiling] For bare hundre år siden virket det umulig å snakke med noen på den andre siden av kloden. I dag gjør vi det uten å tenke over det.', start: 15, dur: 8 },
   ]);
-  assert.equal(caps[0].text, 'Noen synes det er spennende. Andre synes det er skremmende.');
-  assert.deepEqual([caps[0].start, caps[0].end], [10, 14]);
-  assert.ok(caps.length >= 3 && caps.slice(1).every((c) => c.text.length <= 84 && !c.text.includes('[')));
-  assert.equal(caps[1].start, 15);
+  assert.deepEqual(caps.slice(0, 2).map((c) => c.text), ['Noen synes det er spennende.', 'Andre synes det er skremmende.']);
+  assert.deepEqual([caps[0].start, caps[1].end], [10, 14]);
+  assert.ok(caps.length >= 5 && caps.every((c) => c.text.length <= 42 && !c.text.includes('[')));
+  assert.equal(caps[2].start, 15);
   assert.ok(Math.abs(caps.at(-1).end - 23) < 0.01);
+});
+
+test('script captions never combine a sentence ending with the start of the next sentence', () => {
+  const sentences = ['Nå starter vi.', 'Her kommer en lengre setning som må deles over flere undertekster for å være lett å lese.', 'Ferdig!'];
+  const caps = scriptCaptions([{ text: sentences.join(' '), start: 5, dur: 12 }]);
+  assert.equal(caps[0].text, sentences[0]);
+  assert.equal(caps.at(-1).text, sentences[2]);
+  assert.equal(caps.slice(1, -1).map((c) => c.text).join(' '), sentences[1]);
+  assert.ok(caps.every((c) => c.text.length <= 42 && c.end > c.start));
+  assert.equal(caps[0].start, 5);
+  assert.equal(caps.at(-1).end, 17);
+  for (let i = 1; i < caps.length; i++) assert.equal(caps[i].start, caps[i - 1].end);
+});
+
+test('short script sentences each get their own caption, also with a custom character limit', () => {
+  const text = 'Ready? Yes! Go.';
+  for (const maxChars of [42, 84]) {
+    const caps = scriptCaptions([{ text, start: 0, dur: 3 }], { maxChars });
+    assert.deepEqual(caps.map((c) => c.text), ['Ready?', 'Yes!', 'Go.']);
+  }
+});
+
+test('long script sentences prefer clause boundaries and keep all words', () => {
+  const text = 'Vi åpner prosjektet, og deretter velger vi klippet som skal redigeres.';
+  const caps = scriptCaptions([{ text, start: 0, dur: 6 }]);
+  assert.equal(caps[0].text, 'Vi åpner prosjektet,');
+  assert.equal(caps.map((c) => c.text).join(' '), text);
+  assert.ok(caps.every((c) => c.text.length <= 42));
 });
 
 test('each pause knows the line before it, so its room tone can be deleted', () => {

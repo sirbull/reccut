@@ -39,14 +39,15 @@ export function splitSentences(text) {
 }
 
 // Undertekster fra manuset: hver linje legges over klippet sitt (parts: [{ text, start, dur }]).
-// Lange linjer deles i biter på høyst maxChars (to linjer), helst mellom setninger og ved komma,
-// og tiden fordeles etter antall tegn. Retningslinjer i [klammer] er ikke med.
-export function scriptCaptions(parts, { maxChars = 84 } = {}) {
+// Sikt mot én linje per undertekst (42 tegn). Hver setning starter i en ny undertekst;
+// lange setninger deles helst ved komma, ellers mellom ord. Tiden fordeles etter antall tegn.
+// Retningslinjer i [klammer] er ikke med.
+export function scriptCaptions(parts, { maxChars = 42 } = {}) {
   const out = [];
   for (const { text, start, dur } of parts) {
     const clean = plainLine(text).replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
     if (!clean || !(dur > 0)) continue;
-    const pieces = [];
+    const chunks = [];
     for (const sentence of splitSentences(clean)) {
       let rest = sentence;
       while (rest.length > maxChars) {
@@ -54,16 +55,10 @@ export function scriptCaptions(parts, { maxChars = 84 } = {}) {
         const comma = Math.max(head.lastIndexOf(', '), head.lastIndexOf('; '), head.lastIndexOf(': '));
         let cut = comma > maxChars * 0.4 ? comma + 1 : head.lastIndexOf(' ');
         if (cut <= 0) cut = maxChars;
-        pieces.push(rest.slice(0, cut).trim());
+        chunks.push(rest.slice(0, cut).trim());
         rest = rest.slice(cut).trim();
       }
-      if (rest) pieces.push(rest);
-    }
-    // Korte setninger slås sammen så lenge de får plass.
-    const chunks = [];
-    for (const p of pieces) {
-      if (chunks.length && chunks.at(-1).length + 1 + p.length <= maxChars) chunks[chunks.length - 1] += ` ${p}`;
-      else chunks.push(p);
+      if (rest) chunks.push(rest);
     }
     const total = chunks.reduce((a, c) => a + c.length, 0);
     let t = start;
