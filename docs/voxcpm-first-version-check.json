@@ -1,0 +1,30 @@
+{
+  "version": "0.9.2",
+  "networkRequests": 0,
+  "checks": [
+    {
+      "lang": "en-us",
+      "voice": "en-us-female-1",
+      "mood": "warm",
+      "text": "We can find a way together.",
+      "rate": 48000,
+      "duration": 2.24,
+      "elapsedSeconds": 20.697022916999998,
+      "sha256Float32": "56a7135b9fd815f06018796189e24e9aaab0daa668e8d7a5bdbcc16a264673d5",
+      "sentences": 1,
+      "modelLoadingEvents": 1
+    },
+    {
+      "lang": "nb",
+      "voice": "nb-male-1",
+      "mood": "sensual",
+      "text": "Ta en liten pause. Vi finner en god vei videre sammen.",
+      "rate": 48000,
+      "duration": 3.2,
+      "elapsedSeconds": 9.383248625,
+      "sha256Float32": "dd6739465d680e9224b738a4f161bd8e9c4924d4c29c9dec06ce48496db4e0fc",
+      "sentences": 2,
+      "modelLoadingEvents": 0
+    }
+  ]
+}

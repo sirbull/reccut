@@ -136,6 +136,58 @@ test('the voice model and the GPL pronunciation add-on are never packed into the
   assert.ok(!/kokoro|phonemizer|espeak|tts/i.test(resources));
 });
 
+test('VoxCPM2 models, references, moods and engine source are pinned independently of the installer', () => {
+  const c = CATALOG.voxcpm;
+  assert.ok(['Apache-2.0', 'MIT'].includes(c.license));
+  assert.ok(['Apache-2.0', 'MIT'].includes(c.model.license));
+  assert.match(c.model.revision, /^[0-9a-f]{40}$/);
+  assert.match(c.engine.revision, /^[0-9a-f]{40}$/);
+  assert.equal(c.engine.license, 'MIT');
+  assert.equal(c.engine.protocol, require('../src/main/voxcpmProcess.js').PROTOCOL);
+  for (const f of c.model.files) {
+    assert.match(f.sha256, /^[0-9a-f]{64}$/);
+    assert.ok(Number.isSafeInteger(f.size) && f.size > 0);
+  }
+  assert.deepEqual(c.moods.map((m) => m.id), ['neutral', 'intense', 'angry', 'sad', 'warm', 'sensual', 'cheerful', 'confident', 'reassuring', 'whispering']);
+  assert.equal(new Set(c.moods.map((m) => m.id)).size, c.moods.length);
+  for (const mood of c.moods) {
+    assert.ok(mood.label && mood.prompt);
+    assert.ok(!/\b(trailer|movie|hall|stage)\b/i.test(mood.prompt + ' ' + c.settings.suffix));
+  }
+  assert.equal(c.settings.cfg, 3.5);
+  assert.equal(c.settings.suffix, 'Dry, close-mic studio recording with no reverb.');
+  for (const l of c.languages) {
+    if (l.source !== 'release') {
+      assert.match(l.revision, /^[0-9a-f]{40}$/);
+      assert.ok(l.repository);
+    }
+    assert.ok(l.lang && l.voices.length);
+    for (const v of l.voices) {
+      assert.ok(v.id && v.name && v.reference.path && v.reference.size > 0);
+      assert.match(v.reference.sha256, /^[0-9a-f]{64}$/);
+      assert.match(v.id, /^[a-z0-9-]+$/);
+      if (l.source === 'release') {
+        assert.match(v.reference.path, /^reccut-voxcpm-[a-z0-9-]+\.wav$/);
+        const reference = fs.readFileSync(new URL(`../native/voxcpm/voices/${v.reference.path}`, import.meta.url));
+        assert.equal(reference.length, v.reference.size);
+        assert.equal(crypto.createHash('sha256').update(reference).digest('hex'), v.reference.sha256);
+      }
+      for (const mood of c.moods) {
+        const sample = new URL(`../assets/voice-samples/voxcpm/${v.id}-${mood.id}.ogg`, import.meta.url);
+        assert.ok(fs.statSync(sample).size > 0, `${v.id}/${mood.id} has a bundled preview before the model can be offered`);
+      }
+    }
+  }
+  const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.ok(!/\.gguf|reccut-voxcpm-(mac|win|linux)/i.test(JSON.stringify([pkg.build.files, pkg.build.extraResources])));
+  assert.ok(!/voxcpm/i.test(JSON.stringify([pkg.dependencies, pkg.devDependencies, pkg.scripts.postinstall, pkg.scripts.dist])));
+  assert.ok(pkg.build.files.includes('src/shared/tts.js'), 'the native engine can import the same sentence splitter in a packaged app');
+  const ci = fs.readFileSync(new URL('../.github/workflows/build.yml', import.meta.url), 'utf8');
+  assert.ok(ci.includes(`ref: ${c.engine.revision}`));
+  assert.ok(ci.includes('voxcpm-artifacts/reccut-voxcpm-*'));
+  assert.ok(ci.includes('scripts/prepare-voxcpm-voices.mjs'));
+});
+
 test('the language is chosen separately, suggested from the script, and Norwegian sounds the model lacks are mapped', () => {
   assert.equal(detectLanguage('Velkommen til fremtidens redigering. Det er ikke vanskelig, og du kan gjøre det selv.'), 'nb');
   assert.equal(detectLanguage('Welcome to the future of editing. It is not hard, and you can do it.'), 'en-us');

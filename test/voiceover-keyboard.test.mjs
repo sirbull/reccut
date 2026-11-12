@@ -31,6 +31,7 @@ function setup() {
     busy: () => false, recordRoomTone: () => calls.push('record'),
   };
   const aiDialogOpen = { value: false };
+  const voicePackagesOpen = { value: null };
   const document = { activeElement: { tagName: 'BODY' } };
   const module = { exports: {} };
   vm.runInNewContext(bundle, {
@@ -38,6 +39,7 @@ function setup() {
     require: (name) => {
       if (name === './booth.js') return booth;
       if (name === './AiVoice.jsx') return { aiDialogOpen };
+      if (name === '../voicePackages.js') return { voicePackagesOpen };
       if (name === './VoTimeline.jsx') return {
         togglePreview: () => calls.push('play/stop'),
         toggleStudioTool: (id) => calls.push(id),
@@ -55,8 +57,18 @@ function setup() {
     module.exports.onBoothKey(event);
     return event;
   }
-  return { booth, calls, aiDialogOpen, document, key };
+  return { booth, calls, aiDialogOpen, voicePackagesOpen, document, key };
 }
+
+test('voice package chooser keeps keyboard input out of studio transport and recording', () => {
+  const f = setup();
+  f.voicePackagesOpen.value = { firstRun: true };
+  for (const k of [' ', 'r', 'Escape']) {
+    const e = f.key(undefined, { key: k });
+    assert.equal(e.defaultPrevented, undefined);
+  }
+  assert.deepEqual(f.calls, []);
+});
 
 test('Space controls studio playback from controls and scrollable panes, without their default actions', () => {
   for (const target of [

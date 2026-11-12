@@ -66,6 +66,18 @@ export function buildLicenses({ root = projectRoot, out = path.join(root, 'build
   add('whisper', 'Whisper models', 'MIT', 'https://github.com/openai/whisper',
     'Local speech recognition. Converted models are obtained from onnx-community; the model manager identifies the installed revision.',
     ['assets/licenses/whisper-MIT.txt']);
+  const { voxcpm } = JSON.parse(read('src/main/ttsCatalog.json'));
+  add('voxcpm2', 'VoxCPM2 model (optional)', voxcpm.license,
+    `https://huggingface.co/${voxcpm.model.repository}/tree/${voxcpm.model.revision}`,
+    'Local multilingual speech synthesis. GGUF weights converted by DennisHuang648 from openbmb/VoxCPM2; downloaded only when requested, never included in the installer.',
+    ['assets/licenses/VoxCPM2-Apache-2.0.txt'], voxcpm.model.revision);
+  add('voxcpm-engine', 'llama.cpp-omni / VoxCPM2 CLI (optional)', voxcpm.engine.license,
+    `https://github.com/${voxcpm.engine.repository}/tree/${voxcpm.engine.revision}`,
+    'Separate local speech engine with Reccut’s stdin/stdout adapter and nlohmann JSON parser. Keeps weights in memory between speech jobs; downloaded from the matching Reccut release after checksum verification. Not included in the installer.',
+    ['assets/licenses/llama-cpp-omni-MIT.txt', 'assets/licenses/nlohmann-json-MIT.txt'], voxcpm.engine.revision);
+  add('voxcpm-voices', 'Reccut synthetic voice references (optional)', 'MIT', 'https://github.com/sirbull/reccut',
+    'Synthetic reference recordings generated with VoxCPM2, without recordings or clones of real people. Downloaded only when a voice package is requested.',
+    ['native/voxcpm/voices/LICENSE.txt']);
   add('deepfilternet', 'DeepFilterNet 3 model', 'MIT OR Apache-2.0', 'https://github.com/Rikorose/DeepFilterNet',
     'AI noise removal (Clean Voice). The model is included with the app and runs on the computer.',
     ['assets/licenses/DeepFilterNet-MIT.txt']);

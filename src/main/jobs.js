@@ -12,7 +12,7 @@ function snapshot() {
   return [...tasks.values()]
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 30)
-    .map(({ id, kind, title, progress, state, error, result, stage, mediaId }) => ({ id, kind, title, progress, state, error, result, stage, mediaId }));
+    .map(({ id, kind, title, progress, state, error, result, stage, mediaId, packageKey }) => ({ id, kind, title, progress, state, error, result, stage, mediaId, packageKey }));
 }
 
 let broadcastTimer = null;
@@ -39,12 +39,12 @@ function update(id, patch) {
 
 // Køer: analyse kan gå to samtidig, tunge jobber én om gangen.
 // Optimalisering har sin egen kø, så den ikke stopper eksport og analyse.
-const queues = { light: { limit: 2, running: 0, items: [] }, heavy: { limit: 1, running: 0, items: [] }, optimize: { limit: 1, running: 0, items: [] }, speech: { limit: 1, running: 0, items: [] } };
+const queues = { light: { limit: 2, running: 0, items: [] }, heavy: { limit: 1, running: 0, items: [] }, optimize: { limit: 1, running: 0, items: [] }, speech: { limit: 1, running: 0, items: [] }, voiceDownloads: { limit: 1, running: 0, items: [] } };
 
 // mediaId: mediet jobben arbeider med, så klippene kan vise at de analyseres.
-function add({ kind, title, queue = 'light', run, silent = false, mediaId = null }) {
+function add({ kind, title, queue = 'light', run, silent = false, mediaId = null, packageKey = null }) {
   const id = nextId++;
-  const task = { id, kind, title, progress: 0, state: 'queued', createdAt: Date.now(), silent, mediaId };
+  const task = { id, kind, title, progress: 0, state: 'queued', createdAt: Date.now(), silent, mediaId, packageKey };
   tasks.set(id, task);
   let resolveDone, rejectDone;
   const done = new Promise((res, rej) => {

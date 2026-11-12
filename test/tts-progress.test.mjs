@@ -150,3 +150,25 @@ test('cancel interrupts a running speech worker, rejects waiting UI, and allows 
   events.get('worker:done')(null, { jobId: 2, result: audio });
   assert.equal(await next, audio);
 });
+
+test('voice-package downloads share a serial queue and queued packages can be canceled independently', async () => {
+  const { jobs } = mainJobs();
+  let finish;
+  const first = jobs.add({ kind: 'download', title: 'Kokoro', queue: 'voiceDownloads', packageKey: 'kokoro',
+    run: () => new Promise((resolve) => { finish = resolve; }),
+  });
+  let ranSecond = false;
+  const second = jobs.add({ kind: 'download', title: 'Norwegian', queue: 'voiceDownloads', packageKey: 'piper:no',
+    run: () => { ranSecond = true; },
+  });
+  await new Promise(setImmediate);
+  assert.equal(ranSecond, false);
+  assert.equal(jobs.snapshot().find((j) => j.id === second.id).packageKey, 'piper:no');
+  const rejects = assert.rejects(second.done, /Canceled/);
+  jobs.cancel(second.id);
+  finish();
+  await first.done;
+  await rejects;
+  assert.equal(ranSecond, false);
+  assert.equal(jobs.snapshot().find((j) => j.id === first.id).state, 'done');
+});
