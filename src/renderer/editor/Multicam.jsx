@@ -224,7 +224,13 @@ function MulticamWindow({ session }) {
   const skimmingRef = useRef(skimming);
   skimmingRef.current = skimming;
   const [selectedCut, setSelectedCut] = useState(null);
-  const [notice, setNotice] = useState(() => (session.initialErrors?.length ? { kind: 'warn', title: 'Some clips were left out', items: session.initialErrors } : null));
+  const [notice, setNotice] = useState(() =>
+    session.lossy
+      ? { kind: 'warn', title: 'Some changes on the timeline cannot be kept here', items: session.initialErrors }
+      : session.initialErrors?.length
+        ? { kind: 'warn', title: 'Some clips were left out', items: session.initialErrors }
+        : null
+  );
   const [syncing, setSyncing] = useState(false);
 
   const ext = multicamExtent(p, mc);
@@ -572,6 +578,7 @@ function MulticamWindow({ session }) {
   const send = () => {
     stopPlay();
     if (!dirty && session.editing) return closeMulticam();
+    if (session.lossy && !confirm('Parts of this multicam clip were removed or changed speed on the timeline. Updating puts the removed parts back and loses the speed changes. Update anyway?')) return;
     sendMulticamToTimeline(mcRef.current);
   };
 

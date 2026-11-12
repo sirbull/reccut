@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeClip, newProject } from '../src/shared/model.js';
+import { deleteClips, rollEdit, splitClip, trimClip } from '../src/shared/ops.js';
 import {
+  absorbTimeline,
   addAngles,
+  switchClipAngle,
   angleLabel,
   angleSound,
   soundEffects,
@@ -324,4 +327,73 @@ test('the time of a clip in the multicam clip, for Active Video Angle on the tim
   switchSegment(p, mc, multicamTimeOfClip(p, mc, second), A);
   assert.equal(angleAt(mc, 10), A);
   assert.equal(mc.cuts.length, 1);
+});
+
+function editedTimeline() {
+  const p = setup();
+  p.media.rec = { id: 'rec', kind: 'audio', name: 'rec.wav', duration: 20, streams: { main: { path: '/m/rec.wav', hasAudio: true } } };
+  const mc = mcWith(p, ['a', 'b', 'rec']);
+  const [A, B] = mc.angles.map((x) => x.id);
+  cutAndSwitch(p, mc, 6, B);
+  placeMulticam(p, mc);
+  const vids = () => p.primary.map((id) => p.clips[id]).filter((c) => c.multicam);
+  return { p, mc, A, B, vids };
+}
+
+test('trims, cuts and effects made on the timeline survive an update from the multicam window', () => {
+  const { p, mc, A, B, vids } = editedTimeline();
+  let [one, two] = vids();
+  // Roll the cut one second later, add an effect and a keyframe to camera 2, blade it and trim the end.
+  rollEdit(p, one.id, two.id, 1);
+  two = p.clips[two.id];
+  two.props.saturation = 0.4;
+  two.kf.opacity = [[10, 1], [11, 0.5]];
+  two.colorLabel = 'red';
+  splitClip(p, two.id, 12);
+  trimClip(p, vids().at(-1).id, 'end', -2);
+  const audio = Object.values(p.clips).find((c) => c.type === 'audio');
+  trimClip(p, audio.id, 'start', 1);
+  const { mc: read, ok } = absorbTimeline(p, p.multicams[mc.id]);
+  assert.equal(ok, true);
+  assert.deepEqual(read.cuts.filter((c) => c.t <= read.range.out).map((c) => [c.t, c.angle === A ? 'A' : 'B', Boolean(c.blade)]), [[0, 'A', false], [7, 'B', false], [12, 'B', true]]);
+  assert.deepEqual(read.range, { in: 0, out: 18 });
+  // Cut to camera 1 at 15 s in the window, then update the timeline.
+  cutAndSwitch(p, read, 15, A);
+  placeMulticam(p, read, { replace: Object.values(p.clips).filter((c) => c.multicam?.id === mc.id).map((c) => c.id) });
+  const after = vids();
+  assert.deepEqual(after.map((c) => [c.start, c.dur, c.multicam.angle === A ? 'A' : 'B']), [[0, 7, 'A'], [7, 5, 'B'], [12, 3, 'B'], [15, 3, 'A']]);
+  assert.equal(after[1].props.saturation, 0.4);
+  assert.deepEqual(after[1].kf.opacity, [[10, 1], [11, 0.5]]);
+  assert.equal(after[1].colorLabel, 'red');
+  const sound = Object.values(p.clips).find((c) => c.type === 'audio');
+  assert.equal(sound.start, 1);
+  assert.equal(sound.dur, 17);
+});
+
+test('a camera can be switched in one clip without touching its trim, and removed middle parts are reported', () => {
+  const { p, mc, A, B, vids } = editedTimeline();
+  p.multicams[mc.id].angles[1].offset = 0;
+  const [one, two] = vids();
+  rollEdit(p, one.id, two.id, -1);
+  const before = structuredClone(p.clips[two.id]);
+  p.clips[two.id].kf.opacity = [[8, 1]];
+  assert.equal(switchClipAngle(p, two.id, A).ok, true);
+  const now = p.clips[two.id];
+  assert.equal(now.start, before.start);
+  assert.equal(now.dur, before.dur);
+  assert.equal(now.multicam.angle, A);
+  assert.equal(now.mediaId, 'a');
+  assert.deepEqual(now.kf.opacity, [[8, 1]]);
+  // A camera that starts later than the clip cannot cover it, so nothing changes.
+  p.multicams[mc.id].angles[1].offset = 3;
+  const first = vids()[0];
+  const refused = switchClipAngle(p, first.id, B);
+  assert.equal(refused.ok, false);
+  assert.match(refused.reason, /no picture for the whole clip/);
+  assert.equal(p.clips[first.id].multicam.angle, A);
+  // Deleting a piece in the middle of the storyline cannot be described as cuts.
+  splitClip(p, now.id, 10);
+  const pieces = vids();
+  deleteClips(p, [pieces[1].id], { ripple: true });
+  assert.equal(absorbTimeline(p, p.multicams[mc.id]).ok, false);
 });

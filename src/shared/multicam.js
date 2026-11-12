@@ -395,7 +395,8 @@ export function programPieces(project, mc) {
       const use = useAngle(project, mc, seg.angle, mid);
       const piece = { start: s, end: e, angle: use?.id || null, chosen: seg.angle, fallback: Boolean(use && use.id !== seg.angle), index: seg.index };
       const prev = out[out.length - 1];
-      if (prev && prev.angle === piece.angle && prev.chosen === piece.chosen && Math.abs(prev.end - s) < EPS) prev.end = e;
+      // Bare biter fra samme kutt slås sammen. Kutt med samme kamera på begge sider er laget med bladet.
+      if (prev && prev.index === piece.index && prev.angle === piece.angle && prev.chosen === piece.chosen && Math.abs(prev.end - s) < EPS) prev.end = e;
       else out.push(piece);
     }
   }
@@ -571,19 +572,38 @@ function audioStreamKeys(media) {
  * fra vinkelen som har lyden. Tidene regnes fra starten av området. Klipp som fantes fra før,
  * gir egenskapene sine (effekter, farge, posisjon) videre til nye biter fra samme vinkel.
  */
-export function buildMulticamClips(project, mc, { previous = [] } = {}) {
+export function buildMulticamClips(project, mc, { previous = [], previousMc = null } = {}) {
   const range = multicamRange(project, mc);
   const follow = mc.audio === 'follow';
   const video = [];
   const audio = [];
   const oldProps = new Map();
   const oldAudio = new Map();
+  // Tidligere klipp med sin plass i multicam-tid (med forskyvningene de ble laget med).
+  const oldOffset = (id) => (previousMc || mc).angles.find((a) => a.id === id)?.offset ?? mc.angles.find((a) => a.id === id)?.offset ?? 0;
+  const oldVideo = [];
   for (const c of previous) {
     const key = c.multicam?.angle;
     if (!key) continue;
-    if (c.type === 'audio') oldAudio.set(`${key}:${c.stream || 'main'}`, c);
-    else if (!oldProps.has(key)) oldProps.set(key, c);
+    if (c.type === 'audio') {
+      if (!oldAudio.has(`${key}:${c.stream || 'main'}`)) oldAudio.set(`${key}:${c.stream || 'main'}`, c);
+      continue;
+    }
+    if (!oldProps.has(key)) oldProps.set(key, c);
+    const s = c.in + oldOffset(key);
+    oldVideo.push({ c, angle: key, start: s, end: s + c.dur });
   }
+  // Klippet en ny bit kommer fra: samme vinkel og mest felles tid. Det gir tilbake effekter,
+  // nøkkelbilder (de står i kildetid), farge, overganger og av/på, også etter trimming i redigeringen.
+  const source = (angleId, s, e) => {
+    let best = null;
+    for (const o of oldVideo) {
+      if (o.angle !== angleId) continue;
+      const overlap = Math.min(e, o.end) - Math.max(s, o.start);
+      if (overlap > EPS && (!best || overlap > best.overlap)) best = { ...o, overlap };
+    }
+    return best;
+  };
   const gap = (start, dur) => {
     const g = makeClip('gap', { start, dur, name: 'Gap' });
     g.multicam = { id: mc.id };
@@ -593,7 +613,10 @@ export function buildMulticamClips(project, mc, { previous = [] } = {}) {
   const pieces = [];
   for (const piece of programPieces(project, mc)) {
     const prev = pieces[pieces.length - 1];
-    if (prev && prev.angle === piece.angle && Math.abs(prev.end - piece.start) < EPS) prev.end = piece.end;
+    // Et kutt laget med bladet (også i redigeringen) blir stående, selv med samme kamera på begge sider.
+    const cut = mc.cuts[piece.index];
+    const bladed = cut?.blade && Math.abs(cut.t - piece.start) < EPS;
+    if (prev && prev.angle === piece.angle && Math.abs(prev.end - piece.start) < EPS && !bladed) prev.end = piece.end;
     else pieces.push({ ...piece });
   }
   for (const seg of pieces) {
@@ -608,8 +631,18 @@ export function buildMulticamClips(project, mc, { previous = [] } = {}) {
     const e = seg.end;
     {
       const c = makeClip(mediaClipType(m), { media: m, start: r6(s - range.in), in: r6(s - angle.offset), dur: r6(e - s) });
-      const prev = oldProps.get(angle.id);
+      const match = source(angle.id, s, e);
+      const prev = match?.c || oldProps.get(angle.id);
       if (prev) c.props = { ...c.props, ...deepClone(prev.props) };
+      if (match) {
+        const o = match.c;
+        if (o.kf) c.kf = deepClone(o.kf);
+        if (o.expressions) c.expressions = deepClone(o.expressions);
+        if (o.colorLabel) c.colorLabel = o.colorLabel;
+        if (o.enabled === false) c.enabled = false;
+        if (o.transition && Math.abs(match.start - s) < 1e-3) c.transition = deepClone(o.transition);
+        if (o.transitionOut && Math.abs(match.end - e) < 1e-3) c.transitionOut = deepClone(o.transitionOut);
+      }
       c.name = `${mc.name} · Camera ${angleLabel(project, mc, angle.id)}`;
       c.multicam = { id: mc.id, angle: angle.id };
       if (!follow) c.props.audioOff = { ...(c.props.audioOff || {}), ...Object.fromEntries(audioStreamKeys(m).map((k) => [k, true])) };
@@ -625,20 +658,27 @@ export function buildMulticamClips(project, mc, { previous = [] } = {}) {
     const m = project.media[angle?.mediaId];
     if (m) {
       const ext = angleExtent(project, angle);
-      const s = Math.max(range.in, ext.start);
-      const e = Math.min(range.out, ext.end);
-      if (e - s > EPS) {
-        const probe = makeClip(mediaClipType(m), { media: m });
-        const comps = m.kind === 'audio' ? [{ key: 'main', label: 'Audio', off: false }] : audioComponents(probe, m);
-        for (const comp of comps) {
+      const probe = makeClip(mediaClipType(m), { media: m });
+      const comps = m.kind === 'audio' ? [{ key: 'main', label: 'Audio', off: false }] : audioComponents(probe, m);
+      for (const comp of comps) {
+        const prev = oldAudio.get(`${angle.id}:${comp.key}`);
+        // Et lydklipp som er trimmet i redigeringen, beholder lengden sin.
+        let s = Math.max(range.in, ext.start);
+        let e = Math.min(range.out, ext.end);
+        if (prev && (prev.speed ?? 1) === 1 && !prev.ramp && !prev.reverse) {
+          const ps = prev.in + oldOffset(angle.id);
+          s = Math.max(s, ps);
+          e = Math.min(e, ps + prev.dur);
+        }
+        if (e - s > EPS) {
           const a = makeClip('audio', { media: m, start: r6(s - range.in), in: r6(s - angle.offset), dur: r6(e - s), lane: -1 });
           a.stream = comp.key;
-          const prev = oldAudio.get(`${angle.id}:${comp.key}`);
           if (prev) a.props = { ...a.props, ...deepClone(prev.props) };
           a.name = `${mc.name} audio${comps.length > 1 ? ` (${comp.label.toLowerCase()})` : ''}`;
           a.multicam = { id: mc.id, angle: angle.id };
           applySound(a, angleSound(angle), angle.offset);
-          if (comp.off) a.enabled = false;
+          if (comp.off || prev?.enabled === false) a.enabled = false;
+          if (prev?.colorLabel) a.colorLabel = prev.colorLabel;
           audio.push(a);
         }
       }
@@ -673,12 +713,13 @@ function freeAudioLane(project, start, end) {
  * de lå, og uten noe å erstatte legges det til slutt i hovedsporet. Gir id-ene til de nye klippene.
  */
 export function placeMulticam(project, mc, { replace = [], at = null } = {}) {
+  const previousMc = project.multicams?.[mc.id] ? deepClone(project.multicams[mc.id]) : null;
   project.multicams = { ...(project.multicams || {}), [mc.id]: deepClone(mc) };
   const old = replace.map((id) => project.clips[id]).filter(Boolean);
   const oldIds = new Set(old.flatMap((c) => groupMembers(project, c.id)));
   for (const c of old) oldIds.add(c.id);
   const previous = [...oldIds].map((id) => deepClone(project.clips[id]));
-  const { video, audio } = buildMulticamClips(project, mc, { previous });
+  const { video, audio } = buildMulticamClips(project, mc, { previous, previousMc });
   if (!video.length && !audio.length) return [];
   const group = uid();
   for (const c of [...video, ...audio]) c.group = group;
@@ -754,4 +795,90 @@ export function multicamTimeOfClip(project, mc, clip) {
   const first = members.sort((a, b) => a.start - b.start)[0];
   const range = multicamRange(project, mc);
   return range.in + (clip.start - (first?.start ?? clip.start)) + clip.dur / 2;
+}
+
+/* Endringer i redigeringen: klippene på tidslinjen er sannheten for kutt og trimming. */
+
+const plainClip = (c) => (c.speed ?? 1) === 1 && !c.ramp && !c.reverse;
+
+/**
+ * Leser klippene i gruppen tilbake inn i definisjonen før den endres: kuttene (også flyttede,
+ * delte og trimmede), området og lydnivået. Svar: { mc, ok }. ok er false når noe ikke kan
+ * beskrives som kutt i multicam-klippet, for eksempel en bit midt i som er slettet, eller endret fart.
+ */
+export function absorbTimeline(project, mc) {
+  const clips = Object.values(project.clips).filter((c) => c.multicam?.id === mc.id);
+  const vids = clips.filter((c) => c.type !== 'audio').sort((a, b) => a.start - b.start);
+  const offsetOf = (id) => mc.angles.find((a) => a.id === id)?.offset;
+  let delta = null;
+  for (const c of vids) {
+    if (c.type === 'gap') continue;
+    const o = offsetOf(c.multicam.angle);
+    if (o == null || !plainClip(c)) return { mc, ok: false };
+    const d = c.start - (c.in + o);
+    if (delta == null) delta = d;
+    else if (Math.abs(d - delta) > 1e-3) return { mc, ok: false };
+  }
+  if (delta == null) return { mc, ok: true };
+  const next = deepClone(mc);
+  const first = vids[0];
+  const last = vids[vids.length - 1];
+  next.range = { in: r6(first.start - delta), out: r6(last.start + last.dur - delta) };
+  const cuts = [];
+  for (const c of vids) {
+    const t = r6(c.start - delta);
+    const mid = t + c.dur / 2;
+    // En bit der et annet kamera ble vist som reserve, beholder kameraet som var valgt.
+    const angle = c.type === 'gap' || pictureAngleAt(project, mc, mid) === c.multicam.angle ? angleAt(mc, mid) : c.multicam.angle;
+    const prev = cuts[cuts.length - 1];
+    // To klipp etter hverandre med samme kamera (delt med bladet i redigeringen) holdes fra hverandre.
+    cuts.push(prev && prev.angle === angle ? { t, angle, blade: true } : { t, angle });
+  }
+  // Kutt etter området beholdes, så det ikke endrer seg om området gjøres lengre igjen.
+  next.cuts = [...cuts, ...mc.cuts.filter((c) => c.t > next.range.out + EPS)];
+  // Lyden: nivå, nøkkelbilder og Clean Voice fra lydklippet, tilbake til kilden i Properties.
+  if (mc.audio && mc.audio !== 'follow') {
+    const a = clips.find((c) => c.type === 'audio' && c.multicam?.angle === mc.audio && plainClip(c));
+    const angle = next.angles.find((x) => x.id === mc.audio);
+    if (a && angle) {
+      const cur = angleSound(angle);
+      const kf = (a.kf?.volume || []).map(([s, v]) => [r6(s + angle.offset), v]);
+      const clean = a.props.cleanVoice?.[a.stream || 'main'];
+      angle.sound = { ...cur, volume: a.props.volume ?? 0, volumeKf: kf, clean: clean > 0 ? clean : null };
+    }
+  }
+  return { mc: tidy(project, next), ok: true };
+}
+
+/**
+ * Active Video Angle for ett klipp i redigeringen: klippet får samme tid og lengde, men
+ * kilden byttes til et annet kamera. Trimming, effekter og overganger blir som de var.
+ * Gir { ok, reason }.
+ */
+export function switchClipAngle(project, clipId, angleId) {
+  const clip = project.clips[clipId];
+  const mc = project.multicams?.[clip?.multicam?.id];
+  if (!clip || !mc || clip.type === 'gap' || clip.type === 'audio') return { ok: false, reason: 'Choose a video clip from the multicam clip.' };
+  const from = mc.angles.find((a) => a.id === clip.multicam.angle);
+  const to = mc.angles.find((a) => a.id === angleId);
+  const m = project.media[to?.mediaId];
+  if (!from || !to || !m || !isVideoAngle(project, to)) return { ok: false, reason: 'That camera is no longer in the multicam clip.' };
+  if (from.id === to.id) return { ok: false };
+  const newIn = r6(clip.in + from.offset - to.offset);
+  if (!plainClip(clip) || newIn < -EPS || newIn + clip.dur > m.duration + EPS) {
+    return { ok: false, reason: `Camera ${angleLabel(project, mc, to.id)} has no picture for the whole clip. Open Edit Multicam Clip to cut to it where it has.` };
+  }
+  const shift = newIn - clip.in;
+  clip.mediaId = m.id;
+  clip.in = Math.max(0, newIn);
+  // Nøkkelbilder står i kildetid, så de flyttes like mye som kilden.
+  for (const list of Object.values(clip.kf || {})) for (const k of list) k[0] = r6(k[0] + shift);
+  clip.multicam = { ...clip.multicam, angle: to.id };
+  clip.name = `${mc.name} · Camera ${angleLabel(project, mc, to.id)}`;
+  if (mc.audio === 'follow') clip.props.audioOff = { ...(m.audioOff || {}) };
+  else clip.props.audioOff = Object.fromEntries(audioStreamKeys(m).map((k) => [k, true]));
+  // Definisjonen følger med, så multicam-vinduet viser det samme neste gang.
+  const { mc: next, ok } = absorbTimeline(project, mc);
+  if (ok) project.multicams = { ...project.multicams, [mc.id]: next };
+  return { ok: true };
 }

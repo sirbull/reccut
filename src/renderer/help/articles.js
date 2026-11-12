@@ -936,7 +936,7 @@ You can also right click a camera's clip and choose **Use as Fallback Camera**.
 
 Right click anywhere in the multicam timeline and choose **Active Video Angle** to show another camera in the piece you clicked, without making a new cut. **Active Audio Angle** chooses where the sound comes from: one of the cameras, a separate audio file or **Follow the Picture**. The current choice has a check mark.
 
-The same menus are on the multicam clip in the Edit timeline. Right click a clip from the multicam clip and choose **Active Video Angle** or **Active Audio Angle**. The clip changes camera, or the sound changes, without opening the multicam window.
+The same menus are on the multicam clip in the Edit timeline. Right click a clip from the multicam clip and choose **Active Video Angle** or **Active Audio Angle**. The clip changes camera, or the sound changes, without opening the multicam window. The clip keeps its trim, effects, keyframes and transitions; only the camera changes. If the camera has no picture for the whole clip, Reccut says so and leaves the clip as it is.
 
 ## The multicam timeline
 
@@ -1034,7 +1034,11 @@ Press the blue **Add to Timeline** button at the top left, or **Cmd Return** (Ct
 ## Change it later
 
 - **Double click** the multicam clip to edit the clips inside like any other clips, for example to add effects, color or titles. Press Esc when you are done.
-- **Cmd double click** (Ctrl double click on Windows), right click and choose **Edit Multicam Clip**, or press **Edit Multicam Clip** in the inspector, to open the multicam window again. Switch cameras, add cameras or change the sound, then press **Update Timeline**. Effects you added to a camera are kept.
+- **Cmd double click** (Ctrl double click on Windows), right click and choose **Edit Multicam Clip**, or press **Edit Multicam Clip** in the inspector, to open the multicam window again. Switch cameras, add cameras or change the sound, then press **Update Timeline**.
+
+Work you did on the timeline is kept. When the window opens, it reads the clips as they are: cuts you moved or trimmed, clips you split with the blade, a trimmed start or end, and the level and keyframes of the sound. When you update, every piece gets back its effects, keyframes, color, transitions and on or off state, and a trimmed audio clip keeps its length.
+
+There is one exception. If you deleted a piece in the middle of the multicam clip, or changed the speed of one of its clips, that cannot be described as cuts. The window then tells you, and asks before **Update Timeline** puts the removed part back. Switching a camera with **Active Video Angle** on the timeline always keeps everything.
 
 Close the window with **Esc** or the X. If you made changes, Reccut asks before it throws them away.
 

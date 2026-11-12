@@ -9,9 +9,9 @@ import {
   multicamClips,
   multicamFromClips,
   multicamOfClip,
-  multicamTimeOfClip,
+  absorbTimeline,
   newMulticam,
-  switchSegment,
+  switchClipAngle,
   tidy,
   nextMulticamName,
   placeMulticam,
@@ -23,9 +23,13 @@ export const multicamSession = signal(null);
 export const multicamMenu = { handle: null };
 let sessionKey = 1;
 
-function open(mc, { replace = [], editing = false, errors = [] } = {}) {
-  multicamSession.value = { key: sessionKey++, mc: structuredClone(mc), replace, editing, initialErrors: errors };
+// lossy: klippene på tidslinjen er endret på en måte multicam-klippet ikke kan ta vare på.
+function open(mc, { replace = [], editing = false, errors = [], lossy = false } = {}) {
+  multicamSession.value = { key: sessionKey++, mc: structuredClone(mc), replace, editing, initialErrors: errors, lossy };
 }
+
+// Tekst når noe på tidslinjen ikke kan tas med (en bit midt i er slettet, eller farten er endret).
+export const LOSSY_TEXT = 'Parts of this multicam clip were removed or changed speed on the timeline. Cuts, trims and effects are kept, but if you update the timeline from this window, the removed parts come back and speed changes are lost.';
 
 // Høyreklikk på valgte klipp over hverandre: Create Multicam Clip.
 export function createMulticamFromSelection() {
@@ -56,7 +60,9 @@ export function editMulticam(clipId) {
   const p = project.value;
   const mc = multicamOfClip(p, clipId);
   if (!mc) return toast('This clip is not part of a multicam clip.');
-  open(mc, { replace: multicamClips(p, mc.id), editing: true });
+  // Kutt, trimming og lydnivå gjort i redigeringen leses inn først, så vinduet viser det som er på tidslinjen.
+  const { mc: current, ok } = absorbTimeline(p, mc);
+  open(current, { replace: multicamClips(p, mc.id), editing: true, lossy: !ok, errors: ok ? [] : [LOSSY_TEXT] });
 }
 
 export function closeMulticam() {
@@ -92,7 +98,13 @@ function rebuildMulticam(clipId, change, message) {
   const p = project.value;
   const mc = multicamOfClip(p, clipId);
   if (!mc) return false;
-  const next = structuredClone(mc);
+  // Det som er gjort på tidslinjen, leses inn først, så trimming og kutt ikke går tapt.
+  const { mc: current, ok } = absorbTimeline(p, mc);
+  if (!ok) {
+    toast('Parts of this multicam clip were removed or changed speed on the timeline, so the sound cannot be switched here without losing that. Use Edit Multicam Clip instead.', { kind: 'error', timeout: 8000 });
+    return false;
+  }
+  const next = structuredClone(current);
   if (change(next, p) === false) return false;
   tidy(p, next);
   let placed = [];
@@ -104,9 +116,14 @@ function rebuildMulticam(clipId, change, message) {
   return true;
 }
 
+// Bytter kamera i selve klippet. Trimming, effekter, nøkkelbilder og overganger blir som de var.
 export function setActiveVideoAngle(clipId, angleId) {
-  const clip = project.value.clips[clipId];
-  return rebuildMulticam(clipId, (mc, p) => switchSegment(p, mc, multicamTimeOfClip(p, mc, clip), angleId));
+  let result = { ok: false };
+  commit((q) => {
+    result = switchClipAngle(q, clipId, angleId);
+  });
+  if (!result.ok && result.reason) toast(result.reason, { timeout: 6000 });
+  return result.ok;
 }
 
 export function setActiveAudioAngle(clipId, value) {
