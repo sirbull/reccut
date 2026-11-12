@@ -708,5 +708,229 @@
     "sizeBytes": 63206149
    }
   ]
+ },
+ "voxcpm": {
+  "license": "Apache-2.0",
+  "model": {
+   "repository": "DennisHuang648/VoxCPM2-GGUF",
+   "revision": "169f64d8b98bbaab1761e4ca3a83e6af653456cc",
+   "license": "Apache-2.0",
+   "files": [
+    {
+     "path": "VoxCPM2-BaseLM-Q8_0.gguf",
+     "size": 1727309920,
+     "sha256": "0113177abd11303503bf0b705e1613ec5f0a8508cc74a7dfd0f99312b962a962"
+    },
+    {
+     "path": "VoxCPM2-Acoustic-F16.gguf",
+     "size": 1825096352,
+     "sha256": "5bde898488ad635ff55d24da53543768fa33d5e5cdc538ce190e5ef831038e85"
+    }
+   ]
+  },
+  "engine": {
+   "protocol": 1,
+   "repository": "tc-mb/llama.cpp-omni",
+   "revision": "d30f00feadb7ebce95bacd55b0d104e3ef501481",
+   "license": "MIT",
+   "files": {
+    "mac": {
+     "name": "reccut-voxcpm-mac",
+     "checksum": "reccut-voxcpm-mac.sha256",
+     "arch": "arm64"
+    }
+   }
+  },
+  "settings": {
+   "cfg": 3.5,
+   "steps": 250,
+   "timesteps": 10,
+   "temperature": 1,
+   "suffix": "Dry, close-mic studio recording with no reverb."
+  },
+  "moods": [
+   {
+    "id": "neutral",
+    "label": "Neutral",
+    "prompt": "Calm, neutral and matter-of-fact."
+   },
+   {
+    "id": "intense",
+    "label": "Intense",
+    "prompt": "Extremely intense and urgent, almost breathless, hammering every word with heavy emphasis, full of tension."
+   },
+   {
+    "id": "angry",
+    "label": "Angry",
+    "prompt": "Furious and shouting, voice shaking with anger, spitting the words out harshly."
+   },
+   {
+    "id": "sad",
+    "label": "Sad",
+    "prompt": "Deeply sad and close to tears, voice trembling and breaking, speaking slowly and softly."
+   },
+   {
+    "id": "warm",
+    "label": "Warm",
+    "prompt": "Warm, friendly and welcoming, with a soft natural smile and a relaxed conversational tone."
+   },
+   {
+    "id": "sensual",
+    "label": "Sensual",
+    "prompt": "Soft, low and intimate, with a subtly breathy, unhurried and gently alluring delivery."
+   },
+   {
+    "id": "cheerful",
+    "label": "Cheerful",
+    "prompt": "Bright, cheerful and upbeat, with a smiling voice and lively, natural expression."
+   },
+   {
+    "id": "confident",
+    "label": "Confident",
+    "prompt": "Confident, clear and assured, speaking steadily with calm conviction."
+   },
+   {
+    "id": "reassuring",
+    "label": "Reassuring",
+    "prompt": "Gentle, reassuring and compassionate, speaking calmly and patiently."
+   },
+   {
+    "id": "whispering",
+    "label": "Whispering",
+    "prompt": "Whisper softly and clearly in a hushed voice, keeping every word intelligible."
+   }
+  ],
+  "languages": [
+   {
+    "lang": "nb",
+    "source": "release",
+    "voices": [
+     {
+      "id": "nb-female-1",
+      "name": "Woman 1",
+      "gender": "Female",
+      "reference": {
+       "path": "reccut-voxcpm-nb-female-1.wav",
+       "size": 384078,
+       "sha256": "fe6dac6bc6e3077fc88aefadde2e6ea55e2244deee5490cffa741c9470c951f6"
+      }
+     },
+     {
+      "id": "nb-male-1",
+      "name": "Man 1",
+      "gender": "Male",
+      "reference": {
+       "path": "reccut-voxcpm-nb-male-1.wav",
+       "size": 336078,
+       "sha256": "76ec08d59edf961cef0e20e662a372b3304426d533ee46fa566d3e99612cf828"
+      }
+     }
+    ]
+   },
+   {
+    "lang": "en-us",
+    "source": "release",
+    "voices": [
+     {
+      "id": "en-us-female-1",
+      "name": "Woman 1",
+      "gender": "Female",
+      "reference": {
+       "path": "reccut-voxcpm-en-us-female-1.wav",
+       "size": 384044,
+       "sha256": "7f3cd64090fdf5b11944c22cc5158fe5ea456bc93ef2f6f316a42c669a46e8c5"
+      }
+     },
+     {
+      "id": "en-us-male-1",
+      "name": "Man 1",
+      "gender": "Male",
+      "reference": {
+       "path": "reccut-voxcpm-en-us-male-1.wav",
+       "size": 445484,
+       "sha256": "fca787a50234aaa4192c4fe828ab7abc3a54bd00cf27c7fb43ee06ffe8a296ce"
+      }
+     }
+    ]
+   },
+   {
+    "lang": "sv",
+    "source": "release",
+    "voices": [
+     {
+      "id": "sv-female-1",
+      "name": "Woman 1",
+      "gender": "Female",
+      "reference": {
+       "path": "reccut-voxcpm-sv-female-1.wav",
+       "size": 291884,
+       "sha256": "d9e16a00dceaad71b93d00bbbb0635bdfa8772220d161a5df71eefdb903858a6"
+      }
+     },
+     {
+      "id": "sv-male-1",
+      "name": "Man 1",
+      "gender": "Male",
+      "reference": {
+       "path": "reccut-voxcpm-sv-male-1.wav",
+       "size": 307244,
+       "sha256": "4eec47865ec0d334f288b6585df8ece576751a68c271bf947a15586c5323b1ca"
+      }
+     }
+    ]
+   },
+   {
+    "lang": "da",
+    "source": "release",
+    "voices": [
+     {
+      "id": "da-female-1",
+      "name": "Woman 1",
+      "gender": "Female",
+      "reference": {
+       "path": "reccut-voxcpm-da-female-1.wav",
+       "size": 276524,
+       "sha256": "48a77508c4b0764fbed718d9082a331db8fc3e0d57482dc7ec90771ed9791ea0"
+      }
+     },
+     {
+      "id": "da-male-1",
+      "name": "Man 1",
+      "gender": "Male",
+      "reference": {
+       "path": "reccut-voxcpm-da-male-1.wav",
+       "size": 337964,
+       "sha256": "06fca392b68476f0c9bf71939c3949ade6ad35953d7aafb047cd98d126fcf171"
+      }
+     }
+    ]
+   },
+   {
+    "lang": "de",
+    "source": "release",
+    "voices": [
+     {
+      "id": "de-female-1",
+      "name": "Woman 1",
+      "gender": "Female",
+      "reference": {
+       "path": "reccut-voxcpm-de-female-1.wav",
+       "size": 322604,
+       "sha256": "14fd3bda6e28a7b52f3559d3855fcaf51f62171fed37878be43543c5cb80fcdd"
+      }
+     },
+     {
+      "id": "de-male-1",
+      "name": "Man 1",
+      "gender": "Male",
+      "reference": {
+       "path": "reccut-voxcpm-de-male-1.wav",
+       "size": 337964,
+       "sha256": "fe8f8a186152dc6271a00f0853e400d111db2389452addf760659fd187c86211"
+      }
+     }
+    ]
+   }
+  ]
  }
 }

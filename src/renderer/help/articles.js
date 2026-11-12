@@ -636,9 +636,11 @@ Put an audio clip below the timeline, select it and choose Auto Sync Audio ({{ke
     section: 'Editing',
     title: 'The Timeline',
     summary: 'A magnetic storyline with connected clips above and audio below.',
-    keywords: 'timeline storyline magnetic lanes tracks connected',
+    keywords: 'timeline storyline magnetic lanes tracks connected override connections tab grave',
     body: `
 The main row is the **storyline**. Clips in it always sit next to each other, so there are never accidental gaps. Video, images and titles can be connected above the storyline, and audio is placed below. Connected clips move with the storyline clip they sit on.
+
+**Override Connections:** hold **Tab** while you drag to move a storyline clip without its connected clips. Titles, images, audio and grouped clips stay where they are. **Example:** reorder two shots while the music and the title stay in place. Tab is on every keyboard, unlike the grave key that Final Cut Pro uses. You can press or release Tab in the middle of a drag; the timeline updates at once. Over the timeline, Tab is used for this instead of moving keyboard focus.
 
 ![The timeline with track headers on the left.](timeline.jpg)
 
@@ -663,7 +665,7 @@ The main row is the **storyline**. Clips in it always sit next to each other, so
     summary: 'Delete closes the gap; Shift Delete leaves it. Make tracks taller or shorter.',
     keywords: 'delete move gap lift overwrite storyline track height taller shorter resize',
     body: `
-Drag a clip in the storyline to move it; the other clips make room. Drag connected clips freely in time and between tracks.
+Drag a clip in the storyline to move it; the other clips make room. Drag connected clips freely in time and between tracks. Hold Tab while dragging to leave the connected clips where they are (Override Connections).
 
 - Delete ({{key:delete}}) removes the selection and closes the gap.
 - Delete and Leave Gap ({{key:deleteGap}}) leaves an empty space.
@@ -703,7 +705,7 @@ Press A, click a clip, and drag it to reorder it or change its lane. Drag an edg
 
 Press T. Drag the shared edge between two adjacent clips on the same track to **roll** it: one clip grows while the other shrinks, keeping their combined duration and outer edges. This works on every video and audio track, including voice-over and the captions track. The clips must touch; an edge next to a gap trims only that clip. **Example:** move a cut later because the first shot ends too soon, or move the boundary between two captions without changing when the pair starts and ends.
 
-Drag inside a clip to **slip** its source content while its timeline position and duration stay fixed. **Example:** show a later part of a screen recording without changing the surrounding narration. Hold Option/Alt while dragging for a **slide**, which moves the clip and adjusts its neighbours. Available source material limits these edits.
+Drag inside a clip to **slip** its source content while its timeline position and duration stay fixed. Over the middle of a video or audio clip, the pointer shows two brackets back to back with arrows pointing out. Images, titles and captions have no source to slip. **Example:** show a later part of a screen recording without changing the surrounding narration. Hold Option/Alt while dragging for a **slide**, which moves the clip and adjusts its neighbours. Available source material limits these edits.
 
 ## Position: preserve the empty time
 
@@ -791,12 +793,13 @@ When you cut through every clip in a group, the right hand pieces become a new g
     section: 'Editing',
     title: 'Trimming',
     summary: 'Drag edges, roll, slip and slide.',
-    keywords: 'trim roll slip slide edge playhead',
+    keywords: 'trim roll slip slide edge playhead override connections tab',
     body: `
 Drag the start or end of a clip to trim it. In the storyline, the following clips move along.
 
 - Trim Start ({{key:trimStart}}) and Trim End ({{key:trimEnd}}) trim the selected clip to the playhead.
 - With the Trim tool, drag a shared edge to roll it on any video or audio track, including voice-over and captions. The outer edges stay fixed. Drag inside a media clip to slip it, and hold Option (Alt) to slide it on the main storyline.
+- Hold Tab while trimming, rolling or sliding in the storyline to keep connected clips in place (Override Connections).
 - With expanded audio you can drag the audio edges past the video, for J and L cuts.
 `,
     see: ['tools', 'audio'],
@@ -1753,7 +1756,7 @@ The menus, the Keyboard Shortcuts list ({{key:shortcuts}}) and Quick Search alwa
 `,
     see: ['shortcuts', 'search'],
   },
-  { id: 'shortcuts', section: 'Reference', title: 'Keyboard Shortcuts', summary: 'Every shortcut in Reccut, grouped by menu.', keywords: 'keys keyboard hotkeys', body: 'On macOS, Cmd is ⌘, Option is ⌥, Control is ⌃ and Shift is ⇧. Windows uses Ctrl where a command uses Cmd, and Alt where it uses Option, except for commands with their own platform bindings. This list shows the actual binding on this computer, including custom shortcuts. Change them in Settings → Keyboard.', see: ['preferences', 'command-reference'] },
+  { id: 'shortcuts', section: 'Reference', title: 'Keyboard Shortcuts', summary: 'Every shortcut in Reccut, grouped by menu.', keywords: 'keys keyboard hotkeys', body: 'On macOS, Cmd is ⌘, Option is ⌥, Control is ⌃ and Shift is ⇧. Windows uses Ctrl where a command uses Cmd, and Alt where it uses Option, except for commands with their own platform bindings. This list shows the actual binding on this computer, including custom shortcuts. Change them in Settings → Keyboard. Hold Tab while dragging in the timeline for Override Connections.', see: ['preferences', 'command-reference'] },
   {
     id: 'video-scopes',
     section: 'Look',

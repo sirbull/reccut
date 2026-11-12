@@ -57,7 +57,8 @@ import {
   valueAt,
   removeKeyframe,
 } from '../../shared/model.js';
-import { groupLead, mediaClip, moveClip, positionMove, positionTrim, recordingEditId, removeTransition, rollEdit, rollPair, setTransition, slideClip, slipClip, splitClip, syncRecordingTracks, trimClip } from '../../shared/ops.js';
+import { groupLead, mediaClip, moveClip, positionMove, positionTrim, recordingEditId, removeTransition, rollEdit, rollPair, setTransition, slideClip, slipClip, splitClip, syncRecordingTracks, trimClip, withConnectionsOverridden } from '../../shared/ops.js';
+import { commandsBlocked } from '../keyboard.js';
 import {
   beginTransient,
   commitClipEdit as commit,
@@ -161,6 +162,35 @@ export function Timeline() {
   const contentRef = useRef(null);
   const playheadRef = useRef(null);
   const dragRef = useRef(null);
+  // Override Connections: Tab finnes på alle tastaturer, i motsetning til ` (grave) som Final Cut Pro bruker.
+  // Holdt inne under en dragning blir tilkoblede klipp stående. Tab tas bare over tidslinjen,
+  // så tastaturnavigering virker ellers.
+  const overrideRef = useRef(false);
+  const lastMoveRef = useRef(null);
+  const moveRef = useRef(null);
+  useEffect(() => {
+    const set = (on) => {
+      if (overrideRef.current === on) return;
+      overrideRef.current = on;
+      // Vis resultatet med en gang, uten å vente på at musa flyttes.
+      if (dragRef.current?.moved && lastMoveRef.current) moveRef.current(lastMoveRef.current);
+    };
+    const down = (e) => {
+      if (e.key !== 'Tab' || commandsBlocked(e) || (!dragRef.current && !scrollRef.current?.matches(':hover'))) return;
+      e.preventDefault();
+      set(true);
+    };
+    const up = (e) => e.key === 'Tab' && set(false);
+    const blur = () => set(false);
+    window.addEventListener('keydown', down, true);
+    window.addEventListener('keyup', up, true);
+    window.addEventListener('blur', blur);
+    return () => {
+      window.removeEventListener('keydown', down, true);
+      window.removeEventListener('keyup', up, true);
+      window.removeEventListener('blur', blur);
+    };
+  }, []);
   // Media holdt over et klipp en liten stund erstatter klippet når det slippes.
   const hoverRef = useRef(null);
   const [ghost, setGhost] = useState(null);
@@ -522,7 +552,7 @@ export function Timeline() {
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
-  const onPointerMove = (e) => {
+  const dragMove = (e) => {
     const d = dragRef.current;
     const T = timeAt(e.clientX);
     // Kniven viser hvor kuttet havner.
@@ -756,6 +786,11 @@ export function Timeline() {
       }
     }
   };
+  const onPointerMove = (e) => {
+    lastMoveRef.current = e;
+    withConnectionsOverridden(overrideRef.current, () => dragMove(e));
+  };
+  moveRef.current = onPointerMove;
 
   const onPointerUp = (e) => {
     const d = dragRef.current;

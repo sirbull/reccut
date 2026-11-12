@@ -1,0 +1,74 @@
+{
+  "engineRevision": "d30f00feadb7ebce95bacd55b0d104e3ef501481",
+  "modelRevision": "169f64d8b98bbaab1761e4ca3a83e6af653456cc",
+  "protocol": 1,
+  "measurements": [
+    {
+      "name": "cold",
+      "loading": true,
+      "seconds": 9.178735333999999,
+      "loadSeconds": 3.2550519589999998,
+      "audioSeconds": 1.76,
+      "rate": 48000,
+      "launches": 1
+    },
+    {
+      "name": "warm",
+      "loading": false,
+      "seconds": 5.5656934589999985,
+      "loadSeconds": 0,
+      "audioSeconds": 1.76,
+      "rate": 48000,
+      "launches": 1
+    },
+    {
+      "name": "different-mood",
+      "loading": false,
+      "seconds": 5.964105833000001,
+      "loadSeconds": 0,
+      "audioSeconds": 1.76,
+      "rate": 48000,
+      "launches": 1
+    },
+    {
+      "name": "different-reference",
+      "loading": false,
+      "seconds": 5.626070917000001,
+      "loadSeconds": 0,
+      "audioSeconds": 1.92,
+      "rate": 48000,
+      "launches": 1
+    },
+    {
+      "name": "neutral-again",
+      "loading": false,
+      "seconds": 5.288671500000004,
+      "loadSeconds": 0,
+      "audioSeconds": 1.76,
+      "rate": 48000,
+      "launches": 1
+    },
+    {
+      "name": "after-cancel",
+      "loading": true,
+      "seconds": 6.763328915999999,
+      "loadSeconds": 1.5499609160000036,
+      "audioSeconds": 1.76,
+      "rate": 48000,
+      "launches": 2
+    }
+  ],
+  "engineSha256": "f30a65743de4de03f3e39a9ac5c67c6e7809be3e698f34a001b5162147ace745",
+  "maximumSampleDifference": 0,
+  "referenceAndMoodReset": true,
+  "cancellationAndRestart": true,
+  "date": "2026-11-12",
+  "platform": "macOS arm64",
+  "note": "Technical offline check using synthetic listening-test references. Timings depend on OS/Metal caches and script length; this is not a listening-quality approval.",
+  "initialRun": {
+    "coldSeconds": 23.214809333,
+    "modelLoadSeconds": 16.247491791,
+    "warmSeconds": 5.63838575,
+    "audioSeconds": 1.76
+  }
+}

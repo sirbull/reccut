@@ -1319,47 +1319,78 @@ function extensionHandler(channel, handler) {
     return handler(...args);
   });
 }
-// AI-stemmer (Kokoro) til Voice Over Studio. Ingenting lastes ned før brukeren ber om det.
+// AI-stemmer til Voice Over Studio. Ingenting lastes ned før brukeren ber om det.
+const voxcpm = require('./voxcpm').createVoxcpm({
+  dir: path.join(app.getPath('userData'), 'tts', 'voxcpm'),
+  version: app.getVersion(),
+  fetchImpl: (url, opts) => net.fetch(url, { ...opts, headers: { ...opts?.headers, 'User-Agent': `Reccut/${app.getVersion()}` } }),
+  onChange: () => ttsStatus().then((state) => send('tts:changed', state)).catch(() => {}),
+});
+const voicePackages = require('./voicePackages').createVoicePackages({
+  file: path.join(app.getPath('userData'), 'voice-packages.json'),
+  systemLanguage: app.getPreferredSystemLanguages()[0] || 'en-US', appLanguage: 'en-GB',
+});
+extensionHandler('voice-packages:status', () => voicePackages.status());
+extensionHandler('voice-packages:asked', () => voicePackages.markAsked());
+async function ttsStatus() { return { ...await tts.status(), voxcpm: await voxcpm.status() }; }
+app.on('before-quit', () => voxcpm.stop());
 const tts = require('./tts').createTts({
   dir: path.join(app.getPath('userData'), 'tts'),
   fetchImpl: (url, opts) => net.fetch(url, { ...opts, headers: { 'User-Agent': `Reccut/${app.getVersion()}` } }),
-  onChange: () => tts.status().then((state) => send('tts:changed', state)).catch(() => {}),
+  onChange: () => ttsStatus().then((state) => send('tts:changed', state)).catch(() => {}),
 });
-extensionHandler('tts:status', () => tts.status());
+extensionHandler('tts:status', ttsStatus);
+extensionHandler('tts:voxcpmInstall', async (lang) => {
+  const { done } = jobs.add({ kind: 'download', title: 'Downloading VoxCPM2 voices', queue: 'voiceDownloads', packageKey: lang == null ? 'voxcpm:model' : `voxcpm:${String(lang)}`, run: (ctx) => {
+    if (ctx.isCanceled()) throw new Error('Canceled');
+    ctx.setCancel(() => voxcpm.cancel());
+    const progress = (p) => ctx.progress(p, 'Downloading VoxCPM2');
+    return lang == null ? voxcpm.installModel(progress) : voxcpm.installLanguage(String(lang), progress);
+  } });
+  await done;
+  return ttsStatus();
+});
+extensionHandler('tts:voxcpmCancel', () => voxcpm.cancel());
+extensionHandler('tts:voxcpmRemoveLanguage', async (lang) => { await voxcpm.removeLanguage(String(lang)); return ttsStatus(); });
+extensionHandler('tts:voxcpmRemoveModel', async () => { await voxcpm.removeModel(); return ttsStatus(); });
 extensionHandler('tts:install', async () => {
-  const { done } = jobs.add({ kind: 'download', title: 'Downloading AI voices', queue: 'light', run: (ctx) => {
+  const { done } = jobs.add({ kind: 'download', title: 'Downloading AI voices', queue: 'voiceDownloads', packageKey: 'kokoro', run: (ctx) => {
+    if (ctx.isCanceled()) throw new Error('Canceled');
     ctx.setCancel(() => tts.cancel());
     return tts.install((p) => ctx.progress(p, 'Downloading'));
   } });
   await done;
-  return tts.status();
+  return ttsStatus();
 });
 extensionHandler('tts:cancel', () => tts.cancel());
 extensionHandler('tts:piperInstall', async (id) => {
   const v = tts.piperVoice(String(id));
   if (!v) throw new Error('Unknown voice.');
-  const { done } = jobs.add({ kind: 'download', title: `Downloading voice ${v.name}`, queue: 'light', run: (ctx) => {
+  const { done } = jobs.add({ kind: 'download', title: `Downloading voice ${v.name}`, queue: 'voiceDownloads', packageKey: `piper:${v.id}`, run: (ctx) => {
+    if (ctx.isCanceled()) throw new Error('Canceled');
     ctx.setCancel(() => tts.cancelPiper(v.id));
     return tts.installPiper(v.id, (p) => ctx.progress(p, 'Downloading'));
   } });
   await done;
-  return tts.status();
+  return ttsStatus();
 });
 extensionHandler('tts:piperCancel', (id) => tts.cancelPiper(String(id)));
 extensionHandler('tts:piperRemove', async (id) => {
   await tts.removePiper(String(id));
-  return tts.status();
+  return ttsStatus();
 });
 extensionHandler('tts:remove', async () => {
   const { response } = await dialog.showMessageBox(win, { type: 'question', title: 'Remove the AI voices?', message: 'Remove the AI voices?', detail: 'The voice model and the pronunciation add-on are deleted from this computer. Takes you have generated stay in your projects. You can download the voices again later.', buttons: ['Cancel', 'Remove'], defaultId: 0, cancelId: 0, noLink: true });
   if (response === 1) await tts.remove();
-  return tts.status();
+  return ttsStatus();
 });
 // Én linje om gangen i et skjult arbeidsvindu. Gir lyd som Float32 (24 kHz, mono).
 const generateTts = require('./ttsJobs').createTtsJobs({ jobs, onProgress: (state) => send('tts:progress', state) });
 extensionHandler('tts:generate', (payload) => generateTts(payload, async (payload, ctx) => {
   const text = String(payload?.text || '').slice(0, 5000);
   if (!text.trim()) throw new Error('There is no text to read.');
+  if (payload?.engine === 'voxcpm') return voxcpm.generate({ ...payload, text }, ctx);
+  if (payload?.engine && !['kokoro', 'piper'].includes(payload.engine)) throw new Error('Unknown voice engine.');
   const speed = Math.min(2, Math.max(0.5, Number(payload?.speed) || 1));
   // Uttaletillegget hentes her om det mangler eller er en eldre versjon (bare engelsk), før første linje leses.
   const addon = { addon: tts.PHONEMIZER_KEY, addonData: tts.ESPEAK_DATA_KEY };

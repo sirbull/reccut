@@ -9,6 +9,10 @@ import { LANGUAGES, VOICES, languageById, voiceLabel, voiceLanguage, voicesFor }
 import { CHARACTERS, TONES, filterStyles, styleEffects } from '../../shared/voiceStyles.js';
 import * as booth from './booth.js';
 import { SpeechProgress } from './SpeechProgress.jsx';
+import { VoicePackages } from '../VoicePackages.jsx';
+import { openVoicePackages } from '../voicePackages.js';
+import { VOXCPM_MOODS, voxcpmFor, voxcpmPreviewKey } from './voxcpm.js';
+import { aiVoiceInstalled } from '../../shared/aiVoice.js';
 
 const api = window.api;
 export const aiDialogOpen = signal(false);
@@ -88,6 +92,7 @@ export function AiVoiceDialog() {
   const [speed, setSpeed] = useState(1);
   const [lang, setLang] = useState(() => dialogLang.value || booth.scriptLanguage.value || 'en-us');
   const [tab, setTab] = useState('styles');
+  const changeLang = (value) => { booth.stopVoicePreview(); setLang(value); };
   useEffect(() => {
     booth.refreshTts();
   }, []);
@@ -96,6 +101,7 @@ export function AiVoiceDialog() {
     aiDialogOpen.value = false;
   };
   const native = piperFor(lang);
+  const expressive = voxcpmFor(lang);
   const kokoroOwn = Boolean(languageById(lang)?.voices);
   const kokoroPart = !t.installed ? (
     <KokoroSetup collapsed={!kokoroOwn && native.length > 0} lang={lang} />
@@ -131,23 +137,25 @@ export function AiVoiceDialog() {
         <div class="ai-pick-bar">
           <label class="vt-ctl" title="The language of the script. The voice reads it with this pronunciation.">
             Language
-            <Select value={lang} options={LANGUAGES.map((l) => ({ value: l.id, label: `${l.label}${l.id === booth.scriptLanguage.value ? ', the script' : ''}` }))} onChange={setLang} />
-          </label>
-          <label class="vt-ctl ai-speed" title="Speaking speed for new voices. Below 1 is slower, which often suits voice over. Styles have their own speed.">
-            Generation speed
-            <Slider value={speed} min={0.5} max={2} step={0.01} center={1} onInput={setSpeed} />
-            <NumberField value={speed} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={setSpeed} />
+            <Select value={lang} options={LANGUAGES.map((l) => ({ value: l.id, label: `${l.label}${l.id === booth.scriptLanguage.value ? ', the script' : ''}` }))} onChange={changeLang} />
           </label>
         </div>
         {booth.scriptLanguage.value && booth.scriptLanguage.value !== lang && (
           <p class="ai-note">
             The script looks like {languageById(booth.scriptLanguage.value).label}.{' '}
-            <button class="link" onClick={() => setLang(booth.scriptLanguage.value)}>
+            <button class="link" onClick={() => changeLang(booth.scriptLanguage.value)}>
               Use {languageById(booth.scriptLanguage.value).label}
             </button>
           </p>
         )}
+        <Button class="small" icon={Download} onClick={() => { close(); openVoicePackages({ lang }); }}>Manage voice packages…</Button>
         <SpeechProgress controller={booth.speechAudition} onCancel={booth.stopVoicePreview} />
+        {expressive.length > 0 && <VoxcpmList lang={lang} voices={expressive} onAdd={close} onPackages={() => { close(); openVoicePackages({ lang }); }} />}
+        <label class="vt-ctl ai-speed" title="Speaking speed for new Kokoro and Piper voices. Styles have their own speed.">
+          {expressive.length ? 'Kokoro and Piper speed' : 'Generation speed'}
+          <Slider value={speed} min={0.5} max={2} step={0.01} center={1} onInput={setSpeed} />
+          <NumberField value={speed} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={setSpeed} />
+        </label>
         {native.length > 0 && <PiperList lang={lang} speed={speed} onAdd={close} />}
         {kokoroPart}
         {t.installed && (
@@ -158,6 +166,30 @@ export function AiVoiceDialog() {
       </div>
     </Modal>
   );
+}
+
+function VoxcpmList({ lang, voices, onAdd, onPackages }) {
+  const [moods, setMoods] = useState({});
+  const state = booth.tts.value;
+  return <section class="ai-voice-group ai-voxcpm">
+    <div class="ai-voice-title">Voices made for {languageById(lang).label} (VoxCPM2)</div>
+    <p class="ai-note">Choose a mood or delivery style and listen before downloading. The same choices work in each language with a VoxCPM2 voice package. VoxCPM2 uses its own speaking pace.</p>
+    {!state.voxcpm?.supported && <p class="ai-note">VoxCPM2 requires an Apple Silicon Mac.</p>}
+    <ul class="ai-voice-list">
+      {voices.map((v) => {
+        const mood = moods[v.id] || 'neutral', key = voxcpmPreviewKey(v.id, mood);
+        const ready = aiVoiceInstalled({ engine: 'voxcpm', voice: v.id, lang }, state);
+        return <li key={v.id}>
+          <IconButton icon={booth.sampling.value === key ? Square : Play} size={14} title={booth.sampling.value === key ? 'Stop' : `Listen to ${v.name}, ${mood}`} onClick={() => booth.previewVoice(v.id, 1, lang, { engine: 'voxcpm', mood, key, sample: booth.voxcpmSample(v.id, mood) })} />
+          <b>{v.name}</b><span class="dim">{v.gender}</span>
+          <Select title={`Mood for ${v.name}`} value={mood} options={VOXCPM_MOODS.map((m) => ({ value: m.id, label: m.label }))} onChange={(value) => { booth.stopVoicePreview(); setMoods({ ...moods, [v.id]: value }); }} />
+          <div class="spacer" />
+          {ready ? <Button class="small" icon={Plus} onClick={() => { if (booth.addVoxcpmPerson(v.id, mood)) onAdd(); }}>Add</Button>
+            : <Button class="small" icon={Download} disabled={!state.voxcpm?.supported} onClick={onPackages}>Choose package…</Button>}
+        </li>;
+      })}
+    </ul>
+  </section>;
 }
 
 // Kokoro er ikke lastet ned: hva det er og en knapp. Sammenslått når språket har egne Piper-stemmer.
@@ -325,36 +357,8 @@ function VoiceList({ voices, lang, speed, onAdd, title, collapsed = false }) {
   );
 }
 
-// Settings → AI: status for AI-stemmene, med nedlasting og fjerning.
+// Settings → AI uses the same package list as the studio and missing-model flow.
 export function AiVoiceSettings() {
-  const t = booth.tts.value;
-  useEffect(() => {
-    booth.refreshTts();
-  }, []);
-  const job = tasks.value.find((x) => x.kind === 'download' && /AI voices/.test(x.title) && (x.state === 'running' || x.state === 'queued'));
-  return (
-    <section class="section ai-voice-settings">
-      <header>
-        <h3>AI Voices</h3>
-      </header>
-      <div class="section-body">
-        <p class="hint">
-          Kokoro reads scripts aloud in the Voice Over Studio. It runs on this computer, free and without a key. {t.installed ? 'Installed.' : `Not installed (about ${mb(t.sizeBytes || 115e6)}).`} The pronunciation add-on contains eSpeak NG (GPL) and is downloaded from npm, not included in Reccut.
-        </p>
-        <div class="row">
-          {t.installed ? (
-            <Button class="small" onClick={() => api.ttsRemove().then(booth.refreshTts)}>
-              Remove AI Voices
-            </Button>
-          ) : job ? (
-            <span class="dim">Downloading {Math.round((job.progress || 0) * 100)} %</span>
-          ) : (
-            <Button class="small" icon={Download} onClick={() => api.ttsInstall().then(booth.refreshTts).catch(() => booth.refreshTts())}>
-              Download AI Voices
-            </Button>
-          )}
-        </div>
-      </div>
-    </section>
-  );
+  return <section class="section ai-voice-settings"><header><h3>Voice Packages</h3></header>
+    <div class="section-body"><VoicePackages /></div></section>;
 }

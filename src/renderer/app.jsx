@@ -70,6 +70,8 @@ import { StudioIcon } from './voiceover/StudioIcon.jsx';
 import { QuickRecord } from './voiceover/QuickRecord.jsx';
 import { quickOpen } from './voiceover/quick.js';
 import { AiModelsDialog, aiModelsOpen, maybeAskFirstRun } from './AiModels.jsx';
+import { VoicePackagesDialog } from './VoicePackages.jsx';
+import { voicePackagesOpen } from './voicePackages.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -444,6 +446,7 @@ function App() {
       {quickOpen.value && r === 'edit' && <QuickRecord />}
       {aiModelsOpen.value && !needsProject.value && <AiModelsDialog key={String(aiModelsOpen.value.focus)} />}
       {commands.prefsOpen.value && <SettingsWindow />}
+      {voicePackagesOpen.value && !needsProject.value && <VoicePackagesDialog key={voicePackagesOpen.value.lang || 'all'} />}
       {helpOpen.value && <HelpCenter />}
       {paletteOpen.value && <CommandPalette />}
       {recoverList.value.length > 0 && <RecoverDialog />}

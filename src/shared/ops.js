@@ -209,6 +209,18 @@ function applyTrim(project, c, edge, d) {
   return d;
 }
 
+// Override Connections: mens Tab holdes inne under en dragning, blir tilkoblede og grupperte klipp stående.
+let overrideConnections = false;
+export function withConnectionsOverridden(override, fn) {
+  const previous = overrideConnections;
+  overrideConnections = override;
+  try {
+    return fn();
+  } finally {
+    overrideConnections = previous;
+  }
+}
+
 // Frie klipp følger klippet i hovedsporet de ligger over, som tilkoblede klipp i Final Cut Pro.
 // Grupperte klipp følger klippet i hovedsporet i samme gruppe, også utenfor kantene.
 export function withSync(project, fn) {
@@ -220,7 +232,7 @@ export function withSync(project, fn) {
     if (g && !groupParent.has(g)) groupParent.set(g, id);
   }
   const anchors = [];
-  for (const c of Object.values(project.clips)) {
+  for (const c of overrideConnections ? [] : Object.values(project.clips)) {
     // PiP har en eksplisitt kobling. Frakoblet PiP beholder sin egen plassering.
     if (c.recordingPart === 'camera' || c.recordingPart === 'keys' || c.slideshowParent) continue;
     if (c.lane === 0 || project.lanes?.[c.lane]?.locked) continue;

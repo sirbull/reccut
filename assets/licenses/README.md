@@ -5,6 +5,23 @@ Dependency licenses are copied from the installed npm packages, including notice
 inside PDF.js. Model licenses are copied from the pinned model directories.
 The original files are not fetched from the network during this build step.
 
+VoxCPM2 notices were retrieved on 12 November 2026:
+
+| File | Source | SHA-256 |
+| --- | --- | --- |
+| VoxCPM2-Apache-2.0.txt | https://raw.githubusercontent.com/OpenBMB/VoxCPM/300e4260b509066151d623dc9c0aa922cf82232b/LICENSE | 4f10acc209addacfad28293315c74c4cd648f771ee1263a748f1781d1e0265e4 |
+| llama-cpp-omni-MIT.txt | https://raw.githubusercontent.com/tc-mb/llama.cpp-omni/d30f00feadb7ebce95bacd55b0d104e3ef501481/LICENSE | 0c873ab8419f18798cc837e62b4ebb89fcd6360408aabda61ef7b95d02530b08 |
+| nlohmann-json-MIT.txt | https://raw.githubusercontent.com/nlohmann/json/v3.12.0/LICENSE.MIT | 46a65cffd1ea955132d95a8dd921640714a8d6b537d2e4e482d31145ae95b603 |
+
+The original [openbmb/VoxCPM2 model card](https://huggingface.co/openbmb/VoxCPM2/tree/7936080b41163874f38610f46f438e2c0757f9fd)
+declares Apache 2.0; its model repository has no separate LICENSE file. The full
+text above comes from the upstream VoxCPM code repository. The pinned GGUF
+[conversion model card](https://huggingface.co/DennisHuang648/VoxCPM2-GGUF/blob/169f64d8b98bbaab1761e4ca3a83e6af653456cc/README.md)
+also declares Apache 2.0 and retains the original weights' terms. Both GGUF
+SHA-256 values were checked against the pinned Hugging Face LFS metadata and
+the existing local listening-test models. Engine binaries and weights remain
+optional downloads; the license reader needs neither installed.
+
 The following supplemental texts were retrieved on 6 November 2026:
 
 | File | Source | SHA-256 |

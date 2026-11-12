@@ -2789,8 +2789,10 @@ input[type='color'].color::-webkit-color-swatch {
 .speed-grid .chip {
   justify-content: center;
 }
-.tl-content.tool-trim .tl-clip { cursor: ew-resize; }
-.tl-content.tool-trim .tl-clip.t-caption { cursor: default; }
+/* Slip: to klammer rygg mot rygg med piler utover. Innholdet flyttes, klippet står stille. */
+.tl-content.tool-trim .tl-clip { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cg stroke='black' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round' fill='none'%3E%3Cpath d='M7 3c2.4 0 3.2 1.5 3.2 4v10c0 2.5-.8 4-3.2 4M17 3c-2.4 0-3.2 1.5-3.2 4v10c0 2.5.8 4 3.2 4M1.5 12l3.5-3.5v7zM22.5 12L19 8.5v7z'/%3E%3C/g%3E%3Cg stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' fill='none'%3E%3Cpath d='M7 3c2.4 0 3.2 1.5 3.2 4v10c0 2.5-.8 4-3.2 4M17 3c-2.4 0-3.2 1.5-3.2 4v10c0 2.5.8 4 3.2 4'/%3E%3Cpath d='M1.5 12l3.5-3.5v7zM22.5 12L19 8.5v7z' fill='white'/%3E%3C/g%3E%3C/svg%3E") 12 12, ew-resize; }
+/* Bilder, titler, mellomrom og undertekster har ikke noe kildeinnhold å slippe. */
+.tl-content.tool-trim .tl-clip:is(.t-caption, .t-title, .t-image, .t-gap, .t-redact, .t-adjustment) { cursor: default; }
 .tl-content.tool-trim .edge.roll-edge { cursor: var(--trim-cursor); }
 .tl-content.tool-range, .tl-content.tool-range .tl-clip { cursor: text; }
 .tl-content.tool-zoom, .tl-content.tool-zoom .tl-clip { cursor: zoom-in; }
@@ -5831,3 +5833,32 @@ button.vo-badge { border: 0; cursor: pointer; }
 .ai-models-lang { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 6px; color: var(--text-2); }
 .ai-voice-list li .select { max-width: 170px; flex: none; }
 .ai-voice-list li > .dim { white-space: nowrap; }
+
+/* One package chooser for studio onboarding, Settings and missing voices. */
+.voice-packages { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.voice-packages-dialog .modal-body > * { flex-shrink: 0; }
+.voice-packages .hint { margin: 0; line-height: 1.5; }
+.voice-packages-search { flex: none; width: 100%; }
+.voice-packages-search input { flex: 1; min-width: 0; }
+.voice-package-list { list-style: none; padding: 0; margin: 0; border: 1px solid var(--line-2); border-radius: 10px; overflow: hidden; }
+.voice-package { padding: 12px; border-bottom: 1px solid var(--line-2); }
+.voice-package:last-child { border-bottom: 0; }
+.voice-package-choice { display: flex; align-items: flex-start; gap: 10px; }
+.voice-package-choice > input, .voice-package-choice > .ok { margin-top: 3px; flex: none; }
+.voice-package .ok { color: var(--green); }
+.voice-package-info { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; line-height: 1.4; }
+.voice-package-info span { font-size: 12px; }
+.voice-package-info small { color: var(--text-2); font-size: 11px; }
+.voice-package-info small:last-child { font-variant-numeric: tabular-nums; }
+.voice-package-sample { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 0 0 24px; }
+.voice-package-sample .select { max-width: 230px; }
+.voice-package-sample .dim { font-size: 11px; }
+.voice-packages-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-top: 8px; }
+.voice-packages-actions > span { margin-right: auto; font-variant-numeric: tabular-nums; }
+.voice-package-offer { border: 1px solid var(--line-2); border-radius: 8px; padding: 12px; }
+.voice-package-offer p { margin: 0 0 10px; line-height: 1.4; }
+.voice-package-offer .btn + .btn { margin-left: 8px; }
+/* The studio has its own stacking context; its package chooser belongs above it. */
+.modal-backdrop:has(.voice-packages-dialog) { z-index: 1000; }
+.voice-package-list { max-height: 400px; overflow-y: auto; }
+.voice-packages-dialog .voice-package-list { max-height: calc(100vh - 460px); min-height: 150px; }

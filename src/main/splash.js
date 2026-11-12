@@ -16,7 +16,7 @@ function createSplashWindow({ BrowserWindow, version }) {
     closable: false,
     skipTaskbar: true,
     show: false,
-    backgroundColor: '#080f1d',
+    backgroundColor: '#0c1829',
     title: 'Starting Reccut',
     webPreferences: {
       preload: path.join(__dirname, 'preload-splash.js'),
@@ -60,13 +60,13 @@ function createSplashWindow({ BrowserWindow, version }) {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
 <title>Starting Reccut</title><style>
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden;background:#080f1d;color:#e8e8ea;font:13px -apple-system,system-ui,"Segoe UI",sans-serif;user-select:none}
-body{position:relative;border:1px solid #8acbff1a;-webkit-app-region:drag;
+html,body{margin:0;height:100%;overflow:hidden;background:#0c1829;color:#e8e8ea;font:13px -apple-system,system-ui,"Segoe UI",sans-serif;user-select:none}
+body{position:relative;border:1px solid #2f8ee64d;-webkit-app-region:drag;
 background:
-radial-gradient(ellipse at 0% 0%,#0078dc47,transparent 65%),
-radial-gradient(ellipse at 100% 0%,#e2aa161f,transparent 55%),
-radial-gradient(ellipse at 100% 100%,#006bdd3d,transparent 60%),
-linear-gradient(135deg,#0b192d,#080e1b 60%,#0a1830)}
+radial-gradient(ellipse 65% 95% at 0% 0%,#008cff,#0366c1b3 35%,transparent 75%),
+radial-gradient(ellipse 55% 80% at 100% 0%,#011f67,transparent 70%),
+radial-gradient(ellipse 55% 80% at 0% 100%,#02194c,transparent 70%),
+#0c1829}
 .brand{position:absolute;inset:0 0 42px;display:flex;flex-direction:column;align-items:center;justify-content:center}
 img{width:256px;height:auto;margin-bottom:24px}
 .version{color:#aaaab0;font-size:12px;letter-spacing:.04em}

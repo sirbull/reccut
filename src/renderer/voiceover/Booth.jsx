@@ -1,6 +1,7 @@
 // Voice Over Studio: et eget arbeidsvindu over redigeringen for fortellerstemme og snakkende hode.
 // Manuset til venstre (også som teleprompter), opptak og valg av opptak til høyre.
 import { Fragment } from 'preact';
+import { maybeAskVoicePackages, voicePackagesOpen } from '../voicePackages.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import {
   AudioWaveform,
@@ -50,6 +51,9 @@ import { AiVoiceDialog, aiDialogOpen, openAiVoices } from './AiVoice.jsx';
 import { LANGUAGES, languageById, voiceLabel, voicesFor } from '../../shared/tts.js';
 import { PacingFields } from './Pacing.jsx';
 import { piperById, piperFor, speakerLabel } from './piper.js';
+import { VOXCPM_MOODS, voxcpmFor, voxcpmLabel, voxcpmPreviewKey } from './voxcpm.js';
+import { aiVoiceChoicePatch, aiVoiceInstalled } from '../../shared/aiVoice.js';
+import { openVoicePackages } from '../voicePackages.js';
 import { SpeechProgress } from './SpeechProgress.jsx';
 import { EffectsPanel, VoTimeline, clearMarks, deleteSelected, disableOthers, toggleDisabled, marked, pausesOpen, selected as vtSelected, togglePreview, toggleStudioTool, tool } from './VoTimeline.jsx';
 
@@ -88,6 +92,7 @@ export const KEYS = [
 
 function onBoothKey(e) {
   if (!booth.boothOpen.value || e.isComposing) return;
+  if (voicePackagesOpen.value) return;
   if (document.querySelector?.('.vt-clip-dialog, .vo-keys-list')) return;
   // Ta mellomrom før felter, dialoger og romlydoppsettet, så fokus aldri må flyttes til tidslinjen.
   if (e.key === ' ' || e.code === 'Space') {
@@ -180,6 +185,7 @@ export function VoiceoverBooth() {
     booth.ensurePeople();
     booth.startOnMic();
     booth.refreshTts();
+    maybeAskVoicePackages();
     booth.openInput();
     window.addEventListener('keydown', onBoothKey, true);
     const onDevices = () => booth.refreshDevices();
@@ -766,31 +772,38 @@ function Sound() {
 // (Piper og Kokoro i samme liste). Flere stemmer og språk lastes ned fra AI Voices.
 function AiSound({ p }) {
   const t = booth.tts.value;
-  const piper = p.ai.engine === 'piper' ? piperById(p.ai.voice) : null;
+  const engine = p.ai.engine || 'kokoro';
+  const piper = engine === 'piper' ? piperById(p.ai.voice) : null;
+  const vox = engine === 'voxcpm';
+  const mood = p.ai.mood || 'neutral';
   const lang = booth.aiLanguage(p).id;
   const label = languageById(lang).label;
   const forLang = (l) => [
+    ...voxcpmFor(l).filter((v) => aiVoiceInstalled({ engine: 'voxcpm', lang: l, voice: v.id }, t)).map((v) => ({ engine: 'voxcpm', voice: v.id, label: voxcpmLabel(v.id) })),
     ...piperFor(l).filter((x) => t.piper?.[x.id]?.installed).map((x) => ({ engine: 'piper', voice: x.id, label: x.name })),
     ...(t.installed ? voicesFor(l).own.map((v) => ({ engine: 'kokoro', voice: v.id, label: `${v.name} (${v.gender.toLowerCase()})` })) : []),
   ];
   const choices = forLang(lang);
-  const value = `${piper ? 'piper' : 'kokoro'}:${p.ai.voice}`;
+  const value = `${engine}:${p.ai.voice}`;
   const options = choices.map((c) => ({ value: `${c.engine}:${c.voice}`, label: c.label }));
   // En stemme fra et annet språk (som en stil) vises fortsatt, så valget ikke blir tomt.
-  if (!options.some((o) => o.value === value)) options.unshift({ value, label: piper ? piper.name : voiceLabel(p.ai.voice) });
-  const use = (c, l = lang) =>
-    booth.setAiVoice(p.id, c.engine === 'piper' ? { engine: 'piper', voice: c.voice, speaker: piperById(c.voice).speakers[0] || '', lang: l } : { engine: undefined, speaker: undefined, voice: c.voice, lang: l });
+  if (!options.some((o) => o.value === value)) options.unshift({ value, label: vox ? voxcpmLabel(p.ai.voice) : piper?.name || (engine === 'kokoro' ? voiceLabel(p.ai.voice) : p.ai.voice) });
+  const use = (c, l = lang) => {
+    booth.stopVoicePreview();
+    booth.setAiVoice(p.id, aiVoiceChoicePatch(p.ai, { ...c, lang: l, speaker: c.engine === 'piper' ? piperById(c.voice)?.speakers[0] : undefined }));
+  };
   const pick = (val) => {
     const i = val.indexOf(':');
     use({ engine: val.slice(0, i), voice: val.slice(i + 1) });
   };
   // Nytt språk: bytt til den første nedlastede stemmen for det, ellers behold stemmen og vis nedlasting.
   const setLang = (l) => {
+    booth.stopVoicePreview();
     const first = forLang(l)[0];
     first ? use(first, l) : booth.setAiVoice(p.id, { lang: l });
   };
-  const key = piper ? `piper:${piper.id}:${p.ai.speaker || ''}` : p.ai.voice;
-  const listen = () => booth.previewVoice(p.ai.voice, p.ai.speed || 1, lang, { fx: p.fx || [], key, ...(piper ? { engine: 'piper', speaker: p.ai.speaker || '' } : {}) });
+  const key = vox ? voxcpmPreviewKey(p.ai.voice, mood) : piper ? `piper:${piper.id}:${p.ai.speaker || ''}` : p.ai.voice;
+  const listen = () => booth.previewVoice(p.ai.voice, p.ai.speed || 1, lang, { fx: p.fx || [], key, engine, speaker: p.ai.speaker || '', mood, ...(vox ? { sample: booth.voxcpmSample(p.ai.voice, mood) } : {}) });
   return (
     <>
       <label class="vt-ctl" title="The language the lines are read in">
@@ -802,6 +815,9 @@ function AiSound({ p }) {
         <Select value={value} options={options} onChange={pick} />
         <IconButton icon={booth.sampling.value === key ? Square : Play} size={13} title="Listen" onClick={listen} />
       </label>
+      {vox && <label class="vt-ctl">Mood
+        <Select title="Mood for new VoxCPM2 takes" value={mood} options={[...(!VOXCPM_MOODS.some((m) => m.id === mood) ? [{ value: mood, label: `Unknown mood (${mood})` }] : []), ...VOXCPM_MOODS.map((m) => ({ value: m.id, label: m.label }))]} onChange={(mood) => { booth.stopVoicePreview(); booth.setAiVoice(p.id, { mood }); }} />
+      </label>}
       {piper?.speakers.length > 0 && (
         <label class="vt-ctl">
           {piper.id.includes('emotional') ? 'Emotion' : 'Speaker'}
@@ -809,7 +825,7 @@ function AiSound({ p }) {
         </label>
       )}
       {!choices.length && <p class="ai-note">No voices for {label} are downloaded yet. Download one to read the script in {label}.</p>}
-      <Button class="small" icon={Download} variant={choices.length ? 'secondary' : 'primary'} onClick={() => openAiVoices(lang)} title={`Listen to and download voices for ${label}`}>
+      <Button class="small" icon={Download} variant={choices.length ? 'secondary' : 'primary'} onClick={() => { booth.stopVoicePreview(); openVoicePackages({ lang }); }} title={`Download voice packages for ${label}`}>
         Download Voices…
       </Button>
       {booth.scriptLanguage.value && booth.scriptLanguage.value !== lang && (
@@ -820,12 +836,12 @@ function AiSound({ p }) {
           </button>
         </p>
       )}
-      <label class="vt-ctl" title="Set before generating. Applies only to new AI takes; existing takes keep their recorded speed. Below 1 is slower.">
+      {!vox && <label class="vt-ctl" title="Set before generating. Applies only to new AI takes; existing takes keep their recorded speed. Below 1 is slower.">
         Generation speed
         <Slider value={p.ai.speed || 1} min={0.5} max={2} step={0.01} center={1} onInput={(x) => booth.setAiVoice(p.id, { speed: x })} />
         <NumberField value={p.ai.speed || 1} min={0.5} max={2} step={0.01} precision={2} unit="×" width={66} onChange={(x) => booth.setAiVoice(p.id, { speed: x })} />
-      </label>
-      <p class="dim">Language, voice and generation speed apply to new takes. Generate the lines again to hear these changes. Effects below, such as Voice Character, change existing takes without regenerating.</p>
+      </label>}
+      <p class="dim">{vox ? 'Language, voice and mood apply to new takes. VoxCPM2 uses its own speaking pace.' : 'Language, voice and generation speed apply to new takes.'} Generate the lines again to hear these changes. Effects below, such as Voice Character, change existing takes without regenerating.</p>
     </>
   );
 }

@@ -33,12 +33,16 @@ import {
 import { createChain, presetEffects } from '../../shared/audiofx.js';
 import { styleById, styleEffects } from '../../shared/voiceStyles.js';
 import { piperById, speakerName } from './piper.js';
+import { voxcpmById, voxcpmMood } from './voxcpm.js';
+import { aiVoiceInstalled, aiVoicePayload } from '../../shared/aiVoice.js';
 import { DEFAULT_VOICE, PREVIEW_TEXT, detectLanguage, languageById, parseVoice, spokenText, voiceById, voiceLanguage, VOICES } from '../../shared/tts.js';
 import { recordingPlan } from '../../shared/recordingFormats.cjs';
 import { audioSink, prefs, setPrefs } from '../prefs.js';
 import { boothOpen } from './state.js';
 import * as preview from './preview.js';
 import { createSpeechGeneration } from './speech.js';
+import { refreshTts, tts, openVoicePackages } from '../voicePackages.js';
+export { refreshTts, tts } from '../voicePackages.js';
 
 export { boothOpen };
 const fileUrl = (p) => `media://file/${encodeURIComponent(p)}`;
@@ -852,12 +856,9 @@ export const needsRoomTone = computed(() => roomSetup.value || (!vo.value.roomTo
 
 /* AI-stemmer (Kokoro): genereres i stedet for å tas opp, og blir vanlige opptak */
 
-export const tts = signal({ installed: false, downloading: false, progress: 0, sizeBytes: 0 });
 export const generating = signal(null); // { done, total } under Generate All
 export const speechGeneration = createSpeechGeneration(api);
 export const speechAudition = createSpeechGeneration(api);
-export const refreshTts = () => api.ttsStatus().then((s) => (tts.value = s)).catch(() => {});
-api.onTtsChanged?.((s) => (tts.value = s));
 
 // Teksten AI-stemmen leser: "Say it as" for linjen, ellers linjen uten [regi].
 export const spokenFor = (key, who = personId.value) => vo.value.spoken?.[pickKey(who, key)] ?? spokenText(blocks.value.find((b) => b.key === key)?.text || '');
@@ -873,7 +874,8 @@ export function setSpoken(key, text, who = personId.value) {
 
 // Språket manuset ser ut til å være skrevet på (forslag til AI-stemmen).
 export const scriptLanguage = computed(() => detectLanguage(vo.value.script?.text || ''));
-export const aiLanguage = (p) => languageById(p?.ai?.lang) || voiceLanguage(p?.ai?.voice);
+export const aiLanguage = (p) => languageById(p?.ai?.lang) ||
+  languageById(p?.ai?.engine === 'voxcpm' ? voxcpmById(p.ai.voice)?.lang : p?.ai?.engine === 'piper' ? piperById(p.ai.voice)?.lang : null) || voiceLanguage(p?.ai?.voice);
 
 export function addAiPerson(voice = DEFAULT_VOICE, speed = 1, lang = voiceLanguage(voice).id, { name: base = null, fx = [], style = null } = {}) {
   if (busy()) return toast('Stop the take first.');
@@ -913,6 +915,21 @@ export function addPiperPerson(voiceId, speaker = '', speed = 1) {
   return p;
 }
 
+export function addVoxcpmPerson(voiceId, mood = 'neutral') {
+  const voice = voxcpmById(voiceId);
+  if (!voice || !voxcpmMood(mood)) return;
+  if (busy()) return toast('Stop the take first.');
+  const ai = { engine: 'voxcpm', voice: voice.id, mood, lang: voice.lang };
+  if (!aiVoiceInstalled(ai, tts.value)) return openVoicePackages({ lang: voice.lang, reason: 'Download this voice package to add the voice.' });
+  const list = people.value, used = new Set(list.map((p) => p.name.toLowerCase()));
+  let name = `${voice.name} (AI)`;
+  for (let n = 2; used.has(name.toLowerCase()); n++) name = `${voice.name} ${n} (AI)`;
+  const p = { id: uid(), name, color: COLORS[list.length % COLORS.length], fx: [], gain: 0, ai };
+  setVo((x) => { x.people = [...listOf(x), p]; x.person = p.id; });
+  toast(`${p.name} is added on a new track. Press R to read a line, or Read All Missing Lines.`, { timeout: 4500 });
+  return p;
+}
+
 // Legger til en ferdig stemmestil som en person: stemme eller blanding, fart og effekter.
 export function addAiStyle(styleId, lang = null) {
   const st = styleById(styleId);
@@ -925,18 +942,22 @@ let stopAll = false;
 export async function generate(key = current.value?.key, { advance = true } = {}) {
   const who = person.value;
   if (!who?.ai || !key || status.value !== 'idle') return;
-  if (who.ai.engine === 'piper' ? !tts.value.piper?.[who.ai.voice]?.installed : !tts.value.installed) return toast('Download this voice first (Use AI Voice).');
+  if (!aiVoiceInstalled({ ...who.ai, lang: aiLanguage(who).id }, tts.value)) {
+    stopAll = true;
+    return openVoicePackages({ lang: aiLanguage(who).id, reason: 'Download a voice package to read this script.' });
+  }
   const text = spokenFor(key, who.id);
   if (!text) return toast('This line has nothing to read.');
   preview.stop();
   status.value = 'generating';
   recordingKey.value = key;
   try {
-    const { samples, rate } = await speechGeneration.run({ text, voice: who.ai.voice, speed: who.ai.speed || 1, lang: aiLanguage(who).id, engine: who.ai.engine || 'kokoro', speaker: who.ai.speaker || '' });
+    const { samples, rate } = await speechGeneration.run(aiVoicePayload({ ...who.ai, lang: aiLanguage(who).id }, text));
     status.value = 'saving';
     await saveTake(key, samples instanceof Float32Array ? samples : new Float32Array(samples), null, { rate, ai: true, advance });
   } catch (err) {
-    if (err.name !== 'AbortError') toast(`Could not read the line: ${err.message}`, { kind: 'error', timeout: 9000 });
+    if (/MODEL_MISSING:voices/.test(err.message)) openVoicePackages({ lang: aiLanguage(who).id, reason: 'Download a voice package to read this script.' });
+    else if (err.name !== 'AbortError') toast(`Could not read the line: ${err.message}`, { kind: 'error', timeout: 9000 });
     stopAll = true;
   } finally {
     status.value = 'idle';
@@ -989,9 +1010,10 @@ const bundled = (rel) => {
 };
 export const kokoroSample = (id) => (SAMPLED.has(id) ? bundled(`voice-samples/kokoro/${id}.ogg`) : null);
 export const piperSample = (v, speaker) => bundled(`voice-samples/piper/${v.id}-${Math.max(0, v.speakers.indexOf(speaker))}.ogg`);
+export const voxcpmSample = (id, mood = 'neutral') => voxcpmById(id) && voxcpmMood(mood) ? bundled(`voice-samples/voxcpm/${encodeURIComponent(id)}-${encodeURIComponent(mood)}.ogg`) : null;
 
 // sample: spill av en ferdig lydprøve i stedet for å lage lyden (stemmen er ikke lastet ned).
-export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice).id, { fx = null, key = voice, engine = 'kokoro', speaker = '', sample = null } = {}) {
+export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice).id, { fx = null, key = voice, engine = 'kokoro', speaker = '', mood = 'neutral', sample = null } = {}) {
   const previous = sampling.value;
   stopVoicePreview();
   if (previous === key) return;
@@ -1004,7 +1026,7 @@ export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice)
     if (sample) {
       buf = await sampleCtx.decodeAudioData(await (await fetch(sample)).arrayBuffer());
     } else {
-      const { samples, rate } = await speechAudition.run({ text: PREVIEW_TEXT[lang] || PREVIEW_TEXT['en-us'], voice, speed, lang, engine, speaker });
+      const { samples, rate } = await speechAudition.run(aiVoicePayload({ voice, speed, lang, engine, speaker, mood }, PREVIEW_TEXT[lang] || PREVIEW_TEXT['en-us']));
       buf = sampleCtx.createBuffer(1, samples.length, rate);
       buf.copyToChannel(samples instanceof Float32Array ? samples : new Float32Array(samples), 0);
     }
@@ -1022,7 +1044,8 @@ export async function previewVoice(voice, speed = 1, lang = voiceLanguage(voice)
   } catch (err) {
     if (sequence !== sampleSequence) return;
     sampling.value = null;
-    if (err.name !== 'AbortError') toast(`Could not play the voice: ${err.message}`, { kind: 'error' });
+    if (/MODEL_MISSING:voices/.test(err.message)) openVoicePackages({ lang, reason: 'Download a voice package to preview this voice.' });
+    else if (err.name !== 'AbortError') toast(`Could not play the voice: ${err.message}`, { kind: 'error' });
   }
 }
 

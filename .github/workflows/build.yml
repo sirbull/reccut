@@ -10,6 +10,35 @@ permissions:
   contents: write
 
 jobs:
+  # Optional Apple Silicon TTS engine. No model weights or installer changes.
+  voxcpm:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - uses: actions/checkout@v7
+        with:
+          repository: tc-mb/llama.cpp-omni
+          ref: d30f00feadb7ebce95bacd55b0d104e3ef501481
+          path: .voxcpm-source
+          persist-credentials: false
+      - name: Bygg VoxCPM2 (Apple Silicon / Metal)
+        run: bash native/voxcpm/build-mac.sh .voxcpm-source voxcpm-artifacts
+      - name: Klargjør syntetiske stemmereferanser
+        run: node scripts/prepare-voxcpm-voices.mjs voxcpm-artifacts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Reccut-VoxCPM-mac
+          path: voxcpm-artifacts/reccut-voxcpm-*
+          if-no-files-found: error
+      - name: Legg ved i release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: voxcpm-artifacts/reccut-voxcpm-*
+
   # Keystroke Add-on: a separate helper that Reccut downloads only when the user asks for it.
   # It is attached to the release next to the installers, never put inside them.
   keystrokes:

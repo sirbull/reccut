@@ -46,6 +46,7 @@
       "src/shared/pluginTerms.json",
       "src/shared/recordingFormats.cjs",
       "src/shared/stockSources.cjs",
+      "src/shared/tts.js",
       "package.json"
     ],
     "icon": "assets/icon.png",

@@ -4,19 +4,21 @@
 import { signal } from '@preact/signals';
 import { useEffect, useState } from 'preact/hooks';
 import { AudioWaveform, Captions, Check, Download, Loader2, Scissors, Trash2, X } from 'lucide-preact';
-import { Button, IconButton, Modal, Select } from './ui.jsx';
+import { Button, IconButton, Modal } from './ui.jsx';
 import { prefs, setPrefs } from './prefs.js';
 import { modelAction, modelBytes, subtitleModels } from './subtitleModels.js';
 import { tasks } from './editor/store.js';
-import { refreshTts, scriptLanguage, tts } from './voiceover/booth.js';
-import { piperFor } from './voiceover/piper.js';
-import { LANGUAGES, languageById } from '../shared/tts.js';
+import { scriptLanguage } from './voiceover/booth.js';
+import { openVoicePackages, refreshTts } from './voicePackages.js';
 
 const api = window.api;
 
 // { focus: 'captions' | 'background' | 'voices' | null, firstRun, reason }
 export const aiModelsOpen = signal(null);
-export const openAiModels = (focus = null, reason = '') => (aiModelsOpen.value = { focus, reason, firstRun: false });
+export const openAiModels = (focus = null, reason = '') => {
+  if (focus === 'voices') return openVoicePackages({ lang: scriptLanguage.value, reason });
+  aiModelsOpen.value = { focus, reason, firstRun: false };
+};
 
 export const backgroundModels = signal([]);
 const refreshBackground = () => api.backgroundModels().then((list) => (backgroundModels.value = list)).catch(() => {});
@@ -34,16 +36,6 @@ export function handleMissingModel(error) {
   };
   openAiModels(m[1], reasons[m[1]] || '');
   return true;
-}
-
-// Språket på maskinen, som forslag til stemmer (nb for norsk bokmål og nynorsk).
-function systemLanguage() {
-  const l = String(navigator.language || 'en-US').toLowerCase();
-  if (/^(nb|nn|no)\b/.test(l)) return 'nb';
-  if (l.startsWith('en-gb')) return 'en-gb';
-  if (l.startsWith('pt-br')) return 'pt-br';
-  const short = l.split('-')[0];
-  return LANGUAGES.some((x) => x.id === short) ? short : 'en-us';
 }
 
 // Første oppstart: spør én gang, etter at prosjektet er valgt.
@@ -87,9 +79,7 @@ export function AiModelsDialog() {
   const state = aiModelsOpen.value;
   const subs = subtitleModels.value;
   const bg = backgroundModels.value;
-  const t = tts.value;
   const [picked, setPicked] = useState(() => new Set());
-  const [voiceLang, setVoiceLang] = useState(() => scriptLanguage.value || systemLanguage());
   useEffect(() => {
     modelAction('subtitleModels');
     refreshBackground();
@@ -120,8 +110,7 @@ export function AiModelsDialog() {
     try {
       if (kind === 'sub') await modelAction('downloadSubtitleModel', id);
       if (kind === 'bg') await api.downloadBackgroundModel(id).then((list) => (backgroundModels.value = list));
-      if (kind === 'tts') await api.ttsInstall().then(refreshTts);
-      if (kind === 'piper') await api.ttsPiperInstall(id).then(refreshTts);
+      if (kind === 'voices') { close(); openVoicePackages({ lang: scriptLanguage.value }); }
     } catch {}
   };
   const downloadPicked = () => {
@@ -158,34 +147,11 @@ export function AiModelsDialog() {
       remove: m.installed ? () => api.removeBackgroundModel(m.id).then((list) => (backgroundModels.value = list)) : null,
       cancel: () => api.cancelBackgroundModel(m.id),
     })),
-    voices: [
-      {
-        key: 'tts:kokoro',
-        name: 'Kokoro voices',
-        detail: '41 voices for English, Spanish, French, Italian, Portuguese and Hindi, and accented reading in Norwegian, Swedish, Danish, German and more. Includes a pronunciation add-on (eSpeak NG, GPL) from npm.',
-        size: t.sizeBytes || 116e6,
-        installed: t.installed,
-        busy: t.downloading || Boolean(jobFor(/AI voices/)),
-        progress: jobFor(/AI voices/)?.progress ?? t.progress,
-        remove: t.installed ? () => api.ttsRemove().then(refreshTts) : null,
-        cancel: () => api.ttsCancel(),
-      },
-      // Stemmer laget for språket som er valgt (Piper), hver for seg.
-      ...piperFor(voiceLang).map((v) => {
-        const st = t.piper?.[v.id] || {};
-        return {
-          key: `piper:${v.id}`,
-          name: `${v.name} (${languageById(v.lang)?.label})`,
-          detail: `A voice made for ${languageById(v.lang)?.label}${v.gender ? `, ${v.gender.toLowerCase()}` : ''}${v.speakers.length ? `, with ${v.speakers.length} ${v.id.includes('emotional') ? 'emotions' : 'voices'}` : ''}. Licence ${v.license}.`,
-          size: v.sizeBytes,
-          installed: st.installed,
-          busy: st.downloading,
-          progress: st.progress,
-          remove: st.installed ? () => api.ttsPiperRemove(v.id).then(refreshTts) : null,
-          cancel: () => api.ttsPiperCancel(v.id),
-        };
-      }),
-    ],
+    voices: [{
+      key: 'voices:choose', name: 'Voice packages',
+      detail: 'Choose languages, listen to samples and see the download size before installing. Kokoro and Piper are available; VoxCPM2 packages will add expressive moods.',
+      size: 0, sizeLabel: 'From about 63 MB', choose: true,
+    }],
   };
   const total = [...picked].reduce((s, key) => s + (Object.values(rows).flat().find((r) => r.key === key)?.size || 0), 0);
   const groups = state?.focus ? [...GROUPS.filter((g) => g.id === state.focus), ...GROUPS.filter((g) => g.id !== state.focus)] : GROUPS;
@@ -198,7 +164,7 @@ export function AiModelsDialog() {
       class="ai-models"
       footer={
         <>
-          {picked.size > 0 && <span class="dim ai-models-total">{modelBytes(total)} selected</span>}
+          {picked.size > 0 && <span class="dim ai-models-total">{total ? `${modelBytes(total)} selected` : 'Choose voice packages next'}</span>}
           <Button onClick={close}>{state?.firstRun ? 'Not Now' : 'Done'}</Button>
           {picked.size > 0 && (
             <Button variant="primary" icon={Download} onClick={downloadPicked}>
@@ -219,12 +185,6 @@ export function AiModelsDialog() {
             <div>
               <b>{g.title}</b>
               <p>{g.use}</p>
-              {g.id === 'voices' && (
-                <label class="ai-models-lang">
-                  Voices for
-                  <Select value={voiceLang} options={LANGUAGES.filter((l) => piperFor(l.id).length || l.voices).map((l) => ({ value: l.id, label: l.label }))} onChange={setVoiceLang} />
-                </label>
-              )}
               {g.id === 'captions' && <p class="dim">Whisper understands about 100 languages, Norwegian, Swedish, Danish, German and Spanish included. Larger models are more accurate, especially for Norwegian.</p>}
             </div>
           </header>
@@ -240,7 +200,7 @@ export function AiModelsDialog() {
                   <b>{r.name}</b>
                   {r.detail && <span class="dim">{r.detail}</span>}
                 </div>
-                <span class="dim ai-models-size">{modelBytes(r.size)}</span>
+                <span class="dim ai-models-size">{r.sizeLabel || modelBytes(r.size)}</span>
                 {r.busy ? (
                   <span class="ai-models-busy">
                     <Loader2 size={13} class="spin" /> {Math.round((r.progress || 0) * 100)} %
@@ -250,7 +210,7 @@ export function AiModelsDialog() {
                   r.remove && <IconButton icon={Trash2} size={13} title="Remove from this computer" onClick={r.remove} />
                 ) : (
                   <Button class="small" icon={Download} onClick={() => download(r.key)}>
-                    Download
+                    {r.choose ? 'Choose packages…' : 'Download'}
                   </Button>
                 )}
               </li>

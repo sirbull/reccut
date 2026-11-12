@@ -1,11 +1,81 @@
 # Plan: VoxCPM2-stemmer med stemning i Voice Over Studio
 
-Status: plan, ikke påbegynt. Skrevet 11. november 2026 etter lyttetestene i `vendor/voice-tests/norwegian/lyttetest.html`.
+Status: implementasjon påbegynt 12. november 2026. Skrevet 11. november 2026 etter lyttetestene i `vendor/voice-tests/norwegian/lyttetest.html`.
+
+Første implementasjon omfatter grunnlaget for fase 2–4:
+
+- Mac arm64-motor med statiske biblioteker og innebygd Metal, bygget fra låst revisjon, med CI-vedlegg og kontrollsum per utgivelse.
+- Modellkatalog med verifiserte SHA-256-verdier og Apache 2.0-lisens for GGUF-konverteringen. Frakoblet lisensoversikt inkluderer modell og motor.
+- `src/main/downloadFile.js` strømmer til disk og gjenopptar delvise modellfiler med `Range`. Feil kontrollsum eller størrelse blir aldri en installert modell.
+- `src/main/voxcpm.js` håndterer status, modell/språkinstallasjon, avbryt, fjerning og lokal generering per setning. Motoren SHA-256-kontrolleres før kjøring, teksten sendes som lokale argumenter, og midlertidige WAV-filer ryddes opp.
+- IPC er koblet til eksisterende nedlastingsjobber og talekø, med fremdrift og avbryt. Ingen installasjon starter fra status eller generering.
+
+Andre implementasjon (12. november) omfatter fase 5 og klargjøring av fase 1:
+
+- `VoicePackages.jsx` er den felles listen i første åpning av studioet, Innstillinger › AI og ved `MODEL_MISSING:voices`. Appens velkomstvindu beholder raden om stemmenes bruk og størrelse, men sender valget videre til samme liste.
+- Listen viser bruk, størrelse, lisens og lokale lydprøver, med søk og forslag fra system-/appspråk. Ingen nedlasting starter ved åpning, valg eller lytting. Kokoro/Piper deler uttaletillegget i størrelsessummen; VoxCPM-språk velger den felles modellen automatisk.
+- At listen er vist, lagres som `voicePackagesAsked` i hovedprosessen (`voice-packages.json`). «Not now» lar studioet brukes med egen mikrofon. Nedlastinger går i egne vanlige bakgrunnsjobber, serielt så uttaletillegget kan deles, med fremdrift og avbryt også mens pakken står i kø.
+- Alle åtte norske v3-prøver og begge referanser er samlet i en lokal lytterapport med normalisert lyttenivå, SHA-256, varighet og Whisper Base-transkripsjoner. Whisper gjenkjenner begge «ikke» i alle åtte stemningsprøver, men flagger andre ord og variasjoner. Resultatene er lagret i [voxcpm-norwegian-review.json](voxcpm-norwegian-review.json); ingen av stemmene er godkjent automatisk.
+
+Tredje implementasjon (12. november) omfatter fase 6, styrt av katalogen:
+
+- AI Voices viser en egen VoxCPM2-gruppe øverst for språk som har katalogførte stemmer, med én stemningsvelger per stemme. Lytting bruker ferdige lokale prøver også før modellen er lastet ned; manglende pakker åpner den felles pakkelisten.
+- En ny VoxCPM-person lagrer `{ engine: 'voxcpm', voice, mood, lang }`. Personens innstillinger lar stemning og stemme endres senere, uten å endre eksisterende lydfiler. Hastighetsslideren skjules for VoxCPM; Kokoro/Piper beholder hastighet og talervalg.
+- `src/shared/aiVoice.js` deler ruting, tilgjengelighetssjekk og genereringsparametere mellom avspilling og opptak. VoxCPM krever sin egen modell, motor og språkpakke; en installert Kokoro-modell kan ikke føre til at feil motor brukes. `mood` følger med til motoren, mens `speed` og `speaker` utelates for VoxCPM.
+- `scripts/test-voxcpm-picker.cjs` bygger en separat testutgave med teststemmer på norsk, engelsk og tysk i en midlertidig katalog. Den verifiserer lytting uten nedlasting, pakkevalg, alle ti uttrykk, generering/lagring av Warm og Sensual på engelsk, vanlige 48 kHz-opptak, uendrede eksisterende lydfiler og bytte mellom språk og VoxCPM/Piper. Testens lydprøver og generering er tekniske testdata, ikke en kvalitetstest av kandidatene.
+
+Fjerde implementasjon (12. november) omfatter fase 7:
+
+- `native/voxcpm/voxcpm_server.cpp` er en lokal stdio-adapter over den låste VoxCPM2-runtime-en. Vekter og kompilerte grafer holdes i minnet, mens runtime-en nullstiller setningskontekst ved hver generering. Motoren bygges som samme separate utgivelsesvedlegg, med protokollsjekk og lisenstekst for JSON-parseren.
+- `src/main/voxcpmProcess.js` håndterer oppstart, JSON-linjer, tidsavbrudd, kontroll av svar og gjenbruk mellom talejobber. Tekst sendes bare over stdin. Prosessen stoppes ved avbryt eller feil, ved installasjon/fjerning, når appen avsluttes, og etter 60 sekunder uten arbeid. Ingen avbrutt tekst prøves automatisk på nytt.
+- `src/main/voxcpm.js` beholder setningsfremdrift og midlertidige WAV-filer, men starter ikke lenger modellen på nytt per setning. Motorens protokollversjon sjekkes uten vekter før den godkjennes ved installasjon; gamle CLI-binærer kan ikke merkes som kompatible.
+- Den ekte motoren er testet med begge eksisterende referanser: flere setninger/stemninger i samme prosess, bytte av referanse og tilbake, identiske PCM-samples ved samme tekst/stemme/stemning, avbryt og ren oppstart etterpå. [Kontrollresultater](voxcpm-process-check.json) inkluderer kontrollsummer og målinger. Første måling var cirka 23,2 s med oppstart mot 5,6 s uten ny modellinnlasting; med OS/Metal-cache var en senere måling cirka 9,2 mot 5,6 s for 1,76 s lyd. Dette gjelder en kort teknisk prøve, ikke generell ytelse eller stemmekvalitet.
+
+Uttalekontroll etter brukerens lytting: Mannen sier fortsatt «osses»/«oss oss» også i oppfølgingsprøven med ny variasjon. Setningsdeling og seed 7 er ikke en bekreftet løsning, selv om Whisper gjengir ett «oss». Feilen står som uløst. En siste avgrenset kontroll sammenligner CFG 3,5 med 3 og 2, siden upstream-verktøyet anbefaler 1–3; manus, referanse og øvrige parametere er like. De to nye prøvene er ikke lyttetestet/godkjent, og produksjonsinnstillingene er uendret. Se [lytteoppfølgingen](../vendor/voice-tests/norwegian/oss-check/lower-guidance/index.html).
+
+Utvidelse etter brukerønske (12. november): Stemningslisten er nå felles for alle VoxCPM-språk og har ti uttrykk: Neutral, Intense, Angry, Sad, Warm, Sensual, Cheerful, Confident, Reassuring og Whispering. De fire eksisterende id-ene og beskrivelsene er beholdt. Pakkelisten beregner antall uttrykk og lydprøver fra katalogen. Kokoro/Piper får ikke disse VoxCPM-beskrivelsene som stemningsstyring.
+
+`scripts/voice-expression-samples.mjs` lager syntetiske referanser og en [egen lokal lyttepakke for flere språk](../vendor/voice-tests/expressions/index.html), uten nedlastinger. Den første sammenligningen hadde 50 prøver: engelsk (USA) med alle ti uttrykk, norsk med de seks nye, og svensk, dansk og tysk med nøytral, varm og sensuell. `--all-expressions` fullfører alle ti uttrykk for begge stemmer på alle fem språk, med samme tekst per språk. Ingen lyd klippes for å skjule uttalefeil.
+
+**Brukerens beslutning 12. november:** «Det er ikke alle stemmene som er like gode, men jeg tenker det får holde. Jeg kan heller gå tilbake og gjøre justeringer. Vi må nesten videre i prosessen.» Dette godtar dagens referanser og uttrykk som første versjon, med kvalitetsforskjeller og den kjente norske uttalefeilen. Det betyr ikke at alle senere lydprøver er lyttet til enkeltvis eller at feilen er løst. Det skal ikke kreves en ny kvalitetsrunde før integrasjon. Målet på 3–4 sekunder beholdes for nye referanser; de godtatte første referansene omfatter en dansk kvinne på 2,88 s og en amerikansk mann på 4,64 s.
+
+Femte implementasjon klargjør fase 1 og 8 for første versjon:
+
+- `voxcpm.languages` inneholder nå norsk, amerikansk engelsk, svensk, dansk og tysk, med Woman 1 / Man 1 per språk. Referanser er syntetiske og låst med størrelse og SHA-256.
+- Referansefilene i `native/voxcpm/voices` pakkes ikke i installasjonsfilen. `source: 'release'` henter dem fra samme Reccut-utgivelse som motoren; appen kontrollerer dem mot katalogens faste kontrollsummer. HF-kilder med låst revisjon støttes fortsatt. Uendrede referanser overlever en appoppdatering; motoren følger fortsatt appversjonen.
+- `scripts/prepare-voxcpm-voices.mjs` kontrollerer størrelse, hash og WAV-format, og klargjør små utgivelsesvedlegg med kontrollsummer, manifest og MIT-lisens. CI gjør dette sammen med motorbyggingen.
+- `scripts/install-voxcpm-local.mjs` bruker den vanlige verifiserte installasjonen med lokale kildefiler, uten nett. Alle fem språk er installert i utviklingsprofilen fra de eksisterende modellfilene; dette kjøres aldri fra appstart, postinstall eller bygg.
+- Hver stemme får lokale OGG-prøver i alle ti uttrykk. Kvalitetsforskjeller kan justeres senere uten at eksisterende opptak endres.
+
+Verifisert første versjon: 100 ekte OGG-prøver er lagt i `assets/voice-samples/voxcpm`, med kontrollsummer og brukerens vurdering i [voxcpm-expressions-review.json](voxcpm-expressions-review.json). Bygg og alle 864 tester består, inkludert nedlasting fra versjonens utgivelse, innholdslåste referanser ved appoppdatering og alle ti uttrykk på engelsk/tysk. Begge isolerte Electron-tester består med den nye katalogen. Bygget har 100 prøver og ingen GGUF-vekter eller referanse-WAV-er. Motor, referanser, kontrollsummer og lisenser er klargjort lokalt som utgivelsesfiler.
+
+Den ekte backend-en er også prøvd mot den installerte utviklingsprofilen, uten nett: engelsk Warm og norsk Sensual ga 48 kHz mono og riktig setningsfremdrift, og det andre språket brukte samme innlastede modell. [Kontrollresultat](voxcpm-first-version-check.json). Dette bekrefter integrasjonen, ikke feilfri uttale. Reproduser med `node scripts/test-voxcpm-installed.mjs "<installert voxcpm-mappe>"`.
+
+**Gjenstår for distribusjon:** CI-oppsettet må kjøres i GitHub, og motoren og referansevedleggene må publiseres med neste Reccut-utgivelse. Ingen utgivelse eller tagg er publisert i denne økten. Fase 9 (Windows/Linux) krever fortsatt ytelsesmåling; appen tilbyr VoxCPM på Apple Silicon.
+
+Reproduser kontrollene uten å laste ned modeller:
+
+```sh
+node scripts/review-voxcpm.mjs "<lokal mappe med whisper-base>"
+node scripts/voice-expression-samples.mjs "<upstream design-CLI>" "<motor>" "<modellmappe>"
+node scripts/voice-expression-samples.mjs "<upstream design-CLI>" "<motor>" "<modellmappe>" --all-expressions
+node scripts/prepare-voxcpm-voices.mjs "<utgivelsesmappe>"
+npm run build
+node scripts/test-voice-packages.cjs
+node scripts/test-voxcpm-picker.cjs
+node scripts/test-voxcpm-process.mjs "<motor>" "<modellmappe>" "<syntetisk referanse.wav>"
+```
+
+UI-testen bruker en isolert Electron-profil og små testjobber, og sjekker førstegangsvisning, lagring i hovedprosessen, søk, lokale prøver, eksplisitt nedlasting og avbryt av køjobber. Lytterapporten i `vendor/` genereres lokalt; kontrollresultatene i `docs/` beholdes i prosjektet.
+
+Modellfilene er låst direkte med SHA-256. Motorbinærens kontrollsum oppstår ved bygging, og lastes derfor ned fra `.sha256`-vedlegget i appens egen utgivelse (som Keystroke-tillegget); kildekoderevisjonen er låst i katalogen og kontrolleres i byggeskriptet.
+
+Verifisering 12. november: Mac-byggeskriptet er kjørt lokalt og gir en 5,2 MB-binær med bare systembiblioteker. En ende-til-ende-prøve gjennom den nye backend-en, med eksisterende lokale modellfiler og den eksperimentelle kvinnereferansen, ga 48 kHz mono-WAV (1,76 s lyd på cirka 21 s inkludert modelloppstart). Dette er en teknisk røykprøve, ikke en godkjenning av stemmekvalitet eller ytelse. Referansen er fortsatt utenfor katalogen.
 
 ## Mål
 
 - VoxCPM2 blir hovedstemmen for norsk, og etter hvert for flere språk.
-- Brukeren velger stemning (nøytral, intens, sint, trist) før stemmen lages.
+- Brukeren velger stemning eller talemåte før stemmen lages: nøytral, intens, sint, trist, varm, sensuell, glad, selvsikker, beroligende eller hviskende.
 - Hver stemme beholder samme person og dialekt i alle stemninger.
 
 ## Hva testene viste
@@ -36,6 +106,12 @@ Stemningene (teksten i parentes):
 | `intense` | Intense | Extremely intense and urgent, almost breathless, hammering every word with heavy emphasis, full of tension. |
 | `angry` | Angry | Furious and shouting, voice shaking with anger, spitting the words out harshly. |
 | `sad` | Sad | Deeply sad and close to tears, voice trembling and breaking, speaking slowly and softly. |
+| `warm` | Warm | Warm, friendly and welcoming, with a soft natural smile and a relaxed conversational tone. |
+| `sensual` | Sensual | Soft, low and intimate, with a subtly breathy, unhurried and gently alluring delivery. |
+| `cheerful` | Cheerful | Bright, cheerful and upbeat, with a smiling voice and lively, natural expression. |
+| `confident` | Confident | Confident, clear and assured, speaking steadily with calm conviction. |
+| `reassuring` | Reassuring | Gentle, reassuring and compassionate, speaking calmly and patiently. |
+| `whispering` | Whispering | Whisper softly and clearly in a hushed voice, keeping every word intelligible. |
 
 «Serious» (alvorlig) var for lik nøytral i forsøk 2 og er ikke testet i forsøk 3. Den kommer bare med hvis en ny test viser at den skiller seg ut.
 
@@ -50,19 +126,19 @@ Modellen kan altså ikke deles opp per språk, og den lastes ned én gang (cirka
 
 Brukeren søker opp språket i AI Voices og laster ned stemmepakken for det. Første gang lastes modellen ned samtidig, og knappen viser den samlede størrelsen. Etter det er neste språk bare noen hundre kB.
 
-Et språk kommer bare inn i katalogen etter at stemmene er lyttetestet. Norsk er først. Svensk, dansk og tysk lages på samme måte, med en referanse og fire stemninger hver.
+Nye språk vurderes separat gjennom lytting og ordkontroll. Første versjon med norsk, amerikansk engelsk, svensk, dansk og tysk er godtatt med kvalitetsbegrensninger som beskrevet over. Hvert språk har låste referanser og egne lydprøver for alle ti uttrykk. Nye språk kan godkjennes uavhengig av norsk.
 
 Referansestemmene er laget av VoxCPM2 selv, med stemmebeskrivelse, og er ikke klonet fra ekte personer. Slik skal det fortsette.
 
 ## Arkitektur
 
-### 1. Motoren (`voxcpm2-cli`)
+### 1. Motoren (Reccuts stdio-adapter over VoxCPM2-runtime-en)
 
 - Kilde: [tc-mb/llama.cpp-omni](https://github.com/tc-mb/llama.cpp-omni), MIT, låst til revisjon `d30f00feadb7ebce95bacd55b0d104e3ef501481`.
 - Bygges i `.github/workflows/build.yml` per plattform, på samme måte som Keystroke-tillegget: `reccut-voxcpm-mac` (arm64, Metal), `reccut-voxcpm-win-x64.exe` og `reccut-voxcpm-linux-x64`, hver med en `.sha256`.
 - Legges ved GitHub-utgivelsen `v<x.y.z>`, lastes ned ved behov og kontrolleres med SHA-256. Den pakkes ikke inn i installasjonsfilen.
 - **Risiko:** Uten GPU, på Windows og Linux, kan motoren bli for treg. Mål sanntidsfaktoren på CPU før disse plattformene får stemmene. Mac er først.
-- **Risiko:** CLI-en laster 3,5 GB på nytt for hver kjøring. For lange manus trengs en prosess som holder modellen i minnet og får setningene én etter én (stdin/stdout, JSON per linje). Fase 1 kan bruke CLI-en per avsnitt, men fase 2 må ha den vedvarende prosessen.
+- **Løst i fase 7:** Modellen holdes i minnet mellom setninger og talejobber, via stdin/stdout og én JSON-forespørsel per linje. Inaktive prosesser frigjøres etter 60 sekunder.
 
 ### 2. Katalogen (`src/main/ttsCatalog.json`, ny seksjon `voxcpm`)
 
@@ -88,7 +164,7 @@ Referansestemmene er laget av VoxCPM2 selv, med stemmebeskrivelse, og er ikke kl
 Følg mønsteret til Piper i [src/main/tts.js](../src/main/tts.js): `status`, `installLanguage(lang)`, `cancel`, `removeLanguage`, `removeModel`, og nedlasting til en midlertidig mappe som byttes inn til slutt.
 
 - **Viktig:** `fetchBytes` leser hele svaret inn i minnet. Det går ikke med filer på 1,8 GB. Modellfilene må strømmes til disk med SHA-256 underveis, og nedlastingen må kunne fortsette etter et avbrudd (`Range`).
-- **Generering:** Kjør `voxcpm2-cli` med `spawn` og argumentene over, en midlertidig wav som utdata, og les den inn som `{ samples, rate }`. Teksten deles med `chunksForSpeech` fra `src/shared/tts.js`. Avbryt med `kill` når jobben avbrytes.
+- **Generering:** Start stdio-adapteren med `spawn` ved behov og gjenbruk den mellom setninger. De samme innstillingene sendes med hver JSON-forespørsel; en midlertidig WAV leses inn som `{ samples, rate }`. Teksten deles med `chunksForSpeech` fra `src/shared/tts.js`. Avbryt med `kill`, vent på avslutning og rydd opp.
 - Manglende modell eller stemmepakke kaster `MODEL_MISSING:voices`.
 - Kobles inn der Piper og Kokoro rutes i dag (`engine: 'voxcpm'`, se `ttsJobs.js` og `main.js`).
 

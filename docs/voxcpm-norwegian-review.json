@@ -1,0 +1,229 @@
+{
+  "reviewed": true,
+  "source": "Synthetic VoxCPM2 v3 listening-test candidates; no real-person references.",
+  "engineRevision": "d30f00feadb7ebce95bacd55b0d104e3ef501481",
+  "modelRevision": "169f64d8b98bbaab1761e4ca3a83e6af653456cc",
+  "settings": {
+    "cfg": 3.5,
+    "steps": 250,
+    "timesteps": 10,
+    "temperature": 1,
+    "suffix": "Dry, close-mic studio recording with no reverb."
+  },
+  "recognizer": {
+    "name": "Whisper Base, q8",
+    "automatedOnly": true
+  },
+  "expected": "Vi har gått gjennom tallene. Resultatet er ikke det vi håpet på. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+  "results": [
+    {
+      "voice": "kvinne",
+      "label": "Woman",
+      "mood": "reference",
+      "source": "ref-kvinne-kort.wav",
+      "sha256": "fe6dac6bc6e3077fc88aefadde2e6ea55e2244deee5490cffa741c9470c951f6",
+      "size": 384078,
+      "duration": 4,
+      "sample": "kvinne-reference.ogg",
+      "transcript": "Velkommen i dag skal vi lage en liten video sammen.",
+      "expected": null,
+      "wordsToCheck": [],
+      "negations": 0
+    },
+    {
+      "voice": "kvinne",
+      "label": "Woman",
+      "mood": "neutral",
+      "source": "voxcpm2-kvinne-noytral-v3.wav",
+      "sha256": "3a4bb2998258111660084422cad36675da931856638dc0f89dc0060aa8ead562",
+      "size": 783404,
+      "duration": 8.16,
+      "sample": "kvinne-neutral.ogg",
+      "transcript": "Vi har gått gjennomtalene. Resultatet er ikke det vi håper på. Nå må vi bestemme oss for hva vi gjør videre. Og vi har ikke mye tid.",
+      "expected": "Vi har gått gjennom tallene. Resultatet er ikke det vi håpet på. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "wordsToCheck": [
+        "gjennom",
+        "tallene",
+        "håpet"
+      ],
+      "negations": 2
+    },
+    {
+      "voice": "kvinne",
+      "label": "Woman",
+      "mood": "intense",
+      "source": "voxcpm2-kvinne-intens-v3.wav",
+      "sha256": "92f87f6682afbb2ca9ca21ba837723c2324a00b92910ec01475ef3396d0fc8fe",
+      "size": 875564,
+      "duration": 9.12,
+      "sample": "kvinne-intense.ogg",
+      "transcript": "Vi har gått gjennom talene. Resultate er ikke det vi håper på. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "expected": "Vi har gått gjennom tallene. Resultatet er ikke det vi håpet på. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "wordsToCheck": [
+        "tallene",
+        "resultatet",
+        "håpet"
+      ],
+      "negations": 2
+    },
+    {
+      "voice": "kvinne",
+      "label": "Woman",
+      "mood": "angry",
+      "source": "voxcpm2-kvinne-sint-v3.wav",
+      "sha256": "807bd1ac336edf5e58b055a0aaf6b103bee3381ba7a409290c357709a2360ecb",
+      "size": 706604,
+      "duration": 7.36,
+      "sample": "kvinne-angry.ogg",
+      "transcript": "Vi har gått gjennom talene. Resultate er ikke det vi håper på. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "expected": "Vi har gått gjennom tallene. Resultatet er ikke det vi håpet på. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "wordsToCheck": [
+        "tallene",
+        "resultatet",
+        "håpet"
+      ],
+      "negations": 2
+    },
+    {
+      "voice": "kvinne",
+      "label": "Woman",
+      "mood": "sad",
+      "source": "voxcpm2-kvinne-trist-v3.wav",
+      "sha256": "47762d0ee7db46780aaa0a2bdfa31510a0a9cf746595e6be5cb93c76ced0e84a",
+      "size": 829484,
+      "duration": 8.64,
+      "sample": "kvinne-sad.ogg",
+      "transcript": "Vi har gått igjen om tallene. Resultatet er ikke det vi håper på. Når vi bestemmer oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "expected": "Vi har gått gjennom tallene. Resultatet er ikke det vi håpet på. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "wordsToCheck": [
+        "gjennom",
+        "håpet",
+        "nå",
+        "må",
+        "bestemme"
+      ],
+      "negations": 2
+    },
+    {
+      "voice": "mann",
+      "label": "Man",
+      "mood": "reference",
+      "source": "ref-mann-kort.wav",
+      "sha256": "76ec08d59edf961cef0e20e662a372b3304426d533ee46fa566d3e99612cf828",
+      "size": 336078,
+      "duration": 3.5,
+      "sample": "mann-reference.ogg",
+      "transcript": "og velkommen i dag skal vi lage en eten video sammen.",
+      "expected": null,
+      "wordsToCheck": [],
+      "negations": 0
+    },
+    {
+      "voice": "mann",
+      "label": "Man",
+      "mood": "neutral",
+      "source": "voxcpm2-mann-noytral-v3.wav",
+      "sha256": "5fd6d17e510010ed817b8484c877b2c49e7d1e78b95a461f3dd69561038b1488",
+      "size": 721964,
+      "duration": 7.52,
+      "sample": "mann-neutral.ogg",
+      "transcript": "Vi har gått igenom talene. Resultatet er ikke det vi håper på. Nå må vi bestemme oss for hva vi gjør videre og vi har ikke mye tid.",
+      "expected": "Vi har gått gjennom tallene. Resultatet er ikke det vi håpet på. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "wordsToCheck": [
+        "gjennom",
+        "tallene",
+        "håpet"
+      ],
+      "negations": 2
+    },
+    {
+      "voice": "mann",
+      "label": "Man",
+      "mood": "intense",
+      "source": "voxcpm2-mann-intens-v3.wav",
+      "sha256": "5dafe4e1d403befa90db77488c47eb4d73e3d9570c7a9a9da30b87279bedad47",
+      "size": 721964,
+      "duration": 7.52,
+      "sample": "mann-intense.ogg",
+      "transcript": "Vi har gått igjen om talene. Resultate er ikke det vi håper på. Nå må vi bestemme oss oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "expected": "Vi har gått gjennom tallene. Resultatet er ikke det vi håpet på. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "wordsToCheck": [
+        "gjennom",
+        "tallene",
+        "resultatet",
+        "håpet"
+      ],
+      "negations": 2
+    },
+    {
+      "voice": "mann",
+      "label": "Man",
+      "mood": "angry",
+      "source": "voxcpm2-mann-sint-v3.wav",
+      "sha256": "11763468e0bb658548d73ee4113fc8a8a965a26543d5581e1b8f283b5675a5c1",
+      "size": 721964,
+      "duration": 7.52,
+      "sample": "mann-angry.ogg",
+      "transcript": "Vi har gått igjen om talene. Resultate er ikke det vi håper på. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "expected": "Vi har gått gjennom tallene. Resultatet er ikke det vi håpet på. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "wordsToCheck": [
+        "gjennom",
+        "tallene",
+        "resultatet",
+        "håpet"
+      ],
+      "negations": 2
+    },
+    {
+      "voice": "mann",
+      "label": "Man",
+      "mood": "sad",
+      "source": "voxcpm2-mann-trist-v3.wav",
+      "sha256": "f67c2e4bdb6e65924397e74e75df91311ba44b3a5f46d1d0ad249db44c8baafa",
+      "size": 844844,
+      "duration": 8.8,
+      "sample": "mann-sad.ogg",
+      "transcript": "Vi har gått igenom talene. Resultatet er ikke det vi håper til. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "expected": "Vi har gått gjennom tallene. Resultatet er ikke det vi håpet på. Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+      "wordsToCheck": [
+        "gjennom",
+        "tallene",
+        "håpet",
+        "på"
+      ],
+      "negations": 2
+    }
+  ],
+  "date": "2026-11-12",
+  "listeningReport": "vendor/voice-tests/norwegian/voxcpm-review/index.html",
+  "userFeedback": {
+    "date": "2026-11-12",
+    "overall": "Brukeren har lyttet og beskriver lyden som stort sett grei.",
+    "issue": "Mannen sier noen steder «må vi bestemme osses for hva». Stemningene er ikke nærmere spesifisert av brukeren.",
+    "verifiedInput": "Nå må vi bestemme oss for hva vi gjør videre, og vi har ikke mye tid.",
+    "evidence": "Motorloggen har riktig manus. Whisper gjengir «oss oss» i den opprinnelige intense mannsprøven.",
+    "followUp": "Brukeren bekrefter at også «Ny variant av siste setning» har «osses»/«oss oss». Whisper overser feilen; setningsdeling og seed 7 er ikke en bekreftet løsning.",
+    "comparison": "vendor/voice-tests/norwegian/oss-check/index.html",
+    "approval": "accepted_first_version_with_known_pronunciation_issue",
+    "boundedCheck": {
+      "changed": "Kun CFG: 3.5 (tidligere, forkastet) mot 3.0 og 2.0. Samme manus, referanse, stemning og seed 7.",
+      "source": "https://github.com/OpenBMB/VoxCPM/blob/main/src/voxcpm/cli.py",
+      "recommendedCfgRange": [
+        1,
+        3
+      ],
+      "comparison": "vendor/voice-tests/norwegian/oss-check/lower-guidance/index.html",
+      "humanStatus": "not-reviewed",
+      "whisperUsedForApproval": false,
+      "productionSettingsChanged": false
+    },
+    "acceptance": {
+      "date": "2026-11-12",
+      "status": "accepted_first_version_with_known_quality_limits",
+      "user": "Det er ikke alle stemmene som er like gode, men jeg tenker det får holde. Jeg kan heller gå tilbake og gjøre justeringer. Vi må nesten videre i prosessen.",
+      "scope": "Proceed with the current synthetic references and expressions. Do not require another listening round before integration.",
+      "individuallyReviewedAllSamples": false,
+      "knownNorwegianPronunciationIssueResolved": false
+    }
+  }
+}
