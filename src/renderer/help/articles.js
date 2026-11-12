@@ -854,6 +854,45 @@ Ungroup ({{key:ungroup}}) separates them again.
     see: ['sync', 'cutting'],
   },
   {
+    id: 'multicam',
+    section: 'Editing',
+    title: 'Multicam Clips',
+    summary: 'Switch between several cameras that filmed the same thing, live with the number keys.',
+    keywords: 'multicam multi camera angle angles cameras switch live cut podcast interview sync auto sync angle viewer',
+    body: `
+A multicam clip holds the clips from several cameras that recorded at the same time. You switch between them while the video plays, and Reccut cuts the clips for you so only one camera shows at a time.
+
+## Make a multicam clip
+
+- **From the timeline:** select the clips that lie on top of each other, right click and choose **Create Multicam Clip…**. Their positions and what was visible are kept.
+- **From scratch:** choose File › **New Multicam Clip…**, or right click an empty part of the timeline. Files you selected in the browser are added. Double click or drag more files from the list on the left. The file list has list, icon and filmstrip views.
+
+The angles are numbered **1, 2, 3** in the order they were added.
+
+## Synchronize the angles
+
+Press **Auto Sync**. Reccut compares the sound in each angle and lines them up. If an angle cannot be synchronized, a message at the top tells you which one and why, for example that it has no audio or that no matching sound was found. You can drag any angle in the timeline to line it up by hand.
+
+## Switch angles
+
+- The **Angles** view shows all cameras at once. The **Program** view shows what goes on the timeline, and the active angle has a **green frame**.
+- Press **1** to **9**, or click an angle, to cut to it at the playhead. This works while the video plays, so you can switch cameras live.
+- **Shift** with a number (or Shift click) switches the angle of the current piece without making a new cut.
+- Choose where the sound comes from at the top: one angle for the whole clip, or **Audio follows the picture**. The headphones in each angle row do the same.
+
+## Fine tune
+
+The timeline at the bottom works like the main timeline: zoom with **Cmd +** and **Cmd -** (Ctrl on Windows) or pinch, scroll sideways, skim with **S** and snap with **N**. Drag a cut to move it, or use the **Trim** tool (T). The **Blade** tool (B) adds a cut. Press Backspace to remove the cut under the playhead. **I** and **O** set which part goes on the timeline. Up and Down Arrow jump between cuts. The window has its own Undo.
+
+Drag the dividers to change the size of the file list, the two views and the height of the timeline.
+
+## Add it to the timeline
+
+Press the blue **Add to Timeline** button at the top left. The result is a group of clips, one for each cut, with an **MC** badge. Double click the group to edit the clips inside as usual, for example to add effects or color. To switch angles again, hold Cmd (Ctrl on Windows) and double click, or right click and choose **Edit Multicam Clip**. Effects you added to an angle are kept when you update it.
+`,
+    see: ['grouping', 'sync', 'cutting'],
+  },
+  {
     id: 'range',
     section: 'Editing',
     title: 'Ranges',

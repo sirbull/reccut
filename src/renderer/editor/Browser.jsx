@@ -13,6 +13,7 @@ import {
   Film,
   Image as ImageIcon,
   LayoutGrid,
+  List,
   ListVideo,
   Plus,
   Rows3,
@@ -34,6 +35,8 @@ import { fileUrl, mediaPreviewProject, openSource, scrubAudio, seek } from './pl
 import * as commands from './commands.js';
 import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { startLibraryDrag } from './libraryDrag.js';
+import { multicamMedia } from '../../shared/multicam.js';
+import { newMulticamClip } from './multicam.js';
 import { CaptionStyleEditor } from './Inspector.jsx';
 import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
 import { prefs } from '../prefs.js';
@@ -77,7 +80,7 @@ export function Browser() {
   );
 }
 
-function dragData(e, item) {
+export function dragData(e, item) {
   if (item.kind === 'media') {
     const ids = item.ids || [item.id];
     const media = project.value.media[item.id || ids[0]];
@@ -114,11 +117,8 @@ function MediaTab() {
   const items = Object.values(p.media).filter((m) => !query || m.name.toLowerCase().includes(query.toLowerCase()));
   mediaOrder = items.map((m) => m.id);
   const [over, setOver] = useState(false);
-  const [mode, setMode] = useState(localStorage.getItem('browserView') || 'filmstrip');
-  const setView = (v) => {
-    setMode(v);
-    localStorage.setItem('browserView', v);
-  };
+  const mode = commands.browserView.value;
+  const setView = commands.setBrowserView;
   // Utseende på filmstripene: hvor mye tid hver rad viser, og hvor høye bildene er.
   const [spanIdx, setSpanIdx] = useState(() => Math.max(0, Math.min(SPANS.length - 1, Number(localStorage.getItem('browserSpan')) || 0)));
   const [stripH, setStripH] = useState(() => Math.max(24, Math.min(96, Number(localStorage.getItem('browserStripH')) || 40)));
@@ -180,7 +180,8 @@ function MediaTab() {
         <span class="spacer" />
         <IconButton icon={ListVideo} title={`New Sequence (${isMac ? '⌥⌘N' : 'Ctrl+Alt+N'})`} onClick={() => commands.newSequence()} />
         <IconButton icon={Rows3} title="Filmstrip view" active={mode === 'filmstrip'} onClick={() => setView('filmstrip')} />
-        <IconButton icon={LayoutGrid} title="Grid view" active={mode === 'grid'} onClick={() => setView('grid')} />
+        <IconButton icon={LayoutGrid} title="Icon view. Click a clip to show it in the viewer." active={mode === 'grid'} onClick={() => setView('grid')} />
+        <IconButton icon={List} title="List view. Click a clip to show it in the viewer." active={mode === 'list'} onClick={() => setView('list')} />
       </div>
       {mode === 'filmstrip' && Object.keys(p.media).length > 0 && (
         <div class="film-controls">
@@ -215,6 +216,18 @@ function MediaTab() {
               <FilmstripRow key={m.id} m={m} span={SPANS[spanIdx]} height={stripH} />
             ))}
           </div>
+        ) : mode === 'list' ? (
+          <div class="media-rows" role="list">
+            <div class="media-rows-head" aria-hidden="true">
+              <span />
+              <span>Name</span>
+              <span>Duration</span>
+              <span>Format</span>
+            </div>
+            {items.map((m) => (
+              <MediaListRow key={m.id} m={m} />
+            ))}
+          </div>
         ) : (
           <div class="media-grid">
             {items.map((m) => (
@@ -224,7 +237,9 @@ function MediaTab() {
         )
       )}
       <p class="hint small">
-        Skim a clip and press I and O to mark a range, or drag across it. Press E to append, W to insert, Q to connect or D to overwrite at the playhead, or drag the range to the timeline.
+        {mode === 'filmstrip'
+          ? 'Skim a clip and press I and O to mark a range, or drag across it. Press E to append, W to insert, Q to connect or D to overwrite at the playhead, or drag the range to the timeline.'
+          : 'Click a clip to show it in the viewer. Scrub under the picture and press I and O to mark what to keep, then drag the picture to the timeline, or press E, W, Q or D.'}
       </p>
     </div>
   );
@@ -325,6 +340,53 @@ function MediaCard({ m }) {
         </span>}
       </div>
       {m.kind === 'audio' && <div class="name">{m.name}</div>}
+    </div>
+  );
+}
+
+/* Listevisning: én rad per fil med navn, lengde og format. Klikk viser klippet i visningen. */
+
+function mediaFormat(m) {
+  const v = Object.values(m.streams || {}).find((s) => s.hasVideo);
+  if (m.kind === 'audio') {
+    const a = m.streams?.main;
+    return a?.sampleRate ? `Audio · ${Math.round(a.sampleRate / 100) / 10} kHz` : 'Audio';
+  }
+  if (m.kind === 'image') return v?.width ? `Image · ${v.width} × ${v.height}` : 'Image';
+  const size = v?.width ? `${v.width} × ${v.height}` : m.kind === 'recording' ? 'Recording' : 'Video';
+  return v?.fps ? `${size} · ${Math.round(v.fps * 100) / 100} fps` : size;
+}
+
+function MediaListRow({ m }) {
+  const selected = commands.browserPicked.value.includes(m.id);
+  const stream = m.streams.screen || m.streams.main || m.streams.camera;
+  const thumb = m.kind === 'image' ? m.streams.main?.proxy || m.path : stream?.thumbs?.files?.[Math.min(stream.thumbs.files.length - 1, 2)];
+  const used = usedMedia.value.has(m.id);
+  const range = commands.browserRange.value?.mediaId === m.id ? commands.browserRange.value : null;
+  const Icon = m.kind === 'audio' ? FileAudio : m.kind === 'image' ? ImageIcon : m.kind === 'recording' ? Video : Film;
+  return (
+    <div
+      class={`media-row${selected ? ' selected' : ''}`}
+      role="listitem"
+      data-media={m.id}
+      draggable
+      onDragStart={(e) => dragData(e, { kind: 'media', id: m.id, ids: commands.browserPicked.value.includes(m.id) ? mediaOrder.filter((x) => commands.browserPicked.value.includes(x)) : [m.id] })}
+      onClick={(e) => commands.pickMedia(e, m.id, mediaOrder)}
+      onDblClick={() => {
+        commands.pickMedia(null, m.id, mediaOrder);
+        commands.addBrowserSelection('append');
+      }}
+      onContextMenu={(e) => mediaContextMenu(e, m, used)}
+      title={m.path}
+    >
+      <span class={`row-thumb k-${m.kind}`}>{thumb ? <img src={fileUrl(thumb)} draggable={false} /> : <Icon size={14} />}</span>
+      <span class="row-name">
+        {used && <span class="used" title="Used in the project" />}
+        <span class="name">{m.name}</span>
+        <MediaBadges m={m} />
+      </span>
+      <span class="row-dur">{range ? `${formatDuration(range.out - range.in)} of ${formatDuration(m.duration || 0)}` : m.kind === 'image' ? 'Still' : formatDuration(m.duration || 0)}</span>
+      <span class="row-fmt">{mediaFormat(m)}</span>
     </div>
   );
 }
@@ -585,13 +647,14 @@ async function mediaContextMenu(e, m, used) {
   const hasVideo = picked.some((x) => x.kind === 'video' || x.kind === 'recording');
   const hasAudio = picked.some((x) => x.kind === 'audio');
   const synced = picked.some((x) => Object.values(x.streams).some((st) => st.syncedFrom));
-  const inUse = picked.some((x) => timelines(project.value).some((t) => Object.values(t.clips).some((c) => c.mediaId === x.id)));
+  const inUse = picked.some((x) => timelines(project.value).some((t) => Object.values(t.clips).some((c) => c.mediaId === x.id)) || multicamMedia(project.value).has(x.id));
   const id = await api.popupMenu([
     { id: 'append', label: 'Append to Storyline', accelerator: 'E' },
     { id: 'insert', label: 'Insert at Playhead', accelerator: 'W' },
     { id: 'connect', label: 'Connect to Storyline', accelerator: 'Q' },
     { id: 'overwrite', label: 'Overwrite at Playhead', accelerator: 'D' },
     { id: 'slideshow', label: 'Add as Slideshow…', enabled: picked.every((x) => x.kind === 'image' && !x.offline) },
+    { id: 'multicam', label: n > 1 ? 'New Multicam Clip from Selection…' : 'New Multicam Clip…', enabled: hasVideo },
     { separator: true },
     { id: 'sync', label: 'Synchronize Audio', accelerator: 'Alt+CmdOrCtrl+G', enabled: hasVideo && hasAudio },
     { id: 'unsync', label: 'Remove Synchronized Audio', enabled: synced },
@@ -603,6 +666,7 @@ async function mediaContextMenu(e, m, used) {
   ]);
   if (['append', 'insert', 'connect', 'overwrite'].includes(id)) commands.addBrowserSelection(id);
   else if (id === 'slideshow') commands.openSlideshow(mediaOrder);
+  else if (id === 'multicam') newMulticamClip(mediaOrder.filter((x) => picked.some((m) => m.id === x)));
   else if (id === 'sync') commands.syncMediaAudio();
   else if (id === 'unsync') commands.removeSyncedAudio();
   else if (id === 'optimize') commands.optimizeMedia();

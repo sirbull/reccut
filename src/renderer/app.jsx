@@ -61,6 +61,7 @@ import { helpOpen, paletteOpen } from './registry.js';
 import wordmark from '../../assets/reccut-wordmark.svg';
 import { isTyping, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } from './keyboard.js';
 import { installFileDrop } from './fileDrop.js';
+import { multicamMenu } from './editor/multicam.js';
 import { UpdateDialog } from './UpdateDialog.jsx';
 import { startUpdateChecks } from './updates.js';
 
@@ -303,6 +304,8 @@ function handleMenu(id) {
     if (!cmd?.allowWhileTyping) return;
     document.activeElement?.blur?.();
   }
+  // Multicam-vinduet har egen angrehistorikk.
+  if (multicamMenu.handle?.(id)) return;
   // Menyen bygges om etter et rombytte, så et tastetrykk rett etter byttet kan treffe den gamle menyen.
   if (dialogOwnsKeyboard() || !cmd || !inRoom(cmd)) return;
   runCommand(id);

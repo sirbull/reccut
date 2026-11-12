@@ -7,6 +7,7 @@ import { addMask, canMask, removeMask } from '../../shared/shapes.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { effectWarning } from '../../shared/effectSupport.js';
 import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../../shared/videoEffects.js';
+import { createMulticamFromSelection, editMulticam, newMulticamClip } from './multicam.js';
 import { ALL_GROUPS, groupsWithContent, pasteAttributes, removeAttributes } from '../../shared/attributes.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
 import {
@@ -641,7 +642,8 @@ export function deleteMarkerAt(id) {
 
 export function setRange(which) {
   // I og O i biblioteket markerer i klippet under skummeren (eller ved bibliotekets spillhode).
-  if (browserFocus.value && browserMark(which)) return;
+  // Viser visningen et klipp fra biblioteket (liste- eller ikonvisning), markerer I og O i det.
+  if ((browserFocus.value || sourceProject.value) && browserMark(which)) return;
   const T = getTime();
   // I og O på samme sted fjerner området.
   const other = project.value.range?.[which === 'in' ? 'out' : 'in'];
@@ -812,6 +814,20 @@ export async function confirmImport(opts) {
 
 // Utvalg i biblioteket: et helt klipp eller et område valgt i filmstripen.
 export const browserRange = signal(null); // { mediaId, in, out }
+// Visningen i biblioteket: filmstriper (standard), ikoner eller liste.
+export const browserView = signal((() => {
+  try {
+    return ['filmstrip', 'grid', 'list'].includes(localStorage.getItem('browserView')) ? localStorage.getItem('browserView') : 'filmstrip';
+  } catch {
+    return 'filmstrip';
+  }
+})());
+export function setBrowserView(v) {
+  browserView.value = v;
+  try {
+    localStorage.setItem('browserView', v);
+  } catch {}
+}
 
 // Hvor skummeren står i biblioteket nå, og bibliotekets eget spillhode (satt med klikk).
 export const browserSkimPos = { mediaId: null, t: 0 };
@@ -1370,6 +1386,9 @@ export async function clipContextMenu(clipId, T) {
   if (hasAudio || c.type === 'audio') items.push({ id: 'solo', label: c.solo ? 'Unsolo' : 'Solo', accelerator: 'Alt+S' });
   if (c.type === 'audio') items.push({ id: 'sync', label: 'Auto Sync Audio', accelerator: isMac ? 'Alt+Cmd+G' : 'Ctrl+Alt+G' });
   items.push({ separator: true });
+  const multiVideo = selection.value.filter((sid) => project.value.clips[sid]?.type === 'video').length;
+  if (c.multicam) items.push({ id: 'editMulticam', label: 'Edit Multicam Clip' });
+  else if (multiVideo > 1 || (multiVideo === 1 && selection.value.length > 1)) items.push({ id: 'createMulticam', label: 'Create Multicam Clip…' });
   if (selection.value.length > 1) items.push({ id: 'group', label: 'Group Clips', accelerator: 'CmdOrCtrl+G' });
   if (c.group) items.push({ id: 'ungroup', label: 'Ungroup', accelerator: 'Shift+CmdOrCtrl+G' });
   if (c.lane === 0 && c.type !== 'gap') items.push({ id: 'lift', label: 'Lift from Storyline', accelerator: isMac ? 'Alt+Cmd+Up' : 'Ctrl+Alt+Up' });
@@ -1445,6 +1464,12 @@ export async function clipContextMenu(clipId, T) {
     case 'sync':
       autoSyncAudio(clipId);
       break;
+    case 'createMulticam':
+      createMulticamFromSelection();
+      break;
+    case 'editMulticam':
+      editMulticam(clipId);
+      break;
     case 'group':
       groupSelected();
       break;
@@ -1497,6 +1522,8 @@ export async function laneContextMenu(lane, T) {
     { id: 'paste', label: 'Paste at Playhead', enabled: Boolean(clipboard) },
     { id: 'title', label: 'Add Title Here', enabled: lane > 0 && lane !== CAPTION_LANE },
     { id: 'caption', label: 'Add Caption Here', enabled: lane === CAPTION_LANE },
+    { separator: true },
+    { id: 'multicam', label: 'New Multicam Clip…' },
   ];
   const id = await api.popupMenu(items);
   if (id === 'hide' || id === 'mute') {
@@ -1508,4 +1535,5 @@ export async function laneContextMenu(lane, T) {
   } else if (id === 'paste') paste();
   else if (id === 'title') addTitle('center', T);
   else if (id === 'caption') addCaption(T);
+  else if (id === 'multicam') newMulticamClip();
 }

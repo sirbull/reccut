@@ -4,6 +4,8 @@ import { deepClone, formatTimecode, isVisual, kfTime, valueAt } from '../../shar
 import { captionLayout, wrapText } from '../../shared/render.js';
 import { clipBox, clipMatrix, clipPivot, maskList, shapeAt } from '../../shared/shapes.js';
 import { followMatrix } from '../../shared/follow.js';
+import { sourceMediaId } from './store.js';
+import { dragData } from './Browser.jsx';
 import { beginTransient, browserPlayhead, commit, endTransient, getTime, playing, project, selectedClips, room, selectedTransition, selection, skim, timeSig, updateTransient } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
@@ -139,13 +141,25 @@ export function Viewer() {
         </button>
       </div>
       <div class="viewer-box" ref={boxRef} onDblClick={toggleFullscreen}>
-        <canvas ref={canvasRef} class={draggable ? (sel.type === 'redact' ? 'drawable' : 'movable') : ''} onPointerDown={onCanvasDown} />
+        <canvas
+          ref={canvasRef}
+          class={draggable ? (sel.type === 'redact' ? 'drawable' : 'movable') : source ? 'source-drag' : ''}
+          onPointerDown={onCanvasDown}
+          draggable={Boolean(source)}
+          title={source ? 'Drag the picture to the timeline to add the marked part' : undefined}
+          onDragStart={(e) => {
+            const id = sourceMediaId.value;
+            if (!source || !id) return e.preventDefault();
+            dragData(e, { kind: 'media', id, ids: [id] });
+          }}
+        />
         {pen && sel?.id === pen.clipId && <PenOverlay clip={sel} canvasRef={canvasRef} />}
         {sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} label="Redaction. Drag to move, drag the handles to resize." />}
         {sel && sel.type !== 'redact' && trackArea.value === sel.id && !pen && <ShapeEditor clip={sel} prefix="track." shape="rect" smooth={false} canvasRef={canvasRef} label="Tracking area. Put it over what the clip should follow." />}
         {draggable && sel.type !== 'redact' && sel.type !== 'caption' && (commands.shownInspectorTab.value === 'video' || (commands.shownInspectorTab.value === 'recording' && sel.recordingPart === 'camera')) && !pen && !editMask && trackArea.value !== sel.id && <TransformBox clip={sel} canvasRef={canvasRef} />}
         {editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
       </div>
+      {source && !fullscreen && <SourceBar mediaId={sourceMediaId.value} duration={source.duration} fps={p.fps} />}
       {prefs.value.videoScopesVisible && !fullscreen && <VideoScopes sourceRef={canvasRef} onClose={() => setPrefs({ videoScopesVisible: false })} />}
       <div class="transport">
         <div class="tc big">{formatTimecode(source ? (skim.value?.mediaId === browserPlayhead.value?.mediaId ? skim.value.T : browserPlayhead.value?.t || 0) : timeSig.value, p.fps)}</div>
@@ -176,6 +190,72 @@ export function Viewer() {
           <IconButton icon={fullscreen ? Minimize2 : Maximize2} title={fullscreen ? 'Exit full screen (Esc)' : 'Full screen'} aria-pressed={fullscreen} onClick={toggleFullscreen} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/* Kildeklippet i visningen (fra liste- eller ikonvisningen): en enkel tidslinje fra start til slutt.
+   Skrubb ved å dra, marker med I og O (eller dra kantene på området), og dra bildet til tidslinjen. */
+
+function SourceBar({ mediaId, duration, fps }) {
+  const barRef = useRef(null);
+  const headRef = useRef(null);
+  const range = commands.browserRange.value?.mediaId === mediaId ? commands.browserRange.value : null;
+  const dur = Math.max(1e-3, duration || 0);
+  const frame = 1 / (fps || 30);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const t = playback.getViewerTime();
+      if (headRef.current) headRef.current.style.left = `${Math.max(0, Math.min(1, t / dur)) * 100}%`;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [dur]);
+  const timeAt = (x) => {
+    const r = barRef.current.getBoundingClientRect();
+    return Math.max(0, Math.min(dur, ((x - r.left) / Math.max(1, r.width)) * dur));
+  };
+  const onDown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    commands.browserFocus.value = true;
+    const edge = e.target.dataset?.edge;
+    const bar = barRef.current;
+    bar.setPointerCapture(e.pointerId);
+    const apply = (ev) => {
+      const t = timeAt(ev.clientX);
+      const cur = commands.browserRange.value?.mediaId === mediaId ? commands.browserRange.value : null;
+      if (edge === 'in' && cur) commands.browserRange.value = { ...cur, in: Math.min(t, cur.out - frame) };
+      else if (edge === 'out' && cur) commands.browserRange.value = { ...cur, out: Math.max(t, cur.in + frame) };
+      playback.seekViewer(t);
+    };
+    apply(e);
+    const up = () => {
+      bar.removeEventListener('pointermove', apply);
+      bar.removeEventListener('pointerup', up);
+      bar.removeEventListener('pointercancel', up);
+    };
+    bar.addEventListener('pointermove', apply);
+    bar.addEventListener('pointerup', up);
+    bar.addEventListener('pointercancel', up);
+  };
+  return (
+    <div class="source-bar">
+      <span class="source-bar-time">{range ? formatTimecode(range.in, fps) : '00:00:00:00'}</span>
+      <div class="source-bar-track" ref={barRef} onPointerDown={onDown} title="Scrub the clip. Press I and O to mark what to keep.">
+        {range && (
+          <div class="source-bar-range" style={{ left: `${(range.in / dur) * 100}%`, width: `${((range.out - range.in) / dur) * 100}%` }}>
+            <span class="source-bar-edge in" data-edge="in" title="Drag to change the start (I)" />
+            <span class="source-bar-edge out" data-edge="out" title="Drag to change the end (O)" />
+          </div>
+        )}
+        <div class="source-bar-head" ref={headRef} />
+      </div>
+      <span class="source-bar-time">{formatTimecode(range ? range.out - range.in : dur, fps)}</span>
+      <button class="link-btn" title="Mark start (I)" onClick={() => commands.browserMark('in')}>In</button>
+      <button class="link-btn" title="Mark end (O)" onClick={() => commands.browserMark('out')}>Out</button>
     </div>
   );
 }

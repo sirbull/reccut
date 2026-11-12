@@ -24,6 +24,7 @@ import {
   exitGroup,
 } from './editor/store.js';
 import * as commands from './editor/commands.js';
+import * as multicam from './editor/multicam.js';
 import * as playback from './editor/playback.js';
 import { toast } from './ui.jsx';
 import { prefs, setPrefs } from './prefs.js';
@@ -126,6 +127,7 @@ export const COMMANDS = [
   { id: 'package', label: 'Package Project…', menu: 'File', keys: 'Alt+Shift+CmdOrCtrl+P', rooms: ALL, run: () => (commands.packageOpen.value = true), help: 'package', keywords: 'collect files archive reduce consolidate backup hand over export project media', desc: 'Copy the project and every file it uses into one folder, for archiving or handing over. Unused and disabled material can be left out.' },
   { id: 'revealProject', label: isMac ? 'Reveal Project in Finder' : 'Show Project in Explorer', menu: 'File', keys: 'Shift+CmdOrCtrl+R', rooms: ALL, run: () => projectPath.value && api.reveal(projectPath.value), help: 'projects' },
   { id: 'newSequence', label: 'New Sequence…', menu: 'File', group: 'sequence', keys: 'Alt+CmdOrCtrl+N', run: () => commands.newSequence(), help: 'projects', keywords: 'timeline add another version cut edit', desc: 'Choose a name, resolution and frame rate, then create an empty timeline in the project. All sequences share the same media. Double click a sequence in the Media browser to open it.' },
+  { id: 'newMulticam', label: 'New Multicam Clip…', menu: 'File', group: 'sequence', run: () => multicam.newMulticamClip(commands.browserFocus.value ? commands.browserPicked.value : []), help: 'multicam', keywords: 'multi camera angle angles cameras switch live cut podcast interview', desc: 'Open the multicam window and choose the files from each camera. Selected files in the browser are added as angles.' },
   { id: 'duplicateSequence', label: 'Duplicate Sequence', menu: 'File', group: 'sequence', run: () => commands.duplicateSequence(), help: 'projects', keywords: 'copy timeline version clone', desc: 'Make a copy of the open sequence and open it, for example to make a vertical or shorter version.' },
   { id: 'sequenceSettings', label: 'Sequence Settings…', menu: 'File', group: 'sequence', keys: 'CmdOrCtrl+J', run: () => (sequenceSettingsOpen.value = {}), help: 'projects', keywords: 'project properties format resolution size frame rate fps width height aspect', desc: 'Change the size and frame rate of the open sequence. Clips scale to fit the new size.' },
   { id: 'import', label: 'Import Media', menu: 'File', group: 'media', keys: 'CmdOrCtrl+I', register: true, run: () => commands.importDialog(), help: 'import', desc: 'Import video, audio and images. Choose to copy them into the project folder or leave them in place.' },
@@ -177,6 +179,8 @@ export const COMMANDS = [
   { id: 'redact:blur', label: 'Add Blur (Redact)', menu: 'Edit', group: 'redact', keys: 'Alt+Shift+P', run: () => commands.addRedact('blur'), help: 'redact', keywords: 'redact censor hide password sensitive blur face sladd' },
   { id: 'redact:solid', label: 'Add Solid Box (Redact)', menu: 'Edit', group: 'redact', run: () => commands.addRedact('solid'), help: 'redact', keywords: 'redact censor hide password black bar box sladd' },
   { id: 'redact:frosted', label: 'Add Frosted Glass (Redact)', menu: 'Edit', group: 'redact', run: () => commands.addRedact('frosted'), help: 'redact', keywords: 'redact censor hide frosted glass sladd' },
+  { id: 'createMulticam', label: 'Create Multicam Clip…', menu: 'Clip', group: 'multicam', run: () => multicam.createMulticamFromSelection(), help: 'multicam', keywords: 'multi camera angle angles cameras switch stacked podcast interview', desc: 'Turn the selected clips on top of each other into a multicam clip, then switch between the angles with the number keys.' },
+  { id: 'editMulticam', label: 'Edit Multicam Clip', menu: 'Clip', group: 'multicam', run: () => (selection.value[0] ? multicam.editMulticam(selection.value[0]) : toast('Select a multicam clip on the timeline first.')), enabled: () => selection.value.some((id) => project.value.clips[id]?.multicam), help: 'multicam', keywords: 'multi camera angle switch reopen', desc: 'Open the multicam window again for the selected multicam clip.' },
   { id: 'group', label: 'Group Clips', menu: 'Edit', group: 'group', keys: 'CmdOrCtrl+G', run: commands.groupSelected, help: 'grouping', desc: 'Group any clips, such as video, audio, titles and captions, so they move, cut and delete together.' },
   { id: 'ungroup', label: 'Ungroup', menu: 'Edit', group: 'group', keys: 'Shift+CmdOrCtrl+G', run: commands.ungroupSelected, help: 'grouping' },
   { id: 'checkUpdates', label: 'Check for Updates…', menu: 'Help', group: 'about', rooms: ALL, run: () => import('./updates.js').then((m) => m.checkForUpdates(true)), help: 'updates', keywords: 'update new version download github release' },

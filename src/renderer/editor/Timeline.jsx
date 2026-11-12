@@ -94,6 +94,7 @@ import { prefs, setPrefs } from '../prefs.js';
 import { fadePath, formatVolumeDb, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from './volume.js';
 import { libraryDropTarget, mediaDropPreview, resizedTransitionDuration } from '../../shared/libraryDrop.js';
 import { endLibraryDrag, libraryDrag } from './libraryDrag.js';
+import { editMulticam } from './multicam.js';
 
 const PAD = 16;
 const RULER_H = 26;
@@ -898,7 +899,9 @@ export function Timeline() {
             const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-hit]');
             if (el?.dataset.hit === 'clip') {
               const clip = project.value.clips[el.dataset.clip];
-              if (clip?.group && inEditingGroup(clip)) enterGroup(clip.id);
+              // Cmd/Ctrl + dobbeltklikk åpner multicam-vinduet igjen. Vanlig dobbeltklikk går inn i gruppen.
+              if (clip?.multicam && (e.metaKey || e.ctrlKey) && inEditingGroup(clip)) editMulticam(clip.id);
+              else if (clip?.group && inEditingGroup(clip)) enterGroup(clip.id);
             } else if (!el && editingGroup.value) exitGroup();
             else if (!el && rowAt(e.clientY).kind === 'caption' && !project.value.lanes?.[CAPTION_LANE]?.locked) commands.addCaption(timeAt(e.clientX));
           }}
@@ -1230,7 +1233,8 @@ const Clip = memo(function Clip({ clip, row, media, selected, z, labelStart = 0,
           {clip.reverse && <span class="badge speed" title="Reversed">Reverse</span>}
           {clip.ramp ? <span class="badge speed" title="Speed ramp">Ramp</span> : speed !== 1 && <span class="badge speed">{speed === 0 ? 'Freeze' : `${Math.round(speed * 100)}%`}</span>}
           {clip.solo && <span class="badge solo">S</span>}
-          {clip.group && (
+          {clip.multicam && <span class="badge multicam" title={`Multicam clip. Double click to edit the clips inside. ${isMac ? 'Cmd' : 'Ctrl'} double click to switch angles.`}>MC</span>}
+          {clip.group && !clip.multicam && (
             <span class="badge group" title="Grouped. Double click to edit the group. Option click to select one clip.">
               <Link2 size={9} strokeWidth={2.6} />
             </span>
