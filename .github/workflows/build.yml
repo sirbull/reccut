@@ -51,6 +51,8 @@ jobs:
             file: reccut-keystrokes-mac
           - os: windows-latest
             file: reccut-keystrokes-win-x64.exe
+          - os: ubuntu-latest
+            file: reccut-keystrokes-linux-x64
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -68,6 +70,13 @@ jobs:
       - name: Bygg for Windows
         if: runner.os == 'Windows'
         run: gcc -O2 -Wall -s -o ${{ matrix.file }} keystrokes-win.c -luser32
+
+      - name: Bygg for Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxtst-dev
+          gcc -O2 -Wall -s -o ${{ matrix.file }} keystrokes-linux.c -lX11 -lXtst -lpthread
 
       - name: Kontrollsum
         run: |
@@ -102,6 +111,8 @@ jobs:
             name: mac
           - os: windows-latest
             name: windows
+          - os: ubuntu-latest
+            name: linux
     runs-on: ${{ matrix.os }}
     env:
       # Ingen kodesignering foreløpig.
@@ -124,6 +135,10 @@ jobs:
         if: matrix.name == 'windows'
         run: npx electron-builder --win --x64 --publish never
 
+      - name: Bygg for Linux
+        if: matrix.name == 'linux'
+        run: npx electron-builder --linux --x64 --publish never
+
       - name: Bygg for Mac (Apple Silicon)
         if: matrix.name == 'mac'
         run: |
@@ -136,6 +151,7 @@ jobs:
           path: |
             dist/*.dmg
             dist/*.exe
+            dist/*.AppImage
           if-no-files-found: error
 
       - name: Legg ved i release
@@ -146,3 +162,4 @@ jobs:
           files: |
             dist/*.dmg
             dist/*.exe
+            dist/*.AppImage

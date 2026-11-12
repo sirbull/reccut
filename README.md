@@ -190,7 +190,7 @@ Reccut's source code is available under the **MIT licence**. You can build it yo
 
 ## Install
 
-Download the latest version from [Releases](https://github.com/sirbull/reccut/releases/latest): `.dmg` for Apple Silicon Macs and `.exe` for Windows x64. Intel Mac and Linux installers are available in earlier releases.
+Download the latest version from [Releases](https://github.com/sirbull/reccut/releases/latest): `.dmg` for Apple Silicon Macs, `.exe` for Windows x64 and `.AppImage` for Linux x64. Intel Mac installers are available in earlier releases.
 
 ### Is it safe?
 
@@ -239,7 +239,7 @@ npm run dist:mac # or dist:win / dist:linux, builds an installer
 
 `npm start` runs with its own profile (**Reccut Development**), so it doesn't share settings with an installed copy.
 
-To publish a new version, run `npm version <x.y.z> --no-git-tag-version`, commit the changes, tag the commit (for example `v0.9.3`) and push the tag. The workflow in `.github/workflows/build.yml` builds for Apple Silicon Macs and Windows x64 and attaches the installers and optional add-ons to a draft release. Verify the assets and checksums before publishing the release.
+To publish a new version, run `npm version <x.y.z> --no-git-tag-version`, commit the changes, tag the commit (for example `v0.9.3`) and push the tag. The workflow in `.github/workflows/build.yml` builds for Apple Silicon Macs, Windows x64 and Linux x64 and attaches the installers and optional add-ons to a draft release. Verify the assets and checksums before publishing the release.
 
 | Folder | Contents |
 | --- | --- |
