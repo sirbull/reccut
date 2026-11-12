@@ -322,7 +322,7 @@ The active project's **Recordings** folder contains the take's media and recordi
 
 ## Pause without leaving a gap
 
-Use **Pause** on the floating controls, or the configured recording modifier with **9**. Repeat to resume. Paused time is removed, and recorded events follow the shortened time. The default start/stop combination is Control Option 0 on macOS and Ctrl Shift 0 on Windows; the Record room shows your configured keys. Keyboard control from another app requires **Record → Shortcuts → Allow shortcuts in other apps**, which is off by default. The floating controls work regardless of this setting.
+Use **Pause** on the floating controls, or the configured recording modifier with **9**. Repeat to resume. Paused time is removed, and recorded events follow the shortened time. The default start/stop combination is Control Option 0 on macOS and Ctrl Shift 0 on Windows; the Record room shows your configured keys. Keyboard control from another app is enabled by default while the Record room is open. You can turn off **Record → Shortcuts → Allow shortcuts in other apps** to limit shortcuts to Reccut outside a recording. The floating controls work regardless of this setting.
 
 ## Stop and wait for saving
 

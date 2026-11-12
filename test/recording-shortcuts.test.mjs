@@ -14,7 +14,7 @@ function setup() {
   return { state, keys, actions, shortcuts };
 }
 
-test('background apps retain their keys by default; global recording requires opt-in', () => {
+test('disabling background shortcuts releases other apps’ keys outside a recording', () => {
   const { state, keys, actions, shortcuts } = setup();
   assert.equal(keys.size, 12);
   keys.get('Control+Alt+1')();

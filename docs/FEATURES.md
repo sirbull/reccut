@@ -7,7 +7,7 @@ Record, edit and export video in one app, for Mac, Windows and Linux. The app is
 ## Recording
 
 * Screen at native resolution, **a single app window**, webcam or external camera, internal or external microphone. Audio interfaces and HDMI capture devices such as Elgato Cam Link work too, with input channel, output, camera format and microphone delay in Settings → Audio & Video
-* **Start and stop recording**: Control Option 0 (Ctrl Shift 0 on Windows) starts and stops recording. The same keys with 9 pause and resume. By default these keys work in the Record room while Reccut has focus; enable **Allow shortcuts in other apps** under **Record → Shortcuts** to use them in the background. Pauses are removed from the video, and pointer zoom and layout carry over.
+* **Start and stop recording**: Control Option 0 (Ctrl Shift 0 on Windows) starts and stops recording. The same keys with 9 pause and resume. By default these keys also work from other apps while the Record room is open. Turn off **Allow shortcuts in other apps** under **Record → Shortcuts** to limit them to Reccut outside a recording. Pauses are removed from the video, and pointer zoom and layout carry over.
 * **You can see that you are recording, without it ending up in the video**: a small control bar with time, microphone level, Pause and Stop floats above other apps and is hidden from the recording (macOS and Windows). The menu bar icon on macOS shows a red dot and the time, and on Windows the system tray icon turns red. Reccut can tuck itself away while you record and come back when the recording is saved.
 * **Microphone check**: shows whether it is silent, weak, good or clipping, and Test records four seconds and plays them back.
 * **Recordings rescue themselves**: they are written to disk as you go (WebM, remuxed to MP4 when you stop), and if the app or the computer crashes, Reccut offers to recover the recording on the next launch, with layout and pointer movement.
@@ -150,7 +150,7 @@ Settings (Cmd ,) is built like in Final Cut Pro, with tabs at the top:
 
 ### Recording
 
-By default the shortcuts only work when Reccut is in focus, outside fields and dialogs. Turn on **Allow shortcuts in other apps** under **Record → Shortcuts** for global recording shortcuts. These key combinations can then override shortcuts in other apps. The floating recording controls and the menu icon can always be used to pause and stop.
+By default the recording shortcuts also work from other apps while the Record room is open. These key combinations can override shortcuts in other apps. Turn off **Allow shortcuts in other apps** under **Record → Shortcuts** to limit them to Reccut outside a recording. During recording, the shortcuts always work in the background. Input fields and dialogs in Reccut keep their keys. The floating recording controls and the menu icon can always be used to pause and stop.
 
 | Action | Mac (default) | Windows (default) |
 | --- | --- | --- |

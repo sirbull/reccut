@@ -19,8 +19,26 @@ async function withSettings(saved, check) {
 
 test('new installations include Reccut in screenshots by default', () => withSettings(undefined, ({ settings }, protection) => {
   assert.equal(settings.value.hideFromCapture, false);
+  assert.equal(settings.value.backgroundShortcuts, true);
   assert.deepEqual(protection, [false]);
 }));
+
+test('existing background shortcut default is enabled once and later opt-outs survive restart', async () => {
+  let nextLaunch;
+  await withSettings({ backgroundShortcuts: false, captureVisibilityVersion: 1, layout: 4, modifier: 'Command+Alt' },
+    ({ settings, saveSettings }, _protection, stored) => {
+      assert.equal(settings.value.backgroundShortcuts, true);
+      assert.equal(stored().backgroundShortcuts, true);
+      assert.equal(stored().backgroundShortcutsVersion, 1);
+      assert.equal(settings.value.layout, 4);
+      assert.equal(settings.value.modifier, 'Command+Alt');
+      saveSettings({ backgroundShortcuts: false });
+      nextLaunch = stored();
+    });
+  await withSettings(nextLaunch, ({ settings }) => {
+    assert.equal(settings.value.backgroundShortcuts, false);
+  });
+});
 
 test('existing hidden default is migrated once without losing other recording preferences', () => withSettings(
   { hideFromCapture: true, layout: 4, fps: 60, countdown: 5 },

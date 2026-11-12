@@ -83,7 +83,8 @@ const DEFAULTS = {
   hideFromCapture: false,
   captureVisibilityVersion: 1,
   modifier: MODIFIERS[0].value,
-  backgroundShortcuts: false,
+  backgroundShortcuts: true,
+  backgroundShortcutsVersion: 1,
   // Needs the Keystroke Add-on, which the user installs separately.
   showKeys: false,
   // Hva tillegget leser, og hvordan det vises. Alt unntatt snarveier er av til brukeren slår det på.
@@ -118,13 +119,20 @@ function load() {
       s.hideFromCapture = false;
       s.captureVisibilityVersion = 1;
     }
+    // Enable the new default once for existing installations too. Later opt-outs
+    // keep their saved value on subsequent launches.
+    const migrateBackgroundShortcuts = saved.backgroundShortcutsVersion !== 1;
+    if (migrateBackgroundShortcuts) {
+      s.backgroundShortcuts = true;
+      s.backgroundShortcutsVersion = 1;
+    }
     if (!['circle', 'square', 'rect', 'portrait'].includes(s.pipShape)) s.pipShape = 'rect';
     if (!['circle', 'square', 'rect', 'portrait', 'tall'].includes(s.sideShape)) s.sideShape = SIDE_LAYOUT.shape;
     if (!MODIFIERS.some((m) => m.value === s.modifier)) s.modifier = MODIFIERS[0].value;
     s.micMixer = normalizeMix(s.micMixer);
     s.videoFormat = recordingVideoFormat(s.videoFormat).value;
     if (s.audioFormat !== 'auto' && !RECORDING_AUDIO_FORMATS.some((f) => f.value === s.audioFormat)) s.audioFormat = 'auto';
-    if (migrateCaptureVisibility) {
+    if (migrateCaptureVisibility || migrateBackgroundShortcuts) {
       try { localStorage.setItem('settings', JSON.stringify(s)); } catch {}
     }
     return s;
