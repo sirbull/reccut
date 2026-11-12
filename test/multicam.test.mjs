@@ -6,11 +6,13 @@ import {
   angleLabel,
   angleSound,
   soundEffects,
+  soundLevelAt,
   angleAt,
   applyMulticamSync,
   bladeAt,
   buildMulticamClips,
   cutAndSwitch,
+  moveAngle,
   moveCut,
   multicamClips,
   multicamFromClips,
@@ -52,7 +54,7 @@ test('angles are numbered in the order they are added and stills are refused', (
   assert.equal(added.length, 2);
   assert.equal(errors.length, 2);
   assert.match(errors[0], /still image/);
-  assert.match(errors[1], /already an angle/);
+  assert.match(errors[1], /already added/);
   assert.deepEqual(mc.angles.map((x) => x.mediaId), ['a', 'b']);
   assert.equal(mc.cuts.length, 1);
   assert.equal(mc.cuts[0].angle, mc.angles[0].id);
@@ -238,4 +240,54 @@ test('external audio is labelled A1, becomes the sound, and its settings follow 
   assert.equal(audio[0].mediaId, 'rec');
   assert.equal(audio[0].props.volume, -3);
   assert.deepEqual(audio[0].props.afx.map((e) => e.id), ['mc-channels', 'mc-rumble', 'mc-gain', 'mc-eq']);
+});
+
+test('one file can be synchronized to the others afterwards, without moving them', () => {
+  const p = setup();
+  let seed = 11;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const base = Array.from({ length: 2600 }, () => (rnd() > 0.93 ? 0.5 + rnd() : 0.02 * rnd()));
+  const waves = { '/w/a': { peaks: base.slice(0, 2000) }, '/w/b': { peaks: base.slice(300, 2300) }, '/w/c': { peaks: base.slice(500, 2500) } };
+  const mc = mcWith(p);
+  mc.angles[0].offset = 10;
+  mc.angles[1].offset = 13;
+  mc.angles[2].offset = 0;
+  const plan = planMulticamSync(p, mc, (path) => waves[path] || null, { only: mc.angles[2].id });
+  assert.deepEqual(Object.keys(plan.offsets), [mc.angles[2].id]);
+  assert.ok(Math.abs(plan.offsets[mc.angles[2].id] - 15) < 0.02, String(plan.offsets[mc.angles[2].id]));
+  p.media.c.streams.main.hasAudio = false;
+  const none = planMulticamSync(p, mc, (path) => waves[path] || null, { only: mc.angles[2].id });
+  assert.match(none.failures[0].reason, /camera 3 .*no audio/);
+});
+
+test('level keyframes on the sound follow to the audio clip in source time', () => {
+  const p = setup();
+  p.media.rec = { id: 'rec', kind: 'audio', name: 'rec.wav', duration: 20, streams: { main: { path: '/m/rec.wav', hasAudio: true, wave: '/w/rec' } } };
+  const mc = mcWith(p, ['a', 'rec']);
+  const rec = mc.angles[1];
+  rec.offset = 2;
+  rec.sound = { volume: -2, volumeKf: [[4, 0], [8, -12]] };
+  assert.equal(soundLevelAt(angleSound(rec), 6), -6);
+  assert.equal(soundLevelAt(angleSound(rec), 1), 0);
+  assert.equal(soundLevelAt({ volume: -2 }, 6), -2);
+  const { audio } = buildMulticamClips(p, mc);
+  assert.deepEqual(audio[0].kf.volume, [[2, 0, 'linear'], [6, -12, 'linear']]);
+});
+
+test('tracks can be reordered, cameras and separate sound each among their own', () => {
+  const p = setup();
+  p.media.rec = { id: 'rec', kind: 'audio', name: 'rec.wav', duration: 20, streams: { main: { hasAudio: true } } };
+  p.media.rec2 = { id: 'rec2', kind: 'audio', name: 'rec2.wav', duration: 20, streams: { main: { hasAudio: true } } };
+  const mc = mcWith(p, ['a', 'rec', 'b', 'c', 'rec2']);
+  const id = (m) => mc.angles.find((x) => x.mediaId === m).id;
+  const C = id('c');
+  cutAndSwitch(p, mc, 5, C);
+  assert.equal(moveAngle(p, mc, C, 0), true);
+  assert.deepEqual(mc.angles.map((x) => x.mediaId), ['c', 'rec', 'a', 'b', 'rec2']);
+  assert.equal(angleLabel(p, mc, C), '1');
+  assert.equal(angleAt(mc, 6), C);
+  moveAngle(p, mc, id('rec2'), 0);
+  assert.deepEqual(mc.angles.map((x) => x.mediaId), ['c', 'rec2', 'a', 'b', 'rec']);
+  assert.equal(angleLabel(p, mc, id('rec2')), 'A1');
+  assert.equal(moveAngle(p, mc, C, 0), false);
 });

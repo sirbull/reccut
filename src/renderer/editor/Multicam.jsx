@@ -17,6 +17,8 @@ import {
   Redo2,
   Rows3,
   Scissors,
+  PanelLeft,
+  PanelRight,
   Search,
   SlidersHorizontal,
   SkipBack,
@@ -28,9 +30,12 @@ import {
   ZoomIn,
   ZoomOut,
   Hand,
+  GripVertical,
 } from 'lucide-preact';
 import { dbToGain, formatTimecode, workPath } from '../../shared/model.js';
+import { clampDb, formatVolumeDb, volumeDelta, volumeY } from './volume.js';
 import { EQ_PRESETS } from '../../shared/audiofx.js';
+import reccutMarkSvg from '../../../assets/RecCut-logo-R-grey.svg';
 import { elementAudio } from '../player.js';
 import {
   CHANNEL_MODES,
@@ -50,6 +55,7 @@ import {
   cutAndSwitch,
   cutIndexAt,
   isVideoAngle,
+  moveAngle,
   moveCut,
   multicamExtent,
   multicamRange,
@@ -61,6 +67,7 @@ import {
   removeCut,
   setAngleOffset,
   soundEffects,
+  soundLevelAt,
   switchSegment,
   tidy,
   videoAngles as listVideoAngles,
@@ -78,9 +85,16 @@ const isMac = api.platform === 'darwin';
 const mod = isMac ? '⌘' : 'Ctrl+';
 const HEAD_W = 200;
 const RULER_H = 22;
-const PROGRAM_H = 46;
-const ANGLE_H = 40;
+// Standardhøyder. Sporene kan gjøres høyere ved å dra i nederkanten av sporhodet.
+const DEF_PROGRAM_H = 64;
+// Hovedlyden ligger øverst, rett under linjalen, så nivået er lett å se og justere.
+const DEF_SOUND_H = 58;
+const SOUND_Y = RULER_H;
+const KF_HIT = 7;
+const DEF_ANGLE_H = 40;
+const H_LIMITS = { sound: [40, 220], program: [40, 220], angle: [28, 180] };
 const AUDIO_HEAD_H = 22;
+const NEW_ROW_H = 30;
 const DRAG_TYPE = 'application/x-reccut-multicam';
 
 function stored(key, fallback, lo, hi) {
@@ -89,6 +103,13 @@ function stored(key, fallback, lo, hi) {
     return Number.isFinite(v) && v > 0 ? Math.max(lo, Math.min(hi, v)) : fallback;
   } catch {
     return fallback;
+  }
+}
+function storedFlag(key) {
+  try {
+    return localStorage.getItem(key) !== 'off';
+  } catch {
+    return true;
   }
 }
 function store(key, v) {
@@ -209,11 +230,16 @@ function MulticamWindow({ session }) {
   const videoAngles = listVideoAngles(p, mc);
   const audioOnly = audioOnlyAngles(p, mc);
   const audioSource = mc.audio === 'follow' ? active : mc.audio;
-  const [leftTab, setLeftTab] = useState('files');
+  // Filene til venstre og Properties til høyre kan skjules, som i redigeringen.
+  const [browserOn, setBrowserOn] = useState(() => storedFlag('mcBrowserVisible'));
+  const [propsOn, setPropsOn] = useState(() => storedFlag('mcPropsVisible'));
+  const [propsW, setPropsW] = useState(() => stored('mcPropsW', 280, 220, 480));
+  const toggleBrowser = () => setBrowserOn((v) => (store('mcBrowserVisible', v ? 'off' : 'on'), !v));
+  const toggleProps = () => setPropsOn((v) => (store('mcPropsVisible', v ? 'off' : 'on'), !v));
   const [soundTarget, setSoundTarget] = useState(null);
   const openSound = (angleId) => {
     setSoundTarget(angleId);
-    setLeftTab('properties');
+    if (!propsOn) toggleProps();
   };
 
   const clampT = (t) => Math.max(ext.start, Math.min(ext.end, t));
@@ -298,7 +324,7 @@ function MulticamWindow({ session }) {
           const sound = angleSound(a);
           el.muted = false;
           sink.setEffects(soundEffects(sound));
-          sink.setGain(audible ? dbToGain(sound.volume) : 0);
+          sink.setGain(audible ? dbToGain(soundLevelAt(sound, t)) : 0);
         } else el.muted = !audible;
         if (!inside) {
           if (!el.paused) el.pause();
@@ -412,14 +438,39 @@ function MulticamWindow({ session }) {
     end: () => (gesture.current = false),
   };
 
-  const addMedia = (ids) => {
+  // at: tiden der filen ble sluppet på tidslinjen. Uten at legges den der de andre starter.
+  const addMedia = (ids, { at = null } = {}) => {
     let result;
     const ok = edit((m) => {
-      result = addAngles(project.value, m, ids);
+      result = addAngles(project.value, m, ids, { at: at == null ? null : Math.round(at / frame) * frame });
       if (!result.added.length) return false;
+      normalize(project.value, m);
     });
     if (result?.errors.length) setNotice({ kind: 'warn', title: ok ? 'Some files were not added' : 'Nothing was added', items: result.errors });
-    else if (ok) setNotice(null);
+    else if (ok && mcRef.current.angles.length > 1) {
+      const names = result.added.map((id) => angleLabel(project.value, mcRef.current, id)).join(', ');
+      setNotice({ kind: 'info', title: `Added ${names}. Press Auto Sync, or right click the clip in the timeline and choose Synchronize to Audio, to line it up with the others.`, items: [] });
+    } else if (ok) setNotice(null);
+  };
+
+  // Høyreklikk › Synchronize to Audio: bare den ene filen flyttes, de andre blir stående.
+  const syncOne = async (angleId) => {
+    const m = mcRef.current;
+    setSyncing(true);
+    try {
+      const paths = [...new Set(m.angles.flatMap((a) => Object.values(project.value.media[a.mediaId]?.streams || {}).map((st) => st.wave)).filter(Boolean))];
+      const cache = new Map();
+      await Promise.all(paths.map(async (path) => cache.set(path, await api.readWave(path).catch(() => null))));
+      const plan = planMulticamSync(project.value, m, (path) => cache.get(path) || null, { only: angleId });
+      const name = angleLabel(project.value, m, angleId);
+      if (plan.offsets[angleId] != null) {
+        edit((x) => void applyMulticamSync(project.value, x, plan.offsets));
+        setNotice({ kind: 'success', title: `${isVideoAngle(project.value, m.angles.find((a) => a.id === angleId)) ? `Camera ${name}` : name} is synchronized with the others.`, items: [] });
+        setTimeout(() => setNotice((n) => (n?.kind === 'success' ? null : n)), 4000);
+      } else setNotice({ kind: 'error', title: 'The file could not be synchronized.', items: plan.failures.map((f) => f.reason) });
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const dropAngle = (angleId) => edit((m) => removeAngle(project.value, m, angleId));
@@ -569,9 +620,14 @@ function MulticamWindow({ session }) {
         const w = Math.round(Math.max(180, Math.min(520, ev.clientX - main.left)));
         setBrowserW(w);
         store('mcBrowserW', w);
+      } else if (kind === 'props') {
+        const w = Math.round(Math.max(220, Math.min(480, main.right - ev.clientX)));
+        setPropsW(w);
+        store('mcPropsW', w);
       } else if (kind === 'views') {
-        const left = main.left + browserW + 6;
-        const k = Math.max(0.2, Math.min(0.8, (ev.clientX - left) / Math.max(1, main.right - left)));
+        const left = main.left + (browserOn ? browserW + 6 : 0);
+        const right = main.right - (propsOn ? propsW + 6 : 0);
+        const k = Math.max(0.2, Math.min(0.8, (ev.clientX - left) / Math.max(1, right - left)));
         setSplit(k);
         store('mcSplit', k);
       } else {
@@ -611,7 +667,7 @@ function MulticamWindow({ session }) {
   const audioLabel = mc.audio === 'follow' ? 'follow' : mc.audio || '';
 
   return (
-    <div class="mc-window" ref={winRef} role="dialog" aria-modal="true" aria-label="Multicam clip" style={{ gridTemplateRows: `auto auto 1fr 6px ${timelineH}px` }}>
+    <div class="mc-window" ref={winRef} role="dialog" aria-modal="true" aria-label="Multicam clip" style={{ gridTemplateRows: `auto auto minmax(0, 1fr) 6px ${timelineH}px` }}>
       <header class="mc-head">
         <Button variant="primary" icon={Plus} onClick={send} title={`Add the multicam clip to the timeline (${mod}Return)`}>
           {session.editing ? 'Update Timeline' : 'Add to Timeline'}
@@ -647,6 +703,9 @@ function MulticamWindow({ session }) {
           </select>
         </label>
         <span class="spacer" />
+        <IconButton icon={PanelLeft} title={`${browserOn ? 'Hide' : 'Show'} Files`} active={browserOn} aria-pressed={browserOn} onClick={toggleBrowser} />
+        <IconButton icon={PanelRight} title={`${propsOn ? 'Hide' : 'Show'} Properties`} active={propsOn} aria-pressed={propsOn} onClick={toggleProps} />
+        <span class="mc-sep" />
         <IconButton icon={Undo2} title={`Undo (${mod}Z)`} disabled={!hist.current.undo.length} onClick={undo} />
         <IconButton icon={Redo2} title={`Redo (${isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z'})`} disabled={!hist.current.redo.length} onClick={redo} />
         <IconButton icon={X} title="Close (Esc)" onClick={close} />
@@ -668,23 +727,9 @@ function MulticamWindow({ session }) {
       ) : (
         <div />
       )}
-      <div class="mc-main" ref={mainRef} style={{ gridTemplateColumns: `${browserW}px 6px ${split}fr 6px ${1 - split}fr` }}>
-        {leftTab === 'files' ? (
-          <MulticamBrowser mc={mc} onAdd={addMedia} head={<LeftTabs tab={leftTab} setTab={setLeftTab} />} />
-        ) : (
-          <MulticamProperties
-            mc={mc}
-            head={<LeftTabs tab={leftTab} setTab={setLeftTab} />}
-            target={soundTarget}
-            setTarget={setSoundTarget}
-            setAudio={setAudio}
-            setFallback={setFallback}
-            setSound={setSound}
-            gesture={soundGesture}
-            audioSource={audioSource}
-          />
-        )}
-        <div class="mc-vsplit" onPointerDown={dragSplit('browser')} />
+      <div class="mc-main" ref={mainRef} style={{ gridTemplateColumns: [browserOn && `${browserW}px 6px`, `minmax(0, ${split}fr) 6px minmax(0, ${1 - split}fr)`, propsOn && `6px ${propsW}px`].filter(Boolean).join(' ') }}>
+        {browserOn && <MulticamBrowser mc={mc} onAdd={addMedia} head={<b>Files</b>} />}
+        {browserOn && <div class="mc-vsplit" onPointerDown={dragSplit('browser')} />}
         <section class={`mc-angles${over ? ' drop' : ''}`} {...dropProps}>
           <div class="mc-pane-head">
             <b>Angles</b>
@@ -710,6 +755,13 @@ function MulticamWindow({ session }) {
                   elRef={(el) => (el ? (els.current[a.id] = el) : delete els.current[a.id])}
                   onPick={(e) => cutTo(a.id, { noCut: e.shiftKey })}
                 />
+              ))}
+              {Array.from({ length: Math.max(0, tile.cols * tile.rows - videoAngles.length) }, (_, i) => (
+                <div key={`empty-${i}`} class="mc-tile empty" aria-hidden="true">
+                  <div class="mc-frame">
+                    <ReccutMark />
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -742,6 +794,20 @@ function MulticamWindow({ session }) {
             <div class="right dim">{formatTimecode(range.out - range.in, fps)}</div>
           </div>
         </section>
+        {propsOn && <div class="mc-vsplit" onPointerDown={dragSplit('props')} />}
+        {propsOn && (
+          <MulticamProperties
+            mc={mc}
+            head={<b>Properties</b>}
+            target={soundTarget}
+            setTarget={setSoundTarget}
+            setAudio={setAudio}
+            setFallback={setFallback}
+            setSound={setSound}
+            gesture={soundGesture}
+            audioSource={audioSource}
+          />
+        )}
       </div>
       <div class="mc-hsplit" onPointerDown={dragSplit('timeline')} title="Drag to change the height of the timeline" />
       <MulticamTimeline
@@ -771,14 +837,22 @@ function MulticamWindow({ session }) {
         dropAngle={dropAngle}
         openSound={openSound}
         addMedia={addMedia}
+        syncOne={syncOne}
+        setFallback={setFallback}
       />
     </div>
   );
 }
 
+// R-en fra Reccut-logoen, brukt uendret som bilde i tomme ruter.
+const MARK_URL = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(reccutMarkSvg)}`;
+function ReccutMark() {
+  return <img class="mc-mark" src={MARK_URL} alt="" draggable={false} />;
+}
+
 // Alle vinklene skal synes samtidig: finn antall kolonner som gir størst ruter (16:9) i plassen som finnes.
 function useTileSize(ref, n) {
-  const [size, setSize] = useState({ cols: 1, w: 160 });
+  const [size, setSize] = useState({ cols: 1, rows: 1, w: 160 });
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -786,13 +860,12 @@ function useTileSize(ref, n) {
       const gap = 6;
       const W = el.clientWidth - 16;
       const H = el.clientHeight - 16;
-      let best = { cols: 1, w: 80 };
-      for (let cols = 1; cols <= Math.max(1, n); cols++) {
-        const rows = Math.ceil(Math.max(1, n) / cols);
-        const w = Math.floor(Math.min((W - gap * (cols - 1)) / cols, ((H - gap * (rows - 1)) / rows) * (16 / 9)));
-        if (w > best.w) best = { cols, w };
-      }
-      setSize((cur) => (cur.cols === best.cols && cur.w === best.w ? cur : best));
+      // Alltid et jevnt rutenett: 2 × 2 for tre og fire kameraer, 3 × 2 for fem og seks, osv.
+      // Ledige plasser fylles med en tom rute, så ingen video strekkes eller blir stående alene.
+      const cols = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, n))));
+      const rows = Math.ceil(Math.max(1, n) / cols);
+      const best = { cols, rows, w: Math.max(60, Math.floor(Math.min((W - gap * (cols - 1)) / cols, ((H - gap * (rows - 1)) / rows) * (16 / 9)))) };
+      setSize((cur) => (cur.cols === best.cols && cur.rows === best.rows && cur.w === best.w ? cur : best));
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -826,15 +899,6 @@ function AngleTile({ angle, index, color, media, active, audio, elRef, onPick })
 }
 
 /* Filene: liste, ikoner eller filmstriper. Dobbeltklikk eller dra for å legge til en vinkel. */
-function LeftTabs({ tab, setTab }) {
-  return (
-    <div class="mc-tabs" role="tablist">
-      <button role="tab" aria-selected={tab === 'files'} class={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>Files</button>
-      <button role="tab" aria-selected={tab === 'properties'} class={tab === 'properties' ? 'active' : ''} onClick={() => setTab('properties')}>Properties</button>
-    </div>
-  );
-}
-
 // Valgene for hvor lyden kommer fra: hver kilde med lyd, eller lyd som følger bildet.
 function SoundSourceOptions({ mc }) {
   const p = project.value;
@@ -866,7 +930,18 @@ function MulticamProperties({ mc, head, target, setTarget, setAudio, setFallback
         <span>{label}</span>
         <span class="dim">{unit(sound[key])}</span>
       </div>
-      <Slider value={sound[key]} min={min} max={max} step={0.5} center={0} onStart={gesture.start} onCommit={gesture.end} onInput={(v) => set({ [key]: v })} />
+      <Slider
+        value={sound[key]}
+        min={min}
+        max={max}
+        step={0.5}
+        center={0}
+        onStart={gesture.start}
+        onCommit={gesture.end}
+        // Med nøkkelbilder flytter Level hele kurven like mye.
+        onInput={(v) => set(key === 'volume' && sound.volumeKf.length ? { volume: v, volumeKf: sound.volumeKf.map(([t, x]) => [t, clampDb(x + v - sound.volume)]) } : { [key]: v })}
+      />
+      {key === 'volume' && sound.volumeKf.length > 0 && <span class="hint small">The level has {sound.volumeKf.length} keyframes in the Sound track. Level moves them all together.</span>}
     </div>
   );
   return (
@@ -1085,21 +1160,109 @@ function StripThumbs({ media, height, from = 0, to = null, width = null }) {
 
 /* Tidslinjen: programmet (kuttene) øverst og vinklene under, med samme verktøy som i redigeringen. */
 function MulticamTimeline(props) {
-  const { mc, edit, frame, pps, tool, setTool, snap, setSnap, skimming, setSkimming, selectedCut, setSelectedCut, timeRef, skimRef, seek, scrollRef, headRef, skimLineRef, zoomBy, fitZoom, setPps, audioSource, setAudio, dropAngle, openSound, addMedia } = props;
+  const { mc, edit, frame, pps, tool, setTool, snap, setSnap, skimming, setSkimming, selectedCut, setSelectedCut, timeRef, skimRef, seek, scrollRef, headRef, skimLineRef, zoomBy, fitZoom, setPps, audioSource, setAudio, dropAngle, openSound, addMedia, syncOne, setFallback } = props;
   const p = project.value;
+  // Sporhøyder: Sound og Program for seg, og hvert kamera- og lydspor for seg.
+  const [heights, setHeights] = useState(() => ({
+    sound: stored('mcSoundH', DEF_SOUND_H, ...H_LIMITS.sound),
+    program: stored('mcProgramH', DEF_PROGRAM_H, ...H_LIMITS.program),
+    angle: stored('mcAngleH', DEF_ANGLE_H, ...H_LIMITS.angle),
+    per: {},
+  }));
+  const SOUND_H = heights.sound;
+  const PROGRAM_H = heights.program;
+  const PROGRAM_Y = RULER_H + SOUND_H;
+  const angleH = (id) => heights.per[id] ?? heights.angle;
+  // Dra i nederkanten av et sporhode. Shift på et kamera- eller lydspor endrer alle; dobbeltklikk tilbakestiller.
+  const startResize = (key) => (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const kind = key === 'sound' || key === 'program' ? key : 'angle';
+    const [lo, hi] = H_LIMITS[kind];
+    const y0 = e.clientY;
+    const h0 = kind === 'angle' ? angleH(key) : heights[kind];
+    const all = e.shiftKey;
+    let last = h0;
+    const move = (ev) => {
+      last = Math.round(Math.max(lo, Math.min(hi, h0 + ev.clientY - y0)));
+      setHeights((cur) => {
+        if (kind !== 'angle') return { ...cur, [kind]: last };
+        if (all) return { ...cur, angle: last, per: {} };
+        return { ...cur, per: { ...cur.per, [key]: last } };
+      });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (kind === 'sound') store('mcSoundH', last);
+      else if (kind === 'program') store('mcProgramH', last);
+      else if (all) store('mcAngleH', last);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const resetHeight = (key) => (e) => {
+    e.stopPropagation();
+    setHeights((cur) => {
+      if (key === 'sound') return (store('mcSoundH', DEF_SOUND_H), { ...cur, sound: DEF_SOUND_H });
+      if (key === 'program') return (store('mcProgramH', DEF_PROGRAM_H), { ...cur, program: DEF_PROGRAM_H });
+      const per = { ...cur.per };
+      delete per[key];
+      return { ...cur, per };
+    });
+  };
+  const resizer = (key) => <div class="mc-row-resize" title="Drag to change the height. Shift changes all camera tracks. Double click resets." onPointerDown={startResize(key)} onDblClick={resetHeight(key)} />;
   // Kameraene først, så en egen del for lyd tatt opp for seg (A1, A2 ...).
   const rowList = [];
   {
-    let y = RULER_H + PROGRAM_H;
+    let y = PROGRAM_Y + PROGRAM_H;
     const push = (row) => {
       rowList.push({ ...row, y });
       y += row.h;
     };
-    for (const a of listVideoAngles(p, mc)) push({ kind: 'angle', angle: a, h: ANGLE_H });
+    for (const a of listVideoAngles(p, mc)) push({ kind: 'angle', angle: a, h: angleH(a.id) });
+    // Et tomt spor der en ny fil kan slippes, også etter at klippet er lagt på tidslinjen.
+    push({ kind: 'newCamera', h: NEW_ROW_H });
     push({ kind: 'audioHead', h: AUDIO_HEAD_H });
-    for (const a of audioOnlyAngles(p, mc)) push({ kind: 'angle', angle: a, h: ANGLE_H });
+    for (const a of audioOnlyAngles(p, mc)) push({ kind: 'angle', angle: a, h: angleH(a.id) });
   }
   const [dropOver, setDropOver] = useState(false);
+  // Lydkilden i bruk. Følger lyden bildet, varierer den, og nivået justeres i Properties per kilde.
+  const soundAngle = mc.audio && mc.audio !== 'follow' ? mc.angles.find((a) => a.id === mc.audio) : null;
+  const [kfSel, setKfSel] = useState(null);
+  // Dra et sporhode opp eller ned for å endre rekkefølgen. Kameraene og lydsporene flyttes hver for seg.
+  const headsRef = useRef(null);
+  const [reorder, setReorder] = useState(null);
+  const startReorder = (e, a) => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    e.preventDefault();
+    const video = isVideoAngle(p, a);
+    const rows = rowList.filter((r) => r.kind === 'angle' && isVideoAngle(p, r.angle) === video);
+    const others = rows.filter((r) => r.angle.id !== a.id);
+    const target = (y) => {
+      const index = others.filter((r) => r.y + r.h / 2 < y).length;
+      const lineY = index < others.length ? others[index].y : others.length ? others[others.length - 1].y + others[others.length - 1].h : rows[0].y;
+      return { index, lineY };
+    };
+    const y0 = e.clientY;
+    let state = null;
+    const move = (ev) => {
+      if (!state && Math.abs(ev.clientY - y0) < 4) return;
+      const y = ev.clientY - headsRef.current.getBoundingClientRect().top;
+      state = { id: a.id, ...target(y) };
+      setReorder(state);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setReorder(null);
+      if (state) edit((m) => moveAngle(p, m, a.id, state.index));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const [pinY, setPinY] = useState(0);
   const ext = multicamExtent(p, mc);
   const range = multicamRange(p, mc);
   const pieces = programPieces(p, mc);
@@ -1135,8 +1298,11 @@ function MulticamTimeline(props) {
   const rowAt = (clientY) => {
     const r = contentRef.current.getBoundingClientRect();
     const y = clientY - r.top;
-    if (y < RULER_H) return { kind: 'ruler' };
-    if (y < RULER_H + PROGRAM_H) return { kind: 'program' };
+    // Linjalen, lydsporet og programmet står fast øverst når kamerasporene rulles.
+    const yv = y - (scrollRef.current?.scrollTop || 0);
+    if (yv < RULER_H) return { kind: 'ruler' };
+    if (yv < PROGRAM_Y) return { kind: 'sound' };
+    if (yv < PROGRAM_Y + PROGRAM_H) return { kind: 'program' };
     const row = rowList.find((r) => y >= r.y && y < r.y + r.h);
     return row?.kind === 'angle' ? row : { kind: 'empty' };
   };
@@ -1166,7 +1332,32 @@ function MulticamTimeline(props) {
       dragRef.current = { kind: 'hand', x: e.clientX, left: sc.scrollLeft };
       return;
     }
-    if (row.kind === 'ruler' || row.kind === 'empty') {
+    if (row.kind === 'sound' && soundAngle) {
+      const y = e.clientY - el.getBoundingClientRect().top - SOUND_Y - (scrollRef.current?.scrollTop || 0);
+      const kfs = angleSound(soundAngle).volumeKf;
+      const hit = kfs.findIndex(([kt, v]) => Math.abs(kt * pps - (e.clientX - el.getBoundingClientRect().left)) < KF_HIT && Math.abs(volumeY(v, SOUND_H) - y) < KF_HIT + 3);
+      if (e.altKey) {
+        // Alt/Option-klikk legger inn et nøkkelbilde på linjen, som i redigeringen.
+        if (hit < 0) {
+          const at = snapT(t);
+          const v = clampDb(soundLevelAt(angleSound(soundAngle), at));
+          edit((m) => {
+            const a = m.angles.find((x) => x.id === soundAngle.id);
+            const cur = angleSound(a);
+            a.sound = { ...cur, volumeKf: [...cur.volumeKf, [at, v]].sort((x, y2) => x[0] - y2[0]) };
+          });
+        }
+        return;
+      }
+      setKfSel(hit >= 0 ? hit : null);
+      const segment = hit >= 0 ? [hit] : kfs.length ? (() => {
+        const next = kfs.findIndex(([kt]) => kt > t);
+        return next === 0 ? [0] : next < 0 ? [kfs.length - 1] : [next - 1, next];
+      })() : [];
+      dragRef.current = { kind: 'level', angle: soundAngle.id, x: e.clientX, y: e.clientY, base: structuredClone(angleSound(soundAngle)), kf: hit >= 0 ? hit : null, indices: segment, axis: null, started: false };
+      return;
+    }
+    if (row.kind === 'ruler' || row.kind === 'empty' || row.kind === 'sound') {
       seek(snapT(t));
       dragRef.current = { kind: 'scrub' };
       return;
@@ -1207,7 +1398,7 @@ function MulticamTimeline(props) {
       skimRef.current = skimming && contentRef.current.matches(':hover') ? t : null;
       const row = rowAt(e.clientY);
       const near = row.kind === 'program' && tool !== 'blade' && tool !== 'hand' && cutNear(t) > 0;
-      contentRef.current.style.cursor = tool === 'hand' ? 'grab' : tool === 'blade' && row.kind === 'program' ? 'crosshair' : near ? 'ew-resize' : row.kind === 'angle' && tool !== 'blade' ? 'grab' : '';
+      contentRef.current.style.cursor = tool === 'hand' ? 'grab' : row.kind === 'sound' && soundAngle ? (e.altKey ? 'copy' : 'ns-resize') : tool === 'blade' && row.kind === 'program' ? 'crosshair' : near ? 'ew-resize' : row.kind === 'angle' && tool !== 'blade' ? 'grab' : '';
       return;
     }
     if (d.kind === 'hand') {
@@ -1217,6 +1408,38 @@ function MulticamTimeline(props) {
     if (d.kind === 'scrub') {
       skimRef.current = null;
       seek(snapT(t));
+      return;
+    }
+    if (d.kind === 'level') {
+      const dx = e.clientX - d.x;
+      const dy = e.clientY - d.y;
+      if (!d.axis) {
+        if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+        // Et nøkkelbilde dras enten opp/ned eller sidelengs; den første bevegelsen bestemmer.
+        d.axis = d.kf != null && Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      }
+      const base = d.base;
+      let next;
+      if (d.axis === 'x') {
+        const list = base.volumeKf.map((k) => [...k]);
+        const lo = d.kf > 0 ? list[d.kf - 1][0] + frame : -Infinity;
+        const hi = d.kf < list.length - 1 ? list[d.kf + 1][0] - frame : Infinity;
+        list[d.kf][0] = Math.max(lo, Math.min(hi, snapT(base.volumeKf[d.kf][0] + dx / pps)));
+        next = { ...base, volumeKf: list };
+      } else {
+        const delta = -volumeDelta(dy, SOUND_H);
+        if (!base.volumeKf.length) next = { ...base, volume: clampDb(base.volume + delta) };
+        else {
+          const list = base.volumeKf.map((k) => [...k]);
+          const vals = d.indices.map((i) => list[i][1]);
+          const shift = Math.max(-60 - Math.min(...vals), Math.min(12 - Math.max(...vals), delta));
+          for (const i of d.indices) list[i][1] = clampDb(list[i][1] + shift);
+          next = { ...base, volumeKf: list };
+        }
+      }
+      edit((m) => void (m.angles.find((x) => x.id === d.angle).sound = next), { record: !d.started });
+      d.started = true;
+      setDrag({ kind: 'level', t: d.kf != null ? next.volumeKf[d.kf][0] : t, db: d.kf != null ? next.volumeKf[d.kf][1] : soundLevelAt(next, t) });
       return;
     }
     if (d.kind === 'cut') {
@@ -1251,6 +1474,62 @@ function MulticamTimeline(props) {
     dragRef.current = null;
     setDrag(null);
     if (d?.kind === 'angle' && d.started) edit((m) => void normalize(p, m), { record: false });
+  };
+
+  const [dropAt, setDropAt] = useState(null);
+
+  // Høyreklikk på et klipp: synk det mot de andre, bruk lyden, juster lyden eller fjern det.
+  const onContextMenu = async (e) => {
+    e.preventDefault();
+    const row = rowAt(e.clientY);
+    if (row.kind === 'sound' && soundAngle) {
+      const el = contentRef.current.getBoundingClientRect();
+      const x = e.clientX - el.left;
+      const y = e.clientY - el.top - SOUND_Y - (scrollRef.current?.scrollTop || 0);
+      const t = timeAt(e.clientX);
+      const sound = angleSound(soundAngle);
+      const hit = sound.volumeKf.findIndex(([kt, v]) => Math.abs(kt * pps - x) < KF_HIT && Math.abs(volumeY(v, SOUND_H) - y) < KF_HIT + 3);
+      const id = await api.popupMenu([
+        ...(hit >= 0 ? [{ id: 'del', label: 'Delete Keyframe' }] : [{ id: 'add', label: 'Add Keyframe', accelerator: isMac ? 'Alt+Click' : 'Alt+Click' }]),
+        { id: 'clear', label: 'Remove All Keyframes', enabled: sound.volumeKf.length > 0 },
+        { separator: true },
+        { id: 'adjust', label: 'Adjust Sound…' },
+      ]);
+      const put = (fn) => edit((m) => {
+        const a = m.angles.find((x2) => x2.id === soundAngle.id);
+        const cur = angleSound(a);
+        a.sound = { ...cur, volumeKf: fn(cur) };
+      });
+      if (id === 'del') put((cur) => cur.volumeKf.filter((_, i) => i !== hit));
+      else if (id === 'add') put((cur) => [...cur.volumeKf, [snapT(t), clampDb(soundLevelAt(cur, snapT(t)))]].sort((x1, x2) => x1[0] - x2[0]));
+      // Uten nøkkelbilder beholdes nivået der pekeren var.
+      else if (id === 'clear') edit((m) => {
+        const a = m.angles.find((x2) => x2.id === soundAngle.id);
+        const cur = angleSound(a);
+        a.sound = { ...cur, volume: clampDb(soundLevelAt(cur, t)), volumeKf: [] };
+      });
+      else if (id === 'adjust') openSound(soundAngle.id);
+      return;
+    }
+    if (row.kind !== 'angle') return;
+    const a = row.angle;
+    const cam = isVideoAngle(p, a);
+    const hasAudio = angleHasAudio(p, a);
+    const others = mc.angles.some((x) => x.id !== a.id && angleHasAudio(p, x));
+    const id = await api.popupMenu([
+      { id: 'sync', label: 'Synchronize to Audio', enabled: hasAudio && others },
+      { separator: true },
+      { id: 'sound', label: 'Use Sound from This File', enabled: hasAudio, checked: audioSource === a.id && mc.audio !== 'follow' },
+      { id: 'adjust', label: 'Adjust Sound…', enabled: hasAudio },
+      ...(cam ? [{ id: 'fallback', label: 'Use as Fallback Camera', checked: mc.fallback === a.id }] : []),
+      { separator: true },
+      { id: 'remove', label: 'Remove from Multicam Clip' },
+    ]);
+    if (id === 'sync') syncOne(a.id);
+    else if (id === 'sound') setAudio(a.id);
+    else if (id === 'adjust') openSound(a.id);
+    else if (id === 'fallback') setFallback(mc.fallback === a.id ? 'auto' : a.id);
+    else if (id === 'remove') dropAngle(a.id);
   };
 
   const onWheel = (e) => {
@@ -1289,6 +1568,7 @@ function MulticamTimeline(props) {
           <kbd>1</kbd>–<kbd>9</kbd> cut to angle · <kbd>⇧</kbd>+<kbd>1</kbd>–<kbd>9</kbd> switch without cutting · <kbd>I</kbd> <kbd>O</kbd> range · <kbd>Space</kbd> play · <kbd>⌫</kbd> remove cut
         </span>
         <span class="spacer" />
+        {drag?.kind === 'level' && <span class="mc-drag-tip">Level {formatVolumeDb(drag.db)}</span>}
         {drag?.kind === 'angle' && <span class="mc-drag-tip">Moved {drag.delta >= 0 ? '+' : '−'}{formatTimecode(Math.abs(drag.delta), p.fps)}</span>}
         <div class="seg zoom">
           <IconButton icon={ZoomOut} title={`Zoom out (${mod}-)`} onClick={() => zoomBy(1 / 1.4)} />
@@ -1297,15 +1577,40 @@ function MulticamTimeline(props) {
           <button class="link-btn" title="Zoom to fit (Shift Z)" onClick={fitZoom}>Fit</button>
         </div>
       </div>
-      <div class="mc-tl-scroll" ref={scrollRef} onWheel={onWheel}>
+      <div class="mc-tl-scroll" ref={scrollRef} onWheel={onWheel} onScroll={(e) => setPinY(e.currentTarget.scrollTop)}>
         <div class="mc-tl-inner" style={{ width: width + HEAD_W, height: rowsH }}>
-          <div class="mc-tl-heads" style={{ height: rowsH }}>
-            <div class="mc-tl-head ruler" style={{ height: RULER_H }} />
-            <div class="mc-tl-head program" style={{ height: PROGRAM_H }}>
+          <div class={`mc-tl-heads${reorder ? ' reordering' : ''}`} ref={headsRef} style={{ height: rowsH }}>
+            {reorder && <div class="mc-reorder-line" style={{ top: reorder.lineY }} />}
+            <div class="mc-tl-head ruler pin" style={{ height: RULER_H, transform: `translateY(${pinY}px)` }} />
+            <div class="mc-tl-head sound pin" style={{ height: SOUND_H, transform: `translateY(${pinY}px)` }}>
+              <div class="mc-sound-title">
+                <b>Sound</b>
+                {soundAngle && <span class="mc-num audio" style={{ background: angleColor(angleIndex(mc, soundAngle.id)) }}>{angleLabel(p, mc, soundAngle.id)}</span>}
+                <IconButton icon={SlidersHorizontal} size={13} disabled={!soundAngle} title="Adjust the sound in Properties" onClick={() => soundAngle && openSound(soundAngle.id)} />
+              </div>
+              <span class="dim">
+                {mc.audio === 'follow'
+                  ? 'Follows the picture'
+                  : soundAngle
+                    ? `${formatVolumeDb(soundLevelAt(angleSound(soundAngle), drag?.kind === 'level' ? drag.t : timeRef.current))}${angleSound(soundAngle).volumeKf.length ? ' · keyframes' : ''}`
+                    : 'No sound'}
+              </span>
+              {resizer('sound')}
+            </div>
+            <div class="mc-tl-head program pin" style={{ height: PROGRAM_H, transform: `translateY(${pinY}px)` }}>
               <b>Program</b>
               <span class="dim">What goes on the timeline</span>
+              {resizer('program')}
             </div>
             {rowList.map((r) => {
+              if (r.kind === 'newCamera') {
+                return (
+                  <div key="new-camera" class="mc-tl-head new-camera" style={{ height: r.h }} title="Drag a video from Files to this track to add a camera">
+                    <Plus size={12} />
+                    <span>New camera</span>
+                  </div>
+                );
+              }
               if (r.kind === 'audioHead') {
                 return (
                   <div
@@ -1334,7 +1639,14 @@ function MulticamTimeline(props) {
               const cam = isVideoAngle(p, a);
               const hot = cam && Number(label) <= MAX_HOTKEY_ANGLES;
               return (
-                <div key={a.id} class="mc-tl-head" style={{ height: r.h }}>
+                <div
+                  key={a.id}
+                  class={`mc-tl-head track${reorder?.id === a.id ? ' dragging' : ''}`}
+                  style={{ height: r.h }}
+                  title="Drag up or down to change the order"
+                  onPointerDown={(e) => startReorder(e, a)}
+                >
+                  <GripVertical size={12} class="mc-grip" />
                   <span class={`mc-num${cam ? '' : ' audio'}`} style={{ background: angleColor(i) }} title={hot ? `Shortcut: ${label}` : cam ? 'No shortcut' : 'Sound recorded separately'}>
                     {label}
                   </span>
@@ -1351,6 +1663,7 @@ function MulticamTimeline(props) {
                   />
                   <IconButton icon={SlidersHorizontal} size={13} disabled={!hasAudio} title="Adjust the sound in Properties" onClick={() => openSound(a.id)} />
                   <IconButton icon={X} size={13} title="Remove" onClick={() => dropAngle(a.id)} />
+                  {resizer(a.id)}
                 </div>
               );
             })}
@@ -1364,8 +1677,26 @@ function MulticamTimeline(props) {
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
             onPointerLeave={() => !dragRef.current && (skimRef.current = null)}
+            onContextMenu={onContextMenu}
+            onDragOver={(e) => {
+              if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+              e.preventDefault();
+              const r0 = contentRef.current.getBoundingClientRect();
+              const y = e.clientY - r0.top;
+              const row = rowList.find((r) => y >= r.y && y < r.y + r.h);
+              setDropAt({ t: snapT(timeAt(e.clientX)), row: row?.kind || 'empty' });
+            }}
+            onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget) && setDropAt(null)}
+            onDrop={(e) => {
+              const raw = e.dataTransfer.getData(DRAG_TYPE);
+              const at = dropAt?.t ?? snapT(timeAt(e.clientX));
+              setDropAt(null);
+              if (!raw) return;
+              e.preventDefault();
+              addMedia(JSON.parse(raw), { at });
+            }}
           >
-            <div class="mc-ruler" style={{ height: RULER_H }}>
+            <div class="mc-ruler pin" style={{ height: RULER_H, transform: `translateY(${pinY}px)` }}>
               {ticks.out.map((t) => (
                 <span key={t} style={{ left: t * pps }}>{formatTimecode(t, p.fps).replace(/^00:/, '')}</span>
               ))}
@@ -1375,7 +1706,8 @@ function MulticamTimeline(props) {
             <div class="mc-outrange" style={{ left: range.out * pps, width: Math.max(0, width - range.out * pps) }} />
             <div class="mc-range-mark in" style={{ left: range.in * pps }} title="Range start (I)" />
             <div class="mc-range-mark out" style={{ left: range.out * pps }} title="Range end (O)" />
-            <div class="mc-program-row" style={{ top: RULER_H, height: PROGRAM_H }}>
+            <SoundRow mc={mc} source={soundAngle} pps={pps} width={width} kfSel={kfSel} pinY={pinY} h={SOUND_H} />
+            <div class="mc-program-row pin" style={{ top: PROGRAM_Y, height: PROGRAM_H, transform: `translateY(${pinY}px)` }}>
               {pieces.map((s) => {
                 const i = angleIndex(mc, s.angle);
                 const a = mc.angles[i];
@@ -1401,6 +1733,13 @@ function MulticamTimeline(props) {
             </div>
             {rowList.map((r) => {
               if (r.kind === 'audioHead') return <div key="audio-head" class="mc-audio-head-row" style={{ top: r.y, height: r.h }} />;
+              if (r.kind === 'newCamera') {
+                return (
+                  <div key="new-camera" class={`mc-new-row${dropAt?.row === 'newCamera' ? ' over' : ''}`} style={{ top: r.y, height: r.h }}>
+                    <span>Drag a video here from Files to add another camera</span>
+                  </div>
+                );
+              }
               const a = r.angle;
               const i = angleIndex(mc, a.id);
               const m = p.media[a.mediaId];
@@ -1412,18 +1751,59 @@ function MulticamTimeline(props) {
               return (
                 <div key={a.id} class="mc-angle-row" style={{ top: r.y, height: r.h }}>
                   <div class={`mc-angle-bar${isVideo ? '' : ' audio'}${a.id === audioSource ? ' has-audio' : ''}`} style={{ left: x, width: w, '--angle': angleColor(i) }}>
-                    {isVideo && w > 30 && <StripThumbs media={m} height={ANGLE_H - 16} width={w} />}
+                    {isVideo && w > 30 && <StripThumbs media={m} height={r.h - 16} width={w} />}
                     <WaveLine path={wavePath} width={w} height={14} duration={e0.end - e0.start} />
                   </div>
                 </div>
               );
             })}
+            {dropAt && <div class="mc-drop-line" style={{ left: dropAt.t * pps, height: rowsH }} />}
             <div class="mc-head-line" ref={headRef} style={{ height: rowsH }} />
             <div class="mc-skim-line" ref={skimLineRef} style={{ height: rowsH }} />
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+/* Lydsporet øverst: lydbølgen fra kilden i bruk, med den gule nivålinjen og nøkkelbildene. */
+function SoundRow({ mc, source, pps, width, kfSel, pinY, h: SOUND_H }) {
+  const pin = { transform: `translateY(${pinY}px)` };
+  const p = project.value;
+  if (!source) {
+    return (
+      <div class="mc-sound-row empty pin" style={{ top: SOUND_Y, height: SOUND_H, ...pin }}>
+        <span>{mc.audio === 'follow' ? 'The sound follows the picture. Choose one sound source to see and adjust its level here.' : 'No sound. Add a camera with sound or an audio file recorded separately.'}</span>
+      </div>
+    );
+  }
+  const m = p.media[source.mediaId];
+  const e0 = angleExtent(p, source);
+  const sound = angleSound(source);
+  const wavePath = m?.kind === 'audio' ? m.streams.main?.wave : Object.values(m?.streams || {}).find((s) => s.hasAudio)?.wave;
+  const x0 = e0.start * pps;
+  const w = Math.max(2, (e0.end - e0.start) * pps);
+  const list = sound.volumeKf;
+  let d;
+  if (!list.length) d = `M${x0} ${volumeY(sound.volume, SOUND_H)} H${x0 + w}`;
+  else {
+    d = `M${Math.min(x0, list[0][0] * pps)} ${volumeY(list[0][1], SOUND_H)}`;
+    for (const [t, v] of list) d += ` L${t * pps} ${volumeY(v, SOUND_H)}`;
+    d += ` H${Math.max(x0 + w, list[list.length - 1][0] * pps)}`;
+  }
+  return (
+    <div class="mc-sound-row pin" style={{ top: SOUND_Y, height: SOUND_H, ...pin }} title="Drag the yellow line to change the level. Alt (Option) click adds a keyframe. Right click a keyframe to delete it.">
+      <div class="mc-sound-clip" style={{ left: x0, width: w }}>
+        <WaveLine path={wavePath} width={w} height={SOUND_H - 8} duration={e0.end - e0.start} />
+      </div>
+      <svg class="mc-level" width={width} height={SOUND_H}>
+        <path d={d} />
+        {list.map(([t, v], i) => (
+          <circle key={i} class={kfSel === i ? 'selected' : ''} cx={t * pps} cy={volumeY(v, SOUND_H)} r={4.5} />
+        ))}
+      </svg>
+    </div>
   );
 }
 

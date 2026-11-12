@@ -179,9 +179,11 @@ function MediaTab() {
         </Button>
         <span class="spacer" />
         <IconButton icon={ListVideo} title={`New Sequence (${isMac ? '⌥⌘N' : 'Ctrl+Alt+N'})`} onClick={() => commands.newSequence()} />
+        <span class="view-btns">
         <IconButton icon={Rows3} title="Filmstrip view" active={mode === 'filmstrip'} onClick={() => setView('filmstrip')} />
         <IconButton icon={LayoutGrid} title="Icon view. Click a clip to show it in the viewer." active={mode === 'grid'} onClick={() => setView('grid')} />
         <IconButton icon={List} title="List view. Click a clip to show it in the viewer." active={mode === 'list'} onClick={() => setView('list')} />
+        </span>
       </div>
       {mode === 'filmstrip' && Object.keys(p.media).length > 0 && (
         <div class="film-controls">

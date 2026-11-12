@@ -63,7 +63,8 @@ export function angleTitle(project, mc, angleId) {
 
 /* Lyd: enkle innstillinger per kilde som blir vanlige lydeffekter på klippene. */
 
-export const SOUND_DEFAULTS = { volume: 0, channels: 'both', gain: 0, eqPreset: 'flat', bass: 0, mid: 0, treble: 0, rumble: false, noise: false };
+// volumeKf: nøkkelbilder for nivået, [[tid i multicam-klippet, dB]], sortert. Tomt betyr fast nivå (volume).
+export const SOUND_DEFAULTS = { volume: 0, volumeKf: [], channels: 'both', gain: 0, eqPreset: 'flat', bass: 0, mid: 0, treble: 0, rumble: false, noise: false };
 export const CHANNEL_MODES = [
   { id: 'both', label: 'Both channels (as recorded)', mode: 0 },
   { id: 'left', label: 'Left channel only', mode: 1 },
@@ -106,9 +107,26 @@ export function soundEffects(sound) {
 export const isSoundDefault = (sound) => soundEffects(sound).length === 0 && !(sound?.volume);
 
 // Legger lydinnstillingene på et klipp: nivået blir klippets volum, resten blir effekter først i kjeden.
-export function applySound(clip, sound) {
+// Nivået ved tiden t i multicam-klippet, med rette linjer mellom nøkkelbildene.
+export function soundLevelAt(sound, t) {
+  const list = sound?.volumeKf || [];
+  if (!list.length) return sound?.volume ?? 0;
+  if (t <= list[0][0]) return list[0][1];
+  for (let i = 1; i < list.length; i++) {
+    const [t0, v0] = list[i - 1];
+    const [t1, v1] = list[i];
+    if (t <= t1) return v0 + ((v1 - v0) * (t - t0)) / (t1 - t0 || 1);
+  }
+  return list[list.length - 1][1];
+}
+
+// Legger lydinnstillingene på et klipp: nivået blir klippets volum (med nøkkelbilder i kildetid),
+// resten blir effekter først i kjeden.
+export function applySound(clip, sound, offset = 0) {
   const s = { ...SOUND_DEFAULTS, ...sound };
   clip.props.volume = s.volume;
+  if (s.volumeKf.length) clip.kf = { ...clip.kf, volume: s.volumeKf.map(([t, v]) => [r6(t - offset), v, 'linear']) };
+  else if (clip.kf?.volume) delete clip.kf.volume;
   clip.props.afx = [...soundEffects(s), ...(clip.props.afx || []).filter((e) => !String(e.id).startsWith('mc-'))];
   return clip;
 }
@@ -167,7 +185,7 @@ export function addAngles(project, mc, mediaIds, { at = null } = {}) {
       continue;
     }
     if (mc.angles.some((a) => a.mediaId === id)) {
-      errors.push(`${m.name} is already an angle.`);
+      errors.push(`${m.name} is already added.`);
       continue;
     }
     const ext = mc.angles.length ? multicamExtent(project, mc) : { start: 0 };
@@ -179,6 +197,21 @@ export function addAngles(project, mc, mediaIds, { at = null } = {}) {
   }
   tidy(project, mc);
   return { added, errors };
+}
+
+// Flytter et spor opp eller ned. Kameraene og lydsporene har hver sin rekkefølge (1, 2, 3 og A1, A2),
+// så sporet flyttes bare blant sine egne. Kuttene peker på id-er og følger med.
+export function moveAngle(project, mc, angleId, index) {
+  const a = mc.angles.find((x) => x.id === angleId);
+  if (!a) return false;
+  const video = isVideoAngle(project, a);
+  const same = mc.angles.filter((x) => x.id !== angleId && isVideoAngle(project, x) === video);
+  same.splice(Math.max(0, Math.min(same.length, index)), 0, a);
+  let k = 0;
+  const next = mc.angles.map((x) => (isVideoAngle(project, x) === video ? same[k++] : x));
+  if (next.every((x, i) => x === mc.angles[i])) return false;
+  mc.angles = next;
+  return true;
 }
 
 export function removeAngle(project, mc, angleId) {
@@ -221,6 +254,7 @@ export function normalize(project, mc) {
   if (Math.abs(start) < EPS) return mc;
   for (const a of mc.angles) a.offset = r6(a.offset - start);
   for (const c of mc.cuts) c.t = r6(c.t - start);
+  for (const a of mc.angles) if (a.sound?.volumeKf?.length) a.sound.volumeKf = a.sound.volumeKf.map(([t, v]) => [r6(t - start), v]);
   if (mc.range) mc.range = { in: r6(mc.range.in - start), out: r6(mc.range.out - start) };
   return tidy(project, mc);
 }
@@ -379,7 +413,8 @@ function angleAudioRef(project, angle) {
  * Svar: { offsets: { [angleId]: offset }, failures: [{ angleId, number, name, reason }] }.
  * Den første vinkelen med lyd er referansen og blir stående der den er.
  */
-export function planMulticamSync(project, mc, waveFor) {
+// only: synk bare den vinkelen mot de andre, som blir stående der de er (høyreklikk › Synchronize to Audio).
+export function planMulticamSync(project, mc, waveFor, { only = null } = {}) {
   const failures = [];
   const offsets = {};
   const env = new Map();
@@ -403,6 +438,21 @@ export function planMulticamSync(project, mc, waveFor) {
     env.set(a.id, { x: prepareEnvelope(w.peaks), so: ref.stream.offset || 0 });
   }
   const usable = mc.angles.filter((a) => env.has(a.id));
+  if (only) {
+    const target = mc.angles.find((a) => a.id === only);
+    const own = failures.filter((f) => f.angleId === only);
+    if (!target || own.length) return { offsets: {}, failures: own, reference: null };
+    const others = usable.filter((a) => a.id !== only);
+    if (!others.length) return { offsets: {}, failures: [{ angleId: only, number: angleNumber(mc, only), name: project.media[target.mediaId]?.name || '', reason: `Could not synchronize ${label(target)}: none of the other files have sound to compare with.` }], reference: null };
+    let best = null;
+    for (const s of others) {
+      const r = findOffset(env.get(s.id).x, env.get(only).x);
+      if (isConfident(r) && (!best || r.score > best.r.score)) best = { r, s };
+    }
+    if (!best) return { offsets: {}, failures: [{ angleId: only, number: angleNumber(mc, only), name: project.media[target.mediaId]?.name || '', reason: `Could not synchronize ${label(target)}: no matching sound was found in the other files. Make sure it was recorded at the same time, or drag it into place in the timeline.` }], reference: null };
+    const off = r6(best.s.offset + env.get(best.s.id).so - env.get(only).so - best.r.lag / ENV_RATE);
+    return { offsets: { [only]: off }, failures: [], reference: best.s.id };
+  }
   if (!usable.length) return { offsets, failures, reference: null };
   const reference = usable[0];
   offsets[reference.id] = reference.offset;
@@ -428,7 +478,7 @@ export function planMulticamSync(project, mc, waveFor) {
       progress = true;
     }
     if (!progress) {
-      for (const a of next) fail(a, `Could not synchronize ${label(a)}: no matching sound was found in the other angles. Make sure the angles were recorded at the same time, or drag it into place in the timeline.`);
+      for (const a of next) fail(a, `Could not synchronize ${label(a)}: no matching sound was found in the other files. Make sure they were recorded at the same time, or drag it into place in the timeline.`);
       break;
     }
     pending = next;
@@ -556,7 +606,7 @@ export function buildMulticamClips(project, mc, { previous = [] } = {}) {
       if (!follow) c.props.audioOff = { ...(c.props.audioOff || {}), ...Object.fromEntries(audioStreamKeys(m).map((k) => [k, true])) };
       else {
         if (prev) c.props.audioOff = { ...(m.audioOff || {}) };
-        applySound(c, angleSound(angle));
+        applySound(c, angleSound(angle), angle.offset);
       }
       video.push(c);
     }
@@ -578,7 +628,7 @@ export function buildMulticamClips(project, mc, { previous = [] } = {}) {
           if (prev) a.props = { ...a.props, ...deepClone(prev.props) };
           a.name = `${mc.name} audio${comps.length > 1 ? ` (${comp.label.toLowerCase()})` : ''}`;
           a.multicam = { id: mc.id, angle: angle.id };
-          applySound(a, angleSound(angle));
+          applySound(a, angleSound(angle), angle.offset);
           if (comp.off) a.enabled = false;
           audio.push(a);
         }

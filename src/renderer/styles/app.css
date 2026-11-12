@@ -5711,8 +5711,13 @@ kbd.keycap {
 }
 .mc-main {
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
+}
+.mc-angles {
+  overflow: hidden;
 }
 .mc-main > section {
   display: flex;
@@ -6405,4 +6410,213 @@ kbd.keycap {
 .mc-num.audio {
   font-size: 10px;
   padding: 0 3px;
+}
+
+.mc-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--line-2);
+  margin: 0 4px;
+}
+
+.mc-tl-head.new-camera {
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+.mc-new-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  border-bottom: 1px solid var(--line);
+  background: repeating-linear-gradient(135deg, transparent 0 8px, rgba(255, 255, 255, 0.02) 8px 16px);
+}
+.mc-new-row span {
+  position: sticky;
+  left: 10px;
+}
+.mc-new-row.over {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--text);
+}
+.mc-drop-line {
+  position: absolute;
+  top: 0;
+  width: 0;
+  border-left: 2px solid var(--accent);
+  pointer-events: none;
+  z-index: 3;
+}
+.mc-notice.info b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* Når biblioteket er smalt, flyttes visningsknappene ned i stedet for å bli kuttet. */
+.media-tab .tab-actions {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.media-tab .view-btns {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* Multicam: hovedlyden øverst med nivålinje */
+.mc-tl-head.sound {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  background: var(--bg-2);
+}
+.mc-tl-head.sound .dim {
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.mc-sound-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.mc-sound-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid var(--line);
+  background: rgba(48, 209, 88, 0.04);
+}
+.mc-sound-row.empty {
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+.mc-sound-row.empty span {
+  position: sticky;
+  left: 10px;
+}
+.mc-sound-clip {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #2a5e3e, #1f4430);
+  box-shadow: inset 0 0 0 1px rgba(48, 209, 88, 0.6);
+}
+.mc-sound-clip .mc-wave {
+  margin-top: 1px;
+}
+.mc-level {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.mc-level path {
+  fill: none;
+  stroke: var(--yellow);
+  stroke-width: 1.5;
+}
+.mc-level circle {
+  fill: var(--yellow);
+  stroke: #000;
+  stroke-width: 1;
+}
+.mc-level circle.selected {
+  fill: #fff;
+}
+
+/* Linjal, lydspor og program står fast øverst mens kamerasporene rulles under. */
+.mc-tl-content .pin {
+  z-index: 2;
+}
+.mc-tl-content .mc-ruler.pin {
+  position: relative;
+}
+.mc-tl-content .mc-sound-row.pin {
+  background: #18201b;
+}
+.mc-tl-content .mc-program-row.pin {
+  background: var(--bg-1);
+}
+.mc-tl-head.pin {
+  position: relative;
+  z-index: 1;
+}
+.mc-tl-head.ruler.pin,
+.mc-tl-head.program.pin {
+  background: var(--bg-2);
+}
+.mc-head-line,
+.mc-skim-line,
+.mc-drop-line {
+  z-index: 3;
+}
+
+/* Flytt spor: dra i sporhodet */
+.mc-tl-head.track {
+  cursor: grab;
+}
+.mc-tl-head.track.dragging {
+  opacity: 0.5;
+}
+.mc-tl-heads.reordering,
+.mc-tl-heads.reordering .mc-tl-head.track {
+  cursor: grabbing;
+}
+.mc-grip {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  margin-left: -3px;
+  margin-right: -2px;
+}
+.mc-reorder-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px solid var(--accent);
+  margin-top: -1px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Tom rute i vinkelrutenettet: svart med en svak grå R fra logoen. */
+.mc-tile.empty {
+  cursor: default;
+  outline: none;
+}
+.mc-tile.empty .mc-frame {
+  background: #000;
+}
+.mc-mark {
+  height: 42%;
+  width: auto;
+  pointer-events: none;
+}
+
+/* Sporhøyde: dra i nederkanten av sporhodet */
+.mc-tl-head {
+  position: relative;
+}
+.mc-row-resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 7px;
+  cursor: row-resize;
+  z-index: 2;
+}
+.mc-row-resize:hover {
+  background: linear-gradient(transparent 2px, var(--accent) 2px, var(--accent) 4px, transparent 4px);
 }
