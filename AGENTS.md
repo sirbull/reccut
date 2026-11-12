@@ -15,3 +15,9 @@ Når vi lager en ny versjon av Reccut, må About-vinduet også vise det nye vers
 - Reccut selv skal aldri lese tastaturet globalt. Ingen tastaturkrok, `uiohook`, `GetAsyncKeyState` eller lignende i `src/` eller i `dependencies`. Testen `test/keystrokes.test.mjs` sjekker dette.
 - All global tastaturlesing ligger i [native/keystrokes](native/keystrokes), som bygges for seg og aldri pakkes inn i installasjonsfilen.
 - Filteret (bare snarveier, aldri vanlig skriving) ligger i selve hjelpeprogrammet, slik at vanlige tegn aldri når Reccut.
+
+## Clean Voice (AI-støyfjerning)
+
+- Slås på per lydkomponent i Audio-fanen (`props.cleanVoice[key]` = styrke 0 til 1), og under Sound i Properties i multicam-vinduet (`angle.sound.clean`, som blir `props.cleanVoice` på klippene). Kjører lokalt i et skjult arbeidsvindu ([src/worker/denoise.js](src/worker/denoise.js)).
+- Hver kildefil renses én gang til `clean-voice.flac` i hurtigbufferen, med fire kanaler: original V/H og renset V/H. Styrken blandes inn med `cleanNoiseGain` i avspillingen (lydtråden) og eksporten (ffmpeg `pan`), så slideren virker med en gang.
+- Modellen (DeepFilterNet 3, MIT/Apache 2.0, 16 MB) følger med appen. Den finnes bare ett sted, `assets/denoise/denoiser_model.onnx` (kopieres til `build/denoise`), og er låst med SHA-256 i `test/clean-voice.test.mjs`. Alle deler av appen som bruker Clean Voice, bruker denne ene modellen. Ikke legg inn en kopi.

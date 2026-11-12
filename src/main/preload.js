@@ -109,6 +109,7 @@ contextBridge.exposeInMainWorld('api', {
   reanalyze: invoke('media:reanalyze'),
   readWave: invoke('media:wave'),
   reverseMedia: invoke('media:reverse'),
+  cleanAudio: invoke('media:clean'),
   optimizeMedia: invoke('media:optimize'),
   offlineMedia: invoke('media:offline'),
   mediaDetails: invoke('media:details'),

@@ -9,7 +9,10 @@ import {
   multicamClips,
   multicamFromClips,
   multicamOfClip,
+  multicamTimeOfClip,
   newMulticam,
+  switchSegment,
+  tidy,
   nextMulticamName,
   placeMulticam,
 } from '../../shared/multicam.js';
@@ -81,4 +84,34 @@ export function sendMulticamToTimeline(mc) {
   multicamSession.value = null;
   toast(s?.editing ? `${mc.name} was updated on the timeline.` : `${mc.name} was added to the timeline. Double click it to edit the clips inside, or ${window.api.platform === 'darwin' ? 'Cmd' : 'Ctrl'} double click to switch angles again.`, { kind: 'success', timeout: 6000 });
   return true;
+}
+
+// Høyreklikk på et multicam-klipp i tidslinjen: Active Video Angle og Active Audio Angle, som i Final Cut Pro.
+// Klippet bytter vinkel uten nytt kutt, og gruppen bygges på nytt fra definisjonen.
+function rebuildMulticam(clipId, change, message) {
+  const p = project.value;
+  const mc = multicamOfClip(p, clipId);
+  if (!mc) return false;
+  const next = structuredClone(mc);
+  if (change(next, p) === false) return false;
+  tidy(p, next);
+  let placed = [];
+  commit((q) => {
+    placed = placeMulticam(q, next, { replace: multicamClips(q, mc.id) });
+  });
+  if (placed.length) selection.value = placed;
+  if (message) toast(message, { timeout: 2200 });
+  return true;
+}
+
+export function setActiveVideoAngle(clipId, angleId) {
+  const clip = project.value.clips[clipId];
+  return rebuildMulticam(clipId, (mc, p) => switchSegment(p, mc, multicamTimeOfClip(p, mc, clip), angleId));
+}
+
+export function setActiveAudioAngle(clipId, value) {
+  return rebuildMulticam(clipId, (mc) => {
+    if (mc.audio === value) return false;
+    mc.audio = value;
+  });
 }

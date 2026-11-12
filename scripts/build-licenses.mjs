@@ -66,6 +66,9 @@ export function buildLicenses({ root = projectRoot, out = path.join(root, 'build
   add('whisper', 'Whisper models', 'MIT', 'https://github.com/openai/whisper',
     'Local speech recognition. Converted models are obtained from onnx-community; the model manager identifies the installed revision.',
     ['assets/licenses/whisper-MIT.txt']);
+  add('deepfilternet', 'DeepFilterNet 3 model', 'MIT OR Apache-2.0', 'https://github.com/Rikorose/DeepFilterNet',
+    'AI noise removal (Clean Voice). The model is included with the app and runs on the computer.',
+    ['assets/licenses/DeepFilterNet-MIT.txt']);
   const { models } = require(path.join(root, 'src/main/designModels.js'));
   for (const model of models) {
     const licenseFile = model.files.find((file) => /^LICENSE(?:\.txt)?$/.test(file.file));

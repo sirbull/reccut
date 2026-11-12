@@ -45,6 +45,7 @@ import {
   angleLabel,
   angleSound,
   audioOnlyAngles,
+  angleAt,
   angleColor,
   angleExtent,
   angleHasAudio,
@@ -67,6 +68,7 @@ import {
   removeCut,
   setAngleOffset,
   soundEffects,
+  soundKeys,
   soundLevelAt,
   switchSegment,
   tidy,
@@ -136,7 +138,7 @@ function sinkFor(el) {
   if (!el) return null;
   if (el._mcSink !== undefined) return el._mcSink;
   try {
-    el._mcSink = elementAudio(el);
+    el._mcSink = elementAudio(el, { clean: el.dataset?.clean === '1' });
   } catch (err) {
     console.warn('Multicam audio preview without effects', err);
     el._mcSink = null;
@@ -270,6 +272,21 @@ function MulticamWindow({ session }) {
   };
   const togglePlay = () => (play.current.on ? stopPlay() : startPlay(1));
 
+  // AI Clean Voice: lag den rensede kopien i bakgrunnen for kilder der det er slått på, som i redigeringen.
+  const cleanAsked = useRef(new Set());
+  useEffect(() => {
+    for (const a of mc.angles) {
+      if (!(angleSound(a).clean > 0)) continue;
+      const media = project.value.media[a.mediaId];
+      for (const key of soundKeys(media)) {
+        const st = media.streams[key];
+        if (st.cleaned || media.offline || cleanAsked.current.has(st.path)) continue;
+        cleanAsked.current.add(st.path);
+        api.cleanAudio({ file: st.path, mediaId: media.id, stream: key }).catch((err) => setNotice({ kind: 'error', title: 'AI Clean Voice could not clean the sound.', items: [`${media.name}: ${err.message || err}`] }));
+      }
+    }
+  }, [mc]);
+
   // Hovedtidslinjen står stille mens vinduet er åpent.
   useEffect(() => {
     playback.pause();
@@ -318,28 +335,45 @@ function MulticamWindow({ session }) {
         const inside = local >= 0 && local < dur;
         el.parentElement?.classList.toggle('outside', !inside);
         // Bare kilden som har lyden høres, med nivået og effektene fra Properties.
+        // Med AI Clean Voice spilles lyden fra den rensede filen, blandet med styrken som på tidslinjen.
         const audible = a.id === audioId && play.current.on;
+        const sound = angleSound(a);
+        const level = dbToGain(soundLevelAt(sound, t));
+        const cleanEl = sound.clean > 0 ? els.current[`${a.id}:clean`] : null;
         const sink = sinkFor(el);
         if (sink) {
-          const sound = angleSound(a);
           el.muted = false;
           sink.setEffects(soundEffects(sound));
-          sink.setGain(audible ? dbToGain(soundLevelAt(sound, t)) : 0);
-        } else el.muted = !audible;
-        if (!inside) {
-          if (!el.paused) el.pause();
-          continue;
+          sink.setGain(audible && !cleanEl ? level : 0);
+        } else el.muted = !audible || Boolean(cleanEl);
+        const follow = (node) => {
+          if (!inside) {
+            if (!node.paused) node.pause();
+            return;
+          }
+          if (forward) {
+            if (node.playbackRate !== st.rate) node.playbackRate = st.rate;
+            if (node.paused) {
+              node.currentTime = local;
+              node.play().catch(() => {});
+            } else if (Math.abs(node.currentTime - local) > 0.25) node.currentTime = local;
+          } else {
+            if (!node.paused) node.pause();
+            if (Math.abs(node.currentTime - local) > frame / 2) node.currentTime = local;
+          }
+        };
+        if (cleanEl) {
+          const cs = sinkFor(cleanEl);
+          cs?.setEffects(soundEffects(sound), sound.clean);
+          cs?.setGain(audible ? level : 0);
+          if (audible) follow(cleanEl);
+          else if (!cleanEl.paused) cleanEl.pause();
         }
-        if (forward) {
-          if (el.playbackRate !== st.rate) el.playbackRate = st.rate;
-          if (el.paused) {
-            el.currentTime = local;
-            el.play().catch(() => {});
-          } else if (Math.abs(el.currentTime - local) > 0.25) el.currentTime = local;
-        } else {
-          if (!el.paused) el.pause();
-          if (Math.abs(el.currentTime - local) > frame / 2) el.currentTime = local;
-        }
+        follow(el);
+      }
+      // Rensede filer for kilder der Clean Voice er slått av igjen, skal ikke spille videre.
+      for (const [id, node] of Object.entries(els.current)) {
+        if (id.endsWith(':clean') && !(angleSound(m.angles.find((x) => `${x.id}:clean` === id)).clean > 0) && !node.paused) node.pause();
       }
       // Programmet: tegn bildet fra vinkelen som vises.
       const cv = programRef.current;
@@ -771,6 +805,12 @@ function MulticamWindow({ session }) {
               const m = p.media[a.mediaId];
               return m && <audio key={a.id} crossOrigin="anonymous" src={fileUrl(workPath(m.streams.main) || m.path)} preload="auto" ref={(el) => (el ? (els.current[a.id] = el) : delete els.current[a.id])} />;
             })}
+            {/* AI Clean Voice: den rensede filen (fire kanaler) når den er klar. */}
+            {mc.angles.map((a) => {
+              const cleaned = angleSound(a).clean != null && p.media[a.mediaId]?.streams?.[soundKeys(p.media[a.mediaId])[0]]?.cleaned;
+              const id = `${a.id}:clean`;
+              return cleaned && <audio key={`${id}:${cleaned}`} data-clean="1" crossOrigin="anonymous" src={fileUrl(cleaned)} preload="auto" ref={(el) => (el ? (els.current[id] = el) : delete els.current[id])} />;
+            })}
           </div>
         </section>
         <div class="mc-vsplit" onPointerDown={dragSplit('views')} />
@@ -1010,12 +1050,40 @@ function MulticamProperties({ mc, head, target, setTarget, setAudio, setFallback
               <span>Reduce noise</span>
               <Toggle checked={sound.noise} onChange={(v) => set({ noise: v })} />
             </div>
+            <CleanVoiceControl media={current && p.media[current.mediaId]} sound={sound} set={set} gesture={gesture} />
             <Button variant="secondary" onClick={() => set({ ...SOUND_DEFAULTS })}>Reset Sound</Button>
             <p class="hint small">These settings go with the sound to the timeline, as the clip level and effects. Fine tune them later in the Audio tab in Edit.</p>
           </>
         )}
       </div>
     </section>
+  );
+}
+
+// AI Clean Voice i Properties: samme støyfjerning (DeepFilterNet 3) og samme innstilling som i Audio-fanen.
+function CleanVoiceControl({ media, sound, set, gesture }) {
+  const on = sound.clean != null;
+  const key = soundKeys(media)[0];
+  const st = media?.streams?.[key];
+  const job = on && st && !st.cleaned && tasks.value.find((t) => t.title === `Removing background noise from ${st.path.split(/[\\/]/).pop()}` && (t.state === 'running' || t.state === 'queued'));
+  return (
+    <div class="mc-clean">
+      <div class="mc-prop row">
+        <span>AI Clean Voice</span>
+        <Toggle checked={on} onChange={(v) => set({ clean: v ? 0.8 : null })} />
+      </div>
+      {on && (
+        <div class="mc-prop">
+          <div class="mc-prop-label">
+            <span>Strength</span>
+            <span class="dim">{Math.round(sound.clean * 100)} %</span>
+          </div>
+          <Slider value={sound.clean} min={0} max={1} step={0.01} onStart={gesture.start} onCommit={gesture.end} onInput={(v) => set({ clean: v })} />
+        </div>
+      )}
+      {on && st && !st.cleaned && <span class="hint small">{job ? `Cleaning the sound: ${Math.round((job.progress || 0) * 100)} %. You hear the original until it is done.` : 'Preparing the cleaned sound.'}</span>}
+      <span class="hint small">AI removes background noise such as fans, traffic, hum and room sound from speech. It runs on this computer, and nothing is sent anywhere.</span>
+    </div>
   );
 }
 
@@ -1479,9 +1547,40 @@ function MulticamTimeline(props) {
   const [dropAt, setDropAt] = useState(null);
 
   // Høyreklikk på et klipp: synk det mot de andre, bruk lyden, juster lyden eller fjern det.
+  // Active Video Angle og Active Audio Angle, som i Final Cut Pro: bytt kamera for biten der du
+  // høyreklikket (uten nytt kutt), eller hvor lyden kommer fra. Står først i alle menyene i tidslinjen.
+  const angleMenu = (t) => {
+    const cur = angleAt(mc, t);
+    const name = (a) => `${isVideoAngle(p, a) ? `Camera ${angleLabel(p, mc, a.id)}` : angleLabel(p, mc, a.id)}: ${p.media[a.mediaId]?.name || 'missing file'}`;
+    return [
+      { label: 'Active Video Angle', enabled: listVideoAngles(p, mc).length > 0, submenu: listVideoAngles(p, mc).map((a) => ({ id: `mcv:${a.id}`, label: name(a), checked: cur === a.id })) },
+      {
+        label: 'Active Audio Angle',
+        submenu: [
+          ...mc.angles.filter((a) => angleHasAudio(p, a)).map((a) => ({ id: `mca:${a.id}`, label: name(a), checked: mc.audio === a.id })),
+          { separator: true },
+          { id: 'mca:follow', label: 'Follow the Picture', checked: mc.audio === 'follow' },
+        ],
+      },
+      { separator: true },
+    ];
+  };
+  const runAngleMenu = (id, t) => {
+    if (id?.startsWith('mcv:')) {
+      edit((m) => switchSegment(p, m, t, id.slice(4)));
+      return true;
+    }
+    if (id?.startsWith('mca:')) {
+      setAudio(id.slice(4));
+      return true;
+    }
+    return false;
+  };
+
   const onContextMenu = async (e) => {
     e.preventDefault();
     const row = rowAt(e.clientY);
+    const tMenu = timeAt(e.clientX);
     if (row.kind === 'sound' && soundAngle) {
       const el = contentRef.current.getBoundingClientRect();
       const x = e.clientX - el.left;
@@ -1490,11 +1589,13 @@ function MulticamTimeline(props) {
       const sound = angleSound(soundAngle);
       const hit = sound.volumeKf.findIndex(([kt, v]) => Math.abs(kt * pps - x) < KF_HIT && Math.abs(volumeY(v, SOUND_H) - y) < KF_HIT + 3);
       const id = await api.popupMenu([
+        ...angleMenu(t),
         ...(hit >= 0 ? [{ id: 'del', label: 'Delete Keyframe' }] : [{ id: 'add', label: 'Add Keyframe', accelerator: isMac ? 'Alt+Click' : 'Alt+Click' }]),
         { id: 'clear', label: 'Remove All Keyframes', enabled: sound.volumeKf.length > 0 },
         { separator: true },
         { id: 'adjust', label: 'Adjust Sound…' },
       ]);
+      if (runAngleMenu(id, t)) return;
       const put = (fn) => edit((m) => {
         const a = m.angles.find((x2) => x2.id === soundAngle.id);
         const cur = angleSound(a);
@@ -1511,12 +1612,25 @@ function MulticamTimeline(props) {
       else if (id === 'adjust') openSound(soundAngle.id);
       return;
     }
-    if (row.kind !== 'angle') return;
+    if (row.kind !== 'angle') {
+      // Program, linjalen og tomme spor: bytt vinkel, eller legg til og fjern kutt der du klikket.
+      const near = cutNear(tMenu);
+      const id = await api.popupMenu([
+        ...angleMenu(tMenu),
+        { id: 'blade', label: 'Add Cut Here', accelerator: 'B' },
+        { id: 'removeCut', label: 'Remove Cut', enabled: near > 0 },
+      ]);
+      if (runAngleMenu(id, tMenu)) return;
+      if (id === 'blade') edit((m) => void bladeAt(m, snapT(tMenu), { frame }));
+      else if (id === 'removeCut') edit((m) => removeCut(p, m, near));
+      return;
+    }
     const a = row.angle;
     const cam = isVideoAngle(p, a);
     const hasAudio = angleHasAudio(p, a);
     const others = mc.angles.some((x) => x.id !== a.id && angleHasAudio(p, x));
     const id = await api.popupMenu([
+      ...angleMenu(tMenu),
       { id: 'sync', label: 'Synchronize to Audio', enabled: hasAudio && others },
       { separator: true },
       { id: 'sound', label: 'Use Sound from This File', enabled: hasAudio, checked: audioSource === a.id && mc.audio !== 'follow' },
@@ -1525,6 +1639,7 @@ function MulticamTimeline(props) {
       { separator: true },
       { id: 'remove', label: 'Remove from Multicam Clip' },
     ]);
+    if (runAngleMenu(id, tMenu)) return;
     if (id === 'sync') syncOne(a.id);
     else if (id === 'sound') setAudio(a.id);
     else if (id === 'adjust') openSound(a.id);

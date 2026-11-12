@@ -17,6 +17,7 @@ import {
   multicamClips,
   multicamFromClips,
   multicamMedia,
+  multicamTimeOfClip,
   newMulticam,
   pictureAngleAt,
   placeMulticam,
@@ -290,4 +291,37 @@ test('tracks can be reordered, cameras and separate sound each among their own',
   assert.deepEqual(mc.angles.map((x) => x.mediaId), ['c', 'rec2', 'a', 'b', 'rec']);
   assert.equal(angleLabel(p, mc, id('rec2')), 'A1');
   assert.equal(moveAngle(p, mc, C, 0), false);
+});
+
+test('AI Clean Voice in the multicam sound settings becomes Clean Voice on the clips', () => {
+  const p = setup();
+  p.media.rec = { id: 'rec', kind: 'audio', name: 'rec.wav', duration: 20, streams: { main: { path: '/m/rec.wav', hasAudio: true } } };
+  const mc = mcWith(p, ['a', 'rec']);
+  mc.angles[1].sound = { clean: 0.7 };
+  let { audio } = buildMulticamClips(p, mc);
+  assert.deepEqual(audio[0].props.cleanVoice, { main: 0.7 });
+  // Lyden følger bildet: videoklippene får Clean Voice på sine egne lydstrømmer.
+  mc.audio = 'follow';
+  mc.angles[0].sound = { clean: 0.5 };
+  const { video } = buildMulticamClips(p, mc);
+  assert.deepEqual(video[0].props.cleanVoice, { main: 0.5 });
+  mc.audio = mc.angles[1].id;
+  mc.angles[1].sound = { clean: null };
+  ({ audio } = buildMulticamClips(p, mc));
+  assert.equal(audio[0].props.cleanVoice, undefined);
+});
+
+test('the time of a clip in the multicam clip, for Active Video Angle on the timeline', () => {
+  const p = setup();
+  const mc = mcWith(p, ['a', 'b']);
+  const [A, B] = mc.angles.map((x) => x.id);
+  mc.angles[1].offset = 2;
+  cutAndSwitch(p, mc, 6, B);
+  const placed = placeMulticam(p, mc);
+  const clips = placed.map((id) => p.clips[id]).filter((c) => c.type === 'video');
+  const second = clips.find((c) => c.multicam.angle === B);
+  assert.equal(multicamTimeOfClip(p, mc, second), 14);
+  switchSegment(p, mc, multicamTimeOfClip(p, mc, second), A);
+  assert.equal(angleAt(mc, 10), A);
+  assert.equal(mc.cuts.length, 1);
 });

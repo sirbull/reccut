@@ -899,6 +899,14 @@ export function activeEffects(clip) {
   return (clip?.props?.afx || []).filter((e) => e.on !== false && AUDIO_EFFECTS[e.type]);
 }
 
+// Clean Voice (AI-støyfjerning): styrken 0 til 1 for en lydkomponent i klippet.
+export function cleanAmount(clip, key) {
+  const a = clip?.props?.cleanVoice?.[key];
+  return a > 0 ? Math.min(1, a) : 0;
+}
+// Hvor mye av originalen som blandes inn: (1 - styrke)². 50 % demper støyen 12 dB, 75 % 24 dB, 100 % helt.
+export const cleanNoiseGain = (amount) => (1 - Math.max(0, Math.min(1, amount))) ** 2;
+
 // Mono is Pan and Width at zero width, first in the chain, so playback and export
 // share the same code and later effects see the mono signal.
 const MONO = { id: 'mono', type: 'stereo', p: { pan: 0, width: 0 } };

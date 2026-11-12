@@ -3,7 +3,7 @@
 // Redigeringen og eksportfanen har hver sin spiller.
 import { audioWindow, computeAudio, computeFrame, instSpeed, sideBackgroundMedia, sourceTime, transitionWindow, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
-import { componentEffects } from '../shared/audiofx.js';
+import { cleanAmount, componentEffects } from '../shared/audiofx.js';
 import { effect } from '@preact/signals';
 import { audioSink, prefs, previewResolutionScale } from './prefs.js';
 
@@ -36,25 +36,28 @@ audioCtx.audioWorklet
   .catch((err) => console.warn('Could not load audio effects', err));
 
 // Kobler effektkjeden til klippet inn mellom kilden og volumet, og sender nye innstillinger.
+// Clean Voice-filen har fire kanaler, som blandes med styrken i effektkjeden.
 function applyFx(entry, clip, stream) {
   if (!entry.srcNode) return;
   const list = componentEffects(clip, stream);
-  const key = JSON.stringify(list);
+  const msg = entry.clean ? { list, clean: cleanAmount(clip, stream) } : list;
+  const key = JSON.stringify(msg);
   if (key === entry.fxKey) return;
-  if (list.length && !entry.fx) {
+  if ((list.length || entry.clean) && !entry.fx) {
     if (!fxReady) return;
-    entry.fx = new AudioWorkletNode(audioCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
+    entry.fx = new AudioWorkletNode(audioCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: entry.clean ? 4 : 2, channelCountMode: 'explicit' });
     entry.srcNode.disconnect();
     entry.srcNode.connect(entry.fx).connect(entry.gain);
   }
   entry.fxKey = key;
-  entry.fx?.port.postMessage(list);
+  entry.fx?.port.postMessage(msg);
 }
 
 // Lyd fra et eget mediaelement (multicam-vinduet) gjennom samme effektkjede som tidslinjen,
 // så det som høres der er det samme som i redigeringen og eksporten. Elementet må ha crossOrigin.
 const sinks = new WeakMap();
-export function elementAudio(el) {
+// clean: elementet spiller Clean Voice-filen med fire kanaler, som blandes med styrken.
+export function elementAudio(el, { clean = false } = {}) {
   if (sinks.has(el)) return sinks.get(el);
   const src = audioCtx.createMediaElementSource(el);
   const gain = audioCtx.createGain();
@@ -63,17 +66,18 @@ export function elementAudio(el) {
   let fx = null;
   let key = '[]';
   const sink = {
-    setEffects(list) {
-      const k = JSON.stringify(list);
+    setEffects(list, amount = 0) {
+      const msg = clean ? { list, clean: amount } : list;
+      const k = JSON.stringify(msg);
       if (k === key) return;
-      if (list.length && !fx) {
+      if ((list.length || clean) && !fx) {
         if (!fxReady) return;
-        fx = new AudioWorkletNode(audioCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
+        fx = new AudioWorkletNode(audioCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: clean ? 4 : 2, channelCountMode: 'explicit' });
         src.disconnect();
         src.connect(fx).connect(gain);
       }
       key = k;
-      fx?.port.postMessage(list);
+      fx?.port.postMessage(msg);
     },
     setGain(v) {
       if (Math.abs(gain.gain.value - v) > 1e-4) gain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.01);
@@ -120,10 +124,17 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
     return { path: plain, alt: s.reversed, rev: false, hasVideo: s.hasVideo && m.kind !== 'image', hasAudio: s.hasAudio };
   }
 
-  function getEl(clip, key) {
-    const id = `${clip.id}:${key}`;
+  // Clean Voice: lyden spilles fra den rensede filen når den er klar, i et eget lydelement.
+  // ponytail: baklengs bruker originalen; rens den baklengs kopien hvis det trengs.
+  function cleanPath(clip, key) {
+    const st = getProject().media[clip.mediaId]?.streams?.[key];
+    return st?.cleaned && cleanAmount(clip, key) > 0 && !clip.reverse && !(playing.value && rate < 0) ? st.cleaned : null;
+  }
+
+  function getEl(clip, key, clean = null) {
+    const id = `${clip.id}:${key}${clean ? ':clean' : ''}`;
     let entry = pool.get(id);
-    const stream = streamFor(clip, key);
+    const stream = clean ? { path: clean, rev: false, hasVideo: false, hasAudio: true } : streamFor(clip, key);
     if (!stream) return null;
     // Stillestående kan begge kopiene vise riktig bilde, så elementet byttes ikke unødvendig.
     if (entry && entry.path !== stream.path && !(entry.path === stream.alt && !playing.value)) {
@@ -144,7 +155,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
         gain.gain.value = 0;
         srcNode.connect(gain).connect(master);
       } else el.muted = true;
-      entry = { el, gain, srcNode, fx: null, fxKey: '[]', path: stream.path, rev: stream.rev, D: stream.D, lastUsed: performance.now(), target: null, frame: null, hasFrame: false };
+      entry = { el, gain, srcNode, fx: null, fxKey: '[]', clean: Boolean(clean), path: stream.path, rev: stream.rev, D: stream.D, lastUsed: performance.now(), target: null, frame: null, hasFrame: false };
       pool.set(id, entry);
       el.addEventListener('seeked', () => {
         rememberFrame(entry);
@@ -316,9 +327,10 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
       } else addVisual(l.clip, visualT);
     }
     for (const a of computeAudio(p, T)) {
-      const id = `${a.clip.id}:${a.stream}`;
+      const clean = cleanPath(a.clip, a.stream);
+      const id = `${a.clip.id}:${a.stream}${clean ? ':clean' : ''}`;
       const prev = out.get(id);
-      out.set(id, { clip: a.clip, key: a.stream, src: a.src, gain: a.gain + (prev?.gain || 0), speed: a.speed ?? 1 });
+      out.set(id, { clip: a.clip, key: a.stream, clean, src: a.src, gain: a.gain + (prev?.gain || 0), speed: a.speed ?? 1 });
     }
     return out;
   }
@@ -332,7 +344,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
     const scrubbing = !isPlaying && performance.now() < scrubUntil;
     for (const [id, n] of active) {
       seen.add(id);
-      const entry = getEl(n.clip, n.key);
+      const entry = getEl(n.clip, n.key, n.clean);
       if (!entry) continue;
       if (entry.gain) applyFx(entry, n.clip, n.key);
       const el = entry.el;
@@ -383,7 +395,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
     for (const [id, n] of upcoming) {
       if (seen.has(id)) continue;
       seen.add(id);
-      const entry = getEl(n.clip, n.key);
+      const entry = getEl(n.clip, n.key, n.clean);
       if (!entry) continue;
       if (entry.gain) entry.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.015);
       if (!entry.el.paused) entry.el.pause();

@@ -64,7 +64,8 @@ export function angleTitle(project, mc, angleId) {
 /* Lyd: enkle innstillinger per kilde som blir vanlige lydeffekter på klippene. */
 
 // volumeKf: nøkkelbilder for nivået, [[tid i multicam-klippet, dB]], sortert. Tomt betyr fast nivå (volume).
-export const SOUND_DEFAULTS = { volume: 0, volumeKf: [], channels: 'both', gain: 0, eqPreset: 'flat', bass: 0, mid: 0, treble: 0, rumble: false, noise: false };
+// clean: AI Clean Voice, styrke 0 til 1, eller null når det er av. Samme Clean Voice som i redigeringen.
+export const SOUND_DEFAULTS = { volume: 0, volumeKf: [], clean: null, channels: 'both', gain: 0, eqPreset: 'flat', bass: 0, mid: 0, treble: 0, rumble: false, noise: false };
 export const CHANNEL_MODES = [
   { id: 'both', label: 'Both channels (as recorded)', mode: 0 },
   { id: 'left', label: 'Left channel only', mode: 1 },
@@ -104,7 +105,12 @@ export function soundEffects(sound) {
   return out;
 }
 
-export const isSoundDefault = (sound) => soundEffects(sound).length === 0 && !(sound?.volume);
+export const isSoundDefault = (sound) => soundEffects(sound).length === 0 && !(sound?.volume) && sound?.clean == null && !sound?.volumeKf?.length;
+
+// Lydstrømmene i en fil som har lyd. Clean Voice renser hver av dem.
+export function soundKeys(media) {
+  return Object.entries(media?.streams || {}).filter(([, s]) => s.hasAudio).map(([k]) => k);
+}
 
 // Legger lydinnstillingene på et klipp: nivået blir klippets volum, resten blir effekter først i kjeden.
 // Nivået ved tiden t i multicam-klippet, med rette linjer mellom nøkkelbildene.
@@ -122,9 +128,12 @@ export function soundLevelAt(sound, t) {
 
 // Legger lydinnstillingene på et klipp: nivået blir klippets volum (med nøkkelbilder i kildetid),
 // resten blir effekter først i kjeden.
-export function applySound(clip, sound, offset = 0) {
+export function applySound(clip, sound, offset = 0, keys = [clip.stream || 'main']) {
   const s = { ...SOUND_DEFAULTS, ...sound };
   clip.props.volume = s.volume;
+  // AI Clean Voice: samme innstilling som Audio-fanen i redigeringen (props.cleanVoice per lydstrøm).
+  if (s.clean != null) clip.props.cleanVoice = Object.fromEntries(keys.map((k) => [k, s.clean]));
+  else delete clip.props.cleanVoice;
   if (s.volumeKf.length) clip.kf = { ...clip.kf, volume: s.volumeKf.map(([t, v]) => [r6(t - offset), v, 'linear']) };
   else if (clip.kf?.volume) delete clip.kf.volume;
   clip.props.afx = [...soundEffects(s), ...(clip.props.afx || []).filter((e) => !String(e.id).startsWith('mc-'))];
@@ -606,7 +615,7 @@ export function buildMulticamClips(project, mc, { previous = [] } = {}) {
       if (!follow) c.props.audioOff = { ...(c.props.audioOff || {}), ...Object.fromEntries(audioStreamKeys(m).map((k) => [k, true])) };
       else {
         if (prev) c.props.audioOff = { ...(m.audioOff || {}) };
-        applySound(c, angleSound(angle), angle.offset);
+        applySound(c, angleSound(angle), angle.offset, soundKeys(m));
       }
       video.push(c);
     }
@@ -734,4 +743,15 @@ export function multicamMedia(project) {
   const set = new Set();
   for (const mc of Object.values(project.multicams || {})) for (const a of mc.angles) set.add(a.mediaId);
   return set;
+}
+
+// Tiden i multicam-klippet midt i et klipp på tidslinjen (for Active Video Angle i høyreklikkmenyen).
+export function multicamTimeOfClip(project, mc, clip) {
+  const angle = mc.angles.find((a) => a.id === clip?.multicam?.angle);
+  if (angle && clip.type !== 'gap') return clip.in + clip.dur / 2 + angle.offset;
+  // Mellomrom har ingen kilde: regn ut fra plasseringen i gruppen.
+  const members = Object.values(project.clips).filter((c) => c.multicam?.id === mc.id && c.type !== 'audio');
+  const first = members.sort((a, b) => a.start - b.start)[0];
+  const range = multicamRange(project, mc);
+  return range.in + (clip.start - (first?.start ?? clip.start)) + clip.dur / 2;
 }

@@ -7,7 +7,8 @@ import { addMask, canMask, removeMask } from '../../shared/shapes.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { effectWarning } from '../../shared/effectSupport.js';
 import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../../shared/videoEffects.js';
-import { createMulticamFromSelection, editMulticam, newMulticamClip } from './multicam.js';
+import { createMulticamFromSelection, editMulticam, newMulticamClip, setActiveAudioAngle, setActiveVideoAngle } from './multicam.js';
+import { angleHasAudio, angleLabel, isVideoAngle, multicamOfClip } from '../../shared/multicam.js';
 import { ALL_GROUPS, groupsWithContent, pasteAttributes, removeAttributes } from '../../shared/attributes.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
 import {
@@ -430,6 +431,15 @@ export function toggleComponent(clipId, key, on = null) {
     const q = p.clips[clipId];
     q.props.audioOff = { ...(q.props.audioOff || {}), [key]: !value };
     if (!q.props.audioOff[key]) delete q.props.audioOff[key];
+  });
+}
+
+// Clean Voice (AI-støyfjerning) for én lydkomponent: styrke 0 til 1, null slår det av.
+export function setCleanVoice(clipId, key, amount) {
+  commit((p) => {
+    const q = p.clips[clipId];
+    q.props.cleanVoice = { ...q.props.cleanVoice, [key]: amount };
+    if (amount == null) delete q.props.cleanVoice[key];
   });
 }
 
@@ -1387,7 +1397,25 @@ export async function clipContextMenu(clipId, T) {
   if (c.type === 'audio') items.push({ id: 'sync', label: 'Auto Sync Audio', accelerator: isMac ? 'Alt+Cmd+G' : 'Ctrl+Alt+G' });
   items.push({ separator: true });
   const multiVideo = selection.value.filter((sid) => project.value.clips[sid]?.type === 'video').length;
-  if (c.multicam) items.push({ id: 'editMulticam', label: 'Edit Multicam Clip' });
+  if (c.multicam) {
+    // Som i Final Cut Pro: bytt kamera eller lydkilde for klippet rett fra tidslinjen.
+    const mc = multicamOfClip(project.value, clipId);
+    if (mc) {
+      const pv = project.value;
+      const cams = mc.angles.filter((a) => isVideoAngle(pv, a));
+      const name = (a) => `${isVideoAngle(pv, a) ? `Camera ${angleLabel(pv, mc, a.id)}` : angleLabel(pv, mc, a.id)}: ${pv.media[a.mediaId]?.name || 'missing file'}`;
+      if (c.type !== 'audio') items.push({ label: 'Active Video Angle', submenu: cams.map((a) => ({ id: `mcv:${a.id}`, label: name(a), checked: c.multicam.angle === a.id })) });
+      items.push({
+        label: 'Active Audio Angle',
+        submenu: [
+          ...mc.angles.filter((a) => angleHasAudio(pv, a)).map((a) => ({ id: `mca:${a.id}`, label: name(a), checked: mc.audio === a.id })),
+          { separator: true },
+          { id: 'mca:follow', label: 'Follow the Picture', checked: mc.audio === 'follow' },
+        ],
+      });
+    }
+    items.push({ id: 'editMulticam', label: 'Edit Multicam Clip' });
+  }
   else if (multiVideo > 1 || (multiVideo === 1 && selection.value.length > 1)) items.push({ id: 'createMulticam', label: 'Create Multicam Clip…' });
   if (selection.value.length > 1) items.push({ id: 'group', label: 'Group Clips', accelerator: 'CmdOrCtrl+G' });
   if (c.group) items.push({ id: 'ungroup', label: 'Ungroup', accelerator: 'Shift+CmdOrCtrl+G' });
@@ -1421,6 +1449,8 @@ export async function clipContextMenu(clipId, T) {
     ],
   }, { separator: true });
   const id = await api.popupMenu(items);
+  if (id?.startsWith('mcv:')) return setActiveVideoAngle(clipId, id.slice(4));
+  if (id?.startsWith('mca:')) return setActiveAudioAngle(clipId, id.slice(4));
   if (id?.startsWith('color:')) return setClipColor(id === 'color:none' ? null : id.slice(6), sel);
   if (id?.startsWith('speed:')) return setSpeedSelected(Number(id.slice(6)));
   if (id?.startsWith('ramp:')) return applyRamp(id === 'ramp:none' ? null : id.slice(5));

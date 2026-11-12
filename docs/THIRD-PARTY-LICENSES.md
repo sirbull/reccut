@@ -32,6 +32,7 @@ also have their own license files in the installed application's resources.
 | Transformers.js and ONNX Runtime | Local inference | Apache 2.0 and MIT, with additional ONNX Runtime third-party notices. These runtime licenses are separate from model licenses. |
 | Whisper model weights | Local transcription | MIT. Converted models have their own repository and pinned revision, shown by the model manager. |
 | BiRefNet model weights | Background removal | The bundled model variants declare MIT. Their pinned revisions and original license texts are listed in the reader. |
+| DeepFilterNet 3 model | AI Clean Voice (noise removal) | MIT or Apache 2.0. Included with the app, checked with SHA-256, and runs on the computer. |
 | OpenMoji | Color and outline emoji | CC BY-SA 4.0. Preserve attribution, the license reference and applicable ShareAlike terms when adapting the artwork. |
 | Unicode data | Emoji names and sequences | Unicode License V3. System-style emoji are rendered with installed fonts. |
 | PDF.js | PDF import | Apache 2.0, plus the licenses for bundled fonts, character maps, color profiles and decoder components. These additional texts are included in the reader. |

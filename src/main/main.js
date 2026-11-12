@@ -725,6 +725,19 @@ ipcMain.handle('media:reanalyze', async (_e, items) => {
 ipcMain.handle('media:reverse', (_e, m) => {
   media.scheduleReverse(m, notifyAnalyzed);
 });
+// Clean Voice: renser en lydfil i bakgrunnen. Med mediaId meldes kopien som en analyse.
+const cleanTasks = new Map();
+ipcMain.handle('media:clean', (_e, { file, mediaId = null, stream = null }) => {
+  if (!cleanTasks.has(file)) {
+    const { done } = jobs.add({ kind: 'analyze', mediaId, title: `Removing background noise from ${path.basename(file)}`, queue: 'light', run: (ctx) => media.cleanAudio(file, ctx) });
+    cleanTasks.set(file, done);
+    done.finally(() => cleanTasks.delete(file)).catch(() => {});
+  }
+  return cleanTasks.get(file).then((cleaned) => {
+    if (mediaId) notifyAnalyzed({ mediaId, stream, patch: { cleaned } });
+    return cleaned;
+  });
+});
 // Malpakken: kopierer skriptene og beskrivelsen til en mappe brukeren velger, pluss eksempelmalen.
 ipcMain.handle('kit:save', async (_e, exampleJson) => {
   const r = await dialog.showOpenDialog(win, { title: 'Choose where to save the Reccut Template Kit', defaultPath: app.getPath('downloads'), properties: ['openDirectory', 'createDirectory'] });
@@ -1034,6 +1047,17 @@ ipcMain.handle('export:start', (_e, payload) => {
           ctx.progress(0, 'Creating reversed media');
           st.reversed = await media.reverseStream(st, ctx);
           notifyAnalyzed({ mediaId: m.id, stream: key, patch: { reversed: st.reversed } });
+        }
+      }
+      // Clean Voice: den rensede kopien lages nå hvis den ikke er klar.
+      for (const c of payload.settings.frame ? [] : Object.values(p.clips)) {
+        const m = !p.media[c.mediaId]?.offline && p.media[c.mediaId];
+        for (const [key, amount] of Object.entries((m && c.props?.cleanVoice) || {})) {
+          const st = m.streams[key];
+          if (!(amount > 0) || !st?.hasAudio || (st.cleaned && fs.existsSync(st.cleaned))) continue;
+          ctx.progress(0, 'Removing background noise');
+          st.cleaned = await media.cleanAudio(st.path, ctx);
+          notifyAnalyzed({ mediaId: m.id, stream: key, patch: { cleaned: st.cleaned } });
         }
       }
       return jobs.runInWorker('export', { ...payload, ffmpeg: ff.getFfmpegPath(), tmpDir: path.join(os.tmpdir(), 'reccut-export') }, ctx);

@@ -6620,3 +6620,12 @@ kbd.keycap {
 .mc-row-resize:hover {
   background: linear-gradient(transparent 2px, var(--accent) 2px, var(--accent) 4px, transparent 4px);
 }
+
+.mc-clean {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--bg-2);
+}

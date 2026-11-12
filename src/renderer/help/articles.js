@@ -932,6 +932,12 @@ Cameras often start and stop at different times. If the camera you cut to has no
 
 You can also right click a camera's clip and choose **Use as Fallback Camera**.
 
+### Change the angle by hand
+
+Right click anywhere in the multicam timeline and choose **Active Video Angle** to show another camera in the piece you clicked, without making a new cut. **Active Audio Angle** chooses where the sound comes from: one of the cameras, a separate audio file or **Follow the Picture**. The current choice has a check mark.
+
+The same menus are on the multicam clip in the Edit timeline. Right click a clip from the multicam clip and choose **Active Video Angle** or **Active Audio Angle**. The clip changes camera, or the sound changes, without opening the multicam window.
+
 ## The multicam timeline
 
 ![The multicam timeline. Sound at the top, then Program with the cuts, one track per camera, an empty track for a new camera and the separate sound at the bottom.](multicam-timeline.jpg)
@@ -1009,11 +1015,12 @@ Under **Properties**, choose the file in **Adjust** and set:
 - **EQ**: a starting point such as **Voice Boost** or **Podcast**, and **Bass**, **Mid** and **Treble** to adjust it.
 - **Remove rumble**: removes low noise from wind, traffic and handling.
 - **Reduce noise**: removes steady hiss and fan noise.
+- **AI Clean Voice**: removes background noise such as fans, traffic, hum and room sound from speech, with a **Strength** slider. The first time, Reccut cleans the sound in the background; you hear the original until it is done. It is the same AI Clean Voice as in the Audio tab in Edit, it runs on this computer and nothing is sent anywhere.
 - **Reset Sound** sets everything back.
 
-![From the left: Files in icon view, where a check mark shows the files that are already added. Properties with the camera to use when a camera has no picture and where the sound comes from. The sound settings for the separate recorder: Voice Boost, a little more bass and Remove rumble.](multicam-panels.jpg)
+![From the left: Files in icon view, where a check mark shows the files that are already added. Properties with the camera to use when a camera has no picture and where the sound comes from. The sound settings for the separate recorder: Voice Boost, a little more bass, Remove rumble and the AI Clean Voice switch.](multicam-panels.jpg)
 
-Nothing is changed automatically. You hear the settings while you play in the multicam window, and they follow the sound to the timeline as the clip level, keyframes and ordinary audio effects. You can fine tune them later in the Audio tab in Edit.
+Nothing is changed automatically. You hear the settings while you play in the multicam window, and they follow the sound to the timeline as the clip level, keyframes, AI Clean Voice and ordinary audio effects. You can fine tune them later in the Audio tab in Edit.
 
 ## Add it to the timeline
 

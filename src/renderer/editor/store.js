@@ -700,6 +700,22 @@ export function getWave(path) {
   return null;
 }
 
+// Clean Voice: lager den rensede kopien i bakgrunnen for lyd som har det slått på og mangler den.
+// Gjelder også angring og prosjekter der hurtigbufferen er tømt.
+const cleanRequested = new Set();
+effect(() => {
+  const p = project.value;
+  for (const c of Object.values(p.clips)) {
+    const m = p.media[c.mediaId];
+    for (const [key, amount] of Object.entries(c.props?.cleanVoice || {})) {
+      const st = m?.streams?.[key];
+      if (!(amount > 0) || m.offline || !st?.hasAudio || st.cleaned || cleanRequested.has(st.path)) continue;
+      cleanRequested.add(st.path);
+      api.cleanAudio({ file: st.path, mediaId: m.id, stream: key }).catch((err) => console.warn('Clean Voice failed', st.path, err));
+    }
+  }
+});
+
 // Locate: brukeren peker på dekoderen, og filene importeres på nytt.
 export function reportFailed(failed, missing = []) {
   if (!failed?.length && !missing?.length) return;
