@@ -2,6 +2,10 @@
 
 Status: implementasjon påbegynt 12. november 2026. Skrevet 11. november 2026 etter lyttetestene i `vendor/voice-tests/norwegian/lyttetest.html`.
 
+Utgivelsesmål: **Reccut 0.9.3**, med tagg **v0.9.3**. Versjonen er satt med
+`npm version 0.9.3 --no-git-tag-version`. Se [utgivelsesnotater og kontrollpunkter](releases/0.9.3.md)
+og [brukerveiledning for stemmene](AI-VOICES.md). Versjonssettingen publiserer ikke en utgivelse.
+
 Første implementasjon omfatter grunnlaget for fase 2–4:
 
 - Mac arm64-motor med statiske biblioteker og innebygd Metal, bygget fra låst revisjon, med CI-vedlegg og kontrollsum per utgivelse.
@@ -52,6 +56,12 @@ Verifisert første versjon: 100 ekte OGG-prøver er lagt i `assets/voice-samples
 Den ekte backend-en er også prøvd mot den installerte utviklingsprofilen, uten nett: engelsk Warm og norsk Sensual ga 48 kHz mono og riktig setningsfremdrift, og det andre språket brukte samme innlastede modell. [Kontrollresultat](voxcpm-first-version-check.json). Dette bekrefter integrasjonen, ikke feilfri uttale. Reproduser med `node scripts/test-voxcpm-installed.mjs "<installert voxcpm-mappe>"`.
 
 **Gjenstår for distribusjon:** CI-oppsettet må kjøres i GitHub, og motoren og referansevedleggene må publiseres med neste Reccut-utgivelse. Ingen utgivelse eller tagg er publisert i denne økten. Fase 9 (Windows/Linux) krever fortsatt ytelsesmåling; appen tilbyr VoxCPM på Apple Silicon.
+
+Kontroll for 0.9.3: Alle 871 tester består. Den lokale installasjonen er oppgradert
+til motoren for 0.9.3, med gjenbruk av eksisterende modell- og referansefiler,
+uten nett. Ekte generering med engelsk Warm og norsk Sensual, setningsfremdrift
+og gjenbruk av innlastet modell er bekreftet i [kontrollrapporten](voxcpm-0.9.3-check.json).
+Den tidligere rapporten for 0.9.2 beholdes som historisk resultat.
 
 Reproduser kontrollene uten å laste ned modeller:
 
@@ -216,7 +226,9 @@ Første gang brukeren åpner Voice Over Studio, kommer et vindu med alle stemmep
 6. **Brukerflate:** Gruppen i AI Voices, stemningsvelger og lydprøver.
 7. **Vedvarende motorprosess:** Modellen holdes i minnet, så lange manus går fortere.
 8. **Flere språk:** Svensk, dansk og tysk, med samme fremgangsmåte som i fase 1.
-9. **Windows og Linux:** Når hastigheten på CPU er målt og godtatt.
+9. **Windows og Linux:** Når hastigheten på CPU er målt og godtatt. Se
+   [gjennomføringsplan fra Windows](plan-voxcpm2-windows-linux.md) for verktøy,
+   separate CPU-bygg, målekrav, WSL-løype, appintegrasjon og utgivelsesfiler.
 
 ## Åpne spørsmål
 

@@ -1,6 +1,6 @@
 # Local AI voices in Voice Over Studio
 
-Open **Edit → Voice Over Studio**, then choose **AI Voice** in the side panel.
+Open **Voice Over Studio** from the **Edit** toolbar, then choose **AI Voice** in the side panel.
 Use **Record** to return to microphone recording. Each AI voice becomes a person
 with its own track, takes and sound settings.
 

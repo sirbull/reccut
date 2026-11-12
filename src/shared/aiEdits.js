@@ -2,7 +2,7 @@
 // and makes the edit, so documentation and behaviour cannot drift apart.
 import { makeVideoEffect } from './videoEffects.js';
 import { addMediaClip, autoFormat, bladeAt, deleteClips, moveClip, placeFree, setSpeed, setTransition, trimClip } from './ops.js';
-import { CAPTION_LANE, TITLE_TEMPLATES, TRANSITIONS, deepClone, makeClip, primaryAt, round, titleText, uid } from './model.js';
+import { CAPTION_LANE, TITLE_TEMPLATES, TRANSITIONS, audioComponents, deepClone, makeClip, primaryAt, round, titleText, uid } from './model.js';
 import { BUILTIN_TEMPLATES, TEMPLATE_FORMAT, templateDefaults, validateTemplate } from './titletemplates.js';
 import { fitCaptions } from './srt.js';
 import { FILM_IDS } from './filmLooks.js';
@@ -351,7 +351,7 @@ export const TOOLS = [
   {
     name: 'set_clip_properties',
     description:
-      `Change properties on one or many clips in one undo step. Any simple property shown by get_clip can be set with a value of the same type (for example x, y, scale, rotation, anchorX, anchorY (pixels from the centre of the clip, or of the PiP frame; scale and rotation pivot here), cameraOffsetX, cameraOffsetY (-1..1, moves the camera picture inside its PiP frame, 1 is right and down), title font, size, color, showCamera, pipSize). Colour (all -1..1, 0 is neutral): exposure (1 is +2 stops), contrast, highlights (negative recovers bright areas), shadows (positive lifts dark areas), saturation, temperature (positive warmer), tint (positive magenta, negative green). Colour wheels: liftX/liftY/liftL for shadows, gammaX/gammaY/gammaL for midtones, gainX/gainY/gainL for highlights; L is brightness, X/Y push the colour towards a hue at amount a: orange (0.5a, 0.87a), teal (-0.87a, -0.5a), red (0.87a, 0.5a), blue (0, -a), green (-0.87a, 0.5a), magenta (0.87a, -0.5a); a is usually 0.05 to 0.3. Other: opacity 0..1; volume, micVolume, sysVolume in dB -60..12 (0 unchanged; recordings: micVolume is camera/mic audio, sysVolume screen audio); blur 0..100 px; film: a film look id, or "" for none (${FILM_IDS.join(', ')}; ortho is red-blind black and white like The Lighthouse, bw* are black and white with a lens filter), with filmMix 0..1 for its strength (1 if not set); vFadeIn, vFadeOut, aFadeIn, aFadeOut in seconds; name; enabled (false hides and mutes); text and subtext for plain titles and captions.`,
+      `Change properties on one or many clips in one undo step. Any simple property shown by get_clip can be set with a value of the same type (for example x, y, scale, rotation, anchorX, anchorY (pixels from the centre of the clip, or of the PiP frame; scale and rotation pivot here), cameraOffsetX, cameraOffsetY (-1..1, moves the camera picture inside its PiP frame, 1 is right and down), title font, size, color, showCamera, pipSize). Colour (all -1..1, 0 is neutral): exposure (1 is +2 stops), contrast, highlights (negative recovers bright areas), shadows (positive lifts dark areas), saturation, temperature (positive warmer), tint (positive magenta, negative green). Colour wheels: liftX/liftY/liftL for shadows, gammaX/gammaY/gammaL for midtones, gainX/gainY/gainL for highlights; L is brightness, X/Y push the colour towards a hue at amount a: orange (0.5a, 0.87a), teal (-0.87a, -0.5a), red (0.87a, 0.5a), blue (0, -a), green (-0.87a, 0.5a), magenta (0.87a, -0.5a); a is usually 0.05 to 0.3. Other: opacity 0..1; volume, micVolume, sysVolume in dB -60..12 (0 unchanged; recordings: micVolume is camera/mic audio, sysVolume screen audio); blur 0..100 px; film: a film look id, or "" for none (${FILM_IDS.join(', ')}; ortho is red-blind black and white like The Lighthouse, bw* are black and white with a lens filter), with filmMix 0..1 for its strength (1 if not set); vFadeIn, vFadeOut, aFadeIn, aFadeOut in seconds; name; enabled (false hides and mutes); text and subtext for plain titles and captions; cleanVoice 0..1 (AI noise removal on speech: the microphone in recordings, the sound in video and audio clips; 1 is full strength, null turns it off; the cleaning runs once in the background).`,
     parameters: obj(
       {
         edits: {
@@ -375,6 +375,13 @@ export const TOOLS = [
             other.push([c, k, v || undefined]);
           } else if (k === 'name') numeric.push({ type: 'rename', clipId: c.id, name: v });
           else if (k === 'enabled' && typeof v === 'boolean') other.push([c, k, v]);
+          else if (k === 'cleanVoice') {
+            if (v !== null && !(typeof v === 'number' && v >= 0 && v <= 1)) throw new Error('cleanVoice must be 0..1, or null for off.');
+            // System audio in a screen recording is not speech; Clean Voice applies to the microphone.
+            const keys = audioComponents(c, p.media[c.mediaId]).map((x) => x.key).filter((key) => !(c.type === 'recording' && key === 'screen'));
+            if (!keys.length) throw new Error(`Clip ${c.id} has no speech audio for Clean Voice.`);
+            other.push([c, k, Object.fromEntries(Object.entries({ ...c.props.cleanVoice, ...Object.fromEntries(keys.map((key) => [key, v])) }).filter(([, x]) => x != null))]);
+          }
           else if (k === 'template') throw new Error('Add a new title to change its template.');
           else if (c.kf?.[k]?.length) throw new Error(`${k} on clip ${c.id} has keyframes. Edit those in the inspector.`);
           else other.push([c, k, checkPatch(c.props, { [k]: v }, `Clip ${c.id}`)[k]]);
@@ -392,6 +399,7 @@ export const TOOLS = [
     read(p, a) {
       const c = clipOf(p, a.clipId);
       const props = Object.fromEntries(Object.entries(c.props).filter(([, v]) => v === null || typeof v !== 'object' || (Array.isArray(v) && v.every((x) => typeof x !== 'object'))));
+      if (c.props.cleanVoice && Object.keys(c.props.cleanVoice).length) props.cleanVoice = c.props.cleanVoice;
       return { ...summary(p, c), properties: props, keyframed: Object.keys(c.kf || {}).filter((k) => c.kf[k]?.length), ...(c.props.fields ? { fields: c.props.fields } : {}) };
     },
   },

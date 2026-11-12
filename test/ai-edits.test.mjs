@@ -231,3 +231,16 @@ test('the story (brief, outline, documents, media notes) is saved in the project
   assert.equal(TOOL_MAP.get('get_story').read(p, { document: 'script.docx' }).text, 'ANNA\nHello there.');
   assert.throws(() => edit(p, 'set_story', { mediaNotes: { nope: 'x' } }));
 });
+
+test('the agent sets Clean Voice on speech, never on system audio, and null turns it off', () => {
+  const p = project();
+  p.media.r = { id: 'r', kind: 'recording', duration: 20, streams: { screen: { hasVideo: true, hasAudio: true }, camera: { hasVideo: true, hasAudio: true } } };
+  p.clips.r = { id: 'r', type: 'recording', mediaId: 'r', dur: 5, start: 0, in: 0, lane: 1, enabled: true, props: {}, kf: {} };
+  edit(p, 'set_clip_properties', { edits: [{ clipId: 'a', properties: { cleanVoice: 0.8 } }, { clipId: 'r', properties: { cleanVoice: 1 } }] });
+  assert.deepEqual(p.clips.a.props.cleanVoice, { main: 0.8 });
+  assert.deepEqual(p.clips.r.props.cleanVoice, { camera: 1 });
+  assert.equal(TOOL_MAP.get('get_clip').read(p, { clipId: 'r' }).properties.cleanVoice.camera, 1);
+  edit(p, 'set_clip_properties', { edits: [{ clipId: 'a', properties: { cleanVoice: null } }] });
+  assert.deepEqual(p.clips.a.props.cleanVoice, {});
+  assert.throws(() => edit(p, 'set_clip_properties', { edits: [{ clipId: 'a', properties: { cleanVoice: 2 } }] }));
+});

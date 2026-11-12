@@ -1,0 +1,38 @@
+{
+  "date": "2026-11-12",
+  "version": "0.9.3",
+  "packageVersion": "0.9.3",
+  "lockVersion": "0.9.3",
+  "about": {
+    "passed": true,
+    "runtimeVersion": "0.9.3",
+    "displayedVersion": "Version 0.9.3",
+    "screenshot": "../media/about-0.9.3.png"
+  },
+  "updateCheck": {
+    "current": "0.9.3",
+    "latestFixture": "0.9.3",
+    "newer": false,
+    "network": "fixture only"
+  },
+  "addOnVersionUrls": {
+    "interceptedRequests": [
+      "https://github.com/sirbull/reccut/releases/download/v0.9.3/reccut-keystrokes-mac.sha256",
+      "https://github.com/sirbull/reccut/releases/download/v0.9.3/reccut-voxcpm-mac.sha256"
+    ],
+    "network": "fixture only; no public release download attempted"
+  },
+  "tests": {
+    "command": "npm test",
+    "passed": 871,
+    "failed": 0
+  },
+  "build": "npm start rebuilt successfully",
+  "uiChecks": [
+    "scripts/test-voice-packages.cjs",
+    "scripts/test-voxcpm-picker.cjs"
+  ],
+  "realSynthesis": "../voxcpm-0.9.3-check.json",
+  "localVoxcpmChecksumPairsVerified": 11,
+  "publicReleaseAndPlatformChecks": "pending"
+}

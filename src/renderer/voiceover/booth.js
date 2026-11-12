@@ -650,7 +650,7 @@ export async function toggle() {
   if (status.value === 'idle') return record();
 }
 
-async function folder() {
+export async function folder() {
   const f = projectFolders.value || (await api.projectFolders(null).catch(() => null));
   const base = f?.recordings || (await api.baseDir());
   return `${base}${sep()}Voiceover`;

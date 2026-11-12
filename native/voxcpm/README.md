@@ -1,5 +1,11 @@
 # Optional VoxCPM2 engine
 
+User instructions: [AI voices](../../docs/AI-VOICES.md). Release target and
+artifact checklist: [Reccut 0.9.3](../../docs/releases/0.9.3.md).
+The [Windows/Linux phase 9 plan](../../docs/plan-voxcpm2-windows-linux.md)
+describes native Windows CPU work and a separate Linux/WSL test path; support
+is not enabled by creating that plan.
+
 `build-mac.sh <source checkout> <output directory>` builds Reccut's persistent
 stdio adapter against the VoxCPM2 runtime from the revision pinned in
 `src/main/ttsCatalog.json`. Requires an Apple Silicon
