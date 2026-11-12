@@ -701,7 +701,7 @@ Press A, click a clip, and drag it to reorder it or change its lane. Drag an edg
 
 ## Trim: roll, slip and slide
 
-Press T. Drag the edit between two adjacent clips to **roll** it: one clip grows while the other shrinks, keeping their combined duration. **Example:** move a cut later because the first shot ends too soon.
+Press T. Drag the shared edge between two adjacent clips on the same track to **roll** it: one clip grows while the other shrinks, keeping their combined duration and outer edges. This works on every video and audio track, including voice-over and the captions track. The clips must touch; an edge next to a gap trims only that clip. **Example:** move a cut later because the first shot ends too soon, or move the boundary between two captions without changing when the pair starts and ends.
 
 Drag inside a clip to **slip** its source content while its timeline position and duration stay fixed. **Example:** show a later part of a screen recording without changing the surrounding narration. Hold Option/Alt while dragging for a **slide**, which moves the clip and adjusts its neighbours. Available source material limits these edits.
 
@@ -796,7 +796,7 @@ When you cut through every clip in a group, the right hand pieces become a new g
 Drag the start or end of a clip to trim it. In the storyline, the following clips move along.
 
 - Trim Start ({{key:trimStart}}) and Trim End ({{key:trimEnd}}) trim the selected clip to the playhead.
-- With the Trim tool, drag an edit point to roll it, drag inside a clip to slip it, and hold Option (Alt) to slide it.
+- With the Trim tool, drag a shared edge to roll it on any video or audio track, including voice-over and captions. The outer edges stay fixed. Drag inside a media clip to slip it, and hold Option (Alt) to slide it on the main storyline.
 - With expanded audio you can drag the audio edges past the video, for J and L cuts.
 `,
     see: ['tools', 'audio'],

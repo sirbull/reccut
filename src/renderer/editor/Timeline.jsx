@@ -58,7 +58,7 @@ import {
   valueAt,
   removeKeyframe,
 } from '../../shared/model.js';
-import { groupLead, mediaClip, moveClip, positionMove, positionTrim, recordingEditId, removeTransition, rollEdit, setTransition, slideClip, slipClip, splitClip, syncRecordingTracks, trimClip } from '../../shared/ops.js';
+import { groupLead, mediaClip, moveClip, positionMove, positionTrim, recordingEditId, removeTransition, rollEdit, rollPair, setTransition, slideClip, slipClip, splitClip, syncRecordingTracks, trimClip } from '../../shared/ops.js';
 import {
   beginTransient,
   commitClipEdit as commit,
@@ -503,15 +503,17 @@ export function Timeline() {
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
+    if (tool.value === 'trim' && hit === 'edge') {
+      // Den felles kanten rulles i alle spor, inkludert CC. En fri ytterkant trimmes vanlig.
+      const pair = rollPair(proj, clip.id, el.dataset.edge);
+      if (pair && pair.every((id) => inEditingGroup(proj.clips[id]))) dragRef.current = { ...base, kind: 'roll', a: pair[0], b: pair[1], cut: proj.clips[pair[1]].start };
+      else dragRef.current = { ...base, kind: 'trim', edge: el.dataset.edge };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     if (tool.value === 'trim' && clip.type !== 'caption') {
-      // Trimverktøyet: kant mellom to klipp ruller kuttet, klippet selv slippes, Option glir.
-      const idx = proj.primary.indexOf(clip.id);
-      if (hit === 'edge' && clip.lane === 0) {
-        const pair = el.dataset.edge === 'end' ? [clip.id, proj.primary[idx + 1]] : [proj.primary[idx - 1], clip.id];
-        if (pair[0] && pair[1]) dragRef.current = { ...base, kind: 'roll', a: pair[0], b: pair[1], cut: proj.clips[pair[1]].start };
-        else dragRef.current = { ...base, kind: 'trim', edge: el.dataset.edge };
-      } else if (hit === 'edge') dragRef.current = { ...base, kind: 'trim', edge: el.dataset.edge };
-      else dragRef.current = { ...base, kind: e.altKey && clip.lane === 0 ? 'slide' : 'slip' };
+      // Inne i medieklipp slippes innholdet, Option glir i hovedsporet.
+      dragRef.current = { ...base, kind: e.altKey && clip.lane === 0 ? 'slide' : 'slip' };
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
