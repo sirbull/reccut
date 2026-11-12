@@ -8,7 +8,11 @@
 // cuts er sortert etter t. Hvert kutt gjelder fram til neste.
 // audio er id-en til vinkelen som har lyden, eller 'follow' for lyd fra vinkelen som vises.
 // range er { in, out } i multicam-tid, eller null for hele lengden.
+// fallback er vinkelen som brukes der den valgte ikke har bilde: 'auto' (første kamera med
+// bilde), 'none' (et hull) eller id-en til en vinkel.
+// angle.sound er lydinnstillingene for kilden (nivå, kanal, gain, EQ), se SOUND_DEFAULTS.
 
+import { EQ_PRESETS, makeEffect } from './audiofx.js';
 import { audioComponents, deepClone, makeClip, mediaClipType, uid, updateDuration, relayoutPrimary } from './model.js';
 import { ENV_RATE, findOffset, isConfident, mediaReference, prepareEnvelope } from './sync.js';
 import { deleteClips, groupMembers, withSync } from './ops.js';
@@ -42,6 +46,73 @@ export const isVideoAngle = (project, angle) => project.media[angle?.mediaId]?.k
 export const angleIndex = (mc, angleId) => mc.angles.findIndex((a) => a.id === angleId);
 export const angleNumber = (mc, angleId) => angleIndex(mc, angleId) + 1;
 
+// Kameraene nummereres 1, 2, 3 og lydkildene A1, A2, hver for seg. Talltastene gjelder kameraene.
+export const videoAngles = (project, mc) => mc.angles.filter((a) => isVideoAngle(project, a));
+export const audioOnlyAngles = (project, mc) => mc.angles.filter((a) => !isVideoAngle(project, a));
+export function angleLabel(project, mc, angleId) {
+  const a = mc.angles.find((x) => x.id === angleId);
+  if (!a) return '';
+  return isVideoAngle(project, a) ? String(videoAngles(project, mc).indexOf(a) + 1) : `A${audioOnlyAngles(project, mc).indexOf(a) + 1}`;
+}
+export function angleTitle(project, mc, angleId) {
+  const a = mc.angles.find((x) => x.id === angleId);
+  if (!a) return '';
+  const name = project.media[a.mediaId]?.name || 'missing file';
+  return isVideoAngle(project, a) ? `camera ${angleLabel(project, mc, angleId)} (${name})` : `audio ${angleLabel(project, mc, angleId)} (${name})`;
+}
+
+/* Lyd: enkle innstillinger per kilde som blir vanlige lydeffekter på klippene. */
+
+export const SOUND_DEFAULTS = { volume: 0, channels: 'both', gain: 0, eqPreset: 'flat', bass: 0, mid: 0, treble: 0, rumble: false, noise: false };
+export const CHANNEL_MODES = [
+  { id: 'both', label: 'Both channels (as recorded)', mode: 0 },
+  { id: 'left', label: 'Left channel only', mode: 1 },
+  { id: 'right', label: 'Right channel only', mode: 2 },
+  { id: 'swap', label: 'Swap left and right', mode: 3 },
+  { id: 'mono', label: 'Mix to mono', mode: 4 },
+];
+// Hvor mye Bass, Mid og Treble løfter hvert av de ti EQ-båndene (31 Hz til 16 kHz).
+const EQ_WEIGHTS = {
+  bass: [1, 1, 0.8, 0.4, 0.1, 0, 0, 0, 0, 0],
+  mid: [0, 0, 0.1, 0.4, 0.8, 1, 0.7, 0.3, 0, 0],
+  treble: [0, 0, 0, 0, 0, 0, 0.3, 0.7, 1, 1],
+};
+
+export function angleSound(angle) {
+  return { ...SOUND_DEFAULTS, ...(angle?.sound || {}) };
+}
+
+export function soundBands(sound) {
+  const base = EQ_PRESETS.find((x) => x.id === sound.eqPreset)?.g || EQ_PRESETS[0].g;
+  return base.map((g, i) => Math.max(-18, Math.min(18, Math.round((g + sound.bass * EQ_WEIGHTS.bass[i] + sound.mid * EQ_WEIGHTS.mid[i] + sound.treble * EQ_WEIGHTS.treble[i]) * 2) / 2)));
+}
+
+// Effektene for innstillingene, i fast rekkefølge og med faste id-er (mc-...), så de kan byttes
+// ut senere uten å røre effekter brukeren har lagt til selv i redigeringen.
+export function soundEffects(sound) {
+  const s = { ...SOUND_DEFAULTS, ...sound };
+  const out = [];
+  const add = (id, type, p) => out.push({ ...makeEffect(type, p), id: `mc-${id}` });
+  const ch = CHANNEL_MODES.find((x) => x.id === s.channels);
+  if (ch && ch.mode) add('channels', 'channels', { mode: ch.mode });
+  if (s.rumble) add('rumble', 'highpass', { freq: 80 });
+  if (s.noise) add('noise', 'denoise', { amount: 0.6 });
+  if (s.gain) add('gain', 'gain', { db: s.gain });
+  const bands = soundBands(s);
+  if (bands.some((g) => g !== 0)) add('eq', 'eq', Object.fromEntries(bands.map((g, i) => [`b${i}`, g])));
+  return out;
+}
+
+export const isSoundDefault = (sound) => soundEffects(sound).length === 0 && !(sound?.volume);
+
+// Legger lydinnstillingene på et klipp: nivået blir klippets volum, resten blir effekter først i kjeden.
+export function applySound(clip, sound) {
+  const s = { ...SOUND_DEFAULTS, ...sound };
+  clip.props.volume = s.volume;
+  clip.props.afx = [...soundEffects(s), ...(clip.props.afx || []).filter((e) => !String(e.id).startsWith('mc-'))];
+  return clip;
+}
+
 export function angleHasAudio(project, angle) {
   return Object.values(project.media[angle?.mediaId]?.streams || {}).some((s) => s.hasAudio);
 }
@@ -73,7 +144,7 @@ export function multicamRange(project, mc) {
 }
 
 export function newMulticam(name = 'Multicam Clip') {
-  return { id: uid(), name, angles: [], cuts: [], audio: null, range: null };
+  return { id: uid(), name, angles: [], cuts: [], audio: null, range: null, fallback: 'auto' };
 }
 
 // Den første vinkelen med bilde. Brukes når et kutt peker på noe som er borte.
@@ -103,6 +174,8 @@ export function addAngles(project, mc, mediaIds, { at = null } = {}) {
     const angle = { id: uid(), mediaId: id, offset: at ?? ext.start };
     mc.angles.push(angle);
     added.push(angle.id);
+    // Lyd tatt opp for seg (en ekstern opptaker) er vanligvis den beste lyden, så den tas i bruk.
+    if (m.kind === 'audio') mc.audio = angle.id;
   }
   tidy(project, mc);
   return { added, errors };
@@ -137,6 +210,7 @@ export function tidy(project, mc) {
     mc.audio = firstAudioAngle(project, mc);
   }
   if (mc.range && !(mc.range.out > mc.range.in)) mc.range = null;
+  if (!['auto', 'none'].includes(mc.fallback) && !(ids.has(mc.fallback) && isVideoAngle(project, mc.angles.find((a) => a.id === mc.fallback)))) mc.fallback = 'auto';
   return mc;
 }
 
@@ -241,14 +315,27 @@ export function segments(project, mc) {
   return out;
 }
 
+function covers(project, a, t) {
+  if (!a || !isVideoAngle(project, a)) return false;
+  const e = angleExtent(project, a);
+  return e.start <= t + EPS && t < e.end - EPS;
+}
+
+// Vinkelen som vises ved t når chosenId er valgt: den valgte, så reservesporet (mc.fallback),
+// så det første kameraet med bilde. Med fallback 'none' blir det et hull.
+function useAngle(project, mc, chosenId, t) {
+  const chosen = mc.angles.find((a) => a.id === chosenId);
+  if (covers(project, chosen, t)) return chosen;
+  if (mc.fallback === 'none') return null;
+  const fb = mc.angles.find((a) => a.id === mc.fallback);
+  if (covers(project, fb, t)) return fb;
+  return mc.angles.find((a) => covers(project, a, t)) || null;
+}
+
 // Bitene som faktisk vises. Har den valgte vinkelen ikke bilde et sted (den startet senere
-// eller sluttet før), brukes den første vinkelen som har bilde der, så det ikke blir svart.
+// eller sluttet før), brukes reservesporet, så det ikke blir svart.
 // fallback: true betyr at en annen vinkel enn den valgte vises. angle er null når ingen har bilde.
 export function programPieces(project, mc) {
-  const covers = (a, t) => {
-    const e = angleExtent(project, a);
-    return isVideoAngle(project, a) && e.start <= t + EPS && t < e.end - EPS;
-  };
   const edges = new Set();
   for (const a of mc.angles) {
     const e = angleExtent(project, a);
@@ -262,8 +349,7 @@ export function programPieces(project, mc) {
       const s = cuts[i];
       const e = cuts[i + 1];
       const mid = (s + e) / 2;
-      const chosen = mc.angles.find((a) => a.id === seg.angle);
-      const use = chosen && covers(chosen, mid) ? chosen : mc.angles.find((a) => covers(a, mid)) || null;
+      const use = useAngle(project, mc, seg.angle, mid);
       const piece = { start: s, end: e, angle: use?.id || null, chosen: seg.angle, fallback: Boolean(use && use.id !== seg.angle), index: seg.index };
       const prev = out[out.length - 1];
       if (prev && prev.angle === piece.angle && prev.chosen === piece.chosen && Math.abs(prev.end - s) < EPS) prev.end = e;
@@ -275,13 +361,7 @@ export function programPieces(project, mc) {
 
 // Vinkelen som vises ved t, med reserve som over.
 export function pictureAngleAt(project, mc, t) {
-  const covers = (a) => {
-    const e = angleExtent(project, a);
-    return isVideoAngle(project, a) && e.start <= t + EPS && t < e.end - EPS;
-  };
-  const chosen = mc.angles.find((a) => a.id === angleAt(mc, t));
-  if (chosen && covers(chosen)) return chosen.id;
-  return mc.angles.find(covers)?.id || null;
+  return useAngle(project, mc, angleAt(mc, t), t)?.id || null;
 }
 
 /* Automatisk synk: lyden i hver vinkel sammenlignes med de vinklene som allerede er synket. */
@@ -303,7 +383,7 @@ export function planMulticamSync(project, mc, waveFor) {
   const failures = [];
   const offsets = {};
   const env = new Map();
-  const label = (a) => `angle ${angleNumber(mc, a.id)} (${project.media[a.mediaId]?.name || 'missing file'})`;
+  const label = (a) => angleTitle(project, mc, a.id);
   const fail = (a, reason) => failures.push({ angleId: a.id, number: angleNumber(mc, a.id), name: project.media[a.mediaId]?.name || '', reason });
   for (const a of mc.angles) {
     const ref = angleAudioRef(project, a);
@@ -471,10 +551,13 @@ export function buildMulticamClips(project, mc, { previous = [] } = {}) {
       const c = makeClip(mediaClipType(m), { media: m, start: r6(s - range.in), in: r6(s - angle.offset), dur: r6(e - s) });
       const prev = oldProps.get(angle.id);
       if (prev) c.props = { ...c.props, ...deepClone(prev.props) };
-      c.name = `${mc.name} · Angle ${angleNumber(mc, angle.id)}`;
+      c.name = `${mc.name} · Camera ${angleLabel(project, mc, angle.id)}`;
       c.multicam = { id: mc.id, angle: angle.id };
       if (!follow) c.props.audioOff = { ...(c.props.audioOff || {}), ...Object.fromEntries(audioStreamKeys(m).map((k) => [k, true])) };
-      else if (prev) c.props.audioOff = { ...(m.audioOff || {}) };
+      else {
+        if (prev) c.props.audioOff = { ...(m.audioOff || {}) };
+        applySound(c, angleSound(angle));
+      }
       video.push(c);
     }
   }
@@ -495,6 +578,7 @@ export function buildMulticamClips(project, mc, { previous = [] } = {}) {
           if (prev) a.props = { ...a.props, ...deepClone(prev.props) };
           a.name = `${mc.name} audio${comps.length > 1 ? ` (${comp.label.toLowerCase()})` : ''}`;
           a.multicam = { id: mc.id, angle: angle.id };
+          applySound(a, angleSound(angle));
           if (comp.off) a.enabled = false;
           audio.push(a);
         }

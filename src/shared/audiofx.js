@@ -404,6 +404,25 @@ export const AUDIO_EFFECTS = {
       };
     },
   },
+  channels: {
+    label: 'Channels',
+    category: 'Repair',
+    desc: 'Choose which recorded channel to use, for example when a microphone was only on the left or right side, or swap the two sides.',
+    params: [P('mode', 'Use', 0, 4, 0, 1, '', { choices: [0, 1, 2, 3, 4], labels: ['Both', 'Left only', 'Right only', 'Swap sides', 'Mix to mono'] })],
+    create(p) {
+      let q = p;
+      return {
+        set: (x) => (q = x),
+        process(L, R, n) {
+          const mode = Math.round(q.mode);
+          if (mode === 1) for (let i = 0; i < n; i++) R[i] = L[i];
+          else if (mode === 2) for (let i = 0; i < n; i++) L[i] = R[i];
+          else if (mode === 3) for (let i = 0; i < n; i++) [L[i], R[i]] = [R[i], L[i]];
+          else if (mode === 4) for (let i = 0; i < n; i++) L[i] = R[i] = (L[i] + R[i]) / 2;
+        },
+      };
+    },
+  },
   stereo: {
     label: 'Pan and Width',
     category: 'Dynamics',

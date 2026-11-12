@@ -18,6 +18,7 @@ import {
   Rows3,
   Scissors,
   Search,
+  SlidersHorizontal,
   SkipBack,
   SkipForward,
   StretchHorizontal,
@@ -28,10 +29,17 @@ import {
   ZoomOut,
   Hand,
 } from 'lucide-preact';
-import { formatTimecode, workPath } from '../../shared/model.js';
+import { dbToGain, formatTimecode, workPath } from '../../shared/model.js';
+import { EQ_PRESETS } from '../../shared/audiofx.js';
+import { elementAudio } from '../player.js';
 import {
+  CHANNEL_MODES,
   MAX_HOTKEY_ANGLES,
+  SOUND_DEFAULTS,
   addAngles,
+  angleLabel,
+  angleSound,
+  audioOnlyAngles,
   angleColor,
   angleExtent,
   angleHasAudio,
@@ -52,24 +60,27 @@ import {
   removeAngle,
   removeCut,
   setAngleOffset,
+  soundEffects,
   switchSegment,
   tidy,
+  videoAngles as listVideoAngles,
 } from '../../shared/multicam.js';
 import { getWave, project, tasks, waveVersion } from './store.js';
 import { fileUrl } from './playback.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
 import { closeMulticam, multicamMenu, multicamSession, sendMulticamToTimeline } from './multicam.js';
-import { Button, IconButton, toast } from '../ui.jsx';
+import { Button, IconButton, Slider, Toggle, toast } from '../ui.jsx';
 import { isTyping } from '../keyboard.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
 const mod = isMac ? '⌘' : 'Ctrl+';
-const HEAD_W = 150;
+const HEAD_W = 200;
 const RULER_H = 22;
 const PROGRAM_H = 46;
 const ANGLE_H = 40;
+const AUDIO_HEAD_H = 22;
 const DRAG_TYPE = 'application/x-reccut-multicam';
 
 function stored(key, fallback, lo, hi) {
@@ -96,6 +107,20 @@ function fmtDur(t) {
   const m = Math.floor((t || 0) / 60);
   const s = Math.floor((t || 0) % 60);
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// Lyden fra hver vinkel går gjennom samme effektkjede som tidslinjen. Klarer ikke nettleseren
+// det, spilles lyden rett fra elementet uten effekter.
+function sinkFor(el) {
+  if (!el) return null;
+  if (el._mcSink !== undefined) return el._mcSink;
+  try {
+    el._mcSink = elementAudio(el);
+  } catch (err) {
+    console.warn('Multicam audio preview without effects', err);
+    el._mcSink = null;
+  }
+  return el._mcSink;
 }
 
 export function MulticamEditor() {
@@ -181,8 +206,15 @@ function MulticamWindow({ session }) {
 
   const ext = multicamExtent(p, mc);
   const range = multicamRange(p, mc);
-  const videoAngles = mc.angles.filter((a) => isVideoAngle(p, a));
+  const videoAngles = listVideoAngles(p, mc);
+  const audioOnly = audioOnlyAngles(p, mc);
   const audioSource = mc.audio === 'follow' ? active : mc.audio;
+  const [leftTab, setLeftTab] = useState('files');
+  const [soundTarget, setSoundTarget] = useState(null);
+  const openSound = (angleId) => {
+    setSoundTarget(angleId);
+    setLeftTab('properties');
+  };
 
   const clampT = (t) => Math.max(ext.start, Math.min(ext.end, t));
   const shownTime = () => (!play.current.on && skimRef.current != null ? skimRef.current : timeRef.current);
@@ -200,6 +232,7 @@ function MulticamWindow({ session }) {
     let t = timeRef.current;
     if (rate > 0 && t >= ext.end - frame) t = range.in;
     play.current = { on: true, rate, t0: t, now0: performance.now() };
+    for (const el of Object.values(els.current)) sinkFor(el)?.resume();
     skimRef.current = null;
     timeRef.current = t;
     setPlaying(true);
@@ -258,7 +291,15 @@ function MulticamWindow({ session }) {
         const dur = pr.media[a.mediaId]?.duration || 0;
         const inside = local >= 0 && local < dur;
         el.parentElement?.classList.toggle('outside', !inside);
-        el.muted = a.id !== audioId || !play.current.on;
+        // Bare kilden som har lyden høres, med nivået og effektene fra Properties.
+        const audible = a.id === audioId && play.current.on;
+        const sink = sinkFor(el);
+        if (sink) {
+          const sound = angleSound(a);
+          el.muted = false;
+          sink.setEffects(soundEffects(sound));
+          sink.setGain(audible ? dbToGain(sound.volume) : 0);
+        } else el.muted = !audible;
         if (!inside) {
           if (!el.paused) el.pause();
           continue;
@@ -345,12 +386,7 @@ function MulticamWindow({ session }) {
     const a = mcRef.current.angles.find((x) => x.id === angleId);
     if (!a) return;
     const t = timeRef.current;
-    if (!isVideoAngle(project.value, a)) {
-      if (!angleHasAudio(project.value, a)) return;
-      edit((m) => void (m.audio = a.id));
-      toast(`Audio now comes from angle ${angleIndex(mcRef.current, a.id) + 1}.`, { timeout: 1800 });
-      return;
-    }
+    if (!isVideoAngle(project.value, a)) return;
     const changed = edit((m) => (noCut ? switchSegment(project.value, m, t, angleId) : cutAndSwitch(project.value, m, t, angleId, { frame })));
     if (changed) {
       activeRef.current = pictureAngleAt(project.value, mcRef.current, t);
@@ -359,6 +395,22 @@ function MulticamWindow({ session }) {
   };
 
   const setAudio = (value) => edit((m) => void (m.audio = value));
+  const setFallback = (value) => edit((m) => void (m.fallback = value));
+  // Glidebrytere: første endring blir ett angresteg, resten av draget oppdaterer det samme steget.
+  const gesture = useRef(false);
+  const setSound = (angleId, patch) => {
+    const record = gesture.current !== 'moving';
+    if (gesture.current === 'start') gesture.current = 'moving';
+    edit((m) => {
+      const a = m.angles.find((x) => x.id === angleId);
+      if (!a) return false;
+      a.sound = { ...angleSound(a), ...patch };
+    }, { record });
+  };
+  const soundGesture = {
+    start: () => (gesture.current = 'start'),
+    end: () => (gesture.current = false),
+  };
 
   const addMedia = (ids) => {
     let result;
@@ -374,7 +426,7 @@ function MulticamWindow({ session }) {
 
   const autoSync = async () => {
     const m = mcRef.current;
-    if (m.angles.length < 2) return setNotice({ kind: 'warn', title: 'Nothing to synchronize', items: ['Add at least two angles first.'] });
+    if (m.angles.length < 2) return setNotice({ kind: 'warn', title: 'Nothing to synchronize', items: ['Add at least two files first.'] });
     setSyncing(true);
     try {
       const paths = [...new Set(m.angles.flatMap((a) => Object.values(project.value.media[a.mediaId]?.streams || {}).map((st) => st.wave)).filter(Boolean))];
@@ -387,11 +439,11 @@ function MulticamWindow({ session }) {
       if (plan.failures.length) {
         setNotice({
           kind: moved > 1 ? 'warn' : 'error',
-          title: moved > 1 ? `Synchronized ${moved} of ${total} angles. ${plan.failures.length === 1 ? 'One angle' : `${plan.failures.length} angles`} could not be synchronized.` : 'The angles could not be synchronized.',
+          title: moved > 1 ? `Synchronized ${moved} of ${total} files. ${plan.failures.length === 1 ? 'One file' : `${plan.failures.length} files`} could not be synchronized.` : 'The files could not be synchronized.',
           items: plan.failures.map((f) => f.reason),
         });
       } else {
-        setNotice({ kind: 'success', title: `All ${total} angles are synchronized by their audio.`, items: [] });
+        setNotice({ kind: 'success', title: `All ${total} files are synchronized by their audio.`, items: [] });
         setTimeout(() => setNotice((n) => (n?.kind === 'success' ? null : n)), 4000);
       }
     } finally {
@@ -453,7 +505,7 @@ function MulticamWindow({ session }) {
       const digit = /^(Digit|Numpad)([1-9])$/.exec(code);
       let handled = true;
       if (digit && !cmd) {
-        const a = m.angles[Number(digit[2]) - 1];
+        const a = listVideoAngles(project.value, m)[Number(digit[2]) - 1];
         if (a) cutTo(a.id, { noCut: e.shiftKey });
       } else if (e.key === ' ') togglePlay();
       else if (cmd && e.key.toLowerCase() === 'z') e.shiftKey ? redo() : undo();
@@ -555,7 +607,7 @@ function MulticamWindow({ session }) {
   };
 
   const gridRef = useRef(null);
-  const tile = useTileSize(gridRef, mc.angles.length);
+  const tile = useTileSize(gridRef, videoAngles.length);
   const audioLabel = mc.audio === 'follow' ? 'follow' : mc.audio || '';
 
   return (
@@ -591,8 +643,7 @@ function MulticamWindow({ session }) {
               e.currentTarget.blur();
             }}
           >
-            {mc.angles.map((a, i) => angleHasAudio(p, a) && <option key={a.id} value={a.id}>Audio from angle {i + 1}</option>)}
-            <option value="follow">Audio follows the picture</option>
+            <SoundSourceOptions mc={mc} />
           </select>
         </label>
         <span class="spacer" />
@@ -618,26 +669,41 @@ function MulticamWindow({ session }) {
         <div />
       )}
       <div class="mc-main" ref={mainRef} style={{ gridTemplateColumns: `${browserW}px 6px ${split}fr 6px ${1 - split}fr` }}>
-        <MulticamBrowser mc={mc} onAdd={addMedia} />
+        {leftTab === 'files' ? (
+          <MulticamBrowser mc={mc} onAdd={addMedia} head={<LeftTabs tab={leftTab} setTab={setLeftTab} />} />
+        ) : (
+          <MulticamProperties
+            mc={mc}
+            head={<LeftTabs tab={leftTab} setTab={setLeftTab} />}
+            target={soundTarget}
+            setTarget={setSoundTarget}
+            setAudio={setAudio}
+            setFallback={setFallback}
+            setSound={setSound}
+            gesture={soundGesture}
+            audioSource={audioSource}
+          />
+        )}
         <div class="mc-vsplit" onPointerDown={dragSplit('browser')} />
         <section class={`mc-angles${over ? ' drop' : ''}`} {...dropProps}>
           <div class="mc-pane-head">
             <b>Angles</b>
             <span>Click an angle or press its number to cut to it. Shift switches without cutting.</span>
           </div>
-          {mc.angles.length === 0 ? (
+          {videoAngles.length === 0 ? (
             <div class="mc-empty">
               <Film size={30} />
               <p>Add the clips from each camera.</p>
-              <p class="dim">Double click files on the left or drag them here. Then press Auto Sync.</p>
+              <p class="dim">Double click files on the left or drag them here. Audio recorded separately goes under the cameras. Then press Auto Sync.</p>
             </div>
           ) : (
             <div class="mc-grid" ref={gridRef} style={{ gridTemplateColumns: `repeat(${tile.cols}, ${tile.w}px)` }}>
-              {mc.angles.map((a, i) => (
+              {videoAngles.map((a, i) => (
                 <AngleTile
                   key={a.id}
                   angle={a}
                   index={i}
+                  color={angleColor(angleIndex(mc, a.id))}
                   media={p.media[a.mediaId]}
                   active={a.id === active}
                   audio={a.id === audioSource}
@@ -647,12 +713,19 @@ function MulticamWindow({ session }) {
               ))}
             </div>
           )}
+          {/* Lyd tatt opp for seg har ikke bilde, men trenger et element som spilles av. */}
+          <div class="mc-hidden-audio" aria-hidden="true">
+            {audioOnly.map((a) => {
+              const m = p.media[a.mediaId];
+              return m && <audio key={a.id} crossOrigin="anonymous" src={fileUrl(workPath(m.streams.main) || m.path)} preload="auto" ref={(el) => (el ? (els.current[a.id] = el) : delete els.current[a.id])} />;
+            })}
+          </div>
         </section>
         <div class="mc-vsplit" onPointerDown={dragSplit('views')} />
         <section class="mc-program">
           <div class="mc-pane-head">
             <b>Program</b>
-            <span>{active ? `Angle ${angleIndex(mc, active) + 1}` : 'No angle'} · this is what goes on the timeline</span>
+            <span>{active ? `Camera ${angleLabel(p, mc, active)}` : 'No picture'} · this is what goes on the timeline</span>
           </div>
           <div class="mc-program-box">
             <canvas ref={programRef} />
@@ -696,7 +769,8 @@ function MulticamWindow({ session }) {
         audioSource={audioSource}
         setAudio={setAudio}
         dropAngle={dropAngle}
-        videoAngles={videoAngles}
+        openSound={openSound}
+        addMedia={addMedia}
       />
     </div>
   );
@@ -729,20 +803,19 @@ function useTileSize(ref, n) {
 }
 
 /* Én rute i vinkelvisningen. Videoelementet her er også kilden til programbildet. */
-function AngleTile({ angle, index, media, active, audio, elRef, onPick }) {
-  const isVideo = media?.kind === 'video';
+function AngleTile({ angle, index, color, media, active, audio, elRef, onPick }) {
   const src = media ? fileUrl(workPath(media.streams.main) || media.path) : null;
   const hot = index < MAX_HOTKEY_ANGLES;
   return (
     <button
-      class={`mc-tile${active ? ' active' : ''}${isVideo ? '' : ' audio-only'}`}
-      style={{ '--angle': angleColor(index) }}
+      class={`mc-tile${active ? ' active' : ''}`}
+      style={{ '--angle': color }}
       onClick={onPick}
-      title={isVideo ? `Cut to angle ${index + 1}${hot ? ` (${index + 1})` : ''}. Shift-click switches without cutting.` : `Use the sound from angle ${index + 1}${hot ? ` (${index + 1})` : ''}`}
+      title={`Cut to camera ${index + 1}${hot ? ` (${index + 1})` : ''}. Shift-click switches without cutting.`}
     >
       <div class="mc-frame">
-        {isVideo ? <video ref={elRef} src={src} preload="auto" playsInline muted /> : <audio ref={elRef} src={src} preload="auto" />}
-        {!isVideo && <AudioLines size={28} />}
+        {/* crossOrigin før src, så lyden kan gå gjennom effektkjeden. */}
+        <video ref={elRef} crossOrigin="anonymous" src={src} preload="auto" playsInline />
         <span class="mc-outside">No picture here</span>
       </div>
       <span class="mc-badge">{index + 1}</span>
@@ -753,7 +826,125 @@ function AngleTile({ angle, index, media, active, audio, elRef, onPick }) {
 }
 
 /* Filene: liste, ikoner eller filmstriper. Dobbeltklikk eller dra for å legge til en vinkel. */
-function MulticamBrowser({ mc, onAdd }) {
+function LeftTabs({ tab, setTab }) {
+  return (
+    <div class="mc-tabs" role="tablist">
+      <button role="tab" aria-selected={tab === 'files'} class={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>Files</button>
+      <button role="tab" aria-selected={tab === 'properties'} class={tab === 'properties' ? 'active' : ''} onClick={() => setTab('properties')}>Properties</button>
+    </div>
+  );
+}
+
+// Valgene for hvor lyden kommer fra: hver kilde med lyd, eller lyd som følger bildet.
+function SoundSourceOptions({ mc }) {
+  const p = project.value;
+  return (
+    <>
+      {mc.angles.filter((a) => angleHasAudio(p, a)).map((a) => (
+        <option key={a.id} value={a.id}>
+          {isVideoAngle(p, a) ? `Sound from camera ${angleLabel(p, mc, a.id)}` : `Sound from ${angleLabel(p, mc, a.id)}`} ({p.media[a.mediaId]?.name})
+        </option>
+      ))}
+      <option value="follow">Sound follows the picture</option>
+    </>
+  );
+}
+
+/* Properties: reservesporet for bildet og enkle lydjusteringer per kilde. Alt gjøres for hånd. */
+function MulticamProperties({ mc, head, target, setTarget, setAudio, setFallback, setSound, gesture, audioSource }) {
+  const p = project.value;
+  const sources = mc.angles.filter((a) => angleHasAudio(p, a));
+  const cams = listVideoAngles(p, mc);
+  const current = sources.find((a) => a.id === target) || sources.find((a) => a.id === audioSource) || sources[0];
+  const sound = current ? angleSound(current) : SOUND_DEFAULTS;
+  const set = (patch) => current && setSound(current.id, patch);
+  const name = (a) => `${isVideoAngle(p, a) ? `Camera ${angleLabel(p, mc, a.id)}` : angleLabel(p, mc, a.id)} (${p.media[a.mediaId]?.name})`;
+  const db = (v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(1)} dB`;
+  const slider = (key, label, min, max, unit = db) => (
+    <div class="mc-prop">
+      <div class="mc-prop-label">
+        <span>{label}</span>
+        <span class="dim">{unit(sound[key])}</span>
+      </div>
+      <Slider value={sound[key]} min={min} max={max} step={0.5} center={0} onStart={gesture.start} onCommit={gesture.end} onInput={(v) => set({ [key]: v })} />
+    </div>
+  );
+  return (
+    <section class="mc-browser mc-properties">
+      <div class="mc-pane-head">{head}</div>
+      <div class="mc-props-body">
+        <h4>Picture</h4>
+        <label class="mc-prop">
+          <span>When a camera has no picture</span>
+          <select class="select" value={mc.fallback || 'auto'} onChange={(e) => setFallback(e.currentTarget.value)}>
+            <option value="auto">Use the first camera with a picture</option>
+            {cams.map((a) => (
+              <option key={a.id} value={a.id}>Use {name(a)}</option>
+            ))}
+            <option value="none">Leave a gap</option>
+          </select>
+          <span class="hint small">If the camera you cut to has not started yet or has ended, this camera is shown instead. If it has no picture either, the first camera with a picture is used.</span>
+        </label>
+
+        <h4>Sound</h4>
+        {sources.length === 0 ? (
+          <p class="hint small">None of the files have sound. Add a camera with sound or an audio file recorded separately.</p>
+        ) : (
+          <>
+            <label class="mc-prop">
+              <span>Sound comes from</span>
+              <select class="select" value={mc.audio || ''} onChange={(e) => setAudio(e.currentTarget.value)}>
+                <SoundSourceOptions mc={mc} />
+              </select>
+            </label>
+            <label class="mc-prop">
+              <span>Adjust</span>
+              <select class="select" value={current?.id} onChange={(e) => setTarget(e.currentTarget.value)}>
+                {sources.map((a) => (
+                  <option key={a.id} value={a.id}>{name(a)}{a.id === audioSource ? ' · in use' : ''}</option>
+                ))}
+              </select>
+            </label>
+            {slider('volume', 'Level', -30, 12)}
+            <label class="mc-prop">
+              <span>Channels</span>
+              <select class="select" value={sound.channels} onChange={(e) => set({ channels: e.currentTarget.value })}>
+                {CHANNEL_MODES.map((c) => (
+                  <option key={c.id} value={c.id}>{c.label}</option>
+                ))}
+              </select>
+              <span class="hint small">Use one side if a microphone was only recorded on the left or right channel.</span>
+            </label>
+            {slider('gain', 'Gain', -20, 20)}
+            <label class="mc-prop">
+              <span>EQ</span>
+              <select class="select" value={sound.eqPreset} onChange={(e) => set({ eqPreset: e.currentTarget.value })}>
+                {EQ_PRESETS.map((x) => (
+                  <option key={x.id} value={x.id}>{x.label}</option>
+                ))}
+              </select>
+            </label>
+            {slider('bass', 'Bass', -12, 12)}
+            {slider('mid', 'Mid', -12, 12)}
+            {slider('treble', 'Treble', -12, 12)}
+            <div class="mc-prop row">
+              <span>Remove rumble</span>
+              <Toggle checked={sound.rumble} onChange={(v) => set({ rumble: v })} />
+            </div>
+            <div class="mc-prop row">
+              <span>Reduce noise</span>
+              <Toggle checked={sound.noise} onChange={(v) => set({ noise: v })} />
+            </div>
+            <Button variant="secondary" onClick={() => set({ ...SOUND_DEFAULTS })}>Reset Sound</Button>
+            <p class="hint small">These settings go with the sound to the timeline, as the clip level and effects. Fine tune them later in the Audio tab in Edit.</p>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MulticamBrowser({ mc, onAdd, head }) {
   const p = project.value;
   const [view, setView] = useState(() => {
     try {
@@ -792,13 +983,13 @@ function MulticamBrowser({ mc, onAdd }) {
     onDragStart: (e) => dragStart(e, m.id),
     onClick: (e) => pick(e, m.id),
     onDblClick: () => onAdd([m.id]),
-    title: used.has(m.id) ? `${m.name} is already an angle` : `${m.name}. Double click or drag to add it as an angle.`,
+    title: used.has(m.id) ? `${m.name} is already added` : m.kind === 'audio' ? `${m.name}. Double click or drag to add it as separate sound.` : `${m.name}. Double click or drag to add it as a camera.`,
   });
   const Icon = (m) => (m.kind === 'audio' ? AudioLines : Film);
   return (
     <section class="mc-browser">
       <div class="mc-pane-head">
-        <b>Files</b>
+        {head}
         <span class="spacer" />
         <IconButton icon={List} title="List view" active={view === 'list'} onClick={() => choose('list')} />
         <IconButton icon={LayoutGrid} title="Icon view" active={view === 'grid'} onClick={() => choose('grid')} />
@@ -854,7 +1045,7 @@ function MulticamBrowser({ mc, onAdd }) {
       </div>
       <div class="mc-browser-foot">
         <Button variant="secondary" icon={Plus} disabled={!picked.length} onClick={() => onAdd(picked)}>
-          {picked.length > 1 ? `Add ${picked.length} Angles` : 'Add as Angle'}
+          {picked.length > 1 ? `Add ${picked.length} Files` : picked.length && p.media[picked[0]]?.kind === 'audio' ? 'Add as Sound' : 'Add as Camera'}
         </Button>
       </div>
     </section>
@@ -894,8 +1085,21 @@ function StripThumbs({ media, height, from = 0, to = null, width = null }) {
 
 /* Tidslinjen: programmet (kuttene) øverst og vinklene under, med samme verktøy som i redigeringen. */
 function MulticamTimeline(props) {
-  const { mc, edit, frame, pps, tool, setTool, snap, setSnap, skimming, setSkimming, selectedCut, setSelectedCut, timeRef, skimRef, seek, scrollRef, headRef, skimLineRef, zoomBy, fitZoom, setPps, audioSource, setAudio, dropAngle } = props;
+  const { mc, edit, frame, pps, tool, setTool, snap, setSnap, skimming, setSkimming, selectedCut, setSelectedCut, timeRef, skimRef, seek, scrollRef, headRef, skimLineRef, zoomBy, fitZoom, setPps, audioSource, setAudio, dropAngle, openSound, addMedia } = props;
   const p = project.value;
+  // Kameraene først, så en egen del for lyd tatt opp for seg (A1, A2 ...).
+  const rowList = [];
+  {
+    let y = RULER_H + PROGRAM_H;
+    const push = (row) => {
+      rowList.push({ ...row, y });
+      y += row.h;
+    };
+    for (const a of listVideoAngles(p, mc)) push({ kind: 'angle', angle: a, h: ANGLE_H });
+    push({ kind: 'audioHead', h: AUDIO_HEAD_H });
+    for (const a of audioOnlyAngles(p, mc)) push({ kind: 'angle', angle: a, h: ANGLE_H });
+  }
+  const [dropOver, setDropOver] = useState(false);
   const ext = multicamExtent(p, mc);
   const range = multicamRange(p, mc);
   const pieces = programPieces(p, mc);
@@ -933,8 +1137,8 @@ function MulticamTimeline(props) {
     const y = clientY - r.top;
     if (y < RULER_H) return { kind: 'ruler' };
     if (y < RULER_H + PROGRAM_H) return { kind: 'program' };
-    const i = Math.floor((y - RULER_H - PROGRAM_H) / ANGLE_H);
-    return i < mc.angles.length ? { kind: 'angle', angle: mc.angles[i] } : { kind: 'empty' };
+    const row = rowList.find((r) => y >= r.y && y < r.y + r.h);
+    return row?.kind === 'angle' ? row : { kind: 'empty' };
   };
 
   // Kuttet under pekeren, innenfor noen få piksler.
@@ -1065,7 +1269,8 @@ function MulticamTimeline(props) {
     return { step, out };
   }, [pps, ext.end]);
 
-  const rowsH = RULER_H + PROGRAM_H + mc.angles.length * ANGLE_H + 30;
+  const last = rowList[rowList.length - 1];
+  const rowsH = last.y + last.h + 30;
 
   return (
     <section class="mc-timeline">
@@ -1100,26 +1305,52 @@ function MulticamTimeline(props) {
               <b>Program</b>
               <span class="dim">What goes on the timeline</span>
             </div>
-            {mc.angles.map((a, i) => {
+            {rowList.map((r) => {
+              if (r.kind === 'audioHead') {
+                return (
+                  <div
+                    key="audio-head"
+                    class={`mc-tl-head audio-head${dropOver ? ' drop' : ''}`}
+                    style={{ height: r.h }}
+                    title="Drag an audio file here to add sound recorded separately"
+                    onDragOver={(e) => e.dataTransfer.types.includes(DRAG_TYPE) && (e.preventDefault(), setDropOver(true))}
+                    onDragLeave={() => setDropOver(false)}
+                    onDrop={(e) => {
+                      setDropOver(false);
+                      const raw = e.dataTransfer.getData(DRAG_TYPE);
+                      if (raw) addMedia(JSON.parse(raw));
+                    }}
+                  >
+                    <AudioLines size={12} />
+                    <b>Separate sound</b>
+                  </div>
+                );
+              }
+              const a = r.angle;
+              const i = angleIndex(mc, a.id);
               const m = p.media[a.mediaId];
               const hasAudio = angleHasAudio(p, a);
+              const label = angleLabel(p, mc, a.id);
+              const cam = isVideoAngle(p, a);
+              const hot = cam && Number(label) <= MAX_HOTKEY_ANGLES;
               return (
-                <div key={a.id} class="mc-tl-head" style={{ height: ANGLE_H }}>
-                  <span class="mc-num" style={{ background: angleColor(i) }} title={i < MAX_HOTKEY_ANGLES ? `Shortcut: ${i + 1}` : 'No shortcut'}>
-                    {i + 1}
+                <div key={a.id} class="mc-tl-head" style={{ height: r.h }}>
+                  <span class={`mc-num${cam ? '' : ' audio'}`} style={{ background: angleColor(i) }} title={hot ? `Shortcut: ${label}` : cam ? 'No shortcut' : 'Sound recorded separately'}>
+                    {label}
                   </span>
                   <span class="name" title={m?.name}>{m?.name || 'Missing file'}</span>
-                  {i < MAX_HOTKEY_ANGLES && <kbd title="Keyboard shortcut">{i + 1}</kbd>}
+                  {hot && <kbd title="Keyboard shortcut">{label}</kbd>}
                   <IconButton
                     icon={Headphones}
                     size={13}
                     class={audioSource === a.id ? 'on' : ''}
                     active={audioSource === a.id && mc.audio !== 'follow'}
                     disabled={!hasAudio}
-                    title={hasAudio ? 'Use the sound from this angle' : 'This angle has no sound'}
+                    title={hasAudio ? 'Use the sound from this file' : 'This file has no sound'}
                     onClick={() => setAudio(a.id)}
                   />
-                  <IconButton icon={X} size={13} title="Remove angle" onClick={() => dropAngle(a.id)} />
+                  <IconButton icon={SlidersHorizontal} size={13} disabled={!hasAudio} title="Adjust the sound in Properties" onClick={() => openSound(a.id)} />
+                  <IconButton icon={X} size={13} title="Remove" onClick={() => dropAngle(a.id)} />
                 </div>
               );
             })}
@@ -1151,14 +1382,15 @@ function MulticamTimeline(props) {
                 const m = p.media[a?.mediaId];
                 const x = s.start * pps;
                 const w = Math.max(1, (s.end - s.start) * pps);
-                const chosen = angleIndex(mc, s.chosen) + 1;
-                const title = !a ? `No angle has a picture here. This part becomes a gap.` : s.fallback ? `Angle ${chosen} has no picture here, so angle ${i + 1} is shown.` : `Angle ${i + 1}`;
+                const chosen = angleLabel(p, mc, s.chosen);
+                const label = a ? angleLabel(p, mc, a.id) : '';
+                const title = !a ? `No camera has a picture here. This part becomes a gap.` : s.fallback ? `Camera ${chosen} has no picture here, so camera ${label} is shown.` : `Camera ${label}`;
                 return (
                   <div key={`${s.index}-${s.start}`} class={`mc-seg${selectedCut === s.index ? ' selected' : ''}${s.fallback ? ' fallback' : ''}${a ? '' : ' empty'}`} style={{ left: x, width: w, '--angle': a ? angleColor(i) : '#333' }} title={title}>
                     {w > 40 && m && <StripThumbs media={m} height={PROGRAM_H - 18} from={s.start - a.offset} to={s.end - a.offset} width={w} />}
                     <span class="label">
-                      {a ? <b>{i + 1}</b> : <span>Gap</span>}
-                      {w > 70 && m && <span>{s.fallback ? `${m.name} (angle ${chosen} has no picture)` : m.name}</span>}
+                      {a ? <b>{label}</b> : <span>Gap</span>}
+                      {w > 70 && m && <span>{s.fallback ? `${m.name} (camera ${chosen} has no picture)` : m.name}</span>}
                     </span>
                   </div>
                 );
@@ -1167,7 +1399,10 @@ function MulticamTimeline(props) {
                 <div key={k} class={`mc-cut${selectedCut === k + 1 ? ' selected' : ''}`} style={{ left: c.t * pps }} />
               ))}
             </div>
-            {mc.angles.map((a, i) => {
+            {rowList.map((r) => {
+              if (r.kind === 'audioHead') return <div key="audio-head" class="mc-audio-head-row" style={{ top: r.y, height: r.h }} />;
+              const a = r.angle;
+              const i = angleIndex(mc, a.id);
               const m = p.media[a.mediaId];
               const e0 = angleExtent(p, a);
               const x = e0.start * pps;
@@ -1175,7 +1410,7 @@ function MulticamTimeline(props) {
               const isVideo = m?.kind === 'video';
               const wavePath = m?.kind === 'audio' ? m.streams.main?.wave : Object.values(m?.streams || {}).find((s) => s.hasAudio)?.wave;
               return (
-                <div key={a.id} class="mc-angle-row" style={{ top: RULER_H + PROGRAM_H + i * ANGLE_H, height: ANGLE_H }}>
+                <div key={a.id} class="mc-angle-row" style={{ top: r.y, height: r.h }}>
                   <div class={`mc-angle-bar${isVideo ? '' : ' audio'}${a.id === audioSource ? ' has-audio' : ''}`} style={{ left: x, width: w, '--angle': angleColor(i) }}>
                     {isVideo && w > 30 && <StripThumbs media={m} height={ANGLE_H - 16} width={w} />}
                     <WaveLine path={wavePath} width={w} height={14} duration={e0.end - e0.start} />

@@ -6120,7 +6120,7 @@ kbd.keycap {
 .mc-tl-heads {
   position: sticky;
   left: 0;
-  width: 150px;
+  width: 200px;
   z-index: 3;
   background: var(--bg-2);
   border-right: 1px solid var(--line);
@@ -6324,4 +6324,85 @@ kbd.keycap {
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.8);
   font: 11px 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/* Multicam: faner, Properties og egen lyd */
+.mc-tabs {
+  display: flex;
+  gap: 2px;
+}
+.mc-tabs button {
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.mc-tabs button.active {
+  background: var(--bg-4);
+  color: var(--text);
+}
+.mc-props-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mc-props-body h4 {
+  margin: 10px 0 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-3);
+}
+.mc-prop {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mc-prop.row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.mc-prop .select {
+  width: 100%;
+}
+.mc-prop-label {
+  display: flex;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+}
+.mc-props-body .hint {
+  margin: 0;
+  color: var(--text-3);
+}
+.mc-hidden-audio {
+  display: none;
+}
+.mc-tl-head.audio-head,
+.mc-audio-head-row {
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line);
+}
+.mc-tl-head.audio-head {
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+.mc-tl-head.audio-head.drop {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.mc-audio-head-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+.mc-num.audio {
+  font-size: 10px;
+  padding: 0 3px;
 }

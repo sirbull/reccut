@@ -867,7 +867,7 @@ A multicam clip holds the clips from several cameras that recorded at the same t
 - **From the timeline:** select the clips that lie on top of each other, right click and choose **Create Multicam Clip…**. Their positions and what was visible are kept.
 - **From scratch:** choose File › **New Multicam Clip…**, or right click an empty part of the timeline. Files you selected in the browser are added. Double click or drag more files from the list on the left. The file list has list, icon and filmstrip views.
 
-The angles are numbered **1, 2, 3** in the order they were added.
+The cameras are numbered **1, 2, 3** in the order they were added. Audio recorded separately is numbered **A1, A2**.
 
 ## Synchronize the angles
 
@@ -878,7 +878,25 @@ Press **Auto Sync**. Reccut compares the sound in each angle and lines them up. 
 - The **Angles** view shows all cameras at once. The **Program** view shows what goes on the timeline, and the active angle has a **green frame**.
 - Press **1** to **9**, or click an angle, to cut to it at the playhead. This works while the video plays, so you can switch cameras live.
 - **Shift** with a number (or Shift click) switches the angle of the current piece without making a new cut.
-- Choose where the sound comes from at the top: one angle for the whole clip, or **Audio follows the picture**. The headphones in each angle row do the same.
+
+## Sound
+
+Audio recorded separately, for example on an external recorder, is added like the cameras: double click it in the file list or drag it to **Separate sound** in the timeline. It is called **A1**, **A2** and so on, and is used for the sound straight away. Press Auto Sync to line it up with the cameras.
+
+Choose where the sound comes from at the top of the window or under **Properties**: one camera, one of the separate audio files, or **Sound follows the picture**. The headphones in each row do the same, and the sliders button opens its settings.
+
+Under **Properties** you adjust each sound source by hand:
+
+- **Level**: the volume of the clip.
+- **Channels**: both, left only, right only, swap the sides or mix to mono. Useful when a microphone was only recorded on one side.
+- **Gain**, an **EQ** preset, and **Bass**, **Mid** and **Treble**.
+- **Remove rumble** and **Reduce noise**.
+
+The settings go with the sound to the timeline as the clip level and ordinary audio effects, so you can fine tune them later in the Audio tab in Edit. You hear them while you play in the multicam window.
+
+## When a camera has no picture
+
+If the camera you cut to has not started yet or has already ended, another camera is shown so the video never goes black. Under **Properties**, choose which camera to fall back to, or **Leave a gap**. If the fallback camera has no picture either, the first camera with a picture is used. Pieces that use the fallback are striped in the Program track.
 
 ## Fine tune
 
@@ -1471,7 +1489,7 @@ Templates are ready made chains of effects that you can adjust afterwards.
 
 ## Effects
 
-- **Repair**: High Pass (rumble and wind), Hum Removal, Noise Reduction, Noise Gate, De-esser and Auto Level.
+- **Repair**: High Pass (rumble and wind), Hum Removal, Noise Reduction, Noise Gate, De-esser, Auto Level and Channels (left only, right only, swap or mono).
 - **EQ**: a 10 band Equalizer with a curve and presets such as Voice Boost, Podcast, Bass Boost and Clear Up Muddy, Low Pass and Band Pass.
 - **Dynamics**: Compressor, Limiter, Gain, and Pan and Width.
 - **Space**: Reverb and Echo (with ping pong).

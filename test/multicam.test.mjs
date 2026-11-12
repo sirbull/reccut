@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { makeClip, newProject } from '../src/shared/model.js';
 import {
   addAngles,
+  angleLabel,
+  angleSound,
+  soundEffects,
   angleAt,
   applyMulticamSync,
   bladeAt,
@@ -188,10 +191,51 @@ test('auto sync finds the offset between angles and explains the ones it could n
   const plan = planMulticamSync(p, mc, (path) => waves[path] || null);
   assert.ok(Math.abs(plan.offsets[mc.angles[1].id] - 3) < 0.02, `offset ${plan.offsets[mc.angles[1].id]}`);
   assert.deepEqual(plan.failures.map((f) => f.number), [3, 4]);
-  assert.match(plan.failures[0].reason, /angle 3 \(silent\.mp4\).*no audio/);
-  assert.match(plan.failures[1].reason, /angle 4 \(noise\.mp4\).*no matching sound/);
+  assert.match(plan.failures[0].reason, /camera 3 \(silent\.mp4\).*no audio/);
+  assert.match(plan.failures[1].reason, /camera 4 \(noise\.mp4\).*no matching sound/);
   applyMulticamSync(p, mc, plan.offsets);
   assert.equal(Math.min(...mc.angles.map((x) => x.offset)), 0);
   assert.equal(mc.angles[0].offset, 0);
   assert.ok(Math.abs(mc.angles[1].offset - 3) < 0.02);
+});
+
+test('a chosen fallback camera is used where the cut camera has no picture, or a gap with none', () => {
+  const p = setup();
+  const mc = mcWith(p);
+  const [A, B, C] = mc.angles.map((x) => x.id);
+  mc.angles[2].offset = 5; // camera 3 starts at 5 s
+  cutAndSwitch(p, mc, 2, C);
+  // Automatic: the first camera with a picture.
+  assert.equal(pictureAngleAt(p, mc, 3), A);
+  mc.fallback = B;
+  assert.equal(pictureAngleAt(p, mc, 3), B);
+  assert.deepEqual(buildMulticamClips(p, mc).video.slice(0, 3).map((c) => [c.mediaId, c.start, c.dur]), [['a', 0, 2], ['b', 2, 3], ['c', 5, 20]]);
+  mc.fallback = 'none';
+  assert.equal(pictureAngleAt(p, mc, 3), null);
+  assert.equal(buildMulticamClips(p, mc).video[1].type, 'gap');
+  // A fallback that is removed goes back to automatic.
+  mc.fallback = B;
+  mc.angles.splice(1, 1);
+  tidy(p, mc);
+  assert.equal(mc.fallback, 'auto');
+});
+
+test('external audio is labelled A1, becomes the sound, and its settings follow to the timeline', () => {
+  const p = setup();
+  p.media.rec = { id: 'rec', kind: 'audio', name: 'rec.wav', duration: 20, streams: { main: { path: '/m/rec.wav', hasAudio: true, wave: '/w/rec' } } };
+  const mc = mcWith(p, ['a', 'rec', 'b']);
+  const rec = mc.angles[1];
+  assert.deepEqual(mc.angles.map((x) => angleLabel(p, mc, x.id)), ['1', 'A1', '2']);
+  assert.equal(mc.audio, rec.id);
+  rec.sound = { volume: -3, channels: 'left', gain: 4, bass: -6, rumble: true };
+  const fx = soundEffects(angleSound(rec));
+  assert.deepEqual(fx.map((e) => e.type), ['channels', 'highpass', 'gain', 'eq']);
+  assert.equal(fx[0].p.mode, 1);
+  assert.equal(fx[3].p.b0, -6);
+  assert.equal(soundEffects({}).length, 0);
+  const { audio } = buildMulticamClips(p, mc);
+  assert.equal(audio.length, 1);
+  assert.equal(audio[0].mediaId, 'rec');
+  assert.equal(audio[0].props.volume, -3);
+  assert.deepEqual(audio[0].props.afx.map((e) => e.id), ['mc-channels', 'mc-rumble', 'mc-gain', 'mc-eq']);
 });
