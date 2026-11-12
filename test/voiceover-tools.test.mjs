@@ -15,7 +15,7 @@ const bundle = (await build({
   },
   bundle: true, write: false, format: 'cjs', platform: 'browser', jsx: 'automatic', jsxImportSource: 'preact',
   plugins: [{ name: 'studio-tools-fixture', setup(b) {
-    b.onResolve({ filter: /.*/ }, ({ path, importer }) => path.startsWith('../../shared/') || importer.includes('/src/shared/') ? undefined : { path, external: true });
+    b.onResolve({ filter: /.*/ }, ({ path, importer }) => path.startsWith('../../shared/') || importer.replaceAll('\\', '/').includes('/src/shared/') ? undefined : { path, external: true });
   } }],
 })).outputFiles[0].text;
 
