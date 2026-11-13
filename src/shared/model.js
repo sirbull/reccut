@@ -94,6 +94,13 @@ export const DEFAULT_CAPTION_STYLE = {
   x: 50,
   y: 90,
   maxLines: 3,
+  // Kortformat (se captionWords.js): store bokstaver, animasjon av ordet som blir sagt,
+  // inngang for hver undertekst og hvor mange ord nye undertekster deles i (0 = hele setninger).
+  uppercase: false,
+  anim: 'none',
+  highlightColor: '#ffd60a',
+  entrance: 'none',
+  chunkWords: 0,
 };
 
 // Effekter som kan legges på visuelle klipp. "prop" er egenskapen, med verdiområde.
@@ -1279,7 +1286,7 @@ export function computeFrame(project, T, { captions = true } = {}) {
       if (c.type === 'caption' && c.enabled && T >= c.start && T < c.start + c.dur) caps.push(c);
     }
   }
-  return { layers, captions: caps };
+  return { layers, captions: caps, T };
 }
 
 // Lydvinduet til et klipp: kan forlenges eller kortes inn i hver ende (utvidet lyd, J- og L-kutt).

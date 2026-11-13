@@ -48,6 +48,7 @@ import {
   outputGeometry,
 } from '../../shared/formats.js';
 import { createPlayer } from '../player.js';
+import { LOUDNESS_CEILING, LOUDNESS_TARGETS } from '../../shared/loudness.js';
 import { tasks } from '../editor/store.js';
 import { FrameRateWarning, SourceMediaChoice, defaultExportDir, exportCaptionsOnly, startExport } from '../editor/ExportDialog.jsx';
 import { ThumbnailChoice } from '../design/ThumbnailChoice.jsx';
@@ -101,6 +102,7 @@ function resolvedSettings(id) {
     quality: s.quality,
     bitrate: s.quality === 'custom' ? s.bitrate : 0,
     audioKbps: s.audioKbps,
+    loudness: s.loudness || 0,
     size: s.size,
     fit: s.fit,
     crop: so.crop,
@@ -469,6 +471,14 @@ export function ExportRoom({ active }) {
                   onChange={(v) => setSettings({ audioKbps: Number(v) })}
                 />
               </Row>
+            )}
+            {(s.audioOnly || videoFormat(s.format).audio) && (
+              <>
+                <Row label="Loudness" stacked>
+                  <Select value={String(s.loudness || 0)} options={LOUDNESS_TARGETS.map((x) => ({ value: String(x.value), label: x.label }))} onChange={(v) => setSettings({ loudness: Number(v) })} />
+                </Row>
+                {Boolean(s.loudness) && <p class="hint">The whole mix is measured and raised or lowered to {s.loudness} LUFS, with peaks kept under {LOUDNESS_CEILING} dBFS. Your timeline is not changed.</p>}
+              </>
             )}
           </Section>
 

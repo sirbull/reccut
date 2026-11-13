@@ -38,7 +38,7 @@ import * as commands from './commands.js';
 import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { startLibraryDrag } from './libraryDrag.js';
 import { newMulticamClip } from './multicam.js';
-import { CaptionStyleEditor } from './Inspector.jsx';
+import { CaptionPresets, CaptionStyleEditor } from './Inspector.jsx';
 import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
 import { prefs } from '../prefs.js';
 import { AUDIO_EFFECTS, AUDIO_FX_CATEGORIES, AUDIO_PRESETS, AUDIO_PRESET_CATEGORIES } from '../../shared/audiofx.js';
@@ -1249,6 +1249,9 @@ function CaptionsTab() {
           VTT
         </button>
       </div>
+      <Section title="Styles">
+        <CaptionPresets />
+      </Section>
       <div class="cap-list">
         {caps.length === 0 && <p class="dim center">No captions yet. Press {isMac ? 'Option' : 'Alt'} C to add one at the playhead.</p>}
         {caps.map((c) => {

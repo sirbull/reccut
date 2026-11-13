@@ -10,6 +10,7 @@ import { captionItems, toSrt, toVtt } from '../../shared/srt.js';
 import { startExportWithThumbnail } from '../design/videoThumbnail.js';
 import { ThumbnailChoice } from '../design/ThumbnailChoice.jsx';
 import { Button, Modal, Row, Segmented, Select, toast } from '../ui.jsx';
+import { LOUDNESS_TARGETS } from '../../shared/loudness.js';
 
 const api = window.api;
 const ICONS = { film: Film, globe: Globe, feather: Feather, apple: Apple, gem: Gem, image: ImageIcon, music: Music };
@@ -112,6 +113,8 @@ export function ExportDialog() {
   const [res, setRes] = useState(last?.res ?? base.res ?? 0);
   const [fps, setFps] = useState(base.fps || p.fps);
   const [sourceMedia, setSourceMedia] = useState(last?.sourceMedia || 'original');
+  // Lydstyrkemål i LUFS (0 = av). YouTube-forhåndsinnstillingen velger -14.
+  const [loudness, setLoudness] = useState(last?.loudness ?? base.loudness ?? 0);
   const [useRange, setUseRange] = useState(Boolean(p.range));
   const hasCaptions = Object.values(p.clips).some((c) => c.lane === CAPTION_LANE);
   const [captions, setCaptions] = useState(hasCaptions ? 'burn' : 'none');
@@ -128,6 +131,7 @@ export function ExportDialog() {
     setQuality(pr.quality);
     setRes(pr.res || 0);
     setFps(pr.fps || p.fps);
+    if (pr.loudness != null) setLoudness(pr.loudness);
   };
 
   const fmt = VIDEO_FORMATS.find((f) => f.id === format);
@@ -136,7 +140,7 @@ export function ExportDialog() {
   const a = useRange && p.range ? p.range.in : 0;
   const b = useRange && p.range ? p.range.out : p.duration;
   const duration = Math.max(0, b - a);
-  const settingsObj = { preset, format, audioFormat, quality, res, fps, audioOnly, sourceMedia };
+  const settingsObj = { preset, format, audioFormat, quality, res, fps, audioOnly, sourceMedia, loudness };
   const size = useMemo(() => estimateSize(settingsObj, duration, w, h), [preset, format, audioFormat, quality, res, fps, duration, w, h]);
   const ext = audioOnly ? afmt.ext : fmt.ext;
 
@@ -259,6 +263,11 @@ export function ExportDialog() {
           {!(audioOnly && (audioFormat === 'wav' || audioFormat === 'flac')) && format !== 'mov-prores' && (
             <Row label="Quality">
               <Segmented value={quality} onChange={setQuality} options={QUALITIES.map((q) => ({ value: q.id, label: q.label }))} />
+            </Row>
+          )}
+          {(audioOnly || fmt?.audio) && (
+            <Row label="Loudness">
+              <Select value={String(loudness)} options={LOUDNESS_TARGETS.map((x) => ({ value: String(x.value), label: x.label }))} onChange={(v) => setLoudness(Number(v))} />
             </Row>
           )}
           {p.range && (

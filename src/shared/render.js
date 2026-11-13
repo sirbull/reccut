@@ -10,6 +10,7 @@ import { drawTemplate, findTemplate } from './titletemplates.js';
 import { stabilizeAt } from './stabilize.js';
 import { imageRectAt } from './imageMotion.js';
 import { drawHighlight } from './highlight.js';
+import { activeWordIndex, captionWordTimes } from './captionWords.js';
 import { clipMatrix, clipPivot, maskList, paintMask, shapeAt, shapeCorners, shapePath } from './shapes.js';
 import {
   DEFAULT_CAPTION_STYLE,
@@ -72,7 +73,7 @@ export function drawFrame(ctx, project, frame, getSource, { scale = 1, matrix = 
     if (layer.transition) drawTransition(ctx, project, layer, getSource, transparent);
     else drawVisualSide(ctx, project, layer, getSource, 1);
   }
-  for (const c of frame.captions) drawCaption(ctx, project, c);
+  for (const c of frame.captions) drawCaption(ctx, project, c, frame.T);
   ctx.restore();
 }
 
@@ -1186,12 +1187,23 @@ export function captionLayout(project, clip, measure) {
   const H = project.height;
   const st = { ...DEFAULT_CAPTION_STYLE, ...(project.captionStyle || {}) };
   const k = H / 1080;
-  const size = st.size * k;
+  let size = st.size * k;
   const align = clip.props.align || st.align;
-  const font = `${st.weight} ${size}px ${fontFamily(st.font)}`;
-  const lines = measure(font, clip.props.text || '', W * 0.86).slice(0, st.maxLines || 3);
+  let font = `${st.weight} ${size}px ${fontFamily(st.font)}`;
+  const text = st.uppercase ? String(clip.props.text || '').toLocaleUpperCase() : clip.props.text || '';
+  const lines = measure(font, text, W * 0.86).slice(0, st.maxLines || 3);
+  let widths = lines.map((l) => measure(font, l));
+  // Et ord som er bredere enn bildet (stor skrift i 9:16) krymper teksten, så den aldri går utenfor kanten.
+  // Pop forstørrer ordet som blir sagt, så da trengs litt ekstra plass.
+  const room = W * (st.anim === 'pop' ? 0.92 / (1 + WORD_POP_SCALE * 1.1) : 0.92);
+  const widest = Math.max(0, ...widths);
+  if (widest > room) {
+    const f = room / widest;
+    size *= f;
+    font = `${st.weight} ${size}px ${fontFamily(st.font)}`;
+    widths = widths.map((w) => w * f);
+  }
   const lineH = size * 1.28;
-  const widths = lines.map((l) => measure(font, l));
   const blockW = Math.max(0, ...widths) + size * 0.7;
   const blockH = lines.length * lineH;
   let ax;
@@ -1207,7 +1219,13 @@ export function captionLayout(project, clip, measure) {
   return { st, k, size, align, font, lines, widths, lineH, blockW, blockH, ax, cy };
 }
 
-export function drawCaption(ctx, project, clip) {
+const CAPTION_ENTER = 0.18;
+const WORD_POP = 0.14;
+const WORD_POP_SCALE = 0.1;
+const easeOutBack = (t) => 1 + 2.4 * (t - 1) ** 3 + 1.4 * (t - 1) ** 2;
+
+// T er tiden på tidslinjen. Uten animasjon tegnes undertekstene som før, linje for linje.
+export function drawCaption(ctx, project, clip, T = clip.start) {
   const L = captionLayout(project, clip, (font, text, maxW) => {
     ctx.font = font;
     return maxW == null ? ctx.measureText(text).width : wrapText(ctx, text, maxW);
@@ -1222,6 +1240,23 @@ export function drawCaption(ctx, project, clip) {
   ctx.textBaseline = 'middle';
   const top = cy - blockH / 2;
   const padX = size * 0.35;
+  // Inngang: hver undertekst toner inn eller spretter inn når den starter.
+  const enter = st.entrance === 'fade' || st.entrance === 'pop' ? clamp((T - clip.start) / CAPTION_ENTER, 0, 1) : 1;
+  if (enter < 1) {
+    ctx.globalAlpha = st.entrance === 'fade' ? easeOutCubic(enter) : Math.min(1, enter * 2);
+    if (st.entrance === 'pop') {
+      const s = 0.72 + 0.28 * easeOutBack(enter);
+      const cx = align === 'left' ? ax + L.blockW / 2 : align === 'right' ? ax - L.blockW / 2 : ax;
+      ctx.translate(cx, cy);
+      ctx.scale(s, s);
+      ctx.translate(-cx, -cy);
+    }
+  }
+  if (st.anim && st.anim !== 'none') {
+    drawCaptionWords(ctx, clip, L, T);
+    ctx.restore();
+    return;
+  }
   if (st.bg) {
     ctx.fillStyle = hexAlpha(st.bgColor, st.bgOpacity ?? 0.72);
     lines.forEach((l, i) => {
@@ -1248,6 +1283,98 @@ export function drawCaption(ctx, project, clip) {
   ctx.fillStyle = st.color;
   lines.forEach((l, i) => ctx.fillText(l, ax, top + i * lineH + lineH / 2));
   ctx.restore();
+}
+
+// Animerte undertekster: hvert ord tegnes for seg, så ordet som blir sagt kan få egen farge,
+// sprette, få en boks bak seg eller dukke opp når det blir sagt. Ordene står på sin endelige plass hele tiden.
+function drawCaptionWords(ctx, clip, L, T) {
+  const { st, size, align, lines, widths, lineH, blockH, ax, cy, k } = L;
+  const times = captionWordTimes(clip);
+  const s = (clip.in || 0) + (T - clip.start);
+  const active = activeWordIndex(times, s);
+  const top = cy - blockH / 2;
+  const padX = size * 0.35;
+  const space = ctx.measureText(' ').width;
+  const hl = st.highlightColor || DEFAULT_CAPTION_STYLE.highlightColor;
+  const reveal = st.anim === 'reveal';
+  // Plassen til hvert ord, linje for linje.
+  const words = [];
+  let n = 0;
+  lines.forEach((line, li) => {
+    let x = align === 'left' ? ax : align === 'right' ? ax - widths[li] : ax - widths[li] / 2;
+    for (const text of line.split(' ').filter(Boolean)) {
+      const w = ctx.measureText(text).width;
+      words.push({ text, x, w, y: top + li * lineH + lineH / 2, li, i: n++ });
+      x += w + space;
+    }
+  });
+  const shown = (wd) => !reveal || wd.i <= active;
+  const since = (wd) => (times[wd.i] ? s - times[wd.i].a : 1);
+
+  if (st.bg) {
+    // Bakgrunnen dekker ordene som vises på hver linje.
+    ctx.fillStyle = hexAlpha(st.bgColor, st.bgOpacity ?? 0.72);
+    lines.forEach((_, li) => {
+      const row = words.filter((wd) => wd.li === li && shown(wd));
+      if (!row.length) return;
+      const x0 = row[0].x - padX;
+      const x1 = row.at(-1).x + row.at(-1).w + padX;
+      ctx.beginPath();
+      ctx.roundRect(x0, top + li * lineH, x1 - x0, lineH, size * 0.15);
+      ctx.fill();
+    });
+  }
+
+  ctx.textAlign = 'left';
+  const drawWord = (wd) => {
+    const isActive = wd.i === active;
+    const t = clamp(since(wd) / WORD_POP, 0, 1);
+    let scale = 1;
+    let alpha = 1;
+    if (st.anim === 'pop' && isActive) scale = 1 + WORD_POP_SCALE * easeOutBack(t);
+    if (reveal) {
+      alpha = easeOutCubic(t);
+      scale = 0.85 + 0.15 * easeOutBack(t);
+    }
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    if (scale !== 1) {
+      const cx = wd.x + wd.w / 2;
+      ctx.translate(cx, wd.y);
+      ctx.scale(scale, scale);
+      ctx.translate(-cx, -wd.y);
+    }
+    if (st.anim === 'box' && isActive) {
+      const pad = size * 0.16;
+      const grow = 0.9 + 0.1 * easeOutBack(t);
+      const bw = (wd.w + pad * 2) * grow;
+      const bh = lineH * 0.92 * grow;
+      ctx.fillStyle = hl;
+      ctx.beginPath();
+      ctx.roundRect(wd.x + wd.w / 2 - bw / 2, wd.y - bh / 2, bw, bh, size * 0.18);
+      ctx.fill();
+    }
+    if (st.shadow) {
+      ctx.shadowColor = 'rgba(0,0,0,0.85)';
+      ctx.shadowBlur = size * 0.25;
+      ctx.shadowOffsetY = size * 0.05;
+    }
+    if (st.outlineWidth > 0) {
+      ctx.lineWidth = st.outlineWidth * k * 2;
+      ctx.lineJoin = 'round';
+      ctx.miterLimit = 2;
+      ctx.strokeStyle = st.outlineColor;
+      ctx.strokeText(wd.text, wd.x, wd.y);
+      ctx.shadowColor = 'transparent';
+    }
+    ctx.fillStyle = isActive && st.anim !== 'box' ? hl : st.color;
+    ctx.fillText(wd.text, wd.x, wd.y);
+    ctx.restore();
+  };
+  // Ordet som blir sagt tegnes sist, så det ligger over naboene når det spretter.
+  for (const wd of words) if (wd.i !== active && shown(wd)) drawWord(wd);
+  const cur = words.find((wd) => wd.i === active);
+  if (cur) drawWord(cur);
 }
 
 export function fontFamily(f) {

@@ -1,5 +1,6 @@
 // Redigeringsoperasjoner på tidslinjen. Alle muterer et prosjektobjekt direkte;
 // redigeringsvisningen kloner før og lagrer historikk for angre.
+import { splitCaptionAt, splitCaptionWords } from './captionWords.js';
 import {
   FRAME_RATES,
   deepClone,
@@ -369,6 +370,8 @@ export function splitClip(project, id, T, independent = false) {
   const r = kfRate(c);
   const off = srcOffset(c, local);
   const total = srcLen(c);
+  // En undertekst med ordtider deles mellom ordene: hver side beholder ordene som blir sagt der.
+  const captionParts = c.type === 'caption' ? splitCaptionAt(c, (c.in || 0) + local) : null;
   const right = deepClone(c);
   right.id = uid();
   right.start = round(T);
@@ -400,6 +403,10 @@ export function splitClip(project, id, T, independent = false) {
   right.props.aFadeIn = 0;
   right.props.aLead = 0;
   c.dur = round(local);
+  if (captionParts) {
+    Object.assign(c.props, captionParts.left);
+    Object.assign(right.props, captionParts.right);
+  }
   c.props.vFadeOut = 0;
   c.props.aFadeOut = 0;
   c.props.aTail = 0;
@@ -419,6 +426,34 @@ export function splitClip(project, id, T, independent = false) {
   }
   if (!independent) syncRecordingTracks(project);
   return right.id;
+}
+
+// Kortformat: deler undertekstene (alle, eller de valgte) i biter på høyst maxWords ord, med egne ordtider.
+// Plassering, justering og gruppe følger med. Returnerer hvor mange undertekster som ble til hvor mange.
+export function splitCaptions(project, maxWords = 3, ids = null) {
+  const pick = ids ? new Set(ids) : null;
+  let before = 0;
+  let after = 0;
+  for (const c of Object.values(project.clips)) {
+    if (c.type !== 'caption' || c.lane !== CAPTION_LANE || (pick && !pick.has(c.id))) continue;
+    const parts = splitCaptionWords(c, maxWords);
+    if (!parts) continue;
+    before++;
+    after += parts.length;
+    delete project.clips[c.id];
+    for (const part of parts) {
+      const n = deepClone(c);
+      n.id = uid();
+      n.start = part.start;
+      n.dur = part.dur;
+      n.in = 0;
+      n.kf = {};
+      n.props = { ...n.props, text: part.text, words: part.words };
+      project.clips[n.id] = n;
+    }
+  }
+  updateDuration(project);
+  return { before, after };
 }
 
 // Kutt alle (eller de valgte) klippene som ligger under tidspunktet.

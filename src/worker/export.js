@@ -8,7 +8,8 @@ import { drawFrame } from '../shared/render.js';
 import { AUDIO_FORMATS, QUALITIES, audioKbps, outputGeometry, videoBitrate, videoFormat } from '../shared/formats.js';
 import { FRAME_FORMATS, frameExportSettings, frameGeometry } from '../shared/frameExport.js';
 import { captionItems, toSrt, toVtt } from '../shared/srt.js';
-import { cleanAmount, cleanNoiseGain, componentEffects, createChain } from '../shared/audiofx.js';
+import { cleanAmount, cleanNoiseGain, componentEffects, createChain, makeEffect } from '../shared/audiofx.js';
+import { LOUDNESS_CEILING, LoudnessMeter, normalizeTo } from '../shared/loudness.js';
 
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
@@ -185,6 +186,68 @@ function applyEffectsToFile(file, afx, check) {
   fs.closeSync(inFd);
   fs.closeSync(outFd);
   fs.renameSync(outFile, file);
+}
+
+/* Lydstyrke (LUFS) */
+
+const WAV_HEADER = 44;
+
+// Måler den integrerte lydstyrken i miksen (32-bit float stereo fra mixAudio).
+function measureWav(wavPath, check) {
+  const meter = new LoudnessMeter(RATE);
+  const fd = fs.openSync(wavPath, 'r');
+  const total = Math.floor((fs.statSync(wavPath).size - WAV_HEADER) / 8);
+  const buf = Buffer.alloc(RATE * 8);
+  const L = new Float32Array(RATE);
+  const R = new Float32Array(RATE);
+  for (let read = 0; read < total; read += RATE) {
+    check();
+    const n = Math.min(RATE, total - read);
+    fs.readSync(fd, buf, 0, n * 8, WAV_HEADER + read * 8);
+    const f = new Float32Array(buf.buffer, buf.byteOffset, n * 2);
+    for (let i = 0; i < n; i++) {
+      L[i] = f[i * 2];
+      R[i] = f[i * 2 + 1];
+    }
+    meter.push(L, R, n);
+  }
+  fs.closeSync(fd);
+  return meter;
+}
+
+// Forsterker eller demper miksen og tar toppene med limiteren, med samme kode som lydeffektene.
+// Kopierer fra en fil til en annen i biter, så lange prosjekter ikke må ligge i minnet.
+function copyChunks(from, to, fromOffset, header = null) {
+  const inFd = fs.openSync(from, 'r');
+  const outFd = fs.openSync(to, 'w');
+  if (header) fs.writeSync(outFd, header);
+  const buf = Buffer.alloc(1 << 22);
+  let pos = fromOffset;
+  for (;;) {
+    const n = fs.readSync(inFd, buf, 0, buf.length, pos);
+    if (!n) break;
+    fs.writeSync(outFd, buf, 0, n);
+    pos += n;
+  }
+  fs.closeSync(inFd);
+  fs.closeSync(outFd);
+}
+
+function gainWav(wavPath, gainDb, check) {
+  const raw = `${wavPath}.f32`;
+  const header = Buffer.alloc(WAV_HEADER);
+  const fd = fs.openSync(wavPath, 'r');
+  fs.readSync(fd, header, 0, WAV_HEADER, 0);
+  fs.closeSync(fd);
+  copyChunks(wavPath, raw, WAV_HEADER);
+  applyEffectsToFile(raw, [makeEffect('limiter', { ceiling: LOUDNESS_CEILING, gain: gainDb, release: 80 })], check);
+  copyChunks(raw, wavPath, 0, header);
+  fs.rmSync(raw, { force: true });
+}
+
+// Normaliserer miksen til målet (for eksempel -14 LUFS), med samme løkke som testene bruker.
+function normalizeLoudness(wavPath, target, check = () => {}) {
+  return normalizeTo(target, () => measureWav(wavPath, check).integrated(), (gain) => gainWav(wavPath, gain, check));
 }
 
 // Dekoder hver lydkilde til en rå fil, og mikser så blokk for blokk med riktig volum.
@@ -750,6 +813,10 @@ async function runExport(jobId, payload) {
       const fmt = AUDIO_FORMATS.find((x) => x.id === settings.audioFormat) || AUDIO_FORMATS[0];
       progress(jobId, 0, 'Mixing audio');
       await mixAudio(jobId, ctx, a, b, wavPath, (p) => progress(jobId, p * 0.8, 'Mixing audio'));
+      if (settings.loudness) {
+        progress(jobId, 0.8, 'Normalizing loudness');
+        normalizeLoudness(wavPath, settings.loudness, () => checkCancel(jobId));
+      }
       const args = ['-i', wavPath, '-c:a', fmt.ffCodec];
       const ak = audioKbps(settings);
       if (['libmp3lame', 'aac', 'libopus'].includes(fmt.ffCodec)) args.push('-b:a', `${fmt.ffCodec === 'libopus' ? Math.min(256, ak) : ak}k`);
@@ -768,6 +835,10 @@ async function runExport(jobId, payload) {
     if (hasAudio) {
       progress(jobId, 0, 'Mixing audio');
       await mixAudio(jobId, ctx, a, b, wavPath, (p) => progress(jobId, p * 0.15, 'Mixing audio'));
+      if (settings.loudness) {
+        progress(jobId, 0.15, 'Normalizing loudness');
+        normalizeLoudness(wavPath, settings.loudness, () => checkCancel(jobId));
+      }
     }
     let useWebCodecs = false;
     if (fmt.codec && !settings.forceFfmpeg) {

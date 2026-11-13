@@ -83,10 +83,10 @@ export const AUDIO_FORMATS = [
 
 export const PRESETS = [
   { id: 'standard', label: 'Standard', desc: 'MP4 H.264 at full quality. Works for almost anything.', format: 'mp4-h264', quality: 'high', icon: 'film' },
-  { id: 'web', label: 'YouTube and Web', desc: 'MP4 H.264 at 1080p with a good balance of quality and size.', format: 'mp4-h264', quality: 'medium', res: 1080, icon: 'globe' },
+  { id: 'web', label: 'YouTube and Web', desc: 'MP4 H.264 at 1080p with a good balance of quality and size, and sound at -14 LUFS.', format: 'mp4-h264', quality: 'medium', res: 1080, loudness: -14, icon: 'globe' },
   { id: 'small', label: 'Smallest File', desc: 'AV1, a small file with high quality.', format: 'mp4-av1', quality: 'medium', icon: 'feather' },
   { id: 'hevc', label: 'Apple Devices', desc: 'HEVC, half the size of H.264.', format: 'mp4-hevc', quality: 'high', icon: 'apple' },
-  { id: 'master', label: 'Master', desc: 'ProRes 422 for further editing in Final Cut Pro.', format: 'mov-prores', quality: 'high', icon: 'gem' },
+  { id: 'master', label: 'Master', desc: 'ProRes 422 for further editing in Final Cut Pro.', format: 'mov-prores', quality: 'high', loudness: 0, icon: 'gem' },
   { id: 'gif', label: 'GIF', desc: 'Animated GIF at 720p, no audio.', format: 'gif', quality: 'medium', res: 720, fps: 15, icon: 'image' },
   { id: 'audio', label: 'Audio Only', desc: 'MP3, AAC, WAV, FLAC or Opus.', audioOnly: true, audioFormat: 'mp3', quality: 'high', icon: 'music' },
 ];

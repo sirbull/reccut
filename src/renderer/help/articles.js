@@ -1424,11 +1424,44 @@ Import the template ({{key:importTemplate}}), drop the .reccut-title file on Rec
     section: 'Editing',
     title: 'Captions',
     summary: 'Subtitles with full styling, import, export and automatic captions.',
-    keywords: 'captions subtitles srt vtt transcribe whisper',
+    keywords: 'captions subtitles srt vtt transcribe whisper shorts reels tiktok short-form animated word by word karaoke highlight pop',
     body: `
 Add Caption ({{key:addCaption}}) adds a caption at the playhead. Double click an empty spot on the caption track to add one that starts there. The Captions tab ({{key:browser:captions}}) generates captions automatically from speech, and imports and exports SRT and WebVTT. Captions can have one to three lines, any font, color, outline and background, and can be placed anywhere. When exporting, burn them in, embed them, or save them as a separate file.
 
 Captions keep their own timing when video clips are moved, trimmed or deleted. You can add text without selecting a video clip. Type directly in the inspector, drag a caption along the caption track to change its time, or drag it in the viewer to change its position. Only explicit grouping makes a caption follow a video clip. While an input field has focus, editor shortcuts are disabled so you can type freely.
+
+## Styles
+
+Under **Styles** in the Captions tab, click a style to use it for all captions. Hover a style to see it move. The styles come in two groups.
+
+**Subtitles** are full sentences at the bottom of the picture:
+
+- **Classic**: white text on a dark box.
+- **Yellow Outline**: yellow text with a black outline, like DVD subtitles.
+- **White Outline**: white text with a black outline, readable on any picture.
+- **Soft Shadow**: clean white text with a soft shadow.
+- **Cinema**: light serif text, as in a cinema release.
+- **Solid Black**: white text on solid black boxes, as on TV.
+
+**Social** styles are made for Shorts, Reels and TikTok, with short captions a little below the middle of the picture:
+
+- **Bold Pop**: big capitals, and the word being spoken pops up in yellow.
+- **Yellow Bold**: yellow capitals with a thick outline, and the word being spoken turns white.
+- **Karaoke**: the word being spoken lights up in green.
+- **Word Box**: a coloured box follows the word being spoken.
+- **Reveal**: words appear one by one as they are said.
+- **One Word**: one large word at a time in the middle of the picture.
+- **Text Box**: black text on white boxes, like the text in TikTok and Reels.
+- **Highlighter**: black capitals marked with a yellow highlighter.
+- **Neon Pink**: white capitals, and the word being spoken glows pink.
+
+The social styles also split long captions into short ones of one to four words, timed to the speech, in one undo step. **Split into 3-word captions** (the number follows the style) does the same with the current style, and **New captions** under Caption style decides how new automatic captions are split.
+
+The word timing comes from **Generate captions**. Captions you type or import from SRT are timed evenly over their length, and a caption whose words you change is timed evenly again. If you blade a caption, the words are divided at the cut, so each half keeps the words spoken there.
+
+In **Caption style** you can choose each part yourself: **All caps**, **Word animation** (Highlight, Pop, Box or Reveal), the colour of the spoken word or box, and an **Entrance** (Fade or Pop) for each new caption. A word that is too wide for the picture makes the text smaller, so it never runs off the edge.
+
+The animation is shown in the viewer and in exports with burned-in captions. Embedded captions and SRT or WebVTT files contain only the text.
 `,
     see: ['export'],
   },
@@ -1970,7 +2003,28 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
 - **Detach Audio** ({{key:detachAudio}}) turns the audio into separate clips.
 - **Solo** ({{key:solo}}) plays only the selected clips.
 `,
-    see: ['sync', 'enable', 'transitions'],
+    see: ['sync', 'enable', 'transitions', 'ducking'],
+  },
+  {
+    id: 'ducking',
+    section: 'Audio',
+    title: 'Ducking Music Under Speech',
+    summary: 'Lower the music automatically while someone speaks, and bring it back in the pauses.',
+    keywords: 'duck ducking auto lower music voice speech dialogue narration background volume keyframes sidechain loudness',
+    body: `
+Select one or more music clips and choose [[run:duckMusic|Clip → Duck Music Under Speech]], or open the **Ducking** section in the Audio tab and click **Duck Under Speech**.
+
+Reccut listens to all other audio on the timeline: camera sound, microphones, voice over and recordings. Wherever someone speaks, the music fades down, and in the pauses it fades back up. Muted, disabled and soloed clips count as they sound when you play.
+
+The result is ordinary volume keyframes on the music, so you see the dips on the clip, hear them at once and get the same result in the export. Drag a point to adjust a dip, or delete the points you do not want. Undo removes everything in one step. Ducking replaces the volume keyframes the music already had; the level at the start of the clip is the level the music returns to.
+
+- **Lower by**: how far the music goes down while someone speaks. 12 dB is a good start; 18 to 24 dB for quiet narration.
+- **Fade down** and **Fade up**: how quickly the music goes down before the speech and comes back after it.
+- **Bridge pauses**: pauses shorter than this keep the music down, so it does not pump between words.
+
+The settings are remembered for the next time. Speech is found from the waveforms, so wait until new clips have finished analyzing.
+`,
+    see: ['audio', 'export'],
   },
 
   /* Utseende */
@@ -2004,7 +2058,7 @@ The correction runs on the graphics card in 16-bit floating point. 10-bit clips 
     section: 'Export',
     title: 'Exporting',
     summary: 'Use Easy Export for presets, the Export room for more options, or Export Frame for a still image.',
-    keywords: 'export render share format mp4 mov prores gif audio crop size',
+    keywords: 'export render share format mp4 mov prores gif audio crop size loudness lufs normalize normalise ebu r128 youtube podcast',
     body: `
 Choose **File → Easy Export** ({{key:export}}) to open the simple project export dialog. Choose a preset, file name, destination, format, resolution and frame rate, then click **Export**. **More Options** opens the Export room.
 
@@ -2018,6 +2072,7 @@ You can also drop video or audio files into Export to convert them without putti
 - Choose a preset, or set the size, frame rate, quality or bit rate yourself.
 - Crop to another aspect ratio, for example 9:16 for Shorts, and move the crop in the preview.
 - Captions can be burned in, embedded or saved as SRT or WebVTT.
+- **Loudness** makes the sound as loud as the platform expects: −14 LUFS for YouTube, TikTok and Spotify, −16 LUFS for podcasts, −23 LUFS for broadcast (EBU R128) or −24 LKFS for US broadcast. The whole mix is measured, raised or lowered, and a limiter keeps the peaks under −1 dBFS. The **YouTube and Web** preset uses −14 LUFS, and **Master** leaves the level as it is. The timeline is not changed.
 
 Exports are saved in the Exports folder of the project by default, and run in the background so you can keep working.
 `,

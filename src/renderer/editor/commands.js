@@ -3,6 +3,7 @@ import { signal } from '@preact/signals';
 import { addSequence, currentSequence, deleteSequence, sequenceList, hasFreeTransitions, CAPTION_LANE, CLIP_COLORS, EFFECTS, parseTransitionSelection, transitionSelection, nearestEdit, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, componentVolumeProp, kfTime, valueAt, HIGHLIGHT_DEFAULTS } from '../../shared/model.js';
 import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates.js';
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
+import { DUCK_DEFAULTS, duckMusic, speechUnderMusic } from '../../shared/ducking.js';
 import { addMask, canMask, removeMask } from '../../shared/shapes.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { effectWarning } from '../../shared/effectSupport.js';
@@ -1163,6 +1164,25 @@ async function loadWavePaths(paths) {
 }
 function loadWaves(project, ids) {
   return loadWavePaths(ids.map((id) => clipAudioSource(project, project.clips[id])?.stream.wave));
+}
+
+// Demper de valgte musikklippene under all annen lyd på tidslinjen (tale), med volumnøkkelbilder.
+// Ett angresteg. Innstillingene ligger i prefs.duck, se shared/ducking.js.
+export async function duckSelectedMusic(ids = null) {
+  const p = project.value;
+  const music = (ids || selection.value).map((id) => p.clips[id]).filter((c) => c && clipHasAudio(c, p.media[c.mediaId]) && c.type !== 'recording');
+  if (!music.length) return toast('Select the music clips that should be lowered while someone speaks.');
+  const others = Object.values(p.clips).filter((c) => !music.includes(c) && clipHasAudio(c, p.media[c.mediaId]));
+  if (!others.length) return toast('There is no other audio on the timeline to duck under.');
+  const paths = others.flatMap((c) => audioComponents(c, p.media[c.mediaId]).map((x) => x.stream.wave));
+  if (paths.some((x) => !x)) toast('Some audio is still being analyzed, so it is not used for ducking yet.');
+  const waveOf = await loadWavePaths(paths);
+  const opts = { ...DUCK_DEFAULTS, ...(prefs.value.duck || {}) };
+  const musicIds = music.map((c) => c.id);
+  const regions = speechUnderMusic(p, musicIds, (st) => (st?.wave ? waveOf(st.wave) : null), opts);
+  if (!regions.length) return toast('No speech was found under the selected music.');
+  const result = commit((q) => duckMusic(q, musicIds, regions, opts));
+  toast(`Lowered the music by ${-opts.amount} dB in ${result.regions} places where someone speaks. Undo to go back.`, { kind: 'success', timeout: 7000 });
 }
 
 /**

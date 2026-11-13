@@ -19,6 +19,8 @@ import { prefs, setPrefs } from '../prefs.js';
 import { toggleViewerFullscreen } from './fullscreen.js';
 import { handleMissingModel } from '../AiModels.jsx';
 import { mediaSourcePaths } from '../../shared/mediaSources.cjs';
+import { wordsForCaption } from '../../shared/captionWords.js';
+import { splitCaptions } from '../../shared/ops.js';
 
 const api = window.api;
 
@@ -30,14 +32,23 @@ api.onTranscribeDone(({ segments, payload }) => {
     toast('No speech was found to caption.');
     return;
   }
+  let count = segments.length;
   commit((p) => {
     for (const c of Object.values(p.clips)) if (c.lane === CAPTION_LANE) delete p.clips[c.id];
     for (const s of segments) {
       const c = makeCaptionClip(s.start, s.text, Math.max(0.5, s.end - s.start));
+      // Ordtidene fra Whisper gjør at undertekstene kan animeres ord for ord.
+      if (s.words?.length) c.props.words = wordsForCaption(s.start, s.words);
       p.clips[c.id] = c;
     }
+    // Kortformat: stilen sier hvor mange ord hver undertekst skal ha.
+    const chunk = p.captionStyle?.chunkWords || 0;
+    if (chunk > 0) {
+      const { before, after } = splitCaptions(p, chunk);
+      count += after - before;
+    }
   });
-  toast(`Added ${segments.length} captions. Read through them and fix any mistakes in the Captions tab.`, { kind: 'success', timeout: 9000 });
+  toast(`Added ${count} captions. Read through them and fix any mistakes in the Captions tab.`, { kind: 'success', timeout: 9000 });
 });
 api.onTranscribeError(({ error, payload }) => {
   // Mangler talemodellen, åpnes vinduet for KI-modeller i stedet for en feilmelding.

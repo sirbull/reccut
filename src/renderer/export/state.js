@@ -75,6 +75,8 @@ const DEFAULTS = {
   fps: 30,
   sourceMedia: 'original',
   captions: 'burn',
+  // Mål for lydstyrken i LUFS (0 = av), se shared/loudness.js.
+  loudness: 0,
   dir: null,
 };
 
@@ -106,7 +108,8 @@ export function prepareProjectExport() {
   batch(() => {
     playing.value = false;
     selectedId.value = PROJECT_SOURCE;
-    setSettings({ ...DEFAULTS, size: { preset: 0, w: p.width, h: p.height }, fps: p.fps });
+    // Lydstyrkemålet beholdes: det er et valg for leveransen, ikke et spor etter en filkonvertering.
+    setSettings({ ...DEFAULTS, size: { preset: 0, w: p.width, h: p.height }, fps: p.fps, loudness: settings.value.loudness || 0 });
     setSourceOptions(PROJECT_SOURCE, { crop: null, range: p.range ? { ...p.range } : null });
     room.value = 'export';
   });
@@ -125,6 +128,7 @@ export function applyPreset(id) {
     size: { ...settings.value.size, preset: pr.res || 0 },
     fpsMode: pr.fps ? 'custom' : 'source',
     fps: pr.fps || settings.value.fps,
+    ...(pr.loudness != null ? { loudness: pr.loudness } : {}),
   });
 }
 

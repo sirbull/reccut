@@ -69,7 +69,8 @@ export function groupWords(words, maxChars = 84) {
     }
   }
   if (cur) out.push(cur);
-  return out.map(({ start, end, text }) => ({ start, end: Math.max(end, start + 0.6), text }));
+  // Ordene følger med, så undertekstene kan animeres ord for ord.
+  return out.map(({ start, end, text, words }) => ({ start, end: Math.max(end, start + 0.6), text, words: words.map((w) => ({ start: w.start, end: w.end, text: w.text.trim() })) }));
 }
 
 // Manus mot tagninger, som ScriptSync: for hver replikk finnes alle stedene i opptakene der den blir sagt,

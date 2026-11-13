@@ -62,13 +62,17 @@ import { beginTransient, commit, endPreview, projectPath, renameProject, endTran
 import { groupPositionClips, groupVisuals, setGroupOpacity, setGroupPosition } from '../../shared/groupSettings.js';
 import { seek } from './playback.js';
 import { setKeyframe } from './keyframes.js';
-import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, shownInspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, setCleanVoice, setComponentMono, toggleComponent } from './commands.js';
-import { prefs } from '../prefs.js';
+import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, shownInspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, setCleanVoice, setComponentMono, toggleComponent, duckSelectedMusic } from './commands.js';
+import { prefs, setPrefs } from '../prefs.js';
+import { DUCK_DEFAULTS } from '../../shared/ducking.js';
 import { STAB_DEFAULTS, getMotion, stabilizeAt } from '../../shared/stabilize.js';
 import { attachToTrack, deleteTrack, detach, removeTrackingKeyframes, trackArea, trackForward, trackRedaction, tracksFor } from './track.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, EQ_BANDS, EQ_PRESETS, biquadResponse, eqCoefs, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { MASK_MODES, MASK_SHAPES, canMask, defaultPoints, ellipsePoints, maskKey, maskList, setMaskShape } from '../../shared/shapes.js';
-import { Button, FontPicker, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle } from '../ui.jsx';
+import { Button, FontPicker, IconButton, NumberField, Row, Section, Segmented, Select, Slider, Toggle, toast } from '../ui.jsx';
+import { CAPTION_ANIMATIONS, CAPTION_ENTRANCES, CAPTION_PRESET_GROUPS, CAPTION_PRESETS, captionTokens } from '../../shared/captionWords.js';
+import { splitCaptions } from '../../shared/ops.js';
+import { drawCaption } from '../../shared/render.js';
 
 export function Inspector() {
   const clips = selectedClips.value;
@@ -1129,6 +1133,7 @@ function AudioTab({ clip }) {
         <PlainNumber clip={clip} prop="aFadeIn" label={<span class="afx-name"><FadeInIcon size={13} /> Fade in</span>} min={0} max={clip.dur / 2} step={0.1} unit="s" />
         <PlainNumber clip={clip} prop="aFadeOut" label={<span class="afx-name"><FadeOutIcon size={13} /> Fade out</span>} min={0} max={clip.dur / 2} step={0.1} unit="s" />
       </Section>
+      {clip.type === 'audio' && <DuckingSection clip={clip} />}
       <AudioFxSection clip={clip} />
       {a && (
         <Section title="Audio Format">
@@ -1141,6 +1146,34 @@ function AudioTab({ clip }) {
       )}
       {!clip.props.audioDetached && <AudioEditSection clip={clip} />}
     </>
+  );
+}
+
+// Automatisk demping: musikken senkes mens noen snakker, som volumnøkkelbilder (shared/ducking.js).
+// Innstillingene huskes i prefs.duck og gjelder neste gang du demper.
+function DuckingSection({ clip }) {
+  const duck = { ...DUCK_DEFAULTS, ...(prefs.value.duck || {}) };
+  const set = (patch) => setPrefs({ duck: { ...duck, ...patch } });
+  const ids = selection.value.includes(clip.id) ? selection.value : [clip.id];
+  return (
+    <Section title="Ducking" open={false}>
+      <Row label="Lower by">
+        <NumberField value={-duck.amount} min={3} max={40} step={1} unit="dB" onChange={(v) => set({ amount: -Math.abs(v) })} />
+      </Row>
+      <Row label="Fade down">
+        <NumberField value={duck.attack} min={0.05} max={2} step={0.05} precision={2} unit="s" onChange={(v) => set({ attack: v })} />
+      </Row>
+      <Row label="Fade up">
+        <NumberField value={duck.release} min={0.1} max={4} step={0.1} precision={1} unit="s" onChange={(v) => set({ release: v })} />
+      </Row>
+      <Row label="Bridge pauses">
+        <NumberField value={duck.hold} min={0} max={3} step={0.1} precision={1} unit="s" onChange={(v) => set({ hold: v })} />
+      </Row>
+      <Button icon={Volume2} onClick={() => duckSelectedMusic(ids)}>
+        Duck Under Speech
+      </Button>
+      <p class="hint">Lowers this music while someone speaks on the timeline, and brings it back in the pauses. The result is volume keyframes, which replace the clip's own volume keyframes and can be adjusted afterwards.</p>
+    </Section>
   );
 }
 
@@ -2003,6 +2036,136 @@ export function CaptionStyleEditor() {
       <Row label="Max lines">
         <Segmented value={st.maxLines} onChange={(v) => set({ maxLines: v })} options={[1, 2, 3].map((n) => ({ value: n, label: String(n) }))} />
       </Row>
+      <Row label="All caps">
+        <Toggle checked={Boolean(st.uppercase)} onChange={(v) => set({ uppercase: v })} />
+      </Row>
+      <Row label="Word animation">
+        <Select value={st.anim || 'none'} options={CAPTION_ANIMATIONS} onChange={(v) => set({ anim: v })} />
+      </Row>
+      {st.anim && st.anim !== 'none' && (
+        <Row label={st.anim === 'box' ? 'Box color' : 'Spoken word'}>
+          <ColorField value={st.highlightColor} onLive={(v) => live({ highlightColor: v })} />
+        </Row>
+      )}
+      <Row label="Entrance">
+        <Segmented value={st.entrance || 'none'} onChange={(v) => set({ entrance: v })} options={CAPTION_ENTRANCES} />
+      </Row>
+      <Row label="New captions">
+        <Select value={st.chunkWords || 0} options={CHUNK_OPTIONS} onChange={(v) => set({ chunkWords: Number(v) })} />
+      </Row>
+    </>
+  );
+}
+
+const CHUNK_OPTIONS = [
+  { value: 0, label: 'Whole sentences' },
+  { value: 1, label: '1 word each' },
+  { value: 2, label: 'Up to 2 words' },
+  { value: 3, label: 'Up to 3 words' },
+  { value: 4, label: 'Up to 4 words' },
+];
+
+// Kortformat: ferdige stiler med levende forhåndsvisning, og deling av eksisterende undertekster.
+const PREVIEW_TEXT = 'Make every word count';
+const PREVIEW_DUR = 1.6;
+
+function previewCaption(style) {
+  const n = style.chunkWords > 0 ? style.chunkWords : 4;
+  const text = captionTokens(PREVIEW_TEXT).slice(0, n).join(' ');
+  const count = captionTokens(text).length;
+  const step = (PREVIEW_DUR - 0.2) / count;
+  const words = Array.from({ length: count }, (_, i) => [i * step, (i + 1) * step]);
+  return { id: 'preview', type: 'caption', start: 0, in: 0, dur: PREVIEW_DUR, props: { text, words, align: null, pos: null } };
+}
+
+function CaptionPresetCard({ preset, current, onApply }) {
+  const ref = useRef(null);
+  const [hover, setHover] = useState(false);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const W = 192;
+    const H = 108;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    const ctx = canvas.getContext('2d');
+    const project = { width: W * 3, height: H * 3, captionStyle: { ...DEFAULT_CAPTION_STYLE, ...preset.style } };
+    const clip = previewCaption(project.captionStyle);
+    let raf = 0;
+    const t0 = performance.now();
+    const paint = (T) => {
+      ctx.setTransform(dpr / 3, 0, 0, dpr / 3, 0, 0);
+      const g = ctx.createLinearGradient(0, 0, W * 3, H * 3);
+      g.addColorStop(0, '#2b3a55');
+      g.addColorStop(1, '#5a3a5e');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W * 3, H * 3);
+      drawCaption(ctx, project, clip, T);
+    };
+    const loop = () => {
+      paint(((performance.now() - t0) / 1000) % (PREVIEW_DUR + 0.4));
+      raf = requestAnimationFrame(loop);
+    };
+    // Stille bilde: det andre ordet blir sagt. Ved hover spilles animasjonen i løkke.
+    if (hover) loop();
+    else paint(Math.min(PREVIEW_DUR - 0.05, clip.props.words[Math.min(1, clip.props.words.length - 1)][0] + 0.2));
+    return () => cancelAnimationFrame(raf);
+  }, [preset, hover]);
+  return (
+    <button
+      type="button"
+      class={`cap-preset${current ? ' current' : ''}`}
+      title={preset.desc}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+      onClick={onApply}
+    >
+      <canvas ref={ref} />
+      <span>{preset.label}</span>
+    </button>
+  );
+}
+
+export function CaptionPresets() {
+  const p = project.value;
+  const st = { ...DEFAULT_CAPTION_STYLE, ...p.captionStyle };
+  const caps = Object.values(p.clips).filter((c) => c.type === 'caption');
+  const current = CAPTION_PRESETS.find((x) => Object.entries(x.style).every(([key, v]) => st[key] === v))?.id;
+  const apply = (preset) => {
+    let result = { before: 0, after: 0 };
+    commit((q) => {
+      q.captionStyle = { ...DEFAULT_CAPTION_STYLE, ...q.captionStyle, ...preset.style };
+      if (preset.style.chunkWords > 0) result = splitCaptions(q, preset.style.chunkWords);
+    });
+    toast(result.after ? `${preset.label}: split ${result.before} captions into ${result.after} short ones. Undo to go back.` : `Caption style: ${preset.label}.`, { timeout: 6000 });
+  };
+  const split = () => {
+    const n = st.chunkWords || 3;
+    let result;
+    commit((q) => (result = splitCaptions(q, n)));
+    toast(result.after ? `Split ${result.before} captions into ${result.after}.` : `The captions already have ${n === 1 ? 'one word' : `${n} words or fewer`} each.`);
+  };
+  return (
+    <>
+      {CAPTION_PRESET_GROUPS.map((g) => (
+        <Fragment key={g.id}>
+          <h4 class="cap-presets-head">{g.label}</h4>
+          <div class="cap-presets">
+            {CAPTION_PRESETS.filter((x) => x.group === g.id).map((x) => (
+              <CaptionPresetCard key={x.id} preset={x} current={current === x.id} onApply={() => apply(x)} />
+            ))}
+          </div>
+        </Fragment>
+      ))}
+      {caps.length > 0 && (
+        <Button onClick={split} title="Split long captions into short ones, timed to the words">
+          Split into {st.chunkWords > 0 ? `${st.chunkWords}-word` : '3-word'} captions
+        </Button>
+      )}
+      <p class="hint">Hover a style to see it move. Word timing comes from Generate captions; typed and imported captions are timed evenly. Animation shows in the viewer and in burned-in exports.</p>
     </>
   );
 }
@@ -2066,6 +2229,9 @@ function CaptionTab({ clip }) {
           </div>
         )}
         <p class="hint">You can also drag the caption in the viewer to place it.</p>
+      </Section>
+      <Section title="Styles" open={false}>
+        <CaptionPresets />
       </Section>
       <Section title="Style for all captions" open={false}>
         <CaptionStyleEditor />

@@ -287,6 +287,7 @@ export const COMMANDS = [
   { id: 'expandAudio', label: 'Expand Audio', menu: 'Clip', group: 'audio', mac: 'Ctrl+S', win: 'Alt+E', run: commands.toggleExpandAudio, help: 'audio', desc: 'Show the audio below the video, with one strip per audio component.' },
   { id: 'detachAudio', label: 'Detach Audio', menu: 'Clip', group: 'audio', mac: 'Ctrl+Shift+S', win: 'Alt+Shift+E', run: commands.detachSelectedAudio, help: 'audio' },
   { id: 'autoSync', label: 'Auto Sync Audio', menu: 'Clip', group: 'audio', keys: 'Alt+CmdOrCtrl+G', menuOnly: true, run: () => commands.autoSyncAudio(), help: 'sync' },
+  { id: 'duckMusic', label: 'Duck Music Under Speech', menu: 'Clip', group: 'audio', run: () => commands.duckSelectedMusic(), help: 'ducking', keywords: 'duck ducking auto lower music voice speech dialogue sidechain volume keyframes', desc: 'Lower the selected music while someone speaks, with volume keyframes you can adjust.' },
   { id: 'volumeUp', label: 'Volume Up 1 dB', menu: 'Clip', group: 'audio', mac: 'Ctrl+=', win: 'Alt+=', run: () => commands.adjustVolume(1), help: 'audio' },
   { id: 'volumeDown', label: 'Volume Down 1 dB', menu: 'Clip', group: 'audio', mac: 'Ctrl+-', win: 'Alt+-', run: () => commands.adjustVolume(-1), help: 'audio' },
   { id: 'retime', label: 'Show Speed Controls', menu: 'Clip', submenu: 'Retime', keys: 'CmdOrCtrl+R', run: commands.openRetime, help: 'speed' },
