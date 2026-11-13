@@ -44,6 +44,14 @@ If you use Final Cut Pro, the magnetic main storyline and editing shortcuts will
 - Automatic audio sync with an external recorder
 - Subtitles with automatic transcription by Whisper, plus SRT and WebVTT import and export
 
+## Multicam editing
+
+![Four camera angles beside Program, with the active angle outlined in green and the chosen sections on the multicam timeline.](assets/help/multicam-window.jpg)
+
+Import footage from several cameras, line up recordings with shared sound and choose the picture with the number keys while playing or paused. Program starts empty and grows through the sections you choose. Keep a continuous microphone source, adjust its sound and add the result to the Edit timeline. Unfinished edits are saved as local drafts.
+
+The [multicam guide](docs/MULTICAM.md) covers setup, synchronization, camera choices, sound, trimming, I/O ranges, draft recovery, shortcuts and troubleshooting. The same illustrated guide is available in **Help › Reccut Help › Multicam Clips**.
+
 ## Screen and camera recording
 
 <p align="center">
