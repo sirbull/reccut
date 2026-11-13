@@ -176,6 +176,7 @@ contextBridge.exposeInMainWorld('api', {
   openPath: invoke('shell:open'),
   popupMenu: invoke('menu:popup'),
   setMenu: invoke('menu:set'),
+  openMenuBar: invoke('menu:bar'),
 
   listProjects: invoke('projects:list'),
   loadProject: invoke('projects:load'),

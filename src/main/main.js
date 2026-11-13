@@ -71,6 +71,7 @@ const extensions = createExtensionHost({ dir: path.join(app.getPath('userData'),
 const stock=require('./stock').createStockHost({dir:path.join(app.getPath('userData'),'stock'),cacheDir:path.join(app.getPath('userData'),'Cache','Stock'),fetchImpl:(...args)=>require('electron').net.fetch(...args),safeStorage,openExternal:url=>shell.openExternal(url)});
 for(const [channel,method]of Object.entries({providers:'providers',addPlugin:'addPlugin',testConnection:'testConnection',settings:'settings',search:'search',preview:'preview',download:'download',install:'install',remove:'remove',manifest:'manifest',saveKey:'saveKey',signIn:'signIn',signOut:'signOut',acceptCosts:'acceptCosts',catalog:'catalog',catalogFile:'catalogFile',catalogPreview:'catalogPreview'}))ipcMain.handle('stock:'+channel,(_event,...args)=>stock[method](...args));
 const isMac = process.platform === 'darwin';
+const isWin = process.platform === 'win32';
 
 // Keep Electron's built-in UI in English, including on Norwegian systems.
 app.commandLine.appendSwitch('lang', 'en-GB');
@@ -203,9 +204,13 @@ function createWindow() {
     minHeight: 680,
     title: developmentMode ? 'Reccut (Development)' : 'Reccut',
     backgroundColor: '#1b1b1d',
-    titleBarStyle: isMac ? 'hiddenInset' : 'default',
+    // På Windows deler menyen (File, Edit …) linje med Windows-knappene for minimer, maksimer og lukk.
+    // Vinduet tegner menynavnene selv (MenuStrip i app.jsx) og åpner de ekte menyene med menu:bar.
+    titleBarStyle: isMac ? 'hiddenInset' : isWin ? 'hidden' : 'default',
+    ...(isWin ? { titleBarOverlay: { color: '#202022', symbolColor: '#d8d8dc', height: 32 } } : {}),
     trafficLightPosition: { x: 14, y: 16 },
-    autoHideMenuBar: true,
+    // På Linux vises menylinjen alltid, så menyveiene i håndboken stemmer.
+    autoHideMenuBar: false,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -311,6 +316,14 @@ function menuFromTemplate(items) {
 
 ipcMain.handle('menu:set', (_e, items) => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuFromTemplate(items)));
+});
+
+// Windows: åpner en meny fra applikasjonsmenyen under navnet som ble klikket i vinduets menylinje.
+ipcMain.handle('menu:bar', (event, label, x, y) => {
+  if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return;
+  const item = Menu.getApplicationMenu()?.items.find((it) => it.label === label);
+  if (!item?.submenu) return;
+  return new Promise((resolve) => item.submenu.popup({ window: win, x: Math.round(x), y: Math.round(y), callback: () => resolve() }));
 });
 
 /* Skjermvalg og opptak */

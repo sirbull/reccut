@@ -192,7 +192,7 @@ Everything belongs to a project. A project is a folder that holds the project fi
 
 This handbook opens in its own window, so you can keep it beside your project. Search covers article text, headings, examples and commands. Try “connect local AI”, “no sound”, “roll trim” or “export captions”. Use the chapter filter to narrow results. Click an image to enlarge it. Back and Forward return to earlier guides or search results. Cmd/Ctrl F focuses search; Option/Alt Left and Right navigate history. Escape clears search or closes an enlarged image.
 
-Press {{key:findCommand}} and type what you want to do, for example "blade", "sync" or "color". Press Enter and the command runs, or the tool or panel opens. On a Mac you can also search in the Help menu, like in other Mac apps. Every command shows its shortcut in the menus and in the search.
+Press {{key:findCommand}} and type what you want to do, for example "blade", "sync" or "color". Press Enter and the command runs, or the tool or panel opens. Both searches are at the top of the Help menu: Quick Search for commands and [[run:searchHelp|Search Help]] for this handbook. On a Mac the Help menu also has its own search field, like in other Mac apps. Every command shows its shortcut in the menus and in the search.
 
 [[run:findCommand|Search commands]] [[run:shortcuts|Show all shortcuts]]
 `,

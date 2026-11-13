@@ -162,6 +162,37 @@ function TasksIndicator() {
   );
 }
 
+// Windows: menynavnene ligger på samme linje som minimer, maksimer og lukk (titleBarOverlay i main.js).
+// Menyene som åpnes er de ekte menyene fra hovedprosessen. Alt alene åpner File, som i andre Windows-programmer.
+const winMenu = api.platform === 'win32';
+function openMenu(label, el) {
+  const r = el.getBoundingClientRect();
+  return api.openMenuBar(label, r.left, r.bottom).catch(() => {});
+}
+function MenuStrip() {
+  const menus = menuTemplate().map((m) => m.label);
+  return (
+    <nav class="menu-strip" aria-label="Menu bar">
+      {menus.map((label) => (
+        <button key={label} data-menu={label} onClick={(e) => openMenu(label, e.currentTarget)}>
+          {label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+if (winMenu) {
+  let altAlone = false;
+  window.addEventListener('keydown', (e) => { altAlone = e.key === 'Alt' && (e.repeat ? altAlone : true); }, true);
+  for (const type of ['pointerdown', 'wheel', 'blur']) window.addEventListener(type, () => (altAlone = false), true);
+  window.addEventListener('keyup', (e) => {
+    if (e.key !== 'Alt' || !altAlone) return;
+    altAlone = false;
+    const first = document.querySelector('.menu-strip button');
+    if (first) { e.preventDefault(); openMenu(first.dataset.menu, first); }
+  }, true);
+}
+
 function TitleBar() {
   const r = room.value;
   const rec = engine.recording.value;
@@ -419,6 +450,7 @@ function App() {
 
   return (
     <div class={`app room-${r}`}>
+      {winMenu && <MenuStrip />}
       <TitleBar />
       <Notice />
       <main>

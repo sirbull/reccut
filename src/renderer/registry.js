@@ -357,6 +357,7 @@ export const COMMANDS = [
   { id: 'shuttleForward', label: 'Play Forward (faster each press)', menu: 'Playback', group: 'jkl', keys: 'L', run: () => playback.shuttle(1), help: 'playback' },
 
   /* Help */
+  { id: 'searchHelp', label: 'Search Help…', menu: 'Help', group: 'search', keys: 'Shift+F1', rooms: ALL, run: () => (helpOpen.value = { focusSearch: true }), help: 'search', keywords: 'find handbook guide documentation manual' },
   { id: 'help', label: 'Reccut Help', menu: 'Help', group: 'help', keys: 'F1', rooms: ALL, run: () => (helpOpen.value = {}), help: 'search' },
   { id: 'shortcuts', label: 'Keyboard Shortcuts', menu: 'Help', group: 'help', keys: 'Alt+CmdOrCtrl+K', rooms: ALL, run: () => (helpOpen.value = { article: 'shortcuts' }), help: 'shortcuts' },
   { id: 'escape', label: 'Deselect', keys: 'Escape', hidden: true, run: deselectAll },
@@ -555,7 +556,9 @@ export function menuTemplate() {
     const items = [];
     let lastGroup;
     const subs = new Map();
-    for (const cmd of COMMANDS) {
+    // Søket står øverst i Help, der Mac har søkefeltet sitt. Windows-menyer kan ikke ha et tekstfelt.
+    const ordered = name === 'Help' ? [...COMMANDS.filter((c) => c.group === 'search'), ...COMMANDS.filter((c) => c.group !== 'search')] : COMMANDS;
+    for (const cmd of ordered) {
       if (cmd.menu !== name || cmd.hidden || !inMenu(cmd)) continue;
       if (isMac && cmd.id === 'prefs') continue;
       if (cmd.submenu) {

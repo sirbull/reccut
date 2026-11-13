@@ -7104,3 +7104,29 @@ button.vo-badge { border: 0; cursor: pointer; }
   border-radius: 6px;
   background: var(--bg-2);
 }
+
+/* Windows: menylinjen på samme linje som Windows-knappene (titleBarOverlay i main.js, samme farge). */
+.menu-strip {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0 calc(100vw - env(titlebar-area-width, calc(100vw - 140px))) 0 6px;
+  background: #202022;
+  -webkit-app-region: drag;
+}
+.menu-strip button {
+  -webkit-app-region: no-drag;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: 12.5px;
+  padding: 4px 9px;
+  border-radius: 5px;
+}
+.menu-strip button:hover,
+.menu-strip button:focus-visible {
+  background: var(--bg-4);
+  color: var(--text);
+}
