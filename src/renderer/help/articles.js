@@ -879,7 +879,7 @@ A multicam clip holds the clips from several cameras that recorded the same thin
 
 There are two ways to start:
 
-- **From clips on the timeline.** Put the clips from each camera on top of each other, select them and right click one of them. Choose **Create Multicam Clip…**. Their positions are kept, and what was visible on top becomes the first cuts.
+- **From clips on the timeline.** Put the clips from each camera on top of each other, select them and right click one of them. Choose **Create Multicam Clip…**. Their positions are kept. Program starts empty so you can choose the cameras yourself.
 - **From files.** Choose File › **New Multicam Clip…**, or right click an empty part of the timeline. Files you selected in the browser are added straight away. You add more in the window.
 
 ![Three cameras stacked on the timeline, selected and ready to become a multicam clip.](multicam-stacked.jpg)
@@ -915,8 +915,10 @@ To line up one file by hand, drag its clip sideways in its track. Snapping (N) h
 
 ## Switch cameras
 
+New multicam clips start with an empty Program. Choose a camera to begin, then switch cameras manually or during playback. Only the sections you have reviewed and chosen are added to the result; unreviewed gaps and the remaining tail stay empty. Opening an existing multicam clip keeps its previous choices and lets you continue beyond its old endpoint.
+
 - Press **1** to **9** to cut to that camera at the playhead. This works while the video plays, so you can switch cameras live, like a director.
-- When paused, the choice applies from the playhead to the next existing cut. You can try different cameras at the same position without changing the choices before or after that section.
+- When paused, the choice applies from the playhead to the next existing cut or the end of the chosen section. A first choice in an empty section starts with one frame. You can try different cameras at the same position without changing the choices before or after that section.
 - Click a camera in Angles to do the same.
 - Hold **Shift** with the number, or Shift click, to change the camera of the piece you are in without making a new cut.
 - Each cut shows in the **Program** track with the number and color of the camera.
@@ -1025,7 +1027,7 @@ Nothing is changed automatically. You hear the settings while you play in the mu
 
 ## Add it to the timeline
 
-Press the blue **Add to Timeline** button at the top left, or **Cmd Return** (Ctrl Enter on Windows). The result is a group of clips with an **MC** badge: one video clip for each cut, and the sound below.
+Press the blue **Add to Timeline** button at the top right, or **Cmd Return** (Ctrl Enter on Windows). The result is a group of clips with an **MC** badge: one video clip for each cut, and the sound below.
 
 - Made from clips on the timeline, the multicam clip replaces them in the same place.
 - Made from files, it is added at the end of the storyline.
@@ -1041,7 +1043,9 @@ Work you did on the timeline is kept. When the window opens, it reads the clips 
 
 There is one exception. If you deleted a piece in the middle of the multicam clip, or changed the speed of one of its clips, that cannot be described as cuts. The window then tells you, and asks before **Update Timeline** puts the removed part back. Switching a camera with **Active Video Angle** on the timeline always keeps everything.
 
-Close the window with **Esc** or the X. If you made changes, Reccut asks before it throws them away.
+Close the window with **Esc** or the X. Changes are saved automatically as a local draft, separately for each project and sequence. The header shows when the draft is saved. Choose **File › Resume Multicam Draft…** or the recovery notification to continue, also after restarting Reccut. Drafts stay on this computer and are not included in the project file. The trash button discards a draft after confirmation. Applying it to the timeline clears the draft.
+
+If the timeline changed after a draft was started, Reccut warns before applying it replaces the current multicam clips.
 
 ## Tips
 

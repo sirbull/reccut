@@ -5685,6 +5685,13 @@ kbd.keycap {
   width: 220px;
   max-width: 30vw;
 }
+.mc-draft-status {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.mc-draft-status.error {
+  color: var(--red);
+}
 .mc-audio {
   display: flex;
   align-items: center;

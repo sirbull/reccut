@@ -166,14 +166,14 @@ export function multicamExtent(project, mc) {
 // Delen som havner på tidslinjen (satt med I og O), eller hele lengden.
 export function multicamRange(project, mc) {
   const ext = multicamExtent(project, mc);
-  if (!mc.range) return { in: ext.start, out: ext.end };
+  if (!mc.range || mc.programMode === 'selected' && mc.rangeExplicit === false) return { in: ext.start, out: ext.end };
   const a = Math.max(ext.start, mc.range.in);
   const b = Math.min(ext.end, mc.range.out);
   return b > a ? { in: a, out: b } : { in: ext.start, out: ext.end };
 }
 
 export function newMulticam(name = 'Multicam Clip') {
-  return { id: uid(), name, angles: [], cuts: [], audio: null, range: null, fallback: 'auto', programMode: 'selected' };
+  return { id: uid(), name, angles: [], cuts: [], audio: null, range: null, fallback: 'auto', programMode: 'selected', rangeExplicit: false };
 }
 
 // Den første vinkelen med bilde. Brukes når et kutt peker på noe som er borte.
@@ -422,13 +422,13 @@ export function removeCut(project, mc, index) {
 export function moveCut(mc, index, t, { frame = 1 / 30 } = {}) {
   if (index <= 0 || index >= mc.cuts.length) return false;
   const lo = mc.cuts[index - 1].t + frame;
-  const hi = index + 1 < mc.cuts.length ? mc.cuts[index + 1].t - frame : Infinity;
+  let hi = index + 1 < mc.cuts.length ? mc.cuts[index + 1].t - frame : Infinity;
+  if (mc.programMode === 'selected' && Number.isFinite(mc.cuts[index].end)) hi = Math.min(hi, mc.cuts[index].end - frame);
   const T = Math.round(t / frame) * frame;
   const next = r6(Math.max(lo, Math.min(hi, T)));
   if (mc.programMode === 'selected') {
     const cut = mc.cuts[index], prev = mc.cuts[index - 1];
     if (prev.end >= cut.t - EPS) prev.end = next;
-    cut.end = Math.max(cut.end, next + frame);
   }
   mc.cuts[index].t = next;
   return true;
@@ -762,8 +762,12 @@ export function buildMulticamClips(project, mc, { previous = [], previousMc = nu
         let e = Math.min(range.out, ext.end);
         if (prev && (prev.speed ?? 1) === 1 && !prev.ramp && !prev.reverse) {
           const ps = prev.in + oldOffset(angle.id);
-          s = Math.max(s, ps);
-          e = Math.min(e, ps + prev.dur);
+          const pe = ps + prev.dur;
+          const previousRange = previousMc ? multicamOutputRange(project, previousMc) : null;
+          // Preserve deliberate audio trims, while an automatically generated
+          // audio clip can follow newly reviewed video past its old endpoint.
+          if (!previousRange || ps > previousRange.in + EPS) s = Math.max(s, ps);
+          if (!previousRange || pe < previousRange.out - EPS) e = Math.min(e, pe);
         }
         if (e - s > EPS) {
           const a = makeClip('audio', { media: m, start: r6(s - range.in), in: r6(s - angle.offset), dur: r6(e - s), lane: -1 });
@@ -823,7 +827,7 @@ export function placeMulticam(project, mc, { replace = [], at = null } = {}) {
   const { video, audio } = buildMulticamClips(project, mc, { previous, previousMc });
   if (!video.length && !audio.length) return [];
   const stored = deepClone(mc);
-  if (stored.programMode === 'selected') stored.range = multicamOutputRange(project, mc);
+  if (stored.programMode === 'selected' && !stored.rangeExplicit) stored.range = multicamOutputRange(project, mc);
   project.multicams = { ...(project.multicams || {}), [mc.id]: stored };
   const group = uid();
   for (const c of [...video, ...audio]) c.group = group;
@@ -897,7 +901,7 @@ export function multicamTimeOfClip(project, mc, clip) {
   // Mellomrom har ingen kilde: regn ut fra plasseringen i gruppen.
   const members = Object.values(project.clips).filter((c) => c.multicam?.id === mc.id && c.type !== 'audio');
   const first = members.sort((a, b) => a.start - b.start)[0];
-  const range = multicamRange(project, mc);
+  const range = multicamOutputRange(project, mc) || multicamRange(project, mc);
   return range.in + (clip.start - (first?.start ?? clip.start)) + clip.dur / 2;
 }
 
@@ -925,9 +929,18 @@ export function absorbTimeline(project, mc) {
   }
   if (delta == null) return { mc, ok: true };
   const next = deepClone(mc);
+  if (next.programMode === 'selected' && next.rangeExplicit == null) {
+    // Earlier selected-mode saves used range for the inferred output bounds.
+    // A smaller range inside the saved choices represents deliberate I/O marks.
+    const start = Math.min(...next.cuts.map((cut) => cut.t));
+    const end = Math.max(...next.cuts.map((cut) => cut.end ?? Infinity));
+    next.rangeExplicit = Boolean(next.range && (next.range.in > start + EPS || next.range.out < end - EPS));
+  }
   const first = vids[0];
   const last = vids[vids.length - 1];
-  next.range = { in: r6(first.start - delta), out: r6(last.start + last.dur - delta) };
+  if (next.programMode !== 'selected' || !next.rangeExplicit) {
+    next.range = { in: r6(first.start - delta), out: r6(last.start + last.dur - delta) };
+  }
   const cuts = [];
   for (const c of vids) {
     const t = r6(c.start - delta);

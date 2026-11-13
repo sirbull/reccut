@@ -24,6 +24,7 @@ import {
   SkipBack,
   SkipForward,
   StretchHorizontal,
+  Trash2,
   Undo2,
   Wand2,
   X,
@@ -79,7 +80,7 @@ import { getWave, project, tasks, waveVersion } from './store.js';
 import { fileUrl } from './playback.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
-import { closeMulticam, multicamMenu, multicamSession, sendMulticamToTimeline } from './multicam.js';
+import { closeMulticam, flushMulticamDraft, multicamDraftState, multicamMenu, multicamSession, multicamTimelineChanged, recordMulticamDraft, sendMulticamToTimeline } from './multicam.js';
 import { Button, IconButton, Slider, Toggle, toast } from '../ui.jsx';
 import { isTyping } from '../keyboard.js';
 
@@ -166,7 +167,7 @@ function MulticamWindow({ session }) {
   const hist = useRef({ undo: [], redo: [] });
   const lastChoice = useRef(null);
   const playbackEdit = useRef(false);
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(Boolean(session.dirty));
   const edit = (fn, { record = true } = {}) => {
     const next = structuredClone(mcRef.current);
     if (fn(next) === false) return false;
@@ -179,6 +180,7 @@ function MulticamWindow({ session }) {
     mcRef.current = next;
     setMc(next);
     setDirty(true);
+    recordMulticamDraft(next, timeRef.current);
     return true;
   };
   const undo = () => {
@@ -189,6 +191,7 @@ function MulticamWindow({ session }) {
     hist.current.redo.push(mcRef.current);
     mcRef.current = prev;
     setMc(prev);
+    recordMulticamDraft(prev, timeRef.current);
   };
   const redo = () => {
     const next = hist.current.redo.pop();
@@ -198,6 +201,7 @@ function MulticamWindow({ session }) {
     hist.current.undo.push(mcRef.current);
     mcRef.current = next;
     setMc(next);
+    recordMulticamDraft(next, timeRef.current);
   };
 
   /* Oppsett: bredden på filene, delingen mellom vinklene og programmet, og høyden på tidslinjen */
@@ -208,7 +212,8 @@ function MulticamWindow({ session }) {
   const winRef = useRef(null);
 
   /* Avspilling */
-  const timeRef = useRef(multicamRange(p, mc).in);
+  const initialExtent = multicamExtent(p, mc);
+  const timeRef = useRef(Math.max(initialExtent.start, Math.min(initialExtent.end, session.time ?? multicamRange(p, mc).in)));
   const skimRef = useRef(null);
   const play = useRef({ on: false, rate: 1, t0: 0, now0: 0 });
   const [playing, setPlaying] = useState(false);
@@ -234,6 +239,8 @@ function MulticamWindow({ session }) {
   const [notice, setNotice] = useState(() =>
     session.lossy
       ? { kind: 'warn', title: 'Some changes on the timeline cannot be kept here', items: session.initialErrors }
+      : session.restored
+        ? { kind: 'info', title: 'Resumed autosaved multicam draft', items: [] }
       : session.initialErrors?.length
         ? { kind: 'warn', title: 'Some clips were left out', items: session.initialErrors }
         : null
@@ -304,6 +311,7 @@ function MulticamWindow({ session }) {
   // Hovedtidslinjen står stille mens vinduet er åpent.
   useEffect(() => {
     playback.pause();
+    return () => { flushMulticamDraft(); };
   }, []);
 
   // Første gang: zoom slik at hele klippet får plass.
@@ -572,6 +580,7 @@ function MulticamWindow({ session }) {
       const r = multicamRange(project.value, m);
       if (which === 'in') m.range = { in: t, out: r.out > t + frame ? r.out : multicamExtent(project.value, m).end };
       else m.range = { in: r.in < t - frame ? r.in : multicamExtent(project.value, m).start, out: t };
+      m.rangeExplicit = true;
     });
   };
 
@@ -594,16 +603,26 @@ function MulticamWindow({ session }) {
   };
 
   const close = () => {
-    if (dirty && !confirm('Close the multicam window without adding your changes to the timeline?')) return;
     stopPlay();
+    if (dirty) recordMulticamDraft(mcRef.current, timeRef.current);
     closeMulticam();
+  };
+
+  const discard = () => {
+    if (!confirm('Discard this multicam draft and all changes made in this window?')) return;
+    stopPlay();
+    closeMulticam({ discard: true });
   };
 
   const send = () => {
     stopPlay();
     if (!dirty && session.editing) return closeMulticam();
-    if (session.lossy && !confirm('Parts of this multicam clip were removed or changed speed on the timeline. Updating puts the removed parts back and loses the speed changes. Update anyway?')) return;
-    sendMulticamToTimeline(mcRef.current);
+    const warnings = [];
+    if (session.lossy) warnings.push('Parts of this multicam clip were removed or changed speed on the timeline. Updating puts the removed parts back and loses the speed changes.');
+    const timelineChanged = multicamTimelineChanged();
+    if (timelineChanged) warnings.push('The timeline changed since this draft was started. Applying the draft replaces the current multicam clips.');
+    if (warnings.length && !confirm(`${warnings.join('\n\n')}\n\nApply the multicam draft?`)) return;
+    sendMulticamToTimeline(mcRef.current, { allowTimelineChanges: timelineChanged });
   };
 
   /* Tastatur: vinduet eier tastene mens det er åpent */
@@ -642,7 +661,7 @@ function MulticamWindow({ session }) {
       else if (e.key === 'End') seek(multicamRange(project.value, m).out);
       else if ((e.key === 'i' || e.key === 'I') && !e.altKey) markRange('in');
       else if ((e.key === 'o' || e.key === 'O') && !e.altKey) markRange('out');
-      else if (e.altKey && code === 'KeyX') edit((x) => void (x.range = null));
+      else if (e.altKey && code === 'KeyX') edit((x) => { x.range = null; x.rangeExplicit = false; });
       else if (e.key === 'a' || e.key === 'A') setTool('select');
       else if (e.key === 't' || e.key === 'T') setTool('trim');
       else if (e.key === 'b' || e.key === 'B') setTool('blade');
@@ -747,6 +766,9 @@ function MulticamWindow({ session }) {
             if (e.key === 'Enter') e.currentTarget.blur();
           }}
         />
+        {dirty && <span class={`mc-draft-status${multicamDraftState.value === 'error' ? ' error' : ''}`} role="status">
+          {multicamDraftState.value === 'error' ? 'Draft could not be saved' : multicamDraftState.value === 'saving' ? 'Saving draft…' : 'Draft saved locally'}
+        </span>}
         <span class="spacer" />
         <Button variant="secondary" icon={Wand2} disabled={syncing || mc.angles.length < 2} onClick={autoSync} title="Line up all angles by comparing their audio">
           {syncing ? 'Synchronizing…' : 'Auto Sync'}
@@ -773,7 +795,8 @@ function MulticamWindow({ session }) {
         <Button variant="primary" icon={Plus} onClick={send} title={`Add the multicam clip to the timeline (${mod}Return)`}>
           {session.editing ? 'Update Timeline' : 'Add to Timeline'}
         </Button>
-        <IconButton icon={X} title="Close (Esc)" onClick={close} />
+        {dirty && <IconButton icon={Trash2} title="Discard Draft and Close" onClick={discard} />}
+        <IconButton icon={X} title="Close (Esc). Your draft is saved locally." onClick={close} />
       </header>
       {notice ? (
         <div class={`mc-notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}>

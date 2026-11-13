@@ -1,7 +1,8 @@
 // Multicam-vinduet: åpnes fra valgte klipp, fra et multicam-klipp på tidslinjen eller tomt.
 // Vinduet redigerer en kopi. Ingenting endres på tidslinjen før brukeren trykker Add to Timeline.
-import { signal } from '@preact/signals';
-import { commit, project, selection, editingGroup } from './store.js';
+import { computed, effect, signal } from '@preact/signals';
+import { commit, project, projectEpoch, room, selection, editingGroup } from './store.js';
+import { currentSequence } from '../../shared/model.js';
 import { toast } from '../ui.jsx';
 import {
   addAngles,
@@ -23,10 +24,119 @@ export const multicamSession = signal(null);
 // Menyvalg (Angre og Gjør om) går til vinduet mens det er åpent. Vinduet setter handle.
 export const multicamMenu = { handle: null };
 let sessionKey = 1;
+let draftTimer = null;
+let pendingDraft = null;
+const draftRevision = signal(0);
+export const multicamDraftState = signal('saved');
+
+function context() {
+  const p = project.value;
+  const sequenceId = currentSequence(p).id;
+  return { projectId: p.id, sequenceId, epoch: projectEpoch.value, storageKey: `multicamDrafts:${p.id}:${sequenceId}` };
+}
+
+function sameContext(session) {
+  const current = context();
+  return session && session.projectId === current.projectId && session.sequenceId === current.sequenceId && session.epoch === current.epoch;
+}
+
+function readDrafts(key) {
+  const raw = localStorage.getItem(key);
+  if (!raw) return {};
+  const saved = JSON.parse(raw);
+  if (saved.version !== 1 || !saved.drafts || typeof saved.drafts !== 'object') throw new Error('The saved multicam drafts could not be read.');
+  return saved.drafts;
+}
+
+export const savedMulticamDrafts = computed(() => {
+  draftRevision.value;
+  try {
+    return Object.values(readDrafts(context().storageKey)).sort((a, b) => b.updated - a.updated);
+  } catch (error) {
+    console.warn(error);
+    return [];
+  }
+});
+
+function timelineSignature(session) {
+  const p = project.value;
+  const ids = session.editing ? multicamClips(p, session.mc.id) : session.replace;
+  return JSON.stringify([...ids].sort().map((id) => p.clips[id] || null));
+}
+
+export function multicamTimelineChanged() {
+  const session = multicamSession.value;
+  return Boolean(session && sameContext(session) && session.baseSignature !== timelineSignature(session));
+}
+
+export function recordMulticamDraft(mc, time) {
+  const session = multicamSession.value;
+  if (!sameContext(session)) return;
+  pendingDraft = { ...session, key: undefined, restored: undefined, mc, time, dirty: true, updated: Date.now() };
+  multicamDraftState.value = 'saving';
+  // A fixed deadline also saves during uninterrupted playback.
+  if (draftTimer == null) draftTimer = setTimeout(flushMulticamDraft, 1000);
+}
+
+export function flushMulticamDraft() {
+  clearTimeout(draftTimer);
+  draftTimer = null;
+  if (!pendingDraft) return true;
+  try {
+    const draft = pendingDraft;
+    const drafts = readDrafts(draft.storageKey);
+    drafts[draft.mc.id] = draft;
+    localStorage.setItem(draft.storageKey, JSON.stringify({ version: 1, drafts }));
+    pendingDraft = null;
+    multicamDraftState.value = 'saved';
+    draftRevision.value++;
+    return true;
+  } catch (error) {
+    if (multicamDraftState.value !== 'error') toast(`Could not save the multicam draft: ${error.message}`, { kind: 'error' });
+    multicamDraftState.value = 'error';
+    return false;
+  }
+}
+
+function discardSavedDraft(session) {
+  clearTimeout(draftTimer);
+  draftTimer = null;
+  pendingDraft = null;
+  try {
+    const drafts = readDrafts(session.storageKey);
+    delete drafts[session.mc.id];
+    localStorage.setItem(session.storageKey, JSON.stringify({ version: 1, drafts }));
+    draftRevision.value++;
+  } catch (error) {
+    toast(`Could not clear the saved multicam draft: ${error.message}`, { kind: 'error' });
+  }
+}
+
+export async function resumeMulticamDraft(id = null) {
+  if (multicamSession.value) return false;
+  const scope = context();
+  const drafts = savedMulticamDrafts.value;
+  if (!drafts.length) return false;
+  if (!id && drafts.length > 1) {
+    id = await window.api.popupMenu(drafts.map((draft) => ({ id: draft.mc.id, label: draft.mc.name })));
+    if (!id) return false;
+  }
+  const draft = id ? drafts.find((item) => item.mc.id === id) : drafts[0];
+  if (!draft || scope.storageKey !== context().storageKey || scope.epoch !== projectEpoch.value) return false;
+  if (!open(draft.mc, { ...draft, restored: true })) return false;
+  room.value = 'edit';
+  return true;
+}
 
 // lossy: klippene på tidslinjen er endret på en måte multicam-klippet ikke kan ta vare på.
-function open(mc, { replace = [], editing = false, errors = [], lossy = false } = {}) {
-  multicamSession.value = { key: sessionKey++, mc: structuredClone(mc), replace, editing, initialErrors: errors, lossy };
+function open(mc, { replace = [], editing = false, errors = [], initialErrors = errors, lossy = false,
+  restored = false, time, dirty = false, baseSignature } = {}) {
+  if (!flushMulticamDraft()) return false;
+  const session = { ...context(), key: sessionKey++, mc: structuredClone(mc), replace, editing, initialErrors, lossy, restored, time, dirty };
+  session.baseSignature = baseSignature ?? timelineSignature(session);
+  multicamDraftState.value = 'saved';
+  multicamSession.value = session;
+  return true;
 }
 
 // Tekst når noe på tidslinjen ikke kan tas med (en bit midt i er slettet, eller farten er endret).
@@ -47,8 +157,9 @@ export function createMulticamFromSelection() {
   const mc = multicamFromClips(p, usable);
   // Import the camera positions, then let the user choose the new program.
   mc.programMode = 'selected';
+  mc.rangeExplicit = false;
   mc.cuts = [];
-  open(mc, { replace: ids.filter((id) => usable.includes(id)), errors });
+  open(mc, { replace: ids.filter((id) => usable.includes(id)), errors, time: mc.range?.in });
 }
 
 // Uten utvalg: et tomt vindu der man velger filene selv. Valgte filer i biblioteket blir med.
@@ -69,13 +180,23 @@ export function editMulticam(clipId) {
   open(current, { replace: multicamClips(p, mc.id), editing: true, lossy: !ok, errors: ok ? [] : [LOSSY_TEXT] });
 }
 
-export function closeMulticam() {
+export function closeMulticam({ discard = false } = {}) {
+  const session = multicamSession.value;
+  if (!session) return true;
+  if (discard) discardSavedDraft(session);
+  else if (!flushMulticamDraft()) return false;
   multicamSession.value = null;
+  return true;
 }
 
 // Den blå knappen: legger resultatet på tidslinjen som en gruppe.
-export function sendMulticamToTimeline(mc) {
+export function sendMulticamToTimeline(mc, { allowTimelineChanges = false } = {}) {
   const s = multicamSession.value;
+  if (!sameContext(s)) return false;
+  if (multicamTimelineChanged() && !allowTimelineChanges) {
+    toast('The timeline changed after this multicam session started. Review the changes before applying the draft.', { kind: 'error' });
+    return false;
+  }
   if (!mc.angles.some((a) => project.value.media[a.mediaId]?.kind === 'video')) {
     toast('Add at least one video angle first.');
     return false;
@@ -84,7 +205,7 @@ export function sendMulticamToTimeline(mc) {
     toast('Choose a camera in Angles before adding the multicam clip to the timeline.');
     return false;
   }
-  const replace = (s?.replace || []).filter((id) => project.value.clips[id]);
+  const replace = (s.editing ? multicamClips(project.value, mc.id) : s.replace).filter((id) => project.value.clips[id]);
   let placed = [];
   commit((p) => {
     placed = placeMulticam(p, mc, { replace });
@@ -95,6 +216,7 @@ export function sendMulticamToTimeline(mc) {
   }
   editingGroup.value = null;
   selection.value = placed;
+  discardSavedDraft(s);
   multicamSession.value = null;
   toast(s?.editing ? `${mc.name} was updated on the timeline.` : `${mc.name} was added to the timeline. Double click it to edit the clips inside, or ${window.api.platform === 'darwin' ? 'Cmd' : 'Ctrl'} double click to switch angles again.`, { kind: 'success', timeout: 6000 });
   return true;
@@ -140,3 +262,31 @@ export function setActiveAudioAngle(clipId, value) {
     mc.audio = value;
   });
 }
+
+// Drafts belong to one project and sequence. A changed document closes the old
+// session after its pending draft has been saved under its original key.
+let notifiedDrafts = '';
+effect(() => {
+  const scope = context();
+  const session = multicamSession.value;
+  const drafts = savedMulticamDrafts.value;
+  Promise.resolve().then(() => {
+    if (scope.storageKey !== context().storageKey || scope.epoch !== projectEpoch.value || session !== multicamSession.value) return;
+    if (session && !sameContext(session)) {
+      // A write failure keeps pendingDraft available for retry, but the old
+      // editor must never operate on the newly opened document.
+      flushMulticamDraft();
+      multicamSession.value = null;
+      return;
+    }
+    const notification = scope.storageKey + drafts.map((draft) => `${draft.mc.id}:${draft.updated}`).join(',');
+    if (!session && drafts.length && notification !== notifiedDrafts) {
+      notifiedDrafts = notification;
+      toast(`${drafts.length === 1 ? 'An autosaved multicam draft is' : `${drafts.length} autosaved multicam drafts are`} available.`, {
+        timeout: 0, actions: [{ label: 'Resume Multicam Draft', onClick: () => resumeMulticamDraft() }],
+      });
+    }
+  });
+});
+window.addEventListener('beforeunload', flushMulticamDraft);
+window.api.onFlush(flushMulticamDraft);

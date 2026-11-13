@@ -174,6 +174,85 @@ test('reverse playback extends a chosen camera only over the reviewed interval',
   assert.equal(angleAt(mc, 6), B);
 });
 
+test('a reopened selected multicam can continue beyond its previously exported endpoint with matching audio', () => {
+  const p = setup(), mc = newMulticam();
+  addAngles(p, mc, ['a', 'b']);
+  const [A, B] = mc.angles.map((angle) => angle.id);
+  delete mc.rangeExplicit; // A selected-mode project saved before this fix.
+  cutAndSwitch(p, mc, 0, A);
+  extendProgram(p, mc, 0, 5);
+  placeMulticam(p, mc);
+  const read = absorbTimeline(p, p.multicams[mc.id]).mc;
+  assert.equal(read.rangeExplicit, false);
+  cutAndSwitch(p, read, 6, B);
+  extendProgram(p, read, 6, 8);
+  const previous = multicamClips(p, mc.id).map((id) => p.clips[id]);
+  const built = buildMulticamClips(p, read, { previous, previousMc: p.multicams[mc.id] });
+  assert.equal(built.duration, 8);
+  assert.equal(built.video.at(-1).mediaId, 'b');
+  assert.equal(built.video.at(-1).dur, 2);
+  assert.equal(built.audio[0].dur, 8);
+  placeMulticam(p, read, { replace: previous.map((clip) => clip.id) });
+  assert.equal(p.duration, 8);
+});
+
+test('explicit I/O marks survive reopening and still bound further camera choices', () => {
+  const p = setup(), mc = newMulticam();
+  addAngles(p, mc, ['a', 'b']);
+  const [A, B] = mc.angles.map((angle) => angle.id);
+  cutAndSwitch(p, mc, 0, A);
+  extendProgram(p, mc, 0, 5);
+  mc.range = { in: 1, out: 12 };
+  mc.rangeExplicit = true;
+  placeMulticam(p, mc);
+  const read = absorbTimeline(p, p.multicams[mc.id]).mc;
+  assert.deepEqual(read.range, { in: 1, out: 12 });
+  assert.equal(read.rangeExplicit, true);
+  cutAndSwitch(p, read, 6, B);
+  extendProgram(p, read, 6, 15);
+  const built = buildMulticamClips(p, read);
+  assert.equal(built.duration, 11);
+  assert.equal(built.video.at(-1).dur, 6);
+});
+
+test('continuing selected video preserves deliberate audio trims from the timeline', () => {
+  const p = setup(), mc = newMulticam();
+  addAngles(p, mc, ['a']);
+  const A = mc.angles[0].id;
+  cutAndSwitch(p, mc, 0, A);
+  extendProgram(p, mc, 0, 5);
+  placeMulticam(p, mc);
+  const audio = Object.values(p.clips).find((clip) => clip.type === 'audio');
+  audio.in = 1;
+  audio.start = 1;
+  audio.dur = 3;
+  const read = absorbTimeline(p, p.multicams[mc.id]).mc;
+  extendProgram(p, read, 5, 8);
+  const previous = multicamClips(p, mc.id).map((id) => p.clips[id]);
+  const built = buildMulticamClips(p, read, { previous, previousMc: p.multicams[mc.id] });
+  assert.equal(built.duration, 8);
+  assert.equal(built.audio[0].in, 1);
+  assert.equal(built.audio[0].start, 1);
+  assert.equal(built.audio[0].dur, 3);
+});
+
+test('rolling a finite cut out and back never extends the reviewed end or fills later footage', () => {
+  const p = setup(), mc = newMulticam();
+  addAngles(p, mc, ['a', 'b']);
+  const [A, B] = mc.angles.map((angle) => angle.id);
+  cutAndSwitch(p, mc, 0, A);
+  extendProgram(p, mc, 0, 5);
+  cutAndSwitch(p, mc, 5, B);
+  extendProgram(p, mc, 5, 10);
+  moveCut(mc, 1, 12);
+  assert.equal(mc.cuts[1].end, 10);
+  assert.ok(mc.cuts[1].t < 10);
+  moveCut(mc, 1, 6);
+  assert.deepEqual(mc.cuts.map((cut) => [cut.t, cut.end]), [[0, 6], [6, 10]]);
+  assert.equal(buildMulticamClips(p, mc).duration, 10);
+  assert.equal(angleAt(mc, 11), null);
+});
+
 test('number keys cut and switch, and the same angle twice does nothing', () => {
   const p = setup();
   const mc = mcWith(p);
