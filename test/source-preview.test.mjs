@@ -23,12 +23,12 @@ const bundle = (await build({
   } }],
 })).outputFiles[0].text;
 
-function setup() {
+function setup(api = {}) {
   const module = { exports: {} };
   const fixture = {};
   vm.runInNewContext(bundle, {
     module, exports: module.exports, fixture,
-    window: { addEventListener() {}, api: { onTasks() {}, onFlush() {}, onAnalyzed() {}, listTasks: async () => [] } },
+    window: { addEventListener() {}, api: { onTasks() {}, onFlush() {}, onAnalyzed() {}, listTasks: async () => [], offlineMedia: async () => [], ...api } },
     localStorage: { getItem: () => null, setItem() {} },
     performance: { now: () => 0 }, setTimeout: () => 0, clearTimeout() {},
     structuredClone,
@@ -158,4 +158,63 @@ test('a pending removal cannot affect a reopened project with the same id', () =
   assert.ok(s.project.value.media.source);
   c.removeBrowserMedia(['source']);
   assert.ok(c.mediaRemovalDialog.value, 'stale confirmation must not disable warnings');
+});
+
+test('disk deletion stays explicit after warnings are disabled and removes only successful media', async () => {
+  const calls = [];
+  const { store: s, commands: c } = setup({ trashMedia: async (items) => {
+    calls.push(items.map((item) => item.id));
+    return { removedIds: ['source'], trashedPaths: ['/source.mp4'],
+      failed: [{ mediaId: 'other', name: 'Other', errors: [{ path: '/other.mp4', error: 'File is in use' }] }] };
+  } });
+  c.pickMedia(null, 'source', ['source', 'other']);
+  c.removeBrowserMedia();
+  c.confirmMediaRemoval(true);
+  s.undo();
+  c.removeBrowserMedia(['source', 'other'], { forceDialog: true });
+  assert.ok(c.mediaRemovalDialog.value, 'disk deletion must offer its dialog even when project warnings are disabled');
+  assert.equal(calls.length, 0);
+  await c.deleteBrowserMediaFromDisk();
+  assert.deepEqual(calls.map((ids) => [...ids]), [['source', 'other']]);
+  assert.equal(s.project.value.media.source, undefined);
+  assert.ok(s.project.value.media.other, 'failed deletion keeps the media entry');
+  assert.equal(c.mediaRemovalDialog.value.busy, false);
+  assert.match(c.mediaRemovalDialog.value.error, /File is in use/);
+  assert.deepEqual([...c.mediaRemovalDialog.value.mediaIds], ['other']);
+  s.undo();
+  assert.ok(s.project.value.media.source, 'project removal remains undoable');
+});
+
+test('disk deletion prevents duplicate requests and keeps media on failure', async () => {
+  let rejectDelete, calls = 0;
+  const { store: s, commands: c } = setup({ trashMedia: () => {
+    calls++;
+    return new Promise((_resolve, reject) => { rejectDelete = reject; });
+  } });
+  c.removeBrowserMedia(['source']);
+  const before = s.project.value;
+  const pending = c.deleteBrowserMediaFromDisk();
+  assert.equal(c.mediaRemovalDialog.value.busy, true);
+  c.confirmMediaRemoval();
+  await c.deleteBrowserMediaFromDisk();
+  assert.equal(calls, 1);
+  assert.equal(s.project.value, before);
+  rejectDelete(new Error('Recycle Bin is unavailable'));
+  await pending;
+  assert.equal(s.project.value, before);
+  assert.equal(c.mediaRemovalDialog.value.busy, false);
+  assert.match(c.mediaRemovalDialog.value.error, /Recycle Bin is unavailable/);
+});
+
+test('completing disk deletion after a project change leaves the newly opened project intact', async () => {
+  let finish;
+  const { store: s, commands: c, newProject } = setup({ trashMedia: () => new Promise((resolve) => { finish = resolve; }) });
+  c.removeBrowserMedia(['source']);
+  const pending = c.deleteBrowserMediaFromDisk();
+  const next = newProject('Other project');
+  s.setProject(next);
+  finish({ removedIds: ['source'], failed: [], trashedPaths: ['/source.mp4'] });
+  await pending;
+  assert.equal(s.project.value.id, next.id);
+  assert.equal(c.mediaRemovalDialog.value, null);
 });

@@ -17,6 +17,7 @@ import { cancelLayerImport, finish as finishLayers, layerImport } from './layers
 import { Button, Modal, NumberField, Row, Section, Segmented, Select, Toggle, toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
 import { toggleViewerFullscreen } from './fullscreen.js';
+import { mediaSourcePaths } from '../../shared/mediaSources.cjs';
 
 const api = window.api;
 
@@ -118,19 +119,27 @@ export function Editor({ active }) {
 function MediaRemovalDialog() {
   const request = commands.mediaRemovalDialog.value;
   const [skip, setSkip] = useState(false);
-  const close = () => (commands.mediaRemovalDialog.value = null);
+  const close = () => { if (!request.busy) commands.mediaRemovalDialog.value = null; };
+  const files = [...new Set(request.records.flatMap(mediaSourcePaths))];
   return (
     <Modal title={request.mediaIds.length === 1 ? 'Remove Clip from Project?' : `Remove ${request.mediaIds.length} Clips from Project?`}
-      width={480} onClose={close} footer={<>
-        <Button onClick={close} autoFocus>Cancel</Button>
-        <Button variant="primary" onClick={() => commands.confirmMediaRemoval(skip)}>Remove from Project</Button>
+      width={620} onClose={request.busy ? undefined : close} footer={<>
+        <Button disabled={request.busy} onClick={close} autoFocus>Cancel</Button>
+        <Button disabled={request.busy} variant="primary" onClick={() => commands.confirmMediaRemoval(skip)}>Remove from Project</Button>
+        <Button disabled={request.busy || !files.length} variant="danger" onClick={commands.deleteBrowserMediaFromDisk}>
+          {request.busy ? 'Deleting…' : 'Delete from Disk'}
+        </Button>
       </>}>
       <p>{request.names.join(', ')}</p>
       {request.usedOnTimeline && <p><strong>This media is used on a timeline.</strong> Removing it also removes its timeline clips and their linked clips from every sequence. Other clips keep their timing.</p>}
       {request.multicamNames.length > 0 && <p><strong>The following multicam clips will also be removed, including all their angles on the timelines:</strong> {request.multicamNames.join(', ')}.</p>}
-      <p>The files on disk are kept. You can undo this change.</p>
-      <label class="effect-remove-preference"><input type="checkbox" checked={skip}
+      <p><strong>Remove from Project</strong> keeps the source files and supports Undo.</p>
+      <p><strong>Delete from Disk</strong> also moves the source files or recording folders below to the {api.platform === 'win32' ? 'Recycle Bin' : 'Trash'}. Other projects using them will need the files restored or relinked. Undo restores the project entries; restore the files from the {api.platform === 'win32' ? 'Recycle Bin' : 'Trash'} first.</p>
+      <ul class="media-removal-paths">{files.map((file) => <li key={file}>{file}</li>)}</ul>
+      {request.error && <p class="media-removal-error" role="alert">These files could not be deleted. Their media entries are kept in the project.<br />{request.error}</p>}
+      <label class="effect-remove-preference"><input type="checkbox" checked={skip} disabled={request.busy}
         onChange={(e) => setSkip(e.currentTarget.checked)} /> Don’t show this again</label>
+      <p class="hint">Applies to removing media from the project. Deleting from disk always requires this dialog.</p>
     </Modal>
   );
 }

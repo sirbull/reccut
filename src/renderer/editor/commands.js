@@ -43,6 +43,7 @@ import {
 } from '../../shared/ops.js';
 import {
   addMediaRecords,
+  checkOffline,
   reportFailed,
   commit,
   commitClipEdit,
@@ -96,7 +97,7 @@ export function deleteFocusedSelection(ripple = true) {
   return deleteSelection(ripple);
 }
 
-export function removeBrowserMedia(ids = browserPicked.value) {
+export function removeBrowserMedia(ids = browserPicked.value, { forceDialog = false } = {}) {
   if (mediaRemovalDialog.value) return;
   endTransient(true);
   endPreview();
@@ -104,18 +105,54 @@ export function removeBrowserMedia(ids = browserPicked.value) {
   const plan = mediaRemovalPlan(p, ids);
   if (!plan.mediaIds.length) return;
   pause();
-  const request = { ...plan, names: plan.mediaIds.map((id) => p.media[id].name), projectId: p.id, epoch: projectEpoch.value };
+  const records = plan.mediaIds.map((id) => p.media[id]);
+  const request = { ...plan, records, names: records.map((media) => media.name), projectId: p.id, epoch: projectEpoch.value };
   mediaRemovalDialog.value = request;
-  if (!prefs.value.confirmMediaRemoval) confirmMediaRemoval();
+  if (!forceDialog && !prefs.value.confirmMediaRemoval) confirmMediaRemoval();
 }
 
 export function confirmMediaRemoval(skipWarning = false) {
   const request = mediaRemovalDialog.value;
+  if (request?.busy) return;
   mediaRemovalDialog.value = null;
   if (!request || request.projectId !== project.value.id || request.epoch !== projectEpoch.value) return;
   if (skipWarning) setPrefs({ confirmMediaRemoval: false });
-  const removed = new Set(request.mediaIds);
-  commit((p) => removeProjectMedia(p, request.mediaIds));
+  finishMediaRemoval(request.mediaIds);
+}
+
+export async function deleteBrowserMediaFromDisk() {
+  const request = mediaRemovalDialog.value;
+  if (!request || request.busy || request.projectId !== project.value.id || request.epoch !== projectEpoch.value) return;
+  pause();
+  mediaRemovalDialog.value = { ...request, busy: true, error: null };
+  try {
+    const result = await api.trashMedia(request.records);
+    if (request.projectId !== project.value.id || request.epoch !== projectEpoch.value) {
+      mediaRemovalDialog.value = null;
+      return;
+    }
+    if (result.removedIds.length) finishMediaRemoval(result.removedIds);
+    if (result.failed.length) {
+      const remaining = request.records.filter((media) => result.failed.some((failure) => failure.mediaId === media.id));
+      mediaRemovalDialog.value = { ...request, ...mediaRemovalPlan(project.value, remaining.map((media) => media.id)),
+        records: remaining, names: remaining.map((media) => media.name), busy: false,
+        error: result.failed.flatMap((failure) => failure.errors.map((error) => `${error.path || failure.name}: ${error.error}`)).join('\n') };
+    } else mediaRemovalDialog.value = null;
+    if (result.trashedPaths.length) {
+      const bin = api.platform === 'win32' ? 'Recycle Bin' : 'Trash';
+      toast(`Source files moved to the ${bin}. Restore them there before undoing the project removal.`, { timeout: 9000 });
+      checkOffline().catch((error) => console.warn('Could not check remaining media after deletion', error));
+    }
+  } catch (error) {
+    if (request.projectId === project.value.id && request.epoch === projectEpoch.value) {
+      mediaRemovalDialog.value = { ...request, busy: false, error: error.message };
+    }
+  }
+}
+
+function finishMediaRemoval(ids) {
+  const removed = new Set(ids);
+  commit((p) => removeProjectMedia(p, ids));
   browserPicked.value = browserPicked.value.filter((id) => !removed.has(id));
   if (removed.has(browserSelection.value)) browserSelection.value = null;
   if (removed.has(browserRange.value?.mediaId)) browserRange.value = null;

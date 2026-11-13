@@ -663,6 +663,7 @@ async function mediaContextMenu(e, m, used) {
     { id: 'relink', label: m.offline ? 'Relink Missing File…' : 'Relink File…', enabled: n === 1 },
     { id: 'reveal', label: isMac ? 'Reveal in Finder' : 'Show in Explorer', enabled: !m.offline },
     { id: 'remove', label: n > 1 ? `Remove ${n} Clips from Project` : 'Remove from Project', accelerator: 'Backspace' },
+    { id: 'deleteDisk', label: 'Delete from Disk…' },
   ]);
   if (['append', 'insert', 'connect', 'overwrite'].includes(id)) commands.addBrowserSelection(id);
   else if (id === 'slideshow') commands.openSlideshow(mediaOrder);
@@ -673,6 +674,7 @@ async function mediaContextMenu(e, m, used) {
   else if (id === 'reveal') api.reveal(m.path);
   else if (id === 'relink') commands.relinkDialog(m.id);
   else if (id === 'remove') commands.removeBrowserMedia(picked.map((x) => x.id));
+  else if (id === 'deleteDisk') commands.removeBrowserMedia(picked.map((x) => x.id), { forceDialog: true });
 }
 
 /* Små forhåndsvisninger tegnet med tegnemotoren */

@@ -204,6 +204,24 @@ main {
 .btn.primary:hover {
   background: var(--accent-2);
 }
+.btn.danger {
+  background: #c92a24;
+  color: #fff;
+}
+.btn.danger:hover:not(:disabled) {
+  background: #ab201b;
+}
+.media-removal-paths {
+  max-height: 130px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.media-removal-error {
+  color: var(--red);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .btn.secondary {
   background: var(--bg-3);
   border-color: var(--line-2);

@@ -104,6 +104,7 @@ contextBridge.exposeInMainWorld('api', {
   importMedia: invoke('media:import'),
   importRecording: invoke('media:importRecording'),
   recordingPaths: invoke('media:recordingPaths'),
+  trashMedia: invoke('media:trash'),
   importSequence: invoke('media:importSequence'),
   locateDecoder: invoke('decoders:locate'),
   reanalyze: invoke('media:reanalyze'),
