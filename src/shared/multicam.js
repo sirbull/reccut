@@ -6,6 +6,8 @@
 //   { id, name, angles: [{ id, mediaId, offset }], cuts: [{ t, angle }], audio, range }
 // offset er tiden i multicam-klippet der filens start (mediatid 0) ligger.
 // cuts er sortert etter t. Hvert kutt gjelder fram til neste.
+// Nye oppsett har programMode: 'selected'. Der har hvert kutt en end-tid,
+// og bare intervallet [t, end) er valgt. Eldre oppsett beholder hele programmet.
 // audio er id-en til vinkelen som har lyden, eller 'follow' for lyd fra vinkelen som vises.
 // range er { in, out } i multicam-tid, eller null for hele lengden.
 // fallback er vinkelen som brukes der den valgte ikke har bilde: 'auto' (første kamera med
@@ -171,7 +173,7 @@ export function multicamRange(project, mc) {
 }
 
 export function newMulticam(name = 'Multicam Clip') {
-  return { id: uid(), name, angles: [], cuts: [], audio: null, range: null, fallback: 'auto' };
+  return { id: uid(), name, angles: [], cuts: [], audio: null, range: null, fallback: 'auto', programMode: 'selected' };
 }
 
 // Den første vinkelen med bilde. Brukes når et kutt peker på noe som er borte.
@@ -233,21 +235,23 @@ export function tidy(project, mc) {
   const fallback = firstVideoAngle(project, mc);
   const ids = new Set(mc.angles.map((a) => a.id));
   const ext = multicamExtent(project, mc);
+  const selectedOnly = mc.programMode === 'selected';
   let cuts = (mc.cuts || []).filter((c) => ids.has(c.angle) && isVideoAngle(project, mc.angles.find((a) => a.id === c.angle)));
   cuts.sort((a, b) => a.t - b.t);
   if (!fallback) cuts = [];
-  else if (!cuts.length) cuts = [{ t: ext.start, angle: fallback }];
-  else cuts[0] = { ...cuts[0], t: Math.min(cuts[0].t, ext.start) };
+  else if (!selectedOnly && !cuts.length) cuts = [{ t: ext.start, angle: fallback }];
+  else if (!selectedOnly && cuts.length) cuts[0] = { ...cuts[0], t: Math.min(cuts[0].t, ext.start) };
   // Kutt med samme vinkel etter hverandre slås sammen, unntatt kutt laget med bladet.
-  const keep = (c) => (c.blade ? { t: r6(c.t), angle: c.angle, blade: true } : { t: r6(c.t), angle: c.angle });
+  const keep = (c) => ({ t: r6(c.t), angle: c.angle,
+    ...(c.blade ? { blade: true } : {}), ...(c.end != null ? { end: r6(c.end) } : {}) });
   const merged = [];
   for (const c of cuts) {
     const prev = merged[merged.length - 1];
     if (prev && Math.abs(prev.t - c.t) < EPS) merged[merged.length - 1] = { ...keep(c), t: prev.t };
-    else if (!prev || prev.angle !== c.angle || c.blade) merged.push(keep(c));
+    else if (selectedOnly || !prev || prev.angle !== c.angle || c.blade) merged.push(keep(c));
   }
   // Etter en sammenslåing kan to like naboer ha oppstått.
-  mc.cuts = merged.filter((c, i) => i === 0 || c.blade || merged[i - 1].angle !== c.angle);
+  mc.cuts = selectedOnly ? merged : merged.filter((c, i) => i === 0 || c.blade || merged[i - 1].angle !== c.angle);
   if (mc.audio !== 'follow' && !(mc.audio && ids.has(mc.audio) && angleHasAudio(project, mc.angles.find((a) => a.id === mc.audio)))) {
     mc.audio = firstAudioAngle(project, mc);
   }
@@ -262,7 +266,10 @@ export function normalize(project, mc) {
   const { start } = multicamExtent(project, mc);
   if (Math.abs(start) < EPS) return mc;
   for (const a of mc.angles) a.offset = r6(a.offset - start);
-  for (const c of mc.cuts) c.t = r6(c.t - start);
+  for (const c of mc.cuts) {
+    c.t = r6(c.t - start);
+    if (c.end != null) c.end = r6(c.end - start);
+  }
   for (const a of mc.angles) if (a.sound?.volumeKf?.length) a.sound.volumeKf = a.sound.volumeKf.map(([t, v]) => [r6(t - start), v]);
   if (mc.range) mc.range = { in: r6(mc.range.in - start), out: r6(mc.range.out - start) };
   return tidy(project, mc);
@@ -286,7 +293,9 @@ export function cutIndexAt(mc, t) {
 }
 
 export function angleAt(mc, t) {
-  return mc.cuts[cutIndexAt(mc, t)]?.angle || null;
+  const cut = mc.cuts[cutIndexAt(mc, t)];
+  if (mc.programMode === 'selected' && (!cut || t < cut.t - EPS || t >= (cut.end ?? Infinity) - EPS)) return null;
+  return cut?.angle || null;
 }
 
 // Kutter ved t og viser en annen vinkel derfra (talltastene). Gir false om ingenting endret seg.
@@ -294,8 +303,27 @@ export function cutAndSwitch(project, mc, t, angleId, { frame = 1 / 30, preserve
   const angle = mc.angles.find((a) => a.id === angleId);
   if (!angle || !isVideoAngle(project, angle)) return false;
   const T = r6(Math.round(t / frame) * frame);
-  const i = cutIndexAt(mc, T);
+  const selectedOnly = mc.programMode === 'selected';
+  const i = selectedOnly && mc.cuts[0]?.t > T + EPS ? -1 : cutIndexAt(mc, T);
   const cur = mc.cuts[i];
+  if (selectedOnly) {
+    const ext = multicamExtent(project, mc);
+    if (T < ext.start - EPS || T >= ext.end - EPS) return false;
+    const covered = angleAt(mc, T);
+    if (covered === angleId) return false;
+    const next = mc.cuts[i + 1];
+    const end = r6(Math.min(ext.end, next?.t ?? Infinity, covered ? cur.end ?? ext.end : T + frame));
+    if (end <= T) return false;
+    if (cur && Math.abs(cur.t - T) < frame / 2) {
+      cur.angle = angleId;
+      cur.end = end;
+    } else {
+      if (cur && covered) cur.end = T;
+      mc.cuts.splice(i + 1, 0, { t: T, angle: angleId, end });
+    }
+    tidy(project, mc);
+    return true;
+  }
   if (!cur) {
     mc.cuts = [{ t: T, angle: angleId }];
     return tidy(project, mc), true;
@@ -311,7 +339,8 @@ export function cutAndSwitch(project, mc, t, angleId, { frame = 1 / 30, preserve
 }
 
 // Bytter vinkel i biten der t ligger, uten å kutte (Shift og talltast).
-export function switchSegment(project, mc, t, angleId, { preserveCuts = false } = {}) {
+export function switchSegment(project, mc, t, angleId, { preserveCuts = false, frame = 1 / 30 } = {}) {
+  if (mc.programMode === 'selected' && !angleAt(mc, t)) return cutAndSwitch(project, mc, t, angleId, { frame, preserveCuts });
   const angle = mc.angles.find((a) => a.id === angleId);
   if (!angle || !isVideoAngle(project, angle) || !mc.cuts.length) return false;
   const i = cutIndexAt(mc, t);
@@ -320,6 +349,33 @@ export function switchSegment(project, mc, t, angleId, { preserveCuts = false } 
   if (preserveCuts) keepSegmentBoundaries(mc, i);
   tidy(project, mc);
   return true;
+}
+
+// Extend only camera choices reached during review. Seeking through an empty
+// area alone never chooses a camera. Existing later cuts bound every extension.
+export function extendProgram(project, mc, from, to) {
+  if (mc.programMode !== 'selected' || Math.abs(to - from) < EPS) return false;
+  const extent = multicamExtent(project, mc);
+  let changed = false;
+  for (let i = 0; i < mc.cuts.length; i++) {
+    const cut = mc.cuts[i];
+    if (to < from) {
+      if (cut.t > from + EPS || cut.end <= to + EPS) continue;
+      const start = r6(Math.max(to, extent.start, mc.cuts[i - 1]?.end ?? -Infinity));
+      if (start < cut.t - EPS) {
+        cut.t = start;
+        changed = true;
+      }
+      continue;
+    }
+    if (cut.t >= to || (cut.end ?? Infinity) < from - EPS) continue;
+    const end = r6(Math.min(to, extent.end, mc.cuts[i + 1]?.t ?? Infinity));
+    if (cut.end != null && end > cut.end + EPS) {
+      cut.end = end;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 // Paused angle auditions must keep both edges, even when neighbouring angles
@@ -335,12 +391,27 @@ export function bladeAt(mc, t, { frame = 1 / 30 } = {}) {
   const T = r6(Math.round(t / frame) * frame);
   const i = cutIndexAt(mc, T);
   if (!mc.cuts[i] || mc.cuts.some((c) => Math.abs(c.t - T) < frame / 2)) return -1;
-  mc.cuts.splice(i + 1, 0, { t: T, angle: mc.cuts[i].angle, blade: true });
+  if (mc.programMode === 'selected' && !angleAt(mc, T)) return -1;
+  const cut = { t: T, angle: mc.cuts[i].angle, blade: true };
+  if (mc.cuts[i].end != null) {
+    cut.end = mc.cuts[i].end;
+    mc.cuts[i].end = T;
+  }
+  mc.cuts.splice(i + 1, 0, cut);
   return i + 1;
 }
 
 // Fjerner et kutt. Biten før fortsetter der det var.
 export function removeCut(project, mc, index) {
+  if (mc.programMode === 'selected') {
+    const cut = mc.cuts[index];
+    if (!cut) return false;
+    const prev = mc.cuts[index - 1];
+    if (prev && prev.end >= cut.t - EPS) prev.end = Math.max(prev.end, cut.end);
+    mc.cuts.splice(index, 1);
+    tidy(project, mc);
+    return true;
+  }
   if (index <= 0 || index >= mc.cuts.length) return false;
   mc.cuts.splice(index, 1);
   tidy(project, mc);
@@ -353,7 +424,13 @@ export function moveCut(mc, index, t, { frame = 1 / 30 } = {}) {
   const lo = mc.cuts[index - 1].t + frame;
   const hi = index + 1 < mc.cuts.length ? mc.cuts[index + 1].t - frame : Infinity;
   const T = Math.round(t / frame) * frame;
-  mc.cuts[index].t = r6(Math.max(lo, Math.min(hi, T)));
+  const next = r6(Math.max(lo, Math.min(hi, T)));
+  if (mc.programMode === 'selected') {
+    const cut = mc.cuts[index], prev = mc.cuts[index - 1];
+    if (prev.end >= cut.t - EPS) prev.end = next;
+    cut.end = Math.max(cut.end, next + frame);
+  }
+  mc.cuts[index].t = next;
   return true;
 }
 
@@ -362,8 +439,8 @@ export function segments(project, mc) {
   const { in: a, out: b } = multicamRange(project, mc);
   const out = [];
   for (let i = 0; i < mc.cuts.length; i++) {
-    const s = Math.max(a, i === 0 ? -Infinity : mc.cuts[i].t);
-    const e = Math.min(b, mc.cuts[i + 1]?.t ?? Infinity);
+    const s = Math.max(a, i === 0 && mc.programMode !== 'selected' ? -Infinity : mc.cuts[i].t);
+    const e = Math.min(b, mc.cuts[i + 1]?.t ?? Infinity, mc.cuts[i].end ?? Infinity);
     if (e - s > EPS) out.push({ start: s, end: e, angle: mc.cuts[i].angle, index: i });
   }
   return out;
@@ -378,6 +455,7 @@ function covers(project, a, t) {
 // Vinkelen som vises ved t når chosenId er valgt: den valgte, så reservesporet (mc.fallback),
 // så det første kameraet med bilde. Med fallback 'none' blir det et hull.
 function useAngle(project, mc, chosenId, t) {
+  if (!chosenId) return null;
   const chosen = mc.angles.find((a) => a.id === chosenId);
   if (covers(project, chosen, t)) return chosen;
   if (mc.fallback === 'none') return null;
@@ -519,6 +597,8 @@ export function applyMulticamSync(project, mc, offsets) {
 export function multicamFromClips(project, ids, { name } = {}) {
   const clips = ids.map((id) => project.clips[id]).filter((c) => c && (c.type === 'video' || c.type === 'audio') && project.media[c.mediaId]);
   const mc = newMulticam(name || nextMulticamName(project));
+  // These choices already exist on the editing timeline and must be preserved.
+  delete mc.programMode;
   const byMedia = new Map();
   for (const c of [...clips].sort((a, b) => (b.type === 'video') - (a.type === 'video') || b.lane - a.lane || a.start - b.start)) {
     if (byMedia.has(c.mediaId)) continue;
@@ -584,7 +664,8 @@ function audioStreamKeys(media) {
  * gir egenskapene sine (effekter, farge, posisjon) videre til nye biter fra samme vinkel.
  */
 export function buildMulticamClips(project, mc, { previous = [], previousMc = null } = {}) {
-  const range = multicamRange(project, mc);
+  const range = multicamOutputRange(project, mc);
+  if (!range) return { video: [], audio: [], duration: 0 };
   const follow = mc.audio === 'follow';
   const video = [];
   const audio = [];
@@ -626,11 +707,14 @@ export function buildMulticamClips(project, mc, { previous = [], previousMc = nu
     const prev = pieces[pieces.length - 1];
     // Et kutt laget med bladet (også i redigeringen) blir stående, selv med samme kamera på begge sider.
     const cut = mc.cuts[piece.index];
-    const bladed = cut?.blade && Math.abs(cut.t - piece.start) < EPS;
+    const bladed = (cut?.blade || mc.programMode === 'selected') && Math.abs(cut.t - piece.start) < EPS;
     if (prev && prev.angle === piece.angle && Math.abs(prev.end - piece.start) < EPS && !bladed) prev.end = piece.end;
     else pieces.push({ ...piece });
   }
+  let cursor = range.in;
   for (const seg of pieces) {
+    if (seg.start > cursor + EPS) video.push(gap(r6(cursor - range.in), r6(seg.start - cursor)));
+    cursor = seg.end;
     const angle = mc.angles.find((a) => a.id === seg.angle);
     const m = project.media[angle?.mediaId];
     const t0 = seg.start - range.in;
@@ -697,7 +781,14 @@ export function buildMulticamClips(project, mc, { previous = [], previousMc = nu
   }
   // Mellomrom til slutt har ingen funksjon.
   while (video.length && video[video.length - 1].type === 'gap') video.pop();
-  return { video, audio, duration: range.out - range.in };
+  return { video, audio, duration: r6(range.out - range.in) };
+}
+
+function multicamOutputRange(project, mc) {
+  const range = multicamRange(project, mc);
+  if (mc.programMode !== 'selected') return range;
+  const chosen = segments(project, mc);
+  return chosen.length ? { in: chosen[0].start, out: chosen[chosen.length - 1].end } : null;
 }
 
 // Finn et spor over hovedsporet der hele området er ledig.
@@ -725,13 +816,15 @@ function freeAudioLane(project, start, end) {
  */
 export function placeMulticam(project, mc, { replace = [], at = null } = {}) {
   const previousMc = project.multicams?.[mc.id] ? deepClone(project.multicams[mc.id]) : null;
-  project.multicams = { ...(project.multicams || {}), [mc.id]: deepClone(mc) };
   const old = replace.map((id) => project.clips[id]).filter(Boolean);
   const oldIds = new Set(old.flatMap((c) => groupMembers(project, c.id)));
   for (const c of old) oldIds.add(c.id);
   const previous = [...oldIds].map((id) => deepClone(project.clips[id]));
   const { video, audio } = buildMulticamClips(project, mc, { previous, previousMc });
   if (!video.length && !audio.length) return [];
+  const stored = deepClone(mc);
+  if (stored.programMode === 'selected') stored.range = multicamOutputRange(project, mc);
+  project.multicams = { ...(project.multicams || {}), [mc.id]: stored };
   const group = uid();
   for (const c of [...video, ...audio]) c.group = group;
 
@@ -841,9 +934,12 @@ export function absorbTimeline(project, mc) {
     const mid = t + c.dur / 2;
     // En bit der et annet kamera ble vist som reserve, beholder kameraet som var valgt.
     const angle = c.type === 'gap' || pictureAngleAt(project, mc, mid) === c.multicam.angle ? angleAt(mc, mid) : c.multicam.angle;
+    if (next.programMode === 'selected' && !angle) continue;
     const prev = cuts[cuts.length - 1];
     // To klipp etter hverandre med samme kamera (delt med bladet i redigeringen) holdes fra hverandre.
-    cuts.push(prev && prev.angle === angle ? { t, angle, blade: true } : { t, angle });
+    const cut = prev && prev.angle === angle ? { t, angle, blade: true } : { t, angle };
+    if (next.programMode === 'selected') cut.end = r6(t + c.dur);
+    cuts.push(cut);
   }
   // Kutt etter området beholdes, så det ikke endrer seg om området gjøres lengre igjen.
   next.cuts = [...cuts, ...mc.cuts.filter((c) => c.t > next.range.out + EPS)];

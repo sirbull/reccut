@@ -15,6 +15,7 @@ import {
   bladeAt,
   buildMulticamClips,
   cutAndSwitch,
+  extendProgram,
   moveAngle,
   moveCut,
   multicamClips,
@@ -47,6 +48,8 @@ function setup() {
 
 function mcWith(p, ids = ['a', 'b', 'c']) {
   const mc = newMulticam('Multicam 1');
+  // Existing saved multicams retain their full timeline and legacy cut semantics.
+  delete mc.programMode;
   addAngles(p, mc, ids);
   return mc;
 }
@@ -60,9 +63,115 @@ test('angles are numbered in the order they are added and stills are refused', (
   assert.match(errors[0], /still image/);
   assert.match(errors[1], /already added/);
   assert.deepEqual(mc.angles.map((x) => x.mediaId), ['a', 'b']);
-  assert.equal(mc.cuts.length, 1);
-  assert.equal(mc.cuts[0].angle, mc.angles[0].id);
+  assert.equal(mc.cuts.length, 0);
+  assert.equal(pictureAngleAt(p, mc, 0), null);
   assert.equal(mc.audio, mc.angles[0].id);
+});
+
+test('new multicams remain empty until a camera is chosen, including after sync and saving', () => {
+  const p = setup(), mc = newMulticam();
+  addAngles(p, mc, ['a', 'b']);
+  applyMulticamSync(p, mc, { [mc.angles[1].id]: 2 });
+  const restored = tidy(p, JSON.parse(JSON.stringify(mc)));
+  assert.deepEqual(restored.cuts, []);
+  assert.deepEqual(programPieces(p, restored), []);
+  assert.equal(pictureAngleAt(p, restored, 0), null);
+  assert.equal(pictureAngleAt(p, restored, 12), null);
+  assert.equal(extendProgram(p, restored, 0, 10), false, 'playback without a choice leaves Program empty');
+  assert.deepEqual(buildMulticamClips(p, restored), { video: [], audio: [], duration: 0 });
+  const before = structuredClone(p);
+  assert.deepEqual(placeMulticam(p, restored), []);
+  assert.deepEqual(p, before, 'an empty program cannot replace or add timeline clips');
+});
+
+test('a first choice starts at the playhead and grows only through reviewed footage', () => {
+  const p = setup(), mc = newMulticam();
+  addAngles(p, mc, ['a', 'b']);
+  const [A, B] = mc.angles.map((a) => a.id);
+  cutAndSwitch(p, mc, 5, B);
+  assert.equal(pictureAngleAt(p, mc, 4.9), null);
+  assert.equal(pictureAngleAt(p, mc, 5), B);
+  assert.equal(pictureAngleAt(p, mc, 6), null);
+  extendProgram(p, mc, 5, 8);
+  assert.deepEqual(segments(p, mc).map((s) => [s.start, s.end, s.angle]), [[5, 8, B]]);
+  assert.equal(pictureAngleAt(p, mc, 9), null);
+  // Seeking to an unreviewed position does not extend an earlier choice.
+  assert.equal(extendProgram(p, mc, 10, 11), false);
+  // At the next manual choice, the previous camera fills the reviewed interval.
+  extendProgram(p, mc, 5, 10);
+  cutAndSwitch(p, mc, 10, A);
+  assert.equal(angleAt(mc, 9), B);
+  assert.equal(angleAt(mc, 10), A);
+  assert.equal(angleAt(mc, 11), null);
+  const { video, audio, duration } = buildMulticamClips(p, mc);
+  assert.equal(video[0].in, 5);
+  assert.equal(video[0].start, 0);
+  assert.equal(duration, 5.033333);
+  assert.equal(audio[0].dur, duration);
+});
+
+test('unreviewed gaps and tails stay empty through export and reopening from the timeline', () => {
+  const p = setup(), mc = newMulticam();
+  addAngles(p, mc, ['a', 'b']);
+  const [A, B] = mc.angles.map((a) => a.id);
+  cutAndSwitch(p, mc, 5, A);
+  extendProgram(p, mc, 5, 6);
+  cutAndSwitch(p, mc, 9, B);
+  extendProgram(p, mc, 9, 10);
+  const built = buildMulticamClips(p, mc);
+  assert.deepEqual(built.video.map((c) => [c.type, c.start, c.dur]), [['video', 0, 1], ['gap', 1, 3], ['video', 4, 1]]);
+  assert.equal(built.duration, 5);
+  assert.equal(built.audio[0].dur, 5);
+  placeMulticam(p, mc);
+  const reopened = absorbTimeline(p, p.multicams[mc.id]);
+  assert.equal(reopened.ok, true);
+  assert.equal(angleAt(reopened.mc, 7), null);
+  assert.equal(angleAt(reopened.mc, 15), null);
+  assert.deepEqual(segments(p, reopened.mc).map((s) => [s.start, s.end]), [[5, 6], [9, 10]]);
+});
+
+test('repeated paused choices preserve already reviewed neighbours and finite ends', () => {
+  const p = setup(), mc = newMulticam();
+  addAngles(p, mc, ['a', 'b', 'c']);
+  const [A, B, C] = mc.angles.map((a) => a.id);
+  cutAndSwitch(p, mc, 0, A);
+  extendProgram(p, mc, 0, 5);
+  cutAndSwitch(p, mc, 5, B);
+  extendProgram(p, mc, 5, 10);
+  cutAndSwitch(p, mc, 10, C);
+  extendProgram(p, mc, 10, 15);
+  for (const angle of [C, A, B]) {
+    cutAndSwitch(p, mc, 7, angle, { preserveCuts: true });
+    assert.equal(angleAt(mc, 6), B);
+    assert.equal(angleAt(mc, 8), angle);
+    assert.equal(angleAt(mc, 11), C);
+    assert.equal(angleAt(mc, 16), null);
+  }
+  bladeAt(mc, 12);
+  tidy(p, mc);
+  assert.equal(angleAt(mc, 14), C);
+  assert.equal(angleAt(mc, 16), null);
+  const normalized = JSON.parse(JSON.stringify(mc));
+  for (const angle of normalized.angles) angle.offset += 3;
+  for (const cut of normalized.cuts) { cut.t += 3; cut.end += 3; }
+  applyMulticamSync(p, normalized, {});
+  assert.deepEqual(normalized.cuts, mc.cuts);
+});
+
+test('reverse playback extends a chosen camera only over the reviewed interval', () => {
+  const p = setup(), mc = newMulticam();
+  addAngles(p, mc, ['a', 'b']);
+  const [A, B] = mc.angles.map((a) => a.id);
+  cutAndSwitch(p, mc, 0, A);
+  extendProgram(p, mc, 0, 5);
+  cutAndSwitch(p, mc, 10, B);
+  extendProgram(p, mc, 10, 8);
+  assert.equal(angleAt(mc, 8), B);
+  assert.equal(angleAt(mc, 7), null);
+  assert.equal(angleAt(mc, 11), null);
+  extendProgram(p, mc, 8, 3);
+  assert.equal(angleAt(mc, 4), A);
+  assert.equal(angleAt(mc, 6), B);
 });
 
 test('number keys cut and switch, and the same angle twice does nothing', () => {

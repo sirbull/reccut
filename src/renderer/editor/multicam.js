@@ -15,6 +15,7 @@ import {
   tidy,
   nextMulticamName,
   placeMulticam,
+  programPieces,
 } from '../../shared/multicam.js';
 
 // { key, mc, replace: [clipId], editing: bool, initialErrors: [] }
@@ -44,6 +45,9 @@ export function createMulticamFromSelection() {
     return toast(errors[0] || 'Select video clips that lie on top of each other, then choose Create Multicam Clip.', { timeout: 6000 });
   }
   const mc = multicamFromClips(p, usable);
+  // Import the camera positions, then let the user choose the new program.
+  mc.programMode = 'selected';
+  mc.cuts = [];
   open(mc, { replace: ids.filter((id) => usable.includes(id)), errors });
 }
 
@@ -74,6 +78,10 @@ export function sendMulticamToTimeline(mc) {
   const s = multicamSession.value;
   if (!mc.angles.some((a) => project.value.media[a.mediaId]?.kind === 'video')) {
     toast('Add at least one video angle first.');
+    return false;
+  }
+  if (mc.programMode === 'selected' && !programPieces(project.value, mc).length) {
+    toast('Choose a camera in Angles before adding the multicam clip to the timeline.');
     return false;
   }
   const replace = (s?.replace || []).filter((id) => project.value.clips[id]);

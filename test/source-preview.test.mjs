@@ -2,12 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { build } from 'esbuild';
+import { cutAndSwitch, extendProgram } from '../src/shared/multicam.js';
 
 // De faktiske bibliotekkommandoene og editorens tilstand, med en styrbar spiller.
 const bundle = (await build({
   stdin: { contents: `export * as commands from './src/renderer/editor/commands.js';
     export * as playback from './src/renderer/editor/playback.js';
     export * as store from './src/renderer/editor/store.js';
+    export * as multicam from './src/renderer/editor/multicam.js';
     export { newProject } from './src/shared/model.js';`, resolveDir: process.cwd() },
   bundle: true, write: false, format: 'cjs', platform: 'browser',
   jsx: 'automatic', jsxImportSource: 'preact',
@@ -33,14 +35,60 @@ function setup(api = {}) {
     performance: { now: () => 0 }, setTimeout: () => 0, clearTimeout() {},
     structuredClone,
   });
-  const { store, commands, playback, newProject } = module.exports;
+  const { store, commands, playback, newProject, multicam } = module.exports;
   const p = newProject('Timeline');
   p.media.source = { id: 'source', name: 'Source', kind: 'video', duration: 30, streams: { main: { path: '/source.mp4', hasVideo: true } } };
   p.media.other = { ...p.media.source, id: 'other', name: 'Other' };
   store.setProject(p);
   store.setTime(4);
-  return { store, commands, playback, newProject, fixture };
+  return { store, commands, playback, newProject, multicam, fixture };
 }
+
+test('the New Multicam command starts with an empty program and refuses an untouched timeline export', () => {
+  const { store: s, multicam: m } = setup();
+  m.newMulticamClip(['source', 'other']);
+  const session = m.multicamSession.value;
+  assert.equal(session.mc.angles.length, 2);
+  assert.equal(session.mc.cuts.length, 0);
+  assert.equal(m.sendMulticamToTimeline(session.mc), false);
+  assert.equal(Object.keys(s.project.value.clips).length, 0);
+  assert.equal(s.canUndo(), false);
+  assert.equal(m.multicamSession.value, session);
+});
+
+test('Add to Timeline exports just the selected multicam interval and reopens the same choices', () => {
+  const { store: s, multicam: m } = setup();
+  m.newMulticamClip(['source', 'other']);
+  const mc = m.multicamSession.value.mc;
+  cutAndSwitch(s.project.value, mc, 4, mc.angles[1].id);
+  extendProgram(s.project.value, mc, 4, 7);
+  assert.equal(m.sendMulticamToTimeline(mc), true);
+  assert.equal(s.project.value.duration, 3);
+  const video = Object.values(s.project.value.clips).find((clip) => clip.type === 'video');
+  assert.equal(video.in, 4);
+  assert.equal(video.dur, 3);
+  m.editMulticam(video.id);
+  assert.equal(m.multicamSession.value.editing, true);
+  assert.equal(m.multicamSession.value.mc.cuts[0].t, 4);
+  assert.equal(m.multicamSession.value.mc.cuts[0].end, 7);
+});
+
+test('creating a new multicam from timeline clips imports cameras while leaving Program empty', () => {
+  const { store: s, commands: c, multicam: m } = setup();
+  c.pickMedia(null, 'source', ['source', 'other']);
+  c.addBrowserSelection('append');
+  c.pickMedia(null, 'other', ['source', 'other']);
+  c.addBrowserSelection('connect');
+  s.selection.value = Object.keys(s.project.value.clips);
+  const before = s.project.value;
+  m.createMulticamFromSelection();
+  const session = m.multicamSession.value;
+  assert.equal(session.mc.angles.length, 2);
+  assert.equal(session.mc.programMode, 'selected');
+  assert.equal(session.mc.cuts.length, 0);
+  assert.equal(session.replace.length, 2);
+  assert.equal(s.project.value, before, 'the original timeline remains available until Add to Timeline');
+});
 
 test('picking media opens its source; frame steps and I/O mark the visible source position', () => {
   const { store: s, commands: c, playback: p } = setup();

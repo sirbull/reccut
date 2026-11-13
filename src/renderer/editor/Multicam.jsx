@@ -55,6 +55,7 @@ import {
   canBeAngle,
   cutAndSwitch,
   cutIndexAt,
+  extendProgram,
   isVideoAngle,
   moveAngle,
   moveCut,
@@ -163,6 +164,8 @@ function MulticamWindow({ session }) {
   const mcRef = useRef(mc);
   mcRef.current = mc;
   const hist = useRef({ undo: [], redo: [] });
+  const lastChoice = useRef(null);
+  const playbackEdit = useRef(false);
   const [dirty, setDirty] = useState(false);
   const edit = (fn, { record = true } = {}) => {
     const next = structuredClone(mcRef.current);
@@ -181,6 +184,8 @@ function MulticamWindow({ session }) {
   const undo = () => {
     const prev = hist.current.undo.pop();
     if (!prev) return;
+    stopPlay();
+    lastChoice.current = null;
     hist.current.redo.push(mcRef.current);
     mcRef.current = prev;
     setMc(prev);
@@ -188,6 +193,8 @@ function MulticamWindow({ session }) {
   const redo = () => {
     const next = hist.current.redo.pop();
     if (!next) return;
+    stopPlay();
+    lastChoice.current = null;
     hist.current.undo.push(mcRef.current);
     mcRef.current = next;
     setMc(next);
@@ -266,6 +273,7 @@ function MulticamWindow({ session }) {
     let t = timeRef.current;
     if (rate > 0 && t >= ext.end - frame) t = range.in;
     play.current = { on: true, rate, t0: t, now0: performance.now() };
+    playbackEdit.current = false;
     for (const el of Object.values(els.current)) sinkFor(el)?.resume();
     skimRef.current = null;
     timeRef.current = t;
@@ -315,16 +323,24 @@ function MulticamWindow({ session }) {
     let raf = 0;
     const tick = () => {
       const st = play.current;
-      const m = mcRef.current;
+      let m = mcRef.current;
       const pr = project.value;
       const e = multicamExtent(pr, m);
       const rg = multicamRange(pr, m);
       if (st.on) {
+        const previousTime = timeRef.current;
         let t = st.t0 + ((performance.now() - st.now0) / 1000) * st.rate;
         const stopAt = st.rate > 0 ? (timeRef.current < rg.out - 1e-3 ? rg.out : e.end) : e.start;
         if ((st.rate > 0 && t >= stopAt) || (st.rate < 0 && t <= stopAt)) {
           t = stopAt;
           stopPlay();
+        }
+        if (m.programMode === 'selected') {
+          const end = st.rate > 0
+            ? Math.min(e.end, (Math.floor(t / frame + 1e-6) + 1) * frame)
+            : Math.max(e.start, Math.floor(t / frame + 1e-6) * frame);
+          if (edit((next) => extendProgram(pr, next, previousTime, end), { record: !playbackEdit.current })) playbackEdit.current = true;
+          m = mcRef.current;
         }
         timeRef.current = t;
       }
@@ -453,8 +469,16 @@ function MulticamWindow({ session }) {
     if (!isVideoAngle(project.value, a)) return;
     skimRef.current = null;
     const preserveCuts = !play.current.on;
-    const changed = edit((m) => (noCut ? switchSegment(project.value, m, t, angleId, { preserveCuts }) : cutAndSwitch(project.value, m, t, angleId, { frame, preserveCuts })));
+    const changed = edit((m) => {
+      const extended = preserveCuts && lastChoice.current != null && t > lastChoice.current && extendProgram(project.value, m, lastChoice.current, t);
+      const selected = noCut
+        ? switchSegment(project.value, m, t, angleId, { frame, preserveCuts })
+        : cutAndSwitch(project.value, m, t, angleId, { frame, preserveCuts });
+      return Boolean(extended || selected);
+    });
+    lastChoice.current = t;
     if (changed) {
+      if (play.current.on) playbackEdit.current = true;
       activeRef.current = pictureAngleAt(project.value, mcRef.current, t);
       setActive(activeRef.current);
     }
@@ -630,7 +654,7 @@ function MulticamWindow({ session }) {
       } else if (e.shiftKey && (e.key === 'z' || e.key === 'Z')) fitZoom();
       else if (e.key === 'Backspace' || e.key === 'Delete') {
         const idx = selectedCut ?? cutIndexAt(m, timeRef.current);
-        if (idx > 0 && edit((x) => removeCut(project.value, x, idx))) setSelectedCut(null);
+        if ((idx > 0 || m.programMode === 'selected') && (selectedCut != null || angleAt(m, timeRef.current)) && edit((x) => removeCut(project.value, x, idx))) setSelectedCut(null);
       } else handled = false;
       if (handled) {
         e.preventDefault();
@@ -828,6 +852,7 @@ function MulticamWindow({ session }) {
           </div>
           <div class="mc-program-box">
             <canvas ref={programRef} />
+            {!active && !angleAt(mc, shownTime()) && <span class="mc-program-empty">Choose a camera in Angles at the playhead.</span>}
           </div>
           <div class="mc-transport">
             <div class="tc big" ref={tcRef}>00:00:00:00</div>
@@ -1575,7 +1600,7 @@ function MulticamTimeline(props) {
   };
   const runAngleMenu = (id, t) => {
     if (id?.startsWith('mcv:')) {
-      edit((m) => switchSegment(p, m, t, id.slice(4), { preserveCuts: true }));
+      edit((m) => switchSegment(p, m, t, id.slice(4), { frame, preserveCuts: true }));
       return true;
     }
     if (id?.startsWith('mca:')) {
