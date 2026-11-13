@@ -57,6 +57,7 @@ nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
 nav .links { display: flex; gap: 24px; margin-left: auto; font-size: 15px; color: var(--muted); }
 nav .links a { text-decoration: none; transition: color .2s; }
 nav .links a:hover { color: var(--text); }
+nav .links a.docs { color: var(--text); font-weight: 500; }
 
 .btn {
   display: inline-flex; align-items: center; gap: 10px;
@@ -244,8 +245,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 }
 
 @media (max-width: 1040px) {
-  nav .links { display: none; }
-  nav .btn { margin-left: auto; }
+  nav .links a:not(.docs) { display: none; }
 }
 
 @media (max-width: 900px) {
@@ -285,8 +285,9 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <a href="#looks">Color</a>
       <a href="#design">Design</a>
       <a href="#export">Export</a>
-      <a href="#ai">AI agents</a>
+      <a href="#ai">AI Agent</a>
       <a href="#open-source">Open source</a>
+      <a class="docs" href="docs/" target="_blank" rel="noopener">Docs</a>
     </div>
     <a class="btn small" href="https://github.com/sirbull/reccut">
       <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -302,15 +303,15 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <span class="eyebrow"><b>Free &amp; open source</b> Mac, Windows &amp; Linux</span>
     <h1>All-in-one tool for<br><span class="serif">content creators.</span></h1>
-    <p class="lead">Edit videos, record your screen and camera, create thumbnails and edit images. Bring in footage from your camera or phone, then add titles, music and color correction on a multitrack timeline.</p>
+    <p class="lead">Edit video, record your screen and camera, and make thumbnails.</p>
     <div class="ctas">
-      <a class="btn primary" href="https://github.com/sirbull/reccut/releases/latest">
+      <a class="btn primary" href="https://github.com/sirbull/reccut/releases">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
         Download for Mac, Windows &amp; Linux
       </a>
       <a class="btn" href="https://github.com/sirbull/reccut">Source on GitHub</a>
     </div>
-    <div class="facts"><span>macOS, Windows &amp; Linux</span><span>Works fully offline</span><span>MIT licence</span><span>No watermark, no account</span></div>
+    <div class="facts"><span>Works offline</span><span>No watermark</span><span>No account</span></div>
   </div>
 </header>
 
@@ -322,8 +323,8 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="center reveal">
       <div class="kicker">Video editing</div>
-      <h2>Edit video on a <span class="serif">magnetic timeline</span></h2>
-      <p class="sub">Import footage from your camera or phone and build a short film, an interview or a YouTube video. Arrange clips on the timeline, work with picture and sound on separate tracks, and add titles and subtitles.</p>
+      <h2>Video editing with a <span class="serif">magnetic timeline</span></h2>
+      <p class="sub">Import footage from your camera or phone and edit picture, sound, titles and subtitles on separate tracks.</p>
     </div>
     <div class="frame reveal" style="margin-top:50px"><img src="media/timeline.jpg" alt="A Reccut edit with imported nature footage on the magnetic timeline, titles on a separate video track, transitions and music underneath" loading="lazy" width="2000" height="509"></div>
     <div class="rooms reveal">
@@ -340,7 +341,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
         <p>Animate titles and clip properties with keyframes. Change speed, add speed ramps, stabilize footage or use masks and keying. Transcribe dialogue into subtitles and adjust them on the timeline.</p>
       </div>
     </div>
-    <p class="caption">The main track and editing shortcuts will feel familiar if you use Final Cut Pro. Video, audio and images can all be imported into a project.</p>
+    <p class="caption">The main track and shortcuts work like Final Cut Pro.</p>
   </div>
 </section>
 
@@ -348,11 +349,10 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="center reveal">
       <div class="kicker">Quick Search</div>
-      <h2>Press <kbd>Control</kbd> <kbd>Space</kbd> <span class="serif">and type</span></h2>
-      <p class="sub">No hunting through menus. Type a few letters and press Enter: effects and looks are applied to the selected clips, settings open in the inspector, tools switch on, commands run and help articles open. Every command shows its shortcut, so you learn them as you go.</p>
+      <h2>Find any tool <span class="serif">by typing</span></h2>
+      <p class="sub">Press <kbd>Control</kbd> <kbd>Space</kbd> (or Cmd/Ctrl K), type a few letters and press Enter to apply an effect, open a setting, run a command or find help. Each command shows its shortcut.</p>
     </div>
     <div class="frame reveal" style="margin:50px auto 0;max-width:760px"><img src="media/quick-search.jpg" alt="Quick Search in Reccut with the word color typed in, listing the Color Wheels setting, clip color commands with their shortcuts and help articles" loading="lazy" width="1200" height="1086"></div>
-    <p class="caption">Also opens with Cmd K on Mac and Ctrl K on Windows and Linux.</p>
   </div>
 </section>
 
@@ -360,32 +360,30 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="center reveal">
       <div class="kicker">Record</div>
-      <h2>Record your screen <span class="serif">and yourself</span></h2>
-      <p class="sub">Record a game, a tutorial or a presentation with your camera and microphone. When you stop, open the recording in Edit to cut out mistakes, add subtitles and adjust the sound.</p>
+      <h2>Screen and <span class="serif">camera recording</span></h2>
+      <p class="sub">Record a game, tutorial or presentation with your camera and microphone, then edit it right away.</p>
     </div>
     <figure class="record-demo reveal">
       <div class="frame">
         <video id="record-demo" muted loop playsinline controls preload="none" poster="media/record-gameplay.jpg" width="1440" height="904" aria-label="Gameplay and camera recording demo in Reccut">
           <source src="media/record-gameplay.mp4" type="video/mp4">
-          <img src="media/record-gameplay.jpg" alt="Reccut recording gameplay from Echoes of Quite Recent, with the creator's face in the lower-right corner" width="2000" height="1255">
+          <img src="media/record-gameplay.jpg" alt="Reccut recording gameplay with the creator's face in the lower-right corner" width="2000" height="1255">
         </video>
       </div>
-      <figcaption class="caption">Playing my own game, <a href="https://sirbull.itch.io/echoes-of-quite-recent">Echoes of Quite Recent</a>, with screen and camera recorded separately.</figcaption>
     </figure>
     <div class="record-details reveal">
       <div>
         <h3>Choose what to record</h3>
-        <p>Capture the whole screen, a window or a selected area. Add a camera and microphone, or record just yourself. Start, pause and stop from any app with a global shortcut.</p>
+        <p>The whole screen, a window or an area, with or without camera and microphone. Start and stop from any app with a shortcut.</p>
       </div>
       <div>
-        <h3>Adjust it afterwards</h3>
-        <p>Reccut can save screen and camera as separate files, so you can change the layout later. Select the PiP camera clip in Edit to remove a green-screen background or apply a mask without changing the screen recording. Cursor zoom can also be adjusted afterwards.</p>
+        <h3>Change the layout afterwards</h3>
+        <p>Screen and camera are saved as separate files, so you can move the camera, remove its background or adjust cursor zoom in Edit.</p>
       </div>
     </div>
     <div class="record-followup reveal">
-      <p class="sub">The trimmed recording in Edit: screen and camera on separate tracks, with a fade-in and a link to the game.</p>
-      <div class="frame"><img src="media/record-gameplay-edit.jpg" alt="Reccut’s editor with linked screen clips on V1, separate camera clips on V2, and the title Play the game yourself at sirbull.itch.io/echoes-of-quite-recent on V3" loading="lazy" width="2000" height="1255"></div>
-      <p class="caption"><a href="media/echoes-edited.mp4">Watch the finished clip</a></p>
+      <div class="frame"><img src="media/record-gameplay-edit.jpg" alt="Reccut’s editor with linked screen clips on V1, separate camera clips on V2 and a title on V3" loading="lazy" width="2000" height="1255"></div>
+      <p class="caption">The recording in Edit, with screen and camera on separate tracks.</p>
     </div>
   </div>
 </section>
@@ -396,32 +394,28 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="center reveal">
       <div class="kicker">Multicam</div>
-      <h2 id="multicam-title">Several cameras. <span class="serif">One edit.</span></h2>
-      <p class="sub">Filmed an interview from the front and the side, or a concert from three angles? Reccut lines the cameras up by their sound. Watch them all at once and press a number to choose which one is shown, live while the video plays or one section at a time.</p>
+      <h2 id="multicam-title">Multicam <span class="serif">editing</span></h2>
+      <p class="sub">Film with several cameras, sync them by sound and press a number to switch between them while the video plays.</p>
     </div>
     <figure class="reveal" style="margin-top:40px">
       <div class="frame"><img src="media/multicam-window.jpg" alt="The Reccut multicam window with four camera angles in a grid, the active angle outlined in green, the chosen camera in Program, sound settings in Properties and the multicam timeline with Sound, Program and one track per camera" loading="lazy" width="1800" height="1200"></div>
-      <figcaption class="caption">Four angles beside Program, with the chosen cuts on the multicam timeline. The city clips are sample footage. Click to enlarge.</figcaption>
+      <figcaption class="caption">Four camera angles with the chosen cuts below (sample footage).</figcaption>
     </figure>
     <div class="rooms reveal">
       <div class="room">
-        <h3>Sync by sound</h3>
-        <p>Select the clips and choose New Multicam Clip. Auto Sync compares the audio and lines up every camera and a separate audio recorder. If a file cannot be matched, Reccut tells you which one and why, so you can place it by hand.</p>
+        <h3>Automatic sync by sound</h3>
+        <p>Select the clips and choose New Multicam Clip. Reccut lines up every camera and a separate audio recorder, and tells you if a file can’t be matched.</p>
       </div>
       <div class="room">
-        <h3>Cut like a director</h3>
-        <p>Press 1 to 9 to cut to a camera at the playhead, or hold Shift to switch the current section without a new cut. Trim cuts, use the blade, mark an I/O range and choose which camera to fall back on when one has no picture.</p>
+        <h3>Switch cameras with 1–9</h3>
+        <p>Press a number to cut to that camera, or hold Shift to replace the camera in the current section. Trim the cuts afterwards.</p>
       </div>
       <div class="room">
-        <h3>Sound from the best microphone</h3>
-        <p>Keep the sound from one microphone the whole way, or let it follow the picture. Adjust the level with keyframes, pick the left or right channel, and add EQ, noise reduction or AI Clean Voice. Everything runs on your computer.</p>
+        <h3>Choose the sound source</h3>
+        <p>Use one microphone throughout or let the sound follow the camera. Add EQ or AI Clean Voice.</p>
       </div>
     </div>
-    <div class="record-followup reveal">
-      <p class="sub">Add to Timeline places one clip per cut, with the sound below. Edit the clips like any others, or reopen the multicam window to change cameras without losing your trims, effects and transitions.</p>
-      <div class="frame"><img src="media/multicam-result.jpg" alt="Reccut’s editor with a multicam result on the timeline: four clips marked MC, one for each camera cut, on V1 and the separate sound on A1" loading="lazy" width="1800" height="1200"></div>
-    </div>
-    <p class="caption">Unfinished multicam edits are saved locally as drafts, so you can pick up where you left off. See the <a href="https://github.com/sirbull/reccut/blob/main/docs/MULTICAM.md">multicam guide</a> for the full workflow.</p>
+    <p class="caption">The cuts become normal clips on the timeline. Reopen multicam to change cameras without losing your edits. <a href="https://github.com/sirbull/reccut/blob/main/docs/MULTICAM.md">Multicam guide</a></p>
   </div>
 </section>
 
@@ -429,28 +423,26 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="center reveal">
       <div class="kicker">Voice Over Studio</div>
-      <h2 id="voiceover-title">Your script. Your voice.<br><span class="serif">Your best take.</span></h2>
-      <p class="sub">Record narration or a talking head, one line at a time. Keep your best takes, adjust the pauses and send the finished voice over straight to your timeline, with subtitles from your script.</p>
+      <h2 id="voiceover-title">Record voice over <span class="serif">from a script</span></h2>
+      <p class="sub">Record one line at a time, keep the best takes and send the voice over to the timeline with subtitles.</p>
     </div>
     <figure class="reveal" style="margin-top:40px">
       <div class="frame"><img src="media/voice-over-studio.jpg" alt="Voice Over Studio in Reccut with a four-line demo script, a starred take, narration waveforms, audio effect templates, AI Clean Voice and Send to Edit with subtitles" loading="lazy" width="2000" height="1141"></div>
-      <figcaption class="caption">The script, takes, sound controls and narration timeline together in Voice Over Studio. Click to enlarge.</figcaption>
     </figure>
     <div class="rooms reveal">
       <div class="room">
-        <h3>Keep the take you like</h3>
-        <p>Read from your script or use the teleprompter. Record another take, star your favourite and trim to where the voice starts and ends. Set the pauses between lines and fill them with room tone.</p>
+        <h3>Takes and teleprompter</h3>
+        <p>Read from the teleprompter, record retakes and star the one you want. Set the pauses between lines.</p>
       </div>
       <div class="room">
-        <h3>Clean up and shape your sound</h3>
-        <p>AI Clean Voice reduces background noise on your computer. Then shape the voice with EQ, compression, de-essing and other effects, or start with the Studio Voice preset. Preview the result as you work.</p>
+        <h3>Noise removal and effects</h3>
+        <p>AI Clean Voice removes background noise. Add EQ, compression and de-essing, or use the Studio Voice preset.</p>
       </div>
       <div class="room">
-        <h3>Your voice, or a local AI voice</h3>
-        <p>Record with your microphone or download an AI voice to read the script locally. Send the chosen takes to Edit in one step. After a retake, send them again to update the previous assembly.</p>
+        <h3>Your voice or an AI voice</h3>
+        <p>Record with your microphone or let a downloaded AI voice read the script. AI voices run on your computer.</p>
       </div>
     </div>
-    <p class="caption">AI voices and audio cleanup run on your computer. No subscription or cloud upload is needed.</p>
   </div>
 </section>
 
@@ -458,8 +450,8 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="center reveal">
       <div class="kicker">Keying, masks &amp; stabilization</div>
-      <h2>One-click <span class="serif">background removal</span></h2>
-      <p class="sub">Remove a green or blue screen with one click, then place the clip over another image or video. For more demanding shots, use the advanced controls to refine the result.</p>
+      <h2>Remove green screen <span class="serif">in one click</span></h2>
+      <p class="sub">Remove a green or blue screen and place the clip over another image or video.</p>
     </div>
     <figure class="reveal">
       <div class="compare square" id="chroma-compare">
@@ -469,23 +461,22 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
         <span class="tag l">Before</span><span class="tag r">After chroma key</span>
         <input type="range" min="0" max="100" value="50" aria-label="Compare the original green screen and the chroma key result">
       </div>
-      <figcaption class="caption">Drag to compare the original green screen with the keyed result. You can also use the arrow keys.</figcaption>
+      <figcaption class="caption">Drag to compare.</figcaption>
     </figure>
     <div class="rooms reveal">
       <div class="room">
-        <h3>One click to start</h3>
-        <p>Click Remove solid background. Reccut samples the background color from the source frame and applies chroma key automatically. You can use the same tool on a video, a still image or the PiP camera clip.</p>
+        <h3>Automatic chroma key</h3>
+        <p>Click Remove solid background and Reccut picks the background color for you. Works on video, images and the camera clip.</p>
       </div>
       <div class="room">
-        <h3>Advanced controls</h3>
-        <p>Fine-tune tolerance and softness, then open Advanced for fine-detail recovery, source shadows, edge color and spill removal. Adjust matte levels, shrink or expand the edge, add feathering and inspect the matte.</p>
+        <h3>Fine-tune the edges</h3>
+        <p>Adjust tolerance, softness, spill and edge for difficult shots.</p>
       </div>
       <div class="room">
-        <h3>PiP, masks and stabilization</h3>
-        <p>Key or mask the separate PiP camera clip without changing your screen recording. Draw and animate masks with the pen tool, smooth shaky footage with stabilization, pin redactions and titles to moving objects with tracking, and combine the result with titles and effects.</p>
+        <h3>Masks, tracking and stabilization</h3>
+        <p>Draw animated masks, follow moving objects and smooth shaky footage.</p>
       </div>
     </div>
-    <p class="caption">Apply these adjustments in Edit; the same keying and masks are used in preview and export. For a static background without a green screen, use Remove static background with a fixed camera and steady lighting, or capture a clean background reference.</p>
   </div>
 </section>
 
@@ -506,7 +497,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     <div class="center reveal">
       <div class="kicker">Color &amp; film looks</div>
       <h2>Color correction and <span class="serif">film looks</span></h2>
-      <p class="sub">Adjust exposure, white balance and color wheels, or start with one of more than 40 film looks. You can also convert LOG footage and load your own LUTs.</p>
+      <p class="sub">Exposure, white balance and color wheels, more than 40 film looks, LOG conversion and your own LUTs.</p>
     </div>
     <div class="compare reveal" id="compare">
       <img src="media/ba-before.jpg" width="1600" height="900" alt="Coastal ridge, original footage" loading="lazy">
@@ -523,7 +514,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-bleachbypass-before.jpg" aria-label="Compare Bleach bypass with original footage"><img src="media/look-bleachbypass.jpg" width="1280" height="720" alt="River gorge with the Bleach bypass look" loading="lazy"></button><figcaption>Bleach bypass<small>Cinema film</small></figcaption></figure>
       <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-trix400-before.jpg" aria-label="Compare Kodak Tri-X 400 with original footage"><img src="media/look-trix400.jpg" width="1280" height="720" alt="Beach with the Kodak Tri-X 400 look" loading="lazy"></button><figcaption>Kodak Tri-X 400<small>Black &amp; white film</small></figcaption></figure>
     </div>
-    <p class="caption">Real frames from the demo project, graded with Reccut's built-in looks. Click a look to compare it with the original.</p>
+    <p class="caption">Click a look to compare it with the original.</p>
   </div>
 </section>
 
@@ -535,12 +526,11 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="center reveal">
       <div class="kicker">Design</div>
-      <h2>Give your video <span class="serif">a cover</span></h2>
-      <p class="sub">Create thumbnails and social graphics in the same project as your edit. Start with a template or build your own design with text, images and shapes on separate layers.</p>
+      <h2>Thumbnails and <span class="serif">social graphics</span></h2>
+      <p class="sub">Start from a template or design your own with text, images and shapes on layers, in the same project as your video.</p>
     </div>
     <figure class="reveal" style="margin-top:40px">
       <div class="frame"><img src="media/design.jpg" alt="Reccut’s Design tab with a layered Into the Wild film cover, templates on the left and editable text, shapes and a coastal video frame in the layer panel" loading="lazy" width="2000" height="1255"></div>
-      <figcaption class="caption">A cover for Into the Wild, built from a frame of the film, editable text and shapes.</figcaption>
     </figure>
   </div>
 </section>
@@ -550,7 +540,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     <div class="center reveal">
       <div class="kicker">Import formats</div>
       <h2>Video and <span class="serif">audio formats</span></h2>
-      <p class="sub">Bring in footage, music and sound recordings. These are some of the formats and codecs Reccut can read, with many more handled through FFmpeg.</p>
+      <p class="sub">Some of the formats Reccut can import. Many more work through FFmpeg.</p>
     </div>
     <div class="import-formats reveal">
       <article class="format-card">
@@ -579,24 +569,23 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     <div class="reveal">
       <div class="kicker">Export</div>
       <h2>Export and <span class="serif">batch conversion</span></h2>
-      <p class="sub">Export an edit, convert video files, make smaller copies or extract audio. Use a preset or choose the codec, size, frame rate and quality yourself. It’s included in Reccut, free and open source.</p>
+      <p class="sub">Export your edit, convert files, make smaller copies or extract audio. Use a preset or set codec, size and quality yourself.</p>
     </div>
     <figure class="reveal" style="margin-top:32px">
       <div class="frame"><img src="media/export-queue.jpg" alt="Reccut’s Export tab with the current project, imported video files, format settings and three real export jobs running or waiting in the queue" loading="lazy" width="2000" height="1255"></div>
-      <figcaption class="caption">A project export and two file conversions in the same background queue.</figcaption>
     </figure>
     <div class="rooms reveal">
       <div class="room">
         <h3>Export your edit</h3>
-        <p>Click Export Project in the editor to prepare the project in Export. Start with H.264, high quality and the sequence’s size and frame rate. Adjust the settings, then start the export.</p>
+        <p>Click Export Project, adjust the settings if you want, and start.</p>
       </div>
       <div class="room">
-        <h3>Convert files in batches</h3>
-        <p>Drop video or audio files into Export and convert them individually or with Convert All. Make smaller files, change formats or extract sound without adding the files to an editing timeline.</p>
+        <h3>Convert many files at once</h3>
+        <p>Drop video or audio files in and click Convert All, without adding them to a timeline.</p>
       </div>
       <div class="room">
-        <h3>Keep working while it exports</h3>
-        <p>Jobs run in a background queue. Follow their progress, cancel a job or open a finished file. Export another version with a different codec, crop or quality when you need it.</p>
+        <h3>Exports run in the background</h3>
+        <p>Keep editing while the queue works. Cancel a job or open the finished file.</p>
       </div>
     </div>
     <div class="screens reveal">
@@ -607,7 +596,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     <div class="chips reveal" style="justify-content:center;margin-top:50px">
       <span class="chip hot">MP4 · H.264</span><span class="chip hot">H.265 / HEVC</span><span class="chip hot">AV1</span><span class="chip">WebM · VP9</span><span class="chip">MOV · ProRes 422</span><span class="chip">MKV</span><span class="chip">GIF</span><span class="chip">MP3</span><span class="chip">AAC</span><span class="chip">WAV</span><span class="chip">FLAC</span><span class="chip">Opus</span>
     </div>
-    <p class="caption">Reframe for landscape, portrait or square video. Burn in subtitles, embed a subtitle track, or save SRT/WebVTT files.</p>
+    <p class="caption">Reframe for landscape, portrait or square video.</p>
   </div>
 </section>
 
@@ -615,10 +604,10 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="format-card reveal">
       <div class="kicker">Closed captions &amp; subtitle export</div>
-      <h2 id="subtitles-title" style="font-size:clamp(28px,4vw,40px)">Closed captions, <span class="serif">on your computer</span></h2>
-      <p>Generate captions from speech with free, local AI models, or bring them in from your Voice Over Studio script. Review the text and timing on the timeline, then export your closed captions directly from Reccut.</p>
-      <p><b>Need just the captions?</b> Use <b>Export Captions Only</b> to save an SRT or WebVTT file without rendering the video again. You can also embed a subtitle track that viewers can switch on and off, or burn subtitles into the picture.</p>
-      <p class="providers">Download the speech model you need in Settings → AI, then use it offline with no account or API key. Choose a smaller model for speed or a larger one for accuracy.</p>
+      <h2 id="subtitles-title" style="font-size:clamp(28px,4vw,40px)">Automatic <span class="serif">subtitles</span></h2>
+      <p>Turn speech into subtitles with a free AI model that runs on your computer, then correct them on the timeline.</p>
+      <p>Save an SRT or WebVTT file, add a subtitle track viewers can turn on and off, or burn the subtitles into the picture.</p>
+      <p class="providers">Download a speech model in Settings → AI. Smaller models are faster, larger ones more accurate.</p>
       <div class="chips">
         <span class="chip hot">SRT</span><span class="chip hot">WebVTT</span><span class="chip hot">Embedded subtitle track</span>
         <span class="chip">Whisper Tiny</span><span class="chip">Whisper Base</span><span class="chip">Whisper Small</span><span class="chip">Whisper Medium</span><span class="chip">Whisper Large V3 Turbo</span>
@@ -631,17 +620,16 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="ai reveal">
       <img src="media/look-vision500t.jpg" width="1280" height="720" width="1280" height="720" alt="" loading="lazy">
-      <div class="kicker">Optional AI agents</div>
-      <h2>Let an AI agent <span class="serif">do the editing</span></h2>
-      <p class="sub">Connect a model and tell the AI agent what you want changed. It can cut clips, add subtitles, adjust color and create titles using Reccut’s editing tools. Review its edits on the timeline and undo them if needed.</p>
+      <div class="kicker">AI Agent (optional)</div>
+      <h2>Edit with <span class="serif">the AI Agent</span></h2>
+      <p class="sub">Click <b>AI Agent</b> in the top bar and tell it what you want. It cuts clips, adds subtitles, adjusts color and makes titles. You can undo everything it does.</p>
       <div class="prompts">
         <div class="prompt"><span>“Read the script I’ve attached and make a first cut from my camera takes and screen recordings. Use the best takes and show the screen when I explain each step.”</span></div>
         <div class="prompt"><span>“Turn this interview into a three-minute story. Keep the strongest answers, cut the repetition and add subtitles.”</span></div>
         <div class="prompt"><span>“Remove the failed takes and long pauses, then cover the cuts with the matching screen recording.”</span></div>
         <div class="prompt"><span>“Make a 60-second vertical version of this video, with English subtitles and a title at the start.”</span></div>
       </div>
-      <p class="providers">Import your clips and attach the script in the AI chat. The agent can build a first cut for you to review and adjust on the timeline.</p>
-      <p class="providers">Choose your provider and model: OpenAI, Anthropic (Claude), Google (Gemini), Mistral, OpenRouter and others. Enter your API key in Settings, or connect a local model through Ollama, LM Studio or llama.cpp. The model needs tool calling to make edits. Cloud models use your provider account; recording and manual editing work offline without AI.</p>
+      <p class="providers">The first time, choose a provider and paste your API key. Works with OpenAI, Anthropic (Claude), Google (Gemini), Mistral, OpenRouter and others with your own API key, or a local model through Ollama, LM Studio or llama.cpp. The model must support tool calling.</p>
     </div>
   </div>
 </section>
@@ -650,12 +638,12 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="center reveal">
       <div class="kicker">Plugins</div>
-      <h2>Use more tools with <span class="serif">plugins</span></h2>
-      <p class="sub">Anyone can extend Reccut. A plugin is an FFmpeg command or a Python script with its own icon and settings, and it opens as a small tool window next to your timeline.</p>
+      <h2>Add tools <span class="serif">with plugins</span></h2>
+      <p class="sub">A plugin is an FFmpeg command or Python script with its own settings, shown in a small window next to the timeline.</p>
     </div>
     <div class="grid reveal">
       <div><h4>Build your own</h4><p>Turn a video effect, filter or processing tool into a plugin, with sliders, choices and switches for its settings.</p></div>
-      <div><h4>Or ask the AI agent</h4><p>Describe the effect you want and the AI agent writes the plugin inside Reccut. You see the whole script before anything is installed or run.</p></div>
+      <div><h4>Or ask the AI Agent</h4><p>Describe the effect you want and the AI Agent writes the plugin inside Reccut. You see the whole script before anything is installed or run.</p></div>
       <div><h4>Double-click to install</h4><p>Share a plugin as one <code>.reccut-plugin</code> file. Double-click it and Reccut opens it for you to review and install.</p></div>
       <div><h4>Share or sell</h4><p>Give your plugins away or sell them. Each plugin carries its name, version and author, and updates replace the old version.</p></div>
     </div>
@@ -666,21 +654,13 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap">
     <div class="center reveal">
       <div class="kicker">More tools</div>
-      <h2>Audio, effects and <span class="serif">project tools</span></h2>
+      <h2>More <span class="serif">tools</span></h2>
     </div>
     <div class="grid reveal">
-      <div><h4>Video &amp; audio import</h4><p>H.264, H.265, ProRes, MP3, WAV, FLAC and many more. <a href="#formats">See formats and codecs</a>.</p></div>
-      <div><h4>AI Clean Voice</h4><p>Reduce background noise locally in Voice Over Studio or on audio clips in Edit. Preview the result before exporting.</p></div>
-      <div><h4>Audio effects &amp; presets</h4><p>EQ, compression, de-essing, hum removal and voice character effects. Start with Studio Voice or Podcast Voice, then adjust the sound.</p></div>
-      <div><h4>Voice Over Studio</h4><p>A script, teleprompter, retakes and a timeline for your narration. <a href="#voiceover">See the studio</a>.</p></div>
-      <div><h4>Quick audio recording</h4><p>Need a short voice clip? Open Record Audio, choose your microphone and record straight into the media library.</p></div>
-      <div><h4>Closed caption exports</h4><p>Save SRT or WebVTT files directly, or include a switchable subtitle track with the video. <a href="#subtitles">See caption options</a>.</p></div>
-      <div><h4>One-click background removal</h4><p>Auto-sampled chroma key, with advanced edge and matte controls for demanding shots. <a href="#keying">Compare before and after</a>.</p></div>
-      <div><h4>Photoshop layers</h4><p>Import PSD and SVG files as separate, stacked layers ready to animate.</p></div>
-      <div><h4>Redaction</h4><p>Pixelate or blur faces, passwords and number plates, and follow them with keyframes.</p></div>
-      <div><h4>Your own templates</h4><p>Design lower thirds in After Effects and bring them in with the template kit.</p></div>
+      <div><h4>Audio cleanup</h4><p>AI Clean Voice, EQ, compression and hum removal on any audio clip. Record a quick voice clip with Record Audio.</p></div>
+      <div><h4>Photoshop &amp; After Effects</h4><p>Import PSD and SVG files as layers, and lower thirds made in After Effects.</p></div>
+      <div><h4>Redaction</h4><p>Blur or pixelate faces, passwords and number plates.</p></div>
       <div><h4>Autosave &amp; history</h4><p>Saved after every change, with snapshots going back months.</p></div>
-      <div><h4>Plugins</h4><p>Extend Reccut with plugins, or let the AI agent write one for you. <a href="#plugins">About plugins</a>.</p></div>
     </div>
   </div>
 </section>
@@ -691,9 +671,12 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <div style="position:relative">
         <div class="kicker">Open source</div>
         <h2>Free and <span class="serif">open source</span></h2>
-        <p class="sub">The source code is on GitHub under the MIT licence. You can build Reccut yourself, change it and contribute fixes or features. Recording and editing need no account or subscription, and exports have no watermark. The app checks GitHub for updates; you can turn that off in Settings.</p>
+        <p class="sub">MIT licence. Build Reccut yourself, change it and contribute on GitHub.</p>
         <div class="ctas" style="justify-content:flex-start;margin-top:30px">
-          <a class="btn primary" href="https://github.com/sirbull/reccut/releases/latest">Download</a>
+          <a class="btn primary" href="https://github.com/sirbull/reccut/releases">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
+            Download for Mac, Windows &amp; Linux
+          </a>
           <a class="btn" href="https://github.com/sirbull/reccut">Browse the source</a>
         </div>
       </div>

@@ -941,8 +941,11 @@ function MulticamWindow({ session }) {
 
 // R-en fra Reccut-logoen, brukt uendret som bilde i tomme ruter.
 const MARK_URL = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(reccutMarkSvg)}`;
+// Fila er tegnet nesten svart (#141416), så den forsvinner mot den svarte ruta. Den brukes som maske
+// (formen), og fargen settes i CSS, slik at R-en synes likt på Windows og macOS.
+const MARK_MASK = `url("${MARK_URL}") center / contain no-repeat`;
 function ReccutMark() {
-  return <img class="mc-mark" src={MARK_URL} alt="" draggable={false} />;
+  return <span class="mc-mark" style={{ WebkitMask: MARK_MASK, mask: MARK_MASK }} />;
 }
 
 // Alle vinklene skal synes samtidig: finn antall kolonner som gir størst ruter (16:9) i plassen som finnes.

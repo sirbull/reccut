@@ -4,18 +4,19 @@ import { Button, Modal, Row, Section, Select, Toggle, toast } from './ui.jsx';
 import { canUndo, commit, project, undo } from './editor/store.js';
 import { addStoryDocument } from '../shared/aiEdits.js';
 import { helpOpen } from './registry.js';
+import { aiChatOpen } from './aiChatOpen.js';
 import * as commands from './editor/commands.js';
 import { PluginReview } from './Plugins.jsx';
 import { runAgent } from './agent.js';
 import { fileUrl } from './player.js';
-export const aiChatOpen = signal(false);
+export { aiChatOpen };
 export const aiDraft = signal(''); // Text to start the next chat message with, e.g. from the Plugins menu.
 const api = window.api;
 // Ready-made connections. All but Anthropic use the OpenAI-compatible Chat Completions API with tool calls.
 const PRESETS = [
-  { id: 'openai', label: 'OpenAI', endpoint: 'https://api.openai.com/v1' },
-  { id: 'anthropic', label: 'Anthropic Claude', endpoint: 'https://api.anthropic.com/v1', provider: 'anthropic' },
   { id: 'gemini', label: 'Google Gemini', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  { id: 'anthropic', label: 'Anthropic Claude', endpoint: 'https://api.anthropic.com/v1', provider: 'anthropic' },
+  { id: 'openai', label: 'OpenAI', endpoint: 'https://api.openai.com/v1' },
   { id: 'mistral', label: 'Mistral', endpoint: 'https://api.mistral.ai/v1' },
   { id: 'openrouter', label: 'OpenRouter (many providers)', endpoint: 'https://openrouter.ai/api/v1' },
   { id: 'groq', label: 'Groq', endpoint: 'https://api.groq.com/openai/v1' },
@@ -28,6 +29,72 @@ const PRESETS = [
 ];
 const presetOf = (c) =>
   PRESETS.find((p) => p.endpoint === c.endpoint && (p.provider || 'compatible') === c.provider) || PRESETS.at(-1);
+
+// Short explanations for the AI Agent fields. The ? button shows the text and links to the full guide.
+const FIELD_HELP = {
+  provider: ['The company or program that runs the AI model. Choose Other server or gateway for a service that is not listed.', 'ai-setup'],
+  format: ['How Reccut talks to the server. Most services use the OpenAI-compatible format. Choose Anthropic Messages only for a Claude-compatible server.', 'ai-setup'],
+  url: ['The address of the service’s API, usually ending in /v1, for example https://api.example.com/v1. Not the address of a chat web page.', 'ai-setup'],
+  key: ['A secret code from your provider’s website that lets Reccut use your account. Local servers such as Ollama and LM Studio do not need one.', 'ai-setup'],
+  model: ['The exact name of the AI model. Click Fetch models to choose from the models your key or server can use. The model must support tool calling.', 'ai-setup'],
+  vision: ['Turn on if the model can look at pictures. The agent then checks its own work by looking at frames from your video.', 'ai-setup'],
+  local: ['A program that runs the AI model on your own computer, such as Ollama or LM Studio. It is free and private, but needs a fairly powerful computer.', 'ai-local'],
+};
+export function HelpTip({ field }) {
+  const [text, article] = FIELD_HELP[field];
+  const [at, setAt] = useState(null);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!at) return;
+    const close = (e) => (e.type === 'keydown' ? e.key === 'Escape' : !ref.current?.parentElement?.contains(e.target)) && setAt(null);
+    document.addEventListener('pointerdown', close, true);
+    document.addEventListener('keydown', close, true);
+    return () => {
+      document.removeEventListener('pointerdown', close, true);
+      document.removeEventListener('keydown', close, true);
+    };
+  }, [at]);
+  return (
+    <span class="help-tip">
+      <button
+        ref={ref}
+        type="button"
+        class="help-tip-button"
+        aria-label={`What is this? ${text}`}
+        aria-expanded={Boolean(at)}
+        title={text}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const r = ref.current.getBoundingClientRect();
+          setAt(at ? null : { x: Math.max(8, Math.min(r.left - 8, innerWidth - 300)), y: r.bottom + 6 });
+        }}
+      >
+        ?
+      </button>
+      {at && (
+        <span class="help-tip-popover" role="note" style={{ left: `${at.x}px`, top: `${at.y}px` }}>
+          {text}{' '}
+          <button
+            type="button"
+            class="link"
+            onClick={() => {
+              setAt(null);
+              helpOpen.value = { article };
+            }}
+          >
+            Read the setup guide
+          </button>
+        </span>
+      )}
+    </span>
+  );
+}
+const withTip = (label, field) => (
+  <>
+    {label} <HelpTip field={field} />
+  </>
+);
 
 export function ExtensionsPane() {
   const [config, setConfig] = useState(null),
@@ -54,15 +121,26 @@ export function ExtensionsPane() {
   };
   return (
     <>
-      <Section title="AI assistant" collapsible={false}>
+      <Section title="AI Agent" collapsible={false}>
         <p class="hint">
           Use a cloud provider with your own API key, or a local model server. The agent sends your messages and what it
           reads from the project, such as clip names, timings and caption text, and rendered preview frames when the
           model can see images. Media files and audio are not uploaded. Cloud providers bill you for usage.
         </p>
+        <p class="hint agent-setup-intro">
+          The easiest way to connect is the setup in the{' '}
+          <button class="link" onClick={() => (aiChatOpen.value = true)}>
+            AI Agent window
+          </button>
+          . Use the fields below for other providers, your own server or a specific model. Click <b>?</b> next to a field to see what goes in it, or{' '}
+          <button class="link" onClick={() => (helpOpen.value = { article: 'ai-setup' })}>
+            read the setup guide
+          </button>
+          .
+        </p>
         {config && (
           <>
-            <Row label="Provider" stacked>
+            <Row label={withTip('Provider', 'provider')} stacked>
               <Select
                 value={presetOf(config).id}
                 options={PRESETS.map((p) => ({ value: p.id, label: p.label }))}
@@ -82,7 +160,7 @@ export function ExtensionsPane() {
             </Row>
             {presetOf(config).id === 'custom' && (
               <>
-                <Row label="API format" stacked>
+                <Row label={withTip('API format', 'format')} stacked>
                   <Select
                     value={config.provider}
                     options={[
@@ -92,7 +170,7 @@ export function ExtensionsPane() {
                     onChange={(provider) => setConfig({ ...config, provider, hasKey: false })}
                   />
                 </Row>
-                <Row label="API base URL" stacked>
+                <Row label={withTip('API base URL', 'url')} stacked>
                   <input
                     class="text-input"
                     value={config.endpoint}
@@ -108,7 +186,7 @@ export function ExtensionsPane() {
                 choose a downloaded local model for offline use. To use another computer, choose Other server and enter its local network address.
               </p>
             )}
-            <Row label="API key" stacked>
+            <Row label={withTip('API key', 'key')} stacked>
               <input
                 type="password"
                 class="text-input"
@@ -122,7 +200,7 @@ export function ExtensionsPane() {
                 onInput={(e) => setKey(e.currentTarget.value)}
               />
             </Row>
-            <Row label="Model ID" stacked>
+            <Row label={withTip('Model ID', 'model')} stacked>
               <div class="extension-actions">
                 <input
                   class="text-input"
@@ -154,7 +232,7 @@ export function ExtensionsPane() {
                 </Button>
               </div>
             </Row>
-            <Row label="Model can see images" hint="Lets the agent look at rendered frames. Turn off for text-only models.">
+            <Row label={withTip('Model can see images', 'vision')} hint="Lets the agent look at rendered frames. Turn off for text-only models.">
               <Toggle checked={config.vision} onChange={(vision) => setConfig({ ...config, vision })} />
             </Row>
             <p class="hint">
@@ -233,7 +311,7 @@ function AgentSetup({ onDone }) {
     try {
       const saved = await api.aiSave({ ...config, apiKey });
       await api.aiComplete({ system: 'Reply with the single word OK.', messages: [{ role: 'user', content: 'Test' }], tools: [] });
-      toast('The AI agent is ready.', { kind: 'success' });
+      toast('The AI Agent is ready.', { kind: 'success' });
       onDone(saved);
     } catch (e) {
       setError(e.message);
@@ -273,15 +351,20 @@ function AgentSetup({ onDone }) {
   );
   return (
     <div class="agent-setup">
-      <h3>Set up the AI agent</h3>
-      <p class="hint">Choose how the agent thinks. You can change this later in Settings → AI.</p>
+      <h3>Set up the AI Agent</h3>
+      <p class="hint">
+        Choose which AI the agent uses. Not sure? Pick Google Gemini: it is free to start and takes about two minutes.{' '}
+        <button class="link" onClick={() => (helpOpen.value = { article: 'ai-setup' })}>
+          Read the setup guide
+        </button>
+      </p>
       <div class="setup-choices">
         {[
-          ['local', 'On this computer', 'Free and private. Needs Ollama or LM Studio and a fairly powerful computer. Best for simpler tasks.'],
-          ['gemini', 'Google Gemini', 'Free to start with a Google account. Good quality, can see images. On the free tier Google may use your data to improve its products.'],
+          ['gemini', 'Google Gemini', 'Free to start with a Google account. Good quality, can see images. On the free tier Google may use your data to improve its products.', true],
           ['anthropic', 'Claude', 'Best for long, complex edits. Pay as you go with an Anthropic account.'],
           ['openai', 'OpenAI', 'Strong all-round models. Pay as you go with an OpenAI account.'],
-        ].map(([id, title, text]) => (
+          ['local', 'On this computer', 'Free and private, but harder to set up. Needs Ollama or LM Studio and a fairly powerful computer. Best for simpler tasks.'],
+        ].map(([id, title, text, recommended]) => (
           <button
             key={id}
             class={`setup-choice${choice === id ? ' on' : ''}`}
@@ -292,7 +375,10 @@ function AgentSetup({ onDone }) {
               if (id === 'local') findLocal();
             }}
           >
-            <b>{title}</b>
+            <b>
+              {title}
+              {recommended && <span class="setup-badge">Recommended</span>}
+            </b>
             <small>{text}</small>
           </button>
         ))}
@@ -314,9 +400,11 @@ function AgentSetup({ onDone }) {
             ))}
           {local && !local.length && !busy && (
             <ol class="hint">
-              <li>Install {link('https://ollama.com/download', 'Ollama')} (or {link('https://lmstudio.ai', 'LM Studio')}) and open it.</li>
               <li>
-                In Terminal, download a model that can use tools, for example <code>ollama pull qwen3</code>. Larger models
+                No model server was found. Install {link('https://ollama.com/download', 'Ollama')} (or {link('https://lmstudio.ai', 'LM Studio')}) and open it. <HelpTip field="local" />
+              </li>
+              <li>
+                In Terminal (Command Prompt on Windows), download a model that can use tools, for example <code>ollama pull qwen3</code>. Larger models
                 edit better; 14B or more is recommended.
               </li>
               <li>
@@ -335,10 +423,11 @@ function AgentSetup({ onDone }) {
               {link(CLOUD[choice].keys, `Open ${CLOUD[choice].label} and create an API key`)}
               {choice !== 'gemini' && '. Add a payment method or credits in the account.'}
             </li>
-            <li>Paste the key here. It is stored encrypted on this computer and only sent to {CLOUD[choice].label}.</li>
+            <li>Copy the key, paste it below and click Connect. It is stored encrypted on this computer and only sent to {CLOUD[choice].label}.</li>
           </ol>
           <div class="extension-actions">
-            <input type="password" class="text-input" style="flex:1" autoComplete="off" placeholder="Paste your API key" value={key} onInput={(e) => setKey(e.currentTarget.value)} />
+            <HelpTip field="key" />
+            <input type="password" class="text-input" style="flex:1" autoComplete="off" aria-label="API key" placeholder="Paste your API key" value={key} onInput={(e) => setKey(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && key.trim() && !busy && connectCloud(choice)} />
             <Button variant="primary" disabled={busy || !key.trim()} onClick={() => connectCloud(choice)}>
               {busy ? 'Connecting…' : 'Connect'}
             </Button>
@@ -359,7 +448,7 @@ function AgentSetup({ onDone }) {
             commands.prefsOpen.value = true;
           }}
         >
-          open Settings → AI
+          open Settings → AI → AI Agent
         </button>
         .
       </p>
@@ -502,7 +591,7 @@ export function AIChat() {
     <Modal
       title={
         <span class="ai-title">
-          AI editing agent
+          AI Agent
           {ready && (
             <button
               class="model-chip"

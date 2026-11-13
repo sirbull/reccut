@@ -10,6 +10,11 @@ Når vi lager en ny versjon av Reccut, må About-vinduet også vise det nye vers
 - Oppdateringssjekken ([src/main/updates.js](src/main/updates.js)) sammenligner med samme versjon, så den må stemme med GitHub-utgivelsen.
 - Keystroke-tillegget lastes ned fra utgivelsen med samme versjon (`v<x.y.z>`). Byggeflyten legger det ved automatisk når taggen pushes. Sjekk at utgivelsen har `reccut-keystrokes-*` med tilhørende `.sha256`, ellers får brukerne beskjed om at tillegget ikke er publisert ennå.
 
+## Dokumentasjon på nettsiden
+
+- Docs-siden på nettstedet ([docs/docs/index.html](docs/docs/index.html)) genereres fra håndboken i appen (`src/renderer/help`) og kommandoregisteret. Ikke rediger den for hånd.
+- Kjør `npm run docs` etter endringer i hjelpetekstene eller hurtigtastene. Den kopierer også bildene fra `assets/help` til `docs/docs/help`. Testen `test/docs-site.test.mjs` feiler hvis siden ikke er oppdatert.
+
 ## Keystroke-tillegget
 
 - Reccut selv skal aldri lese tastaturet globalt. Ingen tastaturkrok, `uiohook`, `GetAsyncKeyState` eller lignende i `src/` eller i `dependencies`. Testen `test/keystrokes.test.mjs` sjekker dette.

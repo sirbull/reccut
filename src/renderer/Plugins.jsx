@@ -250,7 +250,7 @@ export function PluginsButton() {
   const list = allPlugins.value.filter((p) => pluginRoom(p) === r);
   return (
     <div class="tasks" ref={ref}>
-      <button class="btn secondary small" aria-expanded={open} onClick={() => setOpen(!open)} title={`${name} plugins: tools for this section, installed or made with the AI agent`}>
+      <button class="btn secondary small" aria-expanded={open} onClick={() => setOpen(!open)} title={`${name} plugins: tools for this section, installed or made with the AI Agent`}>
         <Puzzle size={14} />
         Plugins
       </button>
@@ -419,7 +419,7 @@ function PluginSettings({ plugin }) {
   };
   return (
     <div class="generation-settings plugin-settings">
-      <p class="hint">Default values when you open the plugin, and when the AI agent uses it. You can still change them in the plugin's window each time.</p>
+      <p class="hint">Default values when you open the plugin, and when the AI Agent uses it. You can still change them in the plugin's window each time.</p>
       <ParamControls params={plugin.params} values={values} onChange={change} />
       <button
         class="link"
@@ -584,7 +584,7 @@ function GenerationSettings({ onSaved }) {
           Higgsfield Console
         </button>{' '}
         and add credits. Each generation is billed to your Higgsfield account. Your description and any start image are sent
-        to Higgsfield. The AI agent can use it too.
+        to Higgsfield. The AI Agent can use it too.
       </p>
       <Row label="Key ID" stacked>
         <input class="text-input" autoComplete="off" value={keyId} placeholder={cfg.hasKey ? 'Key saved · leave blank to keep it' : 'Key ID'} onInput={(e) => setKeyId(e.currentTarget.value)} />
@@ -724,7 +724,7 @@ export function PluginsPane({ designSettings }) {
           {w.id === 'edit' && <>
             <div class="plugin-install">
               <h3>Add an Edit plugin</h3>
-              <p class="hint">Install a .reccut-plugin file, or ask the AI agent to create a tool. Plugins run with your permissions, so install only plugins you trust.</p>
+              <p class="hint">Install a .reccut-plugin file, or ask the AI Agent to create a tool. Plugins run with your permissions, so install only plugins you trust.</p>
               <div class="extension-actions">
                 <Button icon={FileUp} onClick={choosePluginFile}>Install plugin file…</Button>
                 <Button icon={Sparkles} onClick={() => { aiDraft.value = 'Make a plugin that '; aiChatOpen.value = true; commands.prefsOpen.value = false; }}>Make a plugin with AI…</Button>

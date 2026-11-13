@@ -4791,6 +4791,14 @@ kbd.keycap {
 .setup-choice { display: flex; flex-direction: column; justify-content: flex-start; text-align: left; padding: 12px; border: 1px solid #ffffff1f; border-radius: 8px; background: #ffffff07; color: inherit; cursor: pointer; }
 .setup-choice.on { border-color: #4a8fe0; background: #337bd022; }
 .setup-choice small { display: block; margin-top: 6px; color: #a6a6ad; line-height: 1.4; }
+.setup-choice > b { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.agent-setup-intro { margin-bottom: 12px; }
+.setup-badge { display: inline-block; padding: 1px 6px; border-radius: 999px; background: #337bd033; color: #8fbaf0; font-size: 10px; font-weight: 600; vertical-align: 1px; }
+/* Small round ? next to a field: shows a short explanation and a link to the guide. */
+.help-tip { display: inline-flex; vertical-align: middle; }
+.help-tip-button { display: inline-grid; place-items: center; width: 15px; height: 15px; padding: 0; border: 1px solid #ffffff40; border-radius: 50%; background: transparent; color: #a6a6ad; font: 600 10px/1 inherit; cursor: help; flex: none; }
+.help-tip-button:hover, .help-tip-button[aria-expanded="true"] { border-color: #4a8fe0; color: #fff; background: #337bd033; }
+.help-tip-popover { position: fixed; z-index: 10000; width: 280px; padding: 10px 12px; border: 1px solid #ffffff24; border-radius: 8px; background: #26262b; color: #dcdce0; font-size: 12px; font-weight: 400; line-height: 1.45; text-transform: none; letter-spacing: 0; white-space: normal; box-shadow: 0 8px 24px #0008; }
 .setup-step { padding: 4px 0 8px; }
 .setup-step ol { padding-left: 20px; line-height: 1.6; }
 .agent-help { padding: 12px 16px; margin-bottom: 12px; border-radius: 8px; background: #ffffff07; line-height: 1.5; }
@@ -7025,7 +7033,8 @@ button.vo-badge { border: 0; cursor: pointer; }
 }
 .mc-mark {
   height: 42%;
-  width: auto;
+  aspect-ratio: 1;
+  background: #3a3a3e;
   pointer-events: none;
 }
 

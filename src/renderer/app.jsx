@@ -13,7 +13,6 @@ import {
   PanelLeft,
   PanelRight,
   Palette,
-  Plus,
   Redo2,
   Settings,
   Share,
@@ -198,9 +197,9 @@ function TitleBar() {
       <div class="spacer" />
       <TasksIndicator />
       <PluginsButton />
-      <button class="btn secondary small ai-btn" onClick={() => (aiChatOpen.value = true)} title="AI agent: describe an edit and it does it. The first time, it helps you set it up.">
+      <button class="btn secondary small ai-btn" onClick={() => (aiChatOpen.value = true)} title="AI Agent: describe an edit and it does it. The first time, it helps you set it up.">
         <Sparkles size={14} />
-        AI
+        AI Agent
       </button>
 
       <IconButton icon={CircleHelp} class="help-btn" title={`Help and command search (${isMac ? '⌘K' : 'Ctrl+K'})`} onClick={() => (paletteOpen.value = true)} />
@@ -213,7 +212,6 @@ function TitleBar() {
           <IconButton icon={Redo2} title="Redo" disabled={!canRedo()} onClick={redo} />
           <span class="sep" />
           <IconButton icon={Settings} title={`Settings (${isMac ? '⌘' : 'Ctrl+'},)`} onClick={() => (commands.prefsOpen.value = true)} />
-          <IconButton icon={Plus} title={`Import media (${isMac ? '⌘' : 'Ctrl+'}I)`} onClick={() => commands.importDialog()} />
           <button class="btn secondary vo-open-btn" onClick={openBooth} title={`Voice Over Studio: record narration or a talking head from a script, with retakes, and stitch it to the timeline (${isMac ? '⌥⌘' : 'Ctrl+Alt+'}B)`}>
             <StudioIcon size={15} />
             Voice Over Studio

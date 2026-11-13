@@ -53,3 +53,11 @@ test('effect and format references cover the shipped catalogue', () => {
   const formats = ARTICLES.find((a) => a.id === 'export-formats').body;
   for (const f of VIDEO_FORMATS) assert.ok(formats.includes(f.label));
 });
+
+test('the handbook home page links to real articles and packaged images', async () => {
+  const { HOME_ID, homeImages, homeLinks } = await import('../src/renderer/help/home.js');
+  const ids = new Set(ARTICLES.map((a) => a.id));
+  assert.ok(!ids.has(HOME_ID), 'the home page id must not clash with an article');
+  for (const id of homeLinks()) assert.ok(ids.has(id), `home page links to missing article ${id}`);
+  for (const file of homeImages()) assert.ok(fs.existsSync(new URL(`../assets/help/${file}`, import.meta.url)), `home page image ${file} is missing`);
+});

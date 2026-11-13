@@ -17,7 +17,7 @@ Use Paste Effects or Paste Attributes when you want to copy a look or audio trea
 
 ## Undo and redo
 
-**Undo** ({{key:undo}}) reverses the previous edit. **Redo** ({{key:redo}}) reapplies an undone edit until a new change replaces that redo history. For an older saved state, open Project History. In the AI chat, Undo this request can revert all timeline changes from the last request.
+**Undo** ({{key:undo}}) reverses the previous edit. **Redo** ({{key:redo}}) reapplies an undone edit until a new change replaces that redo history. For an older saved state, open Project History. In the AI Agent window, Undo this request can revert all timeline changes from the last request.
 
 When a text field has focus, Cut, Copy, Paste, Select All, Undo and Redo act on the text. Click the timeline before using them on clips. In the Help window they edit or copy Help text rather than the project behind it.
 `, see: ['timeline', 'grouping', 'paste-attributes', 'history'],
@@ -69,42 +69,80 @@ You need a screen or a short video file and a folder where Reccut can save the p
 `, see: ['recording', 'tools', 'export', 'projects'],
   },
   {
-    id: 'ai-setup', section: 'AI and Plugins', title: 'Set Up a Cloud AI Agent',
-    summary: 'Connect a provider, choose a model, and verify the connection with a harmless first request.',
-    keywords: 'ai setup assistant artificial intelligence cloud api key openai claude anthropic gemini mistral groq openrouter xai deepseek credentials model connect',
+    id: 'ai-setup', section: 'AI and Plugins', title: 'Set Up the AI Agent',
+    summary: 'Connect Google Gemini, Claude, OpenAI or your own AI service in a few minutes, and learn what goes in each field.',
+    keywords: 'ai agent setup assistant artificial intelligence cloud api key openai claude anthropic gemini mistral groq openrouter xai deepseek credentials model connect own provider gateway base url model id fields',
     body: `
-The editing agent needs a model that supports **tool calling**. A provider account, API access and usage billing are managed by that provider. Reccut connects using your own API key. Model availability depends on your account; use the model list instead of guessing a model name.
+The AI Agent edits your project when you describe what you want. It needs an AI service to think with. You connect the service once, and Reccut remembers it.
 
-## Connect from the first-run setup
+**What you need:** an account with an AI provider and an **API key** from it. An API key is a secret code that lets Reccut use your account, a bit like a password made for one app. Prefer to run the AI on your own computer instead? See [[article:ai-local|Use a Local AI Model]].
 
-1. Open **AI** in the main toolbar. If no model is configured, Reccut shows **Set up the AI agent**.
-2. Choose Google Gemini, Claude or OpenAI. The setup provides a link for creating that provider's API key.
-3. Paste the key in the password field and choose **Connect**. Reccut requests the available models and saves the selected connection.
-4. For another provider or an exact model, use **Settings → AI**.
+## The quickest way: Google Gemini (free to start)
 
-![The agent setup screen. Choose a local server or one of the cloud connections.](ai-setup.jpg)
+1. Click **AI Agent** in the top bar. The first time, Reccut shows **Set up the AI Agent**.
+2. Choose **Google Gemini** (marked Recommended).
+3. Click **Open Google Gemini and create an API key**. Your browser opens Google AI Studio. Sign in with your Google account.
+4. Click **Create API key** in Google AI Studio, then copy the key.
+5. Back in Reccut, paste the key in the field and click **Connect**.
+6. Reccut finds the best model for you and tests the connection. When it says **The AI Agent is ready**, you can start.
 
-## Configure the connection yourself
+On Google's free tier, Google may use what you send to improve its products. Add billing in Google AI Studio to avoid that and to get higher limits.
 
-1. Open **Settings → AI** and choose **Provider**. Presets include OpenAI, Anthropic Claude, Google Gemini, Mistral, OpenRouter, Groq, xAI and DeepSeek.
-2. Paste your API key. If the field says **Key saved**, leaving it blank keeps the saved key.
-3. Choose **Fetch models** and pick or enter an exact **Model ID**. The provider may list models that cannot use tools; select one that supports tool calling.
-4. Turn **Model can see images** on only for a vision model. This lets the agent inspect rendered preview frames.
-5. Choose **Save AI settings**, then **Open chat**.
+![The setup in the AI Agent window: Google Gemini, Claude, OpenAI and a model on this computer.](ai-setup.jpg)
+
+## Claude or OpenAI
+
+Both work the same way as Gemini, but you pay per use, so the account needs a payment method or credits first.
+
+- **Claude:** choose **Claude**, click the link to open the Anthropic Console, add credits under Billing, then create a key under API Keys.
+- **OpenAI:** choose **OpenAI**, click the link to open the OpenAI platform, add a payment method under Billing, then create a key under API keys.
+
+Paste the key and click **Connect**. You only pay for what the agent uses. Long edits with many clips cost more than short ones.
+
+## Use another provider or your own server
+
+Use **Settings → AI → AI Agent** to connect anything the setup does not list: Mistral, OpenRouter, Groq, xAI, DeepSeek, a company gateway, or a model server on your network. Click **?** next to a field to see what goes in it.
+
+1. Choose a **Provider**. If yours is not listed, choose **Other server or gateway**.
+2. For **Other server or gateway**, choose the **API format** and enter the **API base URL** from your provider's documentation.
+3. Paste your **API key**. Leave it empty for a local server that does not need one.
+4. Click **Fetch models** and pick a model in **Model ID**.
+5. Turn **Model can see images** on or off to match the model.
+6. Click **Save AI settings**, then **Open chat**.
 
 ![AI settings: provider, API key, exact model ID and optional image support. The screenshot uses fictional values.](ai-settings.jpg)
 
-## Test and start editing
+## What goes in each field
 
-Send: **“Describe the current timeline. Do not change anything.”** The agent should read the project and reply. Then try **“Add a title saying Welcome at the playhead.”** Check the result in the viewer. Use **Undo this request** to remove that request's changes.
+- **Provider:** the company or program that runs the AI model. Choosing a provider fills in its address for you.
+- **API format:** only for **Other server or gateway**. Most services use **OpenAI-compatible**, including vLLM, Jan, LocalAI, LiteLLM and Azure. Choose **Anthropic Messages** only for a Claude-compatible server.
+- **API base URL:** only for **Other server or gateway**. The address of the service's API, usually ending in /v1, for example https://api.example.com/v1. It is not the address of a chat web page, and it does not end in /chat/completions. Use https, or http for a server on this computer or your local network.
+- **API key:** the secret code from your provider. It is stored encrypted on this computer and only sent to that provider. When the field says **Key saved**, leave it empty to keep the saved key. Changing provider or address removes the old key.
+- **Model ID:** the exact name of the model, as the provider's API uses it. Click **Fetch models** to choose from the models your key or server can use, rather than typing a name. The model must support **tool calling**, which is how the agent makes edits. Larger, newer models edit better.
+- **Model can see images:** turn on if the model accepts pictures. The agent then checks its own work by looking at frames from your video, and you can attach reference images. Turn off for text-only models.
+- **Remove key:** deletes the saved key from this computer.
 
-For an alternative gateway, choose **Other server or gateway**, select the API format, and enter its **API base URL**. Use the base URL expected by the service, including its version path when required, rather than a chat webpage or an individual completion endpoint.
+## Test the connection
+
+Open the AI Agent window and send: **“Describe the current timeline. Do not change anything.”** The agent should read the project and reply. Then try **“Add a title saying Welcome at the playhead.”** Check the result in the viewer. Use **Undo this request** to remove that request's changes.
+
+## If something goes wrong
+
+Reccut explains the problem in plain words and shows the provider's code in brackets.
+
+- **The API key was not accepted (401):** copy the whole key again, without spaces, and check that it belongs to the provider you chose.
+- **The account has no credits (402) or the usage limit is reached (429):** add a payment method or credits in your provider account, or wait a minute.
+- **No access to the model (403):** choose another model with **Fetch models**, or check the key's permissions.
+- **The model or address was not found (404):** check **Model ID** and **API base URL**.
+- **Could not reach …:** check your internet connection. For a local server, check that it is running and has a model loaded.
+
+See [[article:ai-troubleshooting|Troubleshoot the AI Connection]] for more.
 
 ## Keys and project data
 
 Keys use the operating system's encrypted credential storage when available. Otherwise they are kept only in memory for the current session. **Remove key** deletes the key. Changing provider or base URL removes the old key, so enter a new one for the new connection.
 
-The agent can send your messages, attached images, clip names, timings, captions, locally generated transcripts, look measurements and rendered frames to the configured provider. Original video and audio files are not uploaded by the chat. Provider processing is external; read its terms before using private material. Whisper Base is included. Additional local speech models are optional downloads in Settings → AI.
+The agent can send your messages, attached images, clip names, timings, captions, locally generated transcripts, look measurements and rendered frames to the configured provider. Original video and audio files are not uploaded by the chat. Provider processing is external; read its terms before using private material. Speech models for transcripts are optional downloads in Settings → AI.
 `, see: ['ai-local', 'ai-recipes', 'ai-troubleshooting', 'ai-plugins'],
   },
   {
@@ -112,18 +150,18 @@ The agent can send your messages, attached images, clip names, timings, captions
     summary: 'Connect Reccut to Ollama, LM Studio, llama.cpp or a compatible local server.',
     keywords: 'local offline ai agent localhost ollama lm studio lmstudio llama.cpp server port model tools privacy connection',
     body: `
-Install and start a model server separately, then load a model that supports tool calling. Reccut does not install or host the language model. Downloading a model needs internet access; a running model on this computer can then handle the chat locally. Reccut's subtitle models are managed separately in Settings → AI; Whisper Base is included.
+Install and start a model server separately, then load a model that supports tool calling. Reccut does not install or host the language model. Downloading a model needs internet access; a running model on this computer can then handle the chat locally. Reccut's speech models for subtitles are separate optional downloads in Settings → AI.
 
 ## Connect automatically
 
 1. Start your local server and load a tool-capable model. Wait until the model is ready.
-2. Open **AI** and choose **On this computer** in the setup.
+2. Click **AI Agent** in the top bar and choose **On this computer** (the last option) in the setup.
 3. Reccut looks for Ollama and LM Studio. Choose one of the models it found and choose **Use**.
 4. If it finds no models, check the server and choose **Look again**. Use manual settings for a different port or llama.cpp.
 
 ## Connect manually
 
-Open **Settings → AI**. The preset addresses in Reccut are:
+Open **Settings → AI → AI Agent**. The preset addresses in Reccut are:
 
 - **Ollama (local)**: http://localhost:11434/v1
 - **LM Studio (local)**: http://localhost:1234/v1
@@ -150,7 +188,7 @@ Local performance depends on model size, available memory and your hardware. Sta
     body: `
 Set up a model first and import your footage. The agent operates on the current project and can inspect its library, timeline, transcripts and rendered frames. Select clips or move the playhead before referring to **“the selected clips”** or **“the clip under the playhead”**.
 
-![The AI chat’s What can I ask panel, with examples of requests you can adapt.](ai-chat.jpg)
+![The AI Agent window’s What can I ask panel, with examples of requests you can adapt.](ai-chat.jpg)
 
 ## Make a tutorial
 
@@ -189,7 +227,7 @@ The agent cannot currently create voice-over or music, or start an export. Expor
     summary: 'Resolve missing models, rejected keys, unavailable tools, image errors and stalled requests.',
     keywords: 'ai errors connection refused unauthorized 401 403 404 429 quota credits timeout tool calling models empty key vision images failed server',
     body: `
-Start in **Settings → AI** and check Provider, Model ID and API base URL. Try **Fetch models**. If that fails, resolve the connection before retrying a large editing request.
+Read the error message first: it says what went wrong and what to check. Then open **Settings → AI → AI Agent** and check Provider, Model ID and API base URL. Click **?** next to a field to see what goes in it. Try **Fetch models**. If that fails, resolve the connection before retrying a large editing request.
 
 ## Key rejected or access denied
 
@@ -431,7 +469,7 @@ Import SRT or WebVTT from the Captions browser. Use **Add Caption** ({{key:addCa
 
 ## Style and translate
 
-Adjust the sequence caption style: font, size, colour, outline, background, alignment and position. Reccut supports up to three lines, but short lines are easier to read. Ask the configured AI agent for translation when needed; that sends caption text to its provider. Read every translated line before publishing.
+Adjust the sequence caption style: font, size, colour, outline, background, alignment and position. Reccut supports up to three lines, but short lines are easier to read. Ask the configured AI Agent for translation when needed; that sends caption text to its provider. Read every translated line before publishing.
 
 ## Choose an export mode
 

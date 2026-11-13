@@ -62,7 +62,7 @@ function createHelpWindow({ BrowserWindow, ipcMain, getMainWindow, buildDir }) {
       if (!window?.isFocused()) return false;
       const text = { undo: 'undo', redo: 'redo', cut: 'cut', copy: 'copy', paste: 'paste', selectAll: 'selectAll' }[id];
       if (text) window.webContents[text]();
-      else if (id === 'help' || id === 'shortcuts') navigate({ article: id === 'help' ? 'welcome' : 'shortcuts' });
+      else if (id === 'help' || id === 'shortcuts') navigate({ article: id === 'help' ? 'home' : 'shortcuts' });
       else if (id === 'findCommand') navigate({ focusSearch: true });
       return true;
     },

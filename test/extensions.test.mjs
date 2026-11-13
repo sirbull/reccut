@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { createExtensionHost, validatePlugin, validateAI, toAnthropic, toCompatible, fromCompatible, readDocument } = require('../src/main/extensions.js');
+const { createExtensionHost, validatePlugin, validateAI, aiErrorMessage, toAnthropic, toCompatible, fromCompatible, readDocument } = require('../src/main/extensions.js');
 const { createStockHost } = require('../src/main/stock');
 const { secrets } = require('../src/main/stock/secrets.js');
 const zlib = require('zlib');
@@ -123,6 +123,22 @@ test('provider error bodies never expose credentials in UI errors', async (t) =>
     () => host.complete(ask()),
     (e) => e.message.includes('401') && !e.message.includes(config.apiKey),
   );
+});
+test('provider errors explain what to do, without credentials', async () => {
+  const reply = (status, body) => ({ status, text: async () => body });
+  const rejected = await aiErrorMessage(reply(401, '{"error":{"message":"Incorrect API key provided: sk-abc123"}}'), 'sk-abc123');
+  assert.match(rejected, /API key was not accepted/);
+  assert.ok(rejected.includes('401') && !rejected.includes('sk-abc123'));
+  const quota = await aiErrorMessage(reply(429, JSON.stringify({ error: { message: 'Quota exceeded for key sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ' } })));
+  assert.match(quota, /usage limit/);
+  assert.ok(quota.includes('Quota exceeded') && !quota.includes('ABCDEFGHIJKLMNOPQRSTUVWXYZ'));
+  assert.match(await aiErrorMessage(reply(404, 'not found')), /Model ID and the API base URL/);
+  assert.match(await aiErrorMessage(reply(503, '')), /Try again in a few minutes\. \(503\)/);
+});
+test('an unreachable server gets a plain explanation', async (t) => {
+  const { host } = setup(t, { fetchImpl: async () => { throw new TypeError('fetch failed'); } });
+  host.saveAI(config);
+  await assert.rejects(() => host.complete(ask()), /Could not reach .*internet connection/);
 });
 const toolRun = {
   system: 'sys',

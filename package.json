@@ -10,6 +10,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
+    "docs": "node scripts/build-docs-site.mjs",
     "postinstall": "node scripts/fetch-ffmpeg.mjs",
     "start": "node scripts/start.mjs",
     "dist": "node scripts/fetch-ffmpeg.mjs && node scripts/build-braw.mjs && node scripts/build.mjs && electron-builder --publish never",

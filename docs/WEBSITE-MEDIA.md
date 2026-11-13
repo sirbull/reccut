@@ -56,8 +56,8 @@ After capture, check the image dimensions against the HTML attributes and inspec
 | Design | `design.jpg`, showing the cover stored in the nature project |
 | Export | `export-queue.jpg`, `exportroom.jpg` |
 | Recording | `record-gameplay.mp4` (8 seconds, muted H.264 loop), `record-gameplay.jpg`, `record-gameplay-edit.jpg` |
-| Finished gameplay edit | `echoes-edited.mp4`, including the game link, fades and microphone audio |
-| Multicam | `multicam-window.jpg`, `multicam-result.jpg`, copied from `assets/help` (see `MULTICAM-CAPTURES.md`). The city clips are sample footage, not cameras recording one event; the caption says so |
+| Finished gameplay edit | `echoes-edited.mp4`, including the game link, fades and microphone audio. Not linked from the page |
+| Multicam | `multicam-window.jpg`, copied from `assets/help` (see `MULTICAM-CAPTURES.md`). The city clips are sample footage, not cameras recording one event; the caption says so. `multicam-result.jpg` is no longer shown on the page |
 
 The green-screen comparison contains no application chrome and remains applicable. The page header separately uses the existing nature reel, `reel.mp4` and `reel-poster.jpg`.
 

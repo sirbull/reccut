@@ -104,6 +104,35 @@ function validateAI(raw) {
   if (!model || model.length > 200) throw new Error('Enter a model ID from your provider.');
   return { provider, endpoint: url.href.replace(/\/$/, ''), model, vision: raw.vision !== false };
 }
+// A provider error the user can act on, with the provider's own short message for details.
+const AI_HINTS = {
+  400: 'The provider did not accept the request. The model may not support tool calling or images. Try another model, or turn off Model can see images.',
+  401: 'The API key was not accepted. Check that you copied the whole key, and that it belongs to the provider you chose.',
+  402: 'The account has no credits. Add a payment method or credits in your provider account.',
+  403: 'This key has no access to the model. Check the key’s permissions, or choose another model.',
+  404: 'The model or address was not found. Check the Model ID and the API base URL.',
+  429: 'The provider’s usage limit is reached, or the account has no credits. Wait a minute, or add credits in your provider account.',
+};
+async function aiErrorMessage(response, apiKey = '') {
+  let detail = '';
+  try {
+    const body = await response.text();
+    try {
+      const json = JSON.parse(body);
+      detail = json?.error?.message || json?.message || (typeof json?.error === 'string' ? json.error : '');
+    } catch {
+      detail = body;
+    }
+  } catch {}
+  // Never show anything that looks like a credential, and skip details for rejected keys.
+  detail = [401, 403].includes(response.status) ? '' : String(detail || '');
+  if (apiKey) detail = detail.split(apiKey).join('…');
+  detail = detail.replace(/[A-Za-z0-9_\-*.]{24,}/g, '…').replace(/\s+/g, ' ').trim().slice(0, 200);
+  const hint =
+    AI_HINTS[response.status] ||
+    (response.status >= 500 ? 'The provider is having problems right now. Try again in a few minutes.' : 'The AI request failed.');
+  return `${hint} (${response.status}${detail ? `: ${detail}` : ''})`;
+}
 const TOOL_NAME = /^[a-z_][a-z0-9_]{0,63}$/;
 const IMAGE = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/;
 function validateRequest({ system, messages, tools }) {
@@ -429,9 +458,19 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
     };
     // Never forward a credential through a redirect to another host.
     const call = async (route, init = {}) => {
-      const response = await fetchImpl(`${c.endpoint}${route}`, { headers, redirect: 'error', ...init });
-      if (!response.ok)
-        throw new Error(`AI request failed (${response.status}). Check the endpoint, model, API key and provider limits.`);
+      let response;
+      try {
+        response = await fetchImpl(`${c.endpoint}${route}`, { headers, redirect: 'error', ...init });
+      } catch (err) {
+        if (err?.name === 'AbortError') throw err;
+        if (err?.name === 'TimeoutError') throw new Error('The AI did not answer in time. Try again, or try a shorter request.');
+        throw new Error(
+          isLocal(c.endpoint)
+            ? `Could not reach the model server at ${c.endpoint}. Check that Ollama, LM Studio or your server is running and has a model loaded.`
+            : `Could not reach ${new URL(c.endpoint).host}. Check your internet connection and the API base URL.`,
+        );
+      }
+      if (!response.ok) throw new Error(await aiErrorMessage(response, apiKey));
       return response.json();
     };
     return { c, anthropic, call };
@@ -736,4 +775,4 @@ function createExtensionHost({ dir, safeStorage, fetchImpl = (...args) => fetch(
   }
   return { aiConfig, saveAI, complete, listModels, draftProcessor, exportPlugin, readPluginFile, installPackage, genConfig, saveGen, estimateVideo, generateVideo, listPlugins, installPlugin, removePlugin, processFile };
 }
-module.exports = { createExtensionHost, validatePlugin, validateAI, toAnthropic, toCompatible, fromCompatible, readDocument };
+module.exports = { createExtensionHost, validatePlugin, validateAI, aiErrorMessage, toAnthropic, toCompatible, fromCompatible, readDocument };

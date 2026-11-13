@@ -3,7 +3,8 @@
 // modell (teksting, fjerne bakgrunn eller AI-stemmer), og fra Settings → AI.
 import { signal } from '@preact/signals';
 import { useEffect, useState } from 'preact/hooks';
-import { AudioWaveform, Captions, Check, Download, Loader2, Scissors, Trash2, X } from 'lucide-preact';
+import { AudioWaveform, Captions, Check, Download, Loader2, Scissors, Sparkles, Trash2, X } from 'lucide-preact';
+import { aiChatOpen } from './aiChatOpen.js';
 import { Button, IconButton, Modal } from './ui.jsx';
 import { prefs, setPrefs } from './prefs.js';
 import { modelAction, modelBytes, subtitleModels } from './subtitleModels.js';
@@ -49,7 +50,7 @@ const GROUPS = [
     id: 'captions',
     icon: Captions,
     title: 'Captions and transcripts',
-    use: 'Turns speech into text: automatic captions in Edit, and the transcripts the AI agent uses to find takes and cut on words.',
+    use: 'Turns speech into text: automatic captions in Edit, and the transcripts the AI Agent uses to find takes and cut on words.',
   },
   {
     id: 'background',
@@ -218,6 +219,29 @@ export function AiModelsDialog() {
           </ul>
         </section>
       ))}
+      {state?.firstRun && (
+        <section class="ai-models-group">
+          <header>
+            <Sparkles size={16} />
+            <div>
+              <b>AI Agent</b>
+              <p>Describe an edit in plain words, and the AI Agent does it for you: cuts clips, adds subtitles, titles and color. It uses an AI service you choose, such as Google Gemini, which is free to start. Nothing is downloaded now.</p>
+            </div>
+            <Button
+              class="small"
+              icon={Sparkles}
+              onClick={() => {
+                // Models already ticked are still downloaded; the agent setup opens on top.
+                if (picked.size) downloadPicked();
+                else close();
+                aiChatOpen.value = true;
+              }}
+            >
+              Set Up AI Agent
+            </Button>
+          </header>
+        </section>
+      )}
     </Modal>
   );
 }

@@ -1,8 +1,10 @@
 import { render, createContext } from 'preact';
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { ArrowLeft, ArrowRight, BookOpen, Search, X, ZoomIn } from 'lucide-preact';
+import { ArrowLeft, ArrowRight, BookOpen, ChevronRight, Home as HomeIcon, Search, X, ZoomIn } from 'lucide-preact';
 import { ARTICLES, SECTIONS } from './articles.js';
 import { excerpt, plainText, queryTerms, searchHelp } from './search.js';
+import { HOME, HOME_ID } from './home.js';
+import wordmark from '../../../assets/reccut-wordmark.svg';
 
 const Runtime = createContext({ commands: [] });
 const headingId = (i) => `heading-${i}`;
@@ -96,6 +98,33 @@ function Article({ article, onImage }) {
   </article>;
 }
 
+const titleOf = (id) => ARTICLES.find((a) => a.id === id)?.title || id;
+
+// Forsiden: kort om Reccut og nøkkelfunksjonene, med lenker inn i håndboken.
+function Home({ onImage }) {
+  const { open } = useContext(Runtime);
+  return <div class="handbook-home">
+    <header class="handbook-home-hero">
+      <img class="handbook-home-logo" src={`data:image/svg+xml,${encodeURIComponent(wordmark)}`} alt="Reccut" />
+      <h1>{HOME.tagline}</h1>
+      <p class="help-summary">{HOME.intro}</p>
+      <button class="handbook-image" aria-label={`Enlarge image: ${HOME.hero.caption}`} onClick={() => onImage({ file: HOME.hero.image, caption: HOME.hero.caption })}>
+        <img src={`help/${HOME.hero.image}`} alt={HOME.hero.caption} /><span><ZoomIn size={14} /> Enlarge</span>
+      </button>
+    </header>
+    <h2>Get started</h2>
+    <div class="handbook-home-start">{HOME.start.map((s) => <button key={s.article} onClick={() => open(s.article)}><b>{s.title}</b><span>{s.text}</span><ChevronRight size={16} /></button>)}</div>
+    <h2>What you can do</h2>
+    <div class="handbook-home-features">{HOME.features.map((f) => <section key={f.title} class="handbook-home-card">
+      <button class="handbook-home-thumb" onClick={() => open(f.links[0])} aria-label={`Read about ${f.title}`}><img src={`help/${f.image}`} alt="" loading="lazy" /></button>
+      <h3>{f.title}</h3><p>{f.text}</p>
+      <ul>{f.links.map((id) => <li key={id}><button class="link" onClick={() => open(id)}>{titleOf(id)}</button></li>)}</ul>
+    </section>)}</div>
+    <h2>Reference</h2>
+    <ul class="handbook-home-reference">{HOME.reference.map((id) => <li key={id}><button class="link" onClick={() => open(id)}>{titleOf(id)}</button></li>)}</ul>
+  </div>;
+}
+
 function ImageDialog({ value, onClose }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -111,23 +140,24 @@ function ImageDialog({ value, onClose }) {
 
 export function Handbook() {
   const [runtime, setRuntime] = useState({ commands: [], platform: '' });
-  const [history, setHistory] = useState([{ article: 'welcome', query: '', section: '' }]);
+  const [history, setHistory] = useState([{ article: HOME_ID, query: '', section: '' }]);
   const [index, setIndex] = useState(0);
   const [image, setImage] = useState(null);
   const [error, setError] = useState('');
   const inputRef = useRef(null), bodyRef = useRef(null);
   const state = history[index];
-  const article = ARTICLES.find((a) => a.id === state.article) || ARTICLES[0];
+  const home = state.article === HOME_ID || !ARTICLES.some((a) => a.id === state.article);
+  const article = ARTICLES.find((a) => a.id === state.article);
   const navigate = (next) => {
     setHistory((old) => [...old.slice(0, index + 1), next]);
     setIndex(index + 1);
   };
-  const open = (id) => { if (ARTICLES.some((a) => a.id === id)) navigate({ article: id, query: '', section: '', match: state.query.trim() }); };
+  const open = (id) => { if (id === HOME_ID || ARTICLES.some((a) => a.id === id)) navigate({ article: id, query: '', section: '', match: state.query.trim() }); };
   const update = (patch) => setHistory((old) => old.map((v, i) => i === index ? { ...v, ...patch } : v));
   const navigationRef = useRef(null);
   navigationRef.current = (request = {}) => {
     if (request.article) open(request.article);
-    if (request.query !== undefined) navigate({ article: 'welcome', query: request.query, section: '' });
+    if (request.query !== undefined) navigate({ article: HOME_ID, query: request.query, section: '' });
     if (request.focusSearch) inputRef.current?.focus();
   };
   useEffect(() => {
@@ -139,7 +169,7 @@ export function Handbook() {
   }, []);
   useEffect(() => {
     bodyRef.current?.scrollTo(0, 0);
-    document.title = `${state.query.trim() ? 'Search' : article.title} — Reccut Help`;
+    document.title = `${state.query.trim() ? 'Search' : home ? HOME.title : article.title} — Reccut Help`;
     if (state.query.trim() || !state.match) return;
     const frame = requestAnimationFrame(() => {
       const terms = queryTerms(state.match);
@@ -165,11 +195,11 @@ export function Handbook() {
     <aside class="help-nav">
       <div class="handbook-brand"><BookOpen size={22} /><div><strong>Reccut</strong><span>User handbook · English</span></div></div>
       <label class="help-search"><Search size={16} /><input ref={inputRef} aria-label="Search the handbook" placeholder="Search all help…" value={state.query} onInput={(e) => update({ query: e.currentTarget.value })} />{state.query && <button aria-label="Clear search" onClick={() => { update({ query: '' }); inputRef.current?.focus(); }}><X size={14} /></button>}</label>
-      <nav aria-label="Handbook chapters">{SECTIONS.map((section) => <div class="help-section" key={section}><h2>{section}</h2>{ARTICLES.filter((a) => a.section === section).map((a) => <button key={a.id} class={!searching && article.id === a.id ? 'active' : ''} aria-current={!searching && article.id === a.id ? 'page' : undefined} onClick={() => open(a.id)}>{a.title}</button>)}</div>)}</nav>
+      <nav aria-label="Handbook chapters"><div class="help-section"><button class={!searching && home ? 'active handbook-home-link' : 'handbook-home-link'} aria-current={!searching && home ? 'page' : undefined} onClick={() => open(HOME_ID)}><HomeIcon size={14} /> Overview</button></div>{SECTIONS.map((section) => <div class="help-section" key={section}><h2>{section}</h2>{ARTICLES.filter((a) => a.section === section).map((a) => <button key={a.id} class={!searching && article?.id === a.id ? 'active' : ''} aria-current={!searching && article?.id === a.id ? 'page' : undefined} onClick={() => open(a.id)}>{a.title}</button>)}</div>)}</nav>
       <footer>{ARTICLES.length} guides · Available offline</footer>
     </aside>
     <div class="handbook-main">
-      <header class="handbook-toolbar"><button class="icon-btn" aria-label="Back" disabled={index === 0} onClick={() => setIndex(index - 1)}><ArrowLeft size={17} /></button><button class="icon-btn" aria-label="Forward" disabled={index === history.length - 1} onClick={() => setIndex(index + 1)}><ArrowRight size={17} /></button><button class="link" onClick={() => open('welcome')}>Handbook</button><span>› {searching ? 'Search' : article.section}</span><span class="handbook-search-key">{runtime.platform === 'darwin' ? '⌘F' : 'Ctrl+F'} to search</span></header>
+      <header class="handbook-toolbar"><button class="icon-btn" aria-label="Back" disabled={index === 0} onClick={() => setIndex(index - 1)}><ArrowLeft size={17} /></button><button class="icon-btn" aria-label="Forward" disabled={index === history.length - 1} onClick={() => setIndex(index + 1)}><ArrowRight size={17} /></button><button class="link" onClick={() => open(HOME_ID)}>Handbook</button>{(searching || !home) && <span>› {searching ? 'Search' : article.section}</span>}<span class="handbook-search-key">{runtime.platform === 'darwin' ? '⌘F' : 'Ctrl+F'} to search</span></header>
       {error && <div class="handbook-error" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError('')}><X size={14} /></button></div>}
       <main class="help-body" ref={bodyRef} tabIndex={-1} id="handbook-content">
         {searching ? <div class="help-results"><h1>Search the handbook</h1><p role="status">{results.articles.length} guides and {results.commands.length} commands for “{state.query}”</p>
@@ -177,7 +207,7 @@ export function Handbook() {
           {results.articles.map((a) => <button key={a.id} class="help-hit" onClick={() => open(a.id)}><span class="handbook-eyebrow">{a.section}</span><b><Highlight text={a.title} query={state.query} /></b><span><Highlight text={excerpt(a, state.query)} query={state.query} /></span></button>)}
           {!!results.commands.length && <h2>Commands</h2>}{results.commands.map((c) => <div class="handbook-command" key={c.id}><div><strong><Highlight text={c.label} query={state.query} /></strong><Keycap command={c} /></div><p>{c.desc || menuPath(c)}</p><div class="handbook-command-actions"><button class="link" onClick={() => open(c.help || 'command-reference')}>Read guide</button><button class="help-run" onClick={() => run(c.id)}>Run in Reccut</button></div></div>)}
           {!results.articles.length && !results.commands.length && <p>No matches. Try a shorter term such as “camera”, “AI”, “trim” or “export”, or choose All chapters.</p>}
-        </div> : <Article key={article.id} article={article} onImage={setImage} />}
+        </div> : home ? <Home onImage={setImage} /> : <Article key={article.id} article={article} onImage={setImage} />}
       </main>
     </div>
     {image && <ImageDialog value={image} onClose={() => setImage(null)} />}

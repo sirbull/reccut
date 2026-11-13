@@ -23,7 +23,7 @@
 
 Reccut is a free, open-source video editor and screen recorder for Mac, Windows and Linux. Import video from your camera or phone, arrange clips on a magnetic timeline, mix sound, correct colour and add titles or subtitles. Use it for a short film, an interview, a travel video or a YouTube project.
 
-The built-in screen recorder captures your screen, camera and microphone straight into a project. You can also use **Export** to convert files. Recording and editing run on your own machine and work offline. Optional **AI agents** can edit for you using a model you choose from a cloud provider or a local model server.
+The built-in screen recorder captures your screen, camera and microphone straight into a project. You can also use **Export** to convert files. Recording and editing run on your own machine and work offline. The optional **AI Agent** can edit for you using a model you choose from a cloud provider or a local model server.
 
 ## Video editing
 
@@ -180,9 +180,9 @@ language, including Warm and Sensual. Listen before downloading and choose the
 packages you need; synthesis runs locally. See the [voice guide](docs/AI-VOICES.md)
 and [0.9.3 release notes](docs/releases/0.9.3.md) for setup and known limitations.
 
-## AI agents and model choice
+## AI Agent and model choice
 
-Connect a model in **Settings → AI & Plugins**, import your clips and ask the AI agent to edit them. You can attach a script in the AI chat:
+Click **AI Agent** in the top bar and connect a model the first time (or use **Settings → AI**). Import your clips and ask the AI Agent to edit them. You can attach a script in the chat:
 
 > “Read the script I’ve attached and make a first cut from my camera takes and screen recordings. Use the best takes and show the screen when I explain each step.”
 

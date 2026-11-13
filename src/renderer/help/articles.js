@@ -183,7 +183,7 @@ Everything belongs to a project. A project is a folder that holds the project fi
 ## Start with a task
 
 - [[article:first-edit|Make your first video]] — a complete recording, edit and export example.
-- [[article:ai-setup|Connect a cloud AI agent]] or [[article:ai-local|use a local model]].
+- [[article:ai-setup|Connect a cloud AI Agent]] or [[article:ai-local|use a local model]].
 - [[article:tools|Learn the editing tools]] and [[article:creative-reference|browse creative presets]].
 - [[article:troubleshooting|Solve a picture, sound or export problem]].
 - [[article:command-reference|Find every command]] or [[article:glossary|look up an unfamiliar term]].
@@ -1323,7 +1323,7 @@ The clip keeps the place it has at the playhead relative to the object, also whe
 
 For a redaction, put it over what it should hide and press **Track Forward** under Follow Track. Reccut tracks what the redaction covers in the video below and attaches the redaction to it.
 
-## With the AI agent
+## With the AI Agent
 
 Ask the agent, for example "Blur the face of the woman in the pink shirt" or "Put a label that follows the car". It finds the object in the frames, adds the redaction or title, tracks the object and attaches the clip. You can adjust the result as usual.
 
@@ -1591,7 +1591,7 @@ Cloud providers need your own API key and bill you for usage. Keys use encrypted
 
 ## The editing agent
 
-Choose **AI** in the toolbar. The first time, a short setup lets you choose a model on this computer, Google Gemini, Claude or OpenAI. Choose **? What can I ask** for tips and examples. Describe the result you want. The agent reads the timeline and library, places and cuts clips, trims, moves and deletes, adds titles, captions and transitions, sets volume, fades, colour and stack effects, imports files you name, and looks up this manual. It renders frames from the timeline to check its work.
+Choose **AI Agent** in the toolbar. The first time, a short setup lets you choose a model on this computer, Google Gemini, Claude or OpenAI. Choose **? What can I ask** for tips and examples. Describe the result you want. The agent reads the timeline and library, places and cuts clips, trims, moves and deletes, adds titles, captions and transitions, sets volume, fades, colour and stack effects, imports files you name, and looks up this manual. It renders frames from the timeline to check its work.
 
 - **Subtitles and translation:** "Subtitle this video in Finnish." The agent transcribes the speech with the local speech model, translates and condenses it, and replaces the captions in one step. Reccut fits the timing to common subtitle rules: at least one second on screen, no more than 17 characters per second, two lines of 42 characters, a short gap between captions and no overlaps. The agent rewrites captions that break the rules. Read through the result before you publish it.
 - **Hide or follow something that moves:** "Blur the face of the man in the blue jacket." The agent finds the object in the frames, adds a redaction, tracks the object and attaches the redaction to it. It can also pin titles and images to objects, and attach clips to tracks you made yourself.
@@ -1607,7 +1607,7 @@ Choose **AI** in the toolbar. The first time, a short setup lets you choose a mo
 
 In **Settings → Plugins**, tools are grouped into **Record**, **Edit**, **Export** and **Design**. Your current workspace appears first and opens automatically. Use the workspace buttons to jump to another section. Photo sources, API keys and online templates are under **Design**; video tools and plugin installation are under **Edit**. Source labels explain whether a connection is ready, needs a key or needs sign-in.
 
-Video plugins have **Open**, **Settings**, **Share…** and **Remove**. The gear in a plugin's window opens the same settings. A plugin's settings are the values it starts with, also when the AI agent uses it; you can still change them in its window each time. Higgsfield's settings hold your account, the models and whether to ask before each generation. Share saves a .reccut-plugin file; others install it by double-clicking it. Sharing is free, and you may also sell your plugins on your own terms; you accept the sharing terms when you export. Installing any plugin, from the agent or from a file, asks you to confirm that you use it at your own risk: a plugin runs on your computer with your permissions and can change files and projects. Install only plugins you trust and keep backups.
+Video plugins have **Open**, **Settings**, **Share…** and **Remove**. The gear in a plugin's window opens the same settings. A plugin's settings are the values it starts with, also when the AI Agent uses it; you can still change them in its window each time. Higgsfield's settings hold your account, the models and whether to ask before each generation. Share saves a .reccut-plugin file; others install it by double-clicking it. Sharing is free, and you may also sell your plugins on your own terms; you accept the sharing terms when you export. Installing any plugin, from the agent or from a file, asks you to confirm that you use it at your own risk: a plugin runs on your computer with your permissions and can change files and projects. Install only plugins you trust and keep backups.
 
 Scripts from **Typeloom**: export the project as a Typeloom project file (.typeloom) and attach it. The binder order, scene headings, character cues, dialogue and the corkboard synopsis of each document are kept, so the agent can follow the acts and scenes. A screenplay exported as PDF works too.
 - **Anything in the menus:** the agent can find and run every command in Reccut, select clips, move the playhead, change any inspector property, the project format and caption style, Settings, recording settings and keyboard shortcuts.
@@ -1616,7 +1616,7 @@ Scripts from **Typeloom**: export the project as a Typeloom project file (.typel
 
 Each change is an undo step, and **Undo this request** reverts everything the agent did in its last request. **Stop** ends a request between steps.
 
-The agent cannot yet create voice-over or music, or export. What is sent to the provider: your messages and attached images, what the agent reads from the project (clip names, timings, captions, the transcript and look measurements) and, if the model can see images, rendered frames. Media files, audio and local paths are not uploaded. The speech model runs on your computer. Manage installed subtitle models in Settings → AI; Whisper Base is included, and additional models are optional downloads.
+The agent cannot yet create voice-over or music, or export. What is sent to the provider: your messages and attached images, what the agent reads from the project (clip names, timings, captions, the transcript and look measurements) and, if the model can see images, rendered frames. Media files, audio and local paths are not uploaded. The speech model runs on your computer. Speech models for subtitles are optional downloads in Settings → AI.
 
 **External video processors** install from a Reccut JSON manifest pointing to a trusted local executable. On a video clip, open Effects → External processing to process the full source and apply the result to that clip. The source timing must be preserved; original audio and media remain available. Cancel through Background tasks.
 
@@ -1891,7 +1891,7 @@ To change the space after one clip, select it and change **Pause after**. **Defa
 
 Turn on **Subtitles** (next to Send to Edit, or **Subtitles from the script** under Stitch) to also get subtitles with the text from the script, timed to where each clip lands. Long lines are split into readable pieces. Fix them in the Captions tab like any other captions. After retakes, press **Send to Edit** again. The clips from the last stitch are replaced, so the timeline always has the best takes. The takes are also in the Media browser, named after the line, so you can use them by hand.
 
-The script is added to the project story, so the AI agent can use it to match the takes to the script.
+The script is added to the project story, so the AI Agent can use it to match the takes to the script.
 `,
     see: ['audio', 'audio-effects', 'recording'],
   },
