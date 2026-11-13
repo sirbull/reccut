@@ -5637,6 +5637,9 @@ button.vo-take-name:hover { background: var(--bg-3); }
 .vo-setup-card h3 { margin: 0; font-size: 18px; }
 .vo-setup-card p { margin: 0; line-height: 1.5; color: var(--text-2); }
 .vo-setup-card .vo-meter-wrap { width: 100%; }
+.vo-setup-input { width: 100%; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 14px; }
+.vo-setup-input .vo-field:first-child { flex: 1 1 220px; min-width: 0; }
+.vo-setup-input .vo-field:first-child .select { flex: 1; min-width: 0; }
 .vo-setup-go { min-width: 220px; justify-content: center; height: 40px; font-size: 14px; }
 .vo-setup-count { font-size: 84px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--yellow); }
 .vo-setup-count.rec { color: var(--red); }

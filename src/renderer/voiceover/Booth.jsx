@@ -218,7 +218,6 @@ export function VoiceoverBooth() {
 function BoothHeader() {
   const v = booth.vo.value;
   const { done, total } = progress(booth.blocks.value, v, booth.personId.value);
-  const mics = booth.devices.value.mics;
   const cams = booth.devices.value.cams;
   const video = booth.opt('voVideo');
   const reopen = (patch) => {
@@ -242,14 +241,7 @@ function BoothHeader() {
       )}
       <div class="spacer" />
       <RoomTonePicker />
-      <label class="vo-field" title="Microphone">
-        <span>Mic</span>
-        <Select value={mics.some((m) => m.id === booth.opt('voMic')) ? booth.opt('voMic') : ''} options={[{ value: '', label: 'System default' }, ...mics.map((m) => ({ value: m.id, label: m.label }))]} onChange={(id) => reopenWith('mic', id)} />
-      </label>
-      <label class="vo-field" title="Which input channel to record. Most interfaces have the microphone on input 1.">
-        <span>Input</span>
-        <Select value={String(booth.opt('voChannel'))} options={[{ value: '0', label: '1 (left)' }, { value: '1', label: '2 (right)' }, { value: '-1', label: '1 + 2 mixed' }]} onChange={(ch) => booth.setChannel(Number(ch))} />
-      </label>
+      <InputPicker />
       <button class={`btn small ${video ? 'primary' : 'secondary'}`} title="Record the camera too, for a talking head" onClick={() => reopen({ voVideo: !video })}>
         {video ? <Video size={14} /> : <VideoOff size={14} />}
         Camera
@@ -261,6 +253,28 @@ function BoothHeader() {
         Back to Edit
       </Button>
     </header>
+  );
+}
+
+// Mikrofon og inngangskanal. Brukes i toppen og i romlydkortet, så inngangen kan byttes før første opptak.
+function InputPicker() {
+  const mics = booth.devices.value.mics;
+  const choose = (id) => {
+    if (booth.busy()) return toast('Stop the take first.');
+    booth.chooseDevice('mic', id);
+    booth.openInput();
+  };
+  return (
+    <>
+      <label class="vo-field" title="Microphone">
+        <span>Mic</span>
+        <Select value={mics.some((m) => m.id === booth.opt('voMic')) ? booth.opt('voMic') : ''} options={[{ value: '', label: 'System default' }, ...mics.map((m) => ({ value: m.id, label: m.label }))]} onChange={choose} />
+      </label>
+      <label class="vo-field" title="Which input channel to record. Most interfaces have the microphone on input 1.">
+        <span>Input</span>
+        <Select value={String(booth.opt('voChannel'))} options={[{ value: '0', label: '1 (left)' }, { value: '1', label: '2 (right)' }, { value: '-1', label: '1 + 2 mixed' }]} onChange={(ch) => booth.setChannel(Number(ch))} />
+      </label>
+    </>
   );
 }
 
@@ -884,6 +898,9 @@ function RoomToneSetup() {
                 ? 'It sounded like a voice or a knock. Try again while everyone is quiet.'
                 : 'Sit where you will record, with the microphone in place. Reccut counts down from 3 and records 5 seconds of silence, then stops by itself. It uses the room tone to find where your voice starts and to fill the pauses between lines.'}
             </p>
+            <div class="vo-setup-input">
+              <InputPicker />
+            </div>
             <Meter />
             <Button variant="primary" class="vo-setup-go" icon={Wind} onClick={() => booth.recordRoomTone(5)} disabled={st !== 'idle'}>
               {retry ? 'Try Again' : 'Record Room Tone'}
@@ -899,7 +916,14 @@ function RoomToneSetup() {
             Cancel (Esc)
           </button>
         )}
-        {booth.inputError.value && <p class="vo-error">{booth.inputError.value}</p>}
+        {booth.inputError.value && (
+          <p class="vo-error">
+            {booth.inputError.value}{' '}
+            <button class="link" onClick={booth.openInput}>
+              Try again
+            </button>
+          </p>
+        )}
       </div>
     </div>
   );
