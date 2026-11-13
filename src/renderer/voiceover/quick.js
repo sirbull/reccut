@@ -5,6 +5,7 @@ import { addMediaRecords, project, projectFolders } from '../editor/store.js';
 import { encodeWav, peakInfo } from '../../shared/voiceover.js';
 import { prefs, setPrefs } from '../prefs.js';
 import { toast } from '../ui.jsx';
+import { inputErrorText, missingDevice, resolveDevice } from '../../shared/mediaInput.js';
 
 const api = window.api;
 const sep = () => (api.platform === 'win32' ? '\\' : '/');
@@ -43,14 +44,26 @@ export async function openQuick(anchor = null) {
   await openMic();
 }
 
+const micConstraints = (id) => ({
+  audio: { ...(id ? { deviceId: { exact: id } } : {}), echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 }, sampleRate: { ideal: 48000 } },
+});
+
 async function openMic() {
   closeMic();
   quickError.value = null;
-  const id = quickMic();
+  await listMics();
+  // Lagret ID som ikke finnes lenger (Windows gir enhetene nye ID-er): finn mikrofonen på navnet.
+  const id = resolveDevice(quickMic(), prefs.value.quickMicLabel, quickMics.value.filter((m) => m.id));
+  if (quickMics.value.length && (id || '') !== quickMic()) setPrefs({ quickMic: id || '' });
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: { ...(id ? { deviceId: { exact: id } } : {}), echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 }, sampleRate: { ideal: 48000 } },
-    });
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(micConstraints(id));
+    } catch (err) {
+      if (!missingDevice(err) || !id) throw err;
+      stream = await navigator.mediaDevices.getUserMedia(micConstraints(null));
+      setPrefs({ quickMic: '' });
+      toast('The chosen microphone did not respond. Using the system default.', { timeout: 5000 });
+    }
     ctx = new AudioContext({ sampleRate: 48000 });
     await ctx.audioWorklet.addModule('vo-capture-worklet.js');
     node = new AudioWorkletNode(ctx, 'reccut-vo-capture', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2, channelCountMode: 'explicit' });
@@ -65,7 +78,7 @@ async function openMic() {
     mute.gain.value = 0;
     ctx.createMediaStreamSource(stream).connect(node).connect(mute).connect(ctx.destination);
   } catch (err) {
-    quickError.value = err.name === 'NotAllowedError' ? 'Reccut has no access to the microphone. Allow it in the system settings.' : `Could not open the microphone: ${err.message}`;
+    quickError.value = inputErrorText(err, 'the microphone');
     closeMic();
   }
   listMics();
@@ -87,7 +100,7 @@ export function closeQuick() {
 
 export async function chooseQuickMic(id) {
   if (quickState.value !== 'idle') return;
-  setPrefs({ quickMic: id });
+  setPrefs({ quickMic: id, quickMicLabel: quickMics.value.find((m) => m.id === id)?.label || '' });
   await openMic();
 }
 

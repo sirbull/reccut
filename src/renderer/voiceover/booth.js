@@ -37,6 +37,7 @@ import { voxcpmById, voxcpmMood } from './voxcpm.js';
 import { aiVoiceInstalled, aiVoicePayload } from '../../shared/aiVoice.js';
 import { DEFAULT_VOICE, PREVIEW_TEXT, detectLanguage, languageById, parseVoice, spokenText, voiceById, voiceLanguage, VOICES } from '../../shared/tts.js';
 import { recordingPlan } from '../../shared/recordingFormats.cjs';
+import { inputErrorText, missingDevice, resolveDevice } from '../../shared/mediaInput.js';
 import { audioSink, prefs, setPrefs } from '../prefs.js';
 import { boothOpen } from './state.js';
 import * as preview from './preview.js';
@@ -53,7 +54,9 @@ const sep = () => (api.platform === 'win32' ? '\\' : '/');
 
 export const VO_DEFAULTS = {
   voMic: '',
+  voMicLabel: '',
   voCam: '',
+  voCamLabel: '',
   voVideo: false,
   voChannel: 0,
   voSplit: 'paragraph',
@@ -423,20 +426,45 @@ export async function refreshDevices() {
   } catch {}
 }
 
+const inputConstraints = (mic, cam, video) => ({
+  // Ren lyd: ingen ekkodemping, støyfjerning eller automatisk nivå. Det gjøres i etterkant.
+  audio: { ...(mic ? { deviceId: { exact: mic } } : {}), echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 }, sampleRate: { ideal: 48000 } },
+  video: video ? { ...(cam ? { deviceId: { exact: cam } } : {}), width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } : false,
+});
+
+// Velger mikrofon eller kamera og husker navnet, så enheten finnes igjen når ID-en endres.
+export function chooseDevice(kind, id) {
+  const list = kind === 'cam' ? devices.value.cams : devices.value.mics;
+  const label = list.find((d) => d.id === id)?.label || '';
+  setPrefs(kind === 'cam' ? { voCam: id, voCamLabel: label } : { voMic: id, voMicLabel: label });
+}
+
 export async function openInput() {
   closeInput();
   inputError.value = null;
-  const mic = opt('voMic');
-  const cam = opt('voCam');
+  await refreshDevices();
   const video = opt('voVideo');
+  // Lagret ID som ikke finnes lenger: finn enheten på navnet, ellers systemets standard.
+  let mic = resolveDevice(opt('voMic'), opt('voMicLabel'), devices.value.mics);
+  let cam = video ? resolveDevice(opt('voCam'), opt('voCamLabel'), devices.value.cams) : opt('voCam');
+  if (devices.value.mics.length && (mic || '') !== (opt('voMic') || '')) setPrefs({ voMic: mic || '' });
+  if (video && devices.value.cams.length && (cam || '') !== (opt('voCam') || '')) setPrefs({ voCam: cam || '' });
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      // Ren lyd: ingen ekkodemping, støyfjerning eller automatisk nivå. Det gjøres i etterkant.
-      audio: { ...(mic ? { deviceId: { exact: mic } } : {}), echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 }, sampleRate: { ideal: 48000 } },
-      video: video ? { ...(cam ? { deviceId: { exact: cam } } : {}), width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } : false,
-    });
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(inputConstraints(mic, cam, video));
+    } catch (err) {
+      if (!missingDevice(err) || (!mic && !cam)) throw err;
+      // Den valgte enheten svarer ikke på ID-en sin. Prøv systemets standard før vi gir opp.
+      stream = await navigator.mediaDevices.getUserMedia(inputConstraints(null, null, video));
+      setPrefs({ voMic: '', ...(video ? { voCam: '' } : {}) });
+      toast(`The chosen ${mic && cam ? 'microphone or camera' : cam ? 'camera' : 'microphone'} did not respond. Using the system default.`, { timeout: 5000 });
+      mic = cam = null;
+    }
   } catch (err) {
-    inputError.value = err.name === 'NotAllowedError' ? 'Reccut has no access to the microphone or camera. Allow it in the system settings.' : `Could not open the input: ${err.message}`;
+    stream = null;
+    inputError.value = inputErrorText(err, video ? 'the microphone or camera' : 'the microphone');
+    // Listen må fylles også når åpningen feiler, ellers kan ikke en annen mikrofon velges.
+    refreshDevices();
     return;
   }
   cameraStream.value = video ? stream : null;

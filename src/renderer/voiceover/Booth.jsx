@@ -226,6 +226,11 @@ function BoothHeader() {
     setPrefs(patch);
     booth.openInput();
   };
+  const reopenWith = (kind, id) => {
+    if (booth.busy()) return toast('Stop the take first.');
+    booth.chooseDevice(kind, id);
+    booth.openInput();
+  };
   return (
     <header class="vo-head">
       <StudioIcon size={16} />
@@ -239,7 +244,7 @@ function BoothHeader() {
       <RoomTonePicker />
       <label class="vo-field" title="Microphone">
         <span>Mic</span>
-        <Select value={booth.opt('voMic')} options={[{ value: '', label: 'System default' }, ...mics.map((m) => ({ value: m.id, label: m.label }))]} onChange={(id) => reopen({ voMic: id })} />
+        <Select value={mics.some((m) => m.id === booth.opt('voMic')) ? booth.opt('voMic') : ''} options={[{ value: '', label: 'System default' }, ...mics.map((m) => ({ value: m.id, label: m.label }))]} onChange={(id) => reopenWith('mic', id)} />
       </label>
       <label class="vo-field" title="Which input channel to record. Most interfaces have the microphone on input 1.">
         <span>Input</span>
@@ -249,7 +254,7 @@ function BoothHeader() {
         {video ? <Video size={14} /> : <VideoOff size={14} />}
         Camera
       </button>
-      {video && cams.length > 1 && <Select value={booth.opt('voCam')} options={[{ value: '', label: 'Default camera' }, ...cams.map((c) => ({ value: c.id, label: c.label }))]} onChange={(id) => reopen({ voCam: id })} />}
+      {video && cams.length > 1 && <Select value={cams.some((c) => c.id === booth.opt('voCam')) ? booth.opt('voCam') : ''} options={[{ value: '', label: 'Default camera' }, ...cams.map((c) => ({ value: c.id, label: c.label }))]} onChange={(id) => reopenWith('cam', id)} />}
       <IconButton icon={PanelLeft} title={`${booth.opt('voBrowserVisible') ? 'Hide' : 'Show'} Effects & Templates`} active={!booth.opt('voPrompter') && booth.opt('voBrowserVisible')} aria-pressed={!booth.opt('voPrompter') && booth.opt('voBrowserVisible')} disabled={booth.opt('voPrompter')} onClick={() => setPrefs({ voBrowserVisible: !booth.opt('voBrowserVisible') })} />
       <IconButton icon={PanelRight} title={`${booth.opt('voInspectorVisible') ? 'Hide' : 'Show'} Properties`} active={!booth.opt('voPrompter') && booth.opt('voInspectorVisible')} aria-pressed={!booth.opt('voPrompter') && booth.opt('voInspectorVisible')} disabled={booth.opt('voPrompter')} onClick={() => setPrefs({ voInspectorVisible: !booth.opt('voInspectorVisible') })} />
       <Button variant="primary" class="small vo-back" icon={ArrowLeft} onClick={backToEdit} title="Leave the studio and go back to Edit (Esc). The takes are kept.">
