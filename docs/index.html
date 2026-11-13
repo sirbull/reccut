@@ -243,9 +243,12 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   html { scroll-behavior: auto; }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1040px) {
   nav .links { display: none; }
   nav .btn { margin-left: auto; }
+}
+
+@media (max-width: 900px) {
   footer .wrap { grid-template-columns: 1fr; text-align: center; }
   footer .wrap > :last-child { justify-self: center; }
   section { padding: 40px 0; }
@@ -277,6 +280,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     <div class="links">
       <a href="#edit">Edit</a>
       <a href="#record">Record</a>
+      <a href="#multicam">Multicam</a>
       <a href="#voiceover">Voice over</a>
       <a href="#looks">Color</a>
       <a href="#design">Design</a>
@@ -387,6 +391,39 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 </section>
 
 
+
+<section id="multicam" aria-labelledby="multicam-title">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Multicam</div>
+      <h2 id="multicam-title">Several cameras. <span class="serif">One edit.</span></h2>
+      <p class="sub">Filmed an interview from the front and the side, or a concert from three angles? Reccut lines the cameras up by their sound. Watch them all at once and press a number to choose which one is shown, live while the video plays or one section at a time.</p>
+    </div>
+    <figure class="reveal" style="margin-top:40px">
+      <div class="frame"><img src="media/multicam-window.jpg" alt="The Reccut multicam window with four camera angles in a grid, the active angle outlined in green, the chosen camera in Program, sound settings in Properties and the multicam timeline with Sound, Program and one track per camera" loading="lazy" width="1800" height="1200"></div>
+      <figcaption class="caption">Four angles beside Program, with the chosen cuts on the multicam timeline. The city clips are sample footage. Click to enlarge.</figcaption>
+    </figure>
+    <div class="rooms reveal">
+      <div class="room">
+        <h3>Sync by sound</h3>
+        <p>Select the clips and choose New Multicam Clip. Auto Sync compares the audio and lines up every camera and a separate audio recorder. If a file cannot be matched, Reccut tells you which one and why, so you can place it by hand.</p>
+      </div>
+      <div class="room">
+        <h3>Cut like a director</h3>
+        <p>Press 1 to 9 to cut to a camera at the playhead, or hold Shift to switch the current section without a new cut. Trim cuts, use the blade, mark an I/O range and choose which camera to fall back on when one has no picture.</p>
+      </div>
+      <div class="room">
+        <h3>Sound from the best microphone</h3>
+        <p>Keep the sound from one microphone the whole way, or let it follow the picture. Adjust the level with keyframes, pick the left or right channel, and add EQ, noise reduction or AI Clean Voice. Everything runs on your computer.</p>
+      </div>
+    </div>
+    <div class="record-followup reveal">
+      <p class="sub">Add to Timeline places one clip per cut, with the sound below. Edit the clips like any others, or reopen the multicam window to change cameras without losing your trims, effects and transitions.</p>
+      <div class="frame"><img src="media/multicam-result.jpg" alt="Reccut’s editor with a multicam result on the timeline: four clips marked MC, one for each camera cut, on V1 and the separate sound on A1" loading="lazy" width="1800" height="1200"></div>
+    </div>
+    <p class="caption">Unfinished multicam edits are saved locally as drafts, so you can pick up where you left off. See the <a href="https://github.com/sirbull/reccut/blob/main/docs/MULTICAM.md">multicam guide</a> for the full workflow.</p>
+  </div>
+</section>
 
 <section id="voiceover" aria-labelledby="voiceover-title">
   <div class="wrap">
