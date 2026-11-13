@@ -313,7 +313,6 @@ function MulticamWindow({ session }) {
   /* Klokken: videoene følger spillhodet, og programmet tegnes fra vinkelen som vises */
   useEffect(() => {
     let raf = 0;
-    let lastActive = activeRef.current;
     const tick = () => {
       const st = play.current;
       const m = mcRef.current;
@@ -409,8 +408,7 @@ function MulticamWindow({ session }) {
         const x = timeRef.current * z + HEAD_W;
         if (x > sc.scrollLeft + sc.clientWidth - 40) sc.scrollLeft = x - HEAD_W - 40;
       }
-      if (cur !== lastActive) {
-        lastActive = cur;
+      if (cur !== activeRef.current) {
         activeRef.current = cur;
         setActive(cur);
       }
@@ -453,7 +451,9 @@ function MulticamWindow({ session }) {
     if (!a) return;
     const t = timeRef.current;
     if (!isVideoAngle(project.value, a)) return;
-    const changed = edit((m) => (noCut ? switchSegment(project.value, m, t, angleId) : cutAndSwitch(project.value, m, t, angleId, { frame })));
+    skimRef.current = null;
+    const preserveCuts = !play.current.on;
+    const changed = edit((m) => (noCut ? switchSegment(project.value, m, t, angleId, { preserveCuts }) : cutAndSwitch(project.value, m, t, angleId, { frame, preserveCuts })));
     if (changed) {
       activeRef.current = pictureAngleAt(project.value, mcRef.current, t);
       setActive(activeRef.current);
@@ -710,9 +710,6 @@ function MulticamWindow({ session }) {
   return (
     <div class="mc-window" ref={winRef} role="dialog" aria-modal="true" aria-label="Multicam clip" style={{ gridTemplateRows: `auto auto minmax(0, 1fr) 6px ${timelineH}px` }}>
       <header class="mc-head">
-        <Button variant="primary" icon={Plus} onClick={send} title={`Add the multicam clip to the timeline (${mod}Return)`}>
-          {session.editing ? 'Update Timeline' : 'Add to Timeline'}
-        </Button>
         <input
           class="text-input mc-name"
           value={mc.name}
@@ -749,6 +746,9 @@ function MulticamWindow({ session }) {
         <span class="mc-sep" />
         <IconButton icon={Undo2} title={`Undo (${mod}Z)`} disabled={!hist.current.undo.length} onClick={undo} />
         <IconButton icon={Redo2} title={`Redo (${isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z'})`} disabled={!hist.current.redo.length} onClick={redo} />
+        <Button variant="primary" icon={Plus} onClick={send} title={`Add the multicam clip to the timeline (${mod}Return)`}>
+          {session.editing ? 'Update Timeline' : 'Add to Timeline'}
+        </Button>
         <IconButton icon={X} title="Close (Esc)" onClick={close} />
       </header>
       {notice ? (
@@ -929,6 +929,7 @@ function AngleTile({ angle, index, color, media, active, audio, elRef, onPick })
   return (
     <button
       class={`mc-tile${active ? ' active' : ''}`}
+      aria-pressed={active}
       style={{ '--angle': color }}
       onClick={onPick}
       title={`Cut to camera ${index + 1}${hot ? ` (${index + 1})` : ''}. Shift-click switches without cutting.`}
@@ -1574,7 +1575,7 @@ function MulticamTimeline(props) {
   };
   const runAngleMenu = (id, t) => {
     if (id?.startsWith('mcv:')) {
-      edit((m) => switchSegment(p, m, t, id.slice(4)));
+      edit((m) => switchSegment(p, m, t, id.slice(4), { preserveCuts: true }));
       return true;
     }
     if (id?.startsWith('mca:')) {

@@ -58,6 +58,7 @@ import {
   makeCaptionClip,
   makeTitleClip,
   project,
+  projectEpoch,
   projectFolders,
   relinkMedia,
   room,
@@ -67,6 +68,7 @@ import {
   editingGroup,
   inEditingGroup,
   sourceMediaId,
+  skim,
   sequenceSettingsOpen,
 } from './store.js';
 import { getViewerTime, openSource, pause, seek, seekViewer, sourceProject } from './playback.js';
@@ -77,6 +79,7 @@ import { droppedPaths } from '../fileDrop.js';
 import { setKeyframe } from './keyframes.js';
 import { enableKenBurns } from '../../shared/imageMotion.js';
 import { addSlideshow, slideshowOptions } from '../../shared/slideshow.js';
+import { mediaRemovalPlan, removeProjectMedia } from '../../shared/mediaRemoval.js';
 
 const api = window.api;
 
@@ -86,6 +89,42 @@ export const browserSelection = signal(null);
 // Alle medier som er valgt i biblioteket, og om biblioteket sist ble brukt (for Cmd A og synk).
 export const browserPicked = signal([]);
 export const browserFocus = signal(false);
+export const mediaRemovalDialog = signal(null);
+
+export function deleteFocusedSelection(ripple = true) {
+  if (browserFocus.value && browserTab.value === 'media') return removeBrowserMedia();
+  return deleteSelection(ripple);
+}
+
+export function removeBrowserMedia(ids = browserPicked.value) {
+  if (mediaRemovalDialog.value) return;
+  endTransient(true);
+  endPreview();
+  const p = project.value;
+  const plan = mediaRemovalPlan(p, ids);
+  if (!plan.mediaIds.length) return;
+  pause();
+  const request = { ...plan, names: plan.mediaIds.map((id) => p.media[id].name), projectId: p.id, epoch: projectEpoch.value };
+  mediaRemovalDialog.value = request;
+  if (!prefs.value.confirmMediaRemoval) confirmMediaRemoval();
+}
+
+export function confirmMediaRemoval(skipWarning = false) {
+  const request = mediaRemovalDialog.value;
+  mediaRemovalDialog.value = null;
+  if (!request || request.projectId !== project.value.id || request.epoch !== projectEpoch.value) return;
+  if (skipWarning) setPrefs({ confirmMediaRemoval: false });
+  const removed = new Set(request.mediaIds);
+  commit((p) => removeProjectMedia(p, request.mediaIds));
+  browserPicked.value = browserPicked.value.filter((id) => !removed.has(id));
+  if (removed.has(browserSelection.value)) browserSelection.value = null;
+  if (removed.has(browserRange.value?.mediaId)) browserRange.value = null;
+  if (removed.has(browserPlayhead.value?.mediaId)) browserPlayhead.value = null;
+  if (removed.has(browserSkimPos.mediaId)) browserSkimPos.mediaId = null;
+  if (removed.has(skim.value?.mediaId)) skim.value = null;
+  if (removed.has(sourceMediaId.value)) sourceMediaId.value = null;
+}
+
 export const slideshowDialog = signal(null);
 export function openSlideshow(order = null) {
   const ordered = [...(order || []), ...mediaOrderOf(browserPicked.value)];

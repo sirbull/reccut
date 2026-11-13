@@ -873,7 +873,7 @@ Ungroup ({{key:ungroup}}) separates them again.
     body: `
 A multicam clip holds the clips from several cameras that recorded the same thing at the same time, for example an interview filmed from the front and from the side. Reccut lines them up by their sound. You watch all the cameras at once and press a number to choose which one is shown. Reccut cuts the clips for you, so only one camera shows at a time, and the sound comes from the best microphone the whole way.
 
-![The multicam window. Files on the left, all cameras in Angles, the result in Program with a green frame, Properties on the right and the multicam timeline at the bottom.](multicam-window.jpg)
+![The multicam window. Files on the left, all cameras in Angles, the result in Program, Properties on the right and the multicam timeline at the bottom.](multicam-window.jpg)
 
 ## Make a multicam clip
 
@@ -890,11 +890,11 @@ The window has five parts:
 
 1. **Files** on the left. All video and audio in the project. Double click a file, or drag it to Angles or the timeline, to add it. Switch between list, icon and filmstrip view at the top. The + button imports new files into the project.
 2. **Angles**. All cameras at once, in small views numbered **1, 2, 3** in the order they were added. The views always form an even grid, so three cameras get four views and the empty one is black with the Reccut R. No video is stretched.
-3. **Program**. What goes on the timeline. The camera shown here has a **green frame** in Angles too.
+3. **Program**. What goes on the timeline. A **green frame** marks the active camera in Angles. The camera numbers keep their own colors.
 4. **Properties** on the right. Which camera to use when a camera has no picture, and the sound settings.
 5. **The multicam timeline** at the bottom, with the sound, the program and one track for each camera.
 
-The blue **Add to Timeline** button at the top left puts the result on the timeline.
+The blue **Add to Timeline** button at the top right puts the result on the timeline.
 
 
 ### Make room for the pictures
@@ -916,11 +916,12 @@ To line up one file by hand, drag its clip sideways in its track. Snapping (N) h
 ## Switch cameras
 
 - Press **1** to **9** to cut to that camera at the playhead. This works while the video plays, so you can switch cameras live, like a director.
+- When paused, the choice applies from the playhead to the next existing cut. You can try different cameras at the same position without changing the choices before or after that section.
 - Click a camera in Angles to do the same.
 - Hold **Shift** with the number, or Shift click, to change the camera of the piece you are in without making a new cut.
 - Each cut shows in the **Program** track with the number and color of the camera.
 
-![Angles and Program. Camera 3 is shown, so it has a green frame.](multicam-angles.jpg)
+![Angles and Program. The active camera is marked in Angles.](multicam-angles.jpg)
 
 ### When a camera has no picture
 

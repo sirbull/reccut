@@ -25,6 +25,15 @@ const path = require('path');
 // silently intercept npm start. Keep installed projects/settings in their existing profile.
 const developmentMode = !app.isPackaged && process.argv.includes('--reccut-development');
 if (developmentMode) app.setPath('userData', path.join(app.getPath('appData'), 'Reccut Development'));
+if (process.platform === 'win32') {
+  // Match build.appId; electron-builder removes build metadata from package.json.
+  app.setAppUserModelId('no.sirbull.reccut');
+  // The executable icon only covers packaged builds. Set every window's icon
+  // as well, so npm start and secondary windows use Reccut in the taskbar.
+  app.on('browser-window-created', (_event, window) => {
+    window.setIcon(path.join(__dirname, '../../assets/icon.png'));
+  });
+}
 const ff = require('./ffmpeg');
 const { finalizeRecordingStream } = require('./recording');
 const jobs = require('./jobs');

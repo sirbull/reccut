@@ -108,9 +108,30 @@ export function Editor({ active }) {
       {commands.attributesDialog.value && <AttributesDialog />}
       {commands.importOptions.value && !needsProject.value && <ImportOptionsDialog />}
       {commands.slideshowDialog.value && <SlideshowDialog />}
+      {commands.mediaRemovalDialog.value && <MediaRemovalDialog />}
       {layerImport.value && <LayerImportDialog key={layerImport.value.file} />}
       {active && <MulticamEditor />}
     </div>
+  );
+}
+
+function MediaRemovalDialog() {
+  const request = commands.mediaRemovalDialog.value;
+  const [skip, setSkip] = useState(false);
+  const close = () => (commands.mediaRemovalDialog.value = null);
+  return (
+    <Modal title={request.mediaIds.length === 1 ? 'Remove Clip from Project?' : `Remove ${request.mediaIds.length} Clips from Project?`}
+      width={480} onClose={close} footer={<>
+        <Button onClick={close} autoFocus>Cancel</Button>
+        <Button variant="primary" onClick={() => commands.confirmMediaRemoval(skip)}>Remove from Project</Button>
+      </>}>
+      <p>{request.names.join(', ')}</p>
+      {request.usedOnTimeline && <p><strong>This media is used on a timeline.</strong> Removing it also removes its timeline clips and their linked clips from every sequence. Other clips keep their timing.</p>}
+      {request.multicamNames.length > 0 && <p><strong>The following multicam clips will also be removed, including all their angles on the timelines:</strong> {request.multicamNames.join(', ')}.</p>}
+      <p>The files on disk are kept. You can undo this change.</p>
+      <label class="effect-remove-preference"><input type="checkbox" checked={skip}
+        onChange={(e) => setSkip(e.currentTarget.checked)} /> Don’t show this again</label>
+    </Modal>
   );
 }
 

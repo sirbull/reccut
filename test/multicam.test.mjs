@@ -79,6 +79,54 @@ test('number keys cut and switch, and the same angle twice does nothing', () => 
   assert.deepEqual(mc.cuts.map((c) => [c.t, c.angle]), [[0, A], [9, C]]);
 });
 
+test('paused angle choices stay between the playhead and the next cut, even after auditioning neighbouring angles', () => {
+  const p = setup(), mc = mcWith(p);
+  const [A, B, C] = mc.angles.map((a) => a.id);
+  cutAndSwitch(p, mc, 4, B);
+  cutAndSwitch(p, mc, 9, C);
+  cutAndSwitch(p, mc, 15, A);
+  const outside = [0, 3.9, 4, 5.9, 9, 12, 15, 19];
+  const original = outside.map((t) => angleAt(mc, t));
+  // Choosing the next angle used to merge away the cut at 9. A second choice
+  // would then overwrite that later section as well.
+  for (const angle of [C, A, B, C, B]) {
+    assert.equal(cutAndSwitch(p, mc, 6, angle, { preserveCuts: true }), true);
+    tidy(p, mc); // The window also tidies after every edit.
+    assert.equal(angleAt(mc, 6), angle);
+    assert.equal(angleAt(mc, 8.9), angle);
+    assert.deepEqual(outside.map((t) => angleAt(mc, t)), original);
+    assert.deepEqual(mc.cuts.map((c) => c.t), [0, 4, 6, 9, 15]);
+  }
+  const reopened = tidy(p, JSON.parse(JSON.stringify(mc)));
+  cutAndSwitch(p, reopened, 6, A, { preserveCuts: true });
+  assert.deepEqual(outside.map((t) => angleAt(reopened, t)), original);
+  assert.equal(angleAt(reopened, 6), A);
+});
+
+test('paused replacement at an existing cut and switch without cutting preserve both neighbouring sections', () => {
+  const p = setup(), mc = mcWith(p);
+  const [A, B, C] = mc.angles.map((a) => a.id);
+  cutAndSwitch(p, mc, 4, B);
+  cutAndSwitch(p, mc, 9, C);
+  for (const angle of [C, A, B]) {
+    cutAndSwitch(p, mc, 4, angle, { preserveCuts: true });
+    assert.equal(angleAt(mc, 3.9), A);
+    assert.equal(angleAt(mc, 4), angle);
+    assert.equal(angleAt(mc, 9), C);
+    assert.deepEqual(mc.cuts.map((c) => c.t), [0, 4, 9]);
+  }
+  for (const angle of [A, C, B]) {
+    switchSegment(p, mc, 6, angle, { preserveCuts: true });
+    assert.equal(angleAt(mc, 3.9), A);
+    assert.equal(angleAt(mc, 4), angle);
+    assert.equal(angleAt(mc, 9), C);
+    assert.deepEqual(mc.cuts.map((c) => c.t), [0, 4, 9]);
+  }
+  const { video } = buildMulticamClips(p, mc);
+  assert.deepEqual(video.map((c) => [c.start, c.dur, c.mediaId]),
+    [[0, 4, 'a'], [4, 5, 'b'], [9, 11, 'c']]);
+});
+
 test('trimming moves a cut but never past its neighbours, and cuts can be removed', () => {
   const p = setup();
   const mc = mcWith(p);

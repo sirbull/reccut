@@ -290,7 +290,7 @@ export function angleAt(mc, t) {
 }
 
 // Kutter ved t og viser en annen vinkel derfra (talltastene). Gir false om ingenting endret seg.
-export function cutAndSwitch(project, mc, t, angleId, { frame = 1 / 30 } = {}) {
+export function cutAndSwitch(project, mc, t, angleId, { frame = 1 / 30, preserveCuts = false } = {}) {
   const angle = mc.angles.find((a) => a.id === angleId);
   if (!angle || !isVideoAngle(project, angle)) return false;
   const T = r6(Math.round(t / frame) * frame);
@@ -302,21 +302,32 @@ export function cutAndSwitch(project, mc, t, angleId, { frame = 1 / 30 } = {}) {
   }
   if (cur.angle === angleId) return false;
   // Kutt som ligger nesten på samme sted erstattes, så det ikke blir bitte små biter.
-  if (Math.abs(cur.t - T) < frame / 2 || i === 0 && T <= cur.t) cur.angle = angleId;
+  const replace = Math.abs(cur.t - T) < frame / 2 || i === 0 && T <= cur.t;
+  if (replace) cur.angle = angleId;
   else mc.cuts.splice(i + 1, 0, { t: T, angle: angleId });
+  if (preserveCuts) keepSegmentBoundaries(mc, replace ? i : i + 1);
   tidy(project, mc);
   return true;
 }
 
 // Bytter vinkel i biten der t ligger, uten å kutte (Shift og talltast).
-export function switchSegment(project, mc, t, angleId) {
+export function switchSegment(project, mc, t, angleId, { preserveCuts = false } = {}) {
   const angle = mc.angles.find((a) => a.id === angleId);
   if (!angle || !isVideoAngle(project, angle) || !mc.cuts.length) return false;
   const i = cutIndexAt(mc, t);
   if (mc.cuts[i].angle === angleId) return false;
   mc.cuts[i].angle = angleId;
+  if (preserveCuts) keepSegmentBoundaries(mc, i);
   tidy(project, mc);
   return true;
+}
+
+// Paused angle auditions must keep both edges, even when neighbouring angles
+// become equal. Otherwise a second choice at the same playhead edits those
+// neighbours too. Like blade cuts, these boundaries survive tidy and saving.
+function keepSegmentBoundaries(mc, index) {
+  if (index > 0) mc.cuts[index].blade = true;
+  if (mc.cuts[index + 1]) mc.cuts[index + 1].blade = true;
 }
 
 // Bladet: deler biten ved t, med samme vinkel på begge sider.

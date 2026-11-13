@@ -31,6 +31,7 @@ function setup() {
     window: { addEventListener() {}, api: { onTasks() {}, onFlush() {}, onAnalyzed() {}, listTasks: async () => [] } },
     localStorage: { getItem: () => null, setItem() {} },
     performance: { now: () => 0 }, setTimeout: () => 0, clearTimeout() {},
+    structuredClone,
   });
   const { store, commands, playback, newProject } = module.exports;
   const p = newProject('Timeline');
@@ -89,4 +90,72 @@ test('home and end navigate the source; opening a project clears its preview', (
   assert.equal(s.skim.value, null);
   assert.equal(p.sourceProject.value, null);
   assert.equal(p.getViewerTime(), 0);
+});
+
+test('deleting browser media asks first, preserves timeline selection on cancel and clears source state on removal', () => {
+  const { store: s, commands: c } = setup();
+  c.pickMedia(null, 'source', ['source', 'other']);
+  c.addBrowserSelection('append');
+  const clipId = Object.keys(s.project.value.clips)[0];
+  s.selection.value = [clipId];
+  c.pickMedia(null, 'source', ['source', 'other']);
+  c.browserMarkClip();
+  c.browserSkimPos.mediaId = 'source';
+  s.skim.value = { mediaId: 'source', T: 2 };
+  const before = s.project.value;
+  c.deleteFocusedSelection();
+  assert.equal(c.mediaRemovalDialog.value.usedOnTimeline, true);
+  assert.equal(s.project.value, before, 'no removal before confirmation');
+  c.mediaRemovalDialog.value = null; // Cancel / Escape
+  assert.equal(s.project.value.clips[clipId].mediaId, 'source');
+  c.deleteFocusedSelection();
+  c.confirmMediaRemoval();
+  assert.equal(s.project.value.media.source, undefined);
+  assert.equal(s.project.value.clips[clipId], undefined);
+  assert.ok(s.project.value.media.other);
+  assert.equal(c.browserPicked.value.length, 0);
+  for (const signal of [c.browserSelection, c.browserRange, c.browserPlayhead, s.sourceMediaId, s.skim]) assert.equal(signal.value, null);
+  assert.equal(c.browserSkimPos.mediaId, null);
+  s.undo();
+  assert.equal(s.project.value, before, 'media and edits are restored together');
+  s.redo();
+  assert.equal(s.project.value.media.source, undefined);
+});
+
+test('remembering the warning choice skips subsequent dialogs and supports multiple selected media', () => {
+  const { store: s, commands: c } = setup();
+  c.pickMedia(null, 'source', ['source', 'other']);
+  c.deleteFocusedSelection();
+  assert.equal(c.mediaRemovalDialog.value.usedOnTimeline, false);
+  c.confirmMediaRemoval(true);
+  s.undo();
+  c.pickMedia(null, 'source', ['source', 'other']);
+  c.pickMedia({ ctrlKey: true }, 'other', ['source', 'other']);
+  c.deleteFocusedSelection();
+  assert.equal(c.mediaRemovalDialog.value, null);
+  assert.equal(Object.keys(s.project.value.media).length, 0);
+});
+
+test('timeline focus deletes only timeline clips even when browser media remain selected', () => {
+  const { store: s, commands: c } = setup();
+  c.pickMedia(null, 'source', ['source']);
+  c.addBrowserSelection('append');
+  s.selection.value = Object.keys(s.project.value.clips);
+  c.browserFocus.value = false;
+  c.deleteFocusedSelection();
+  assert.equal(Object.keys(s.project.value.clips).length, 0);
+  assert.ok(s.project.value.media.source);
+  assert.equal(c.mediaRemovalDialog.value, null);
+});
+
+test('a pending removal cannot affect a reopened project with the same id', () => {
+  const { store: s, commands: c } = setup();
+  c.pickMedia(null, 'source', ['source']);
+  c.deleteFocusedSelection();
+  const reopened = structuredClone(s.project.value);
+  s.setProject(reopened);
+  c.confirmMediaRemoval(true);
+  assert.ok(s.project.value.media.source);
+  c.removeBrowserMedia(['source']);
+  assert.ok(c.mediaRemovalDialog.value, 'stale confirmation must not disable warnings');
 });

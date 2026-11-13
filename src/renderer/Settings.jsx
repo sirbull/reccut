@@ -115,6 +115,7 @@ function GeneralPane() {
         <p class="hint">Reccut works fully offline. When there is a connection, it can tell you about a new version and download the installer for you. Nothing is installed without you opening it.</p>
       </Section>
       <Section title="Media" collapsible={false}>
+        {toggle('confirmMediaRemoval', 'Warn before removing media from the project')}
         {toggle('checkOfflineOnFocus', 'Look for missing media when you return to Reccut')}
         <p class="hint">Finds a drive that has been connected again, and shows missing files as Media Offline.</p>
       </Section>

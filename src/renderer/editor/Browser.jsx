@@ -26,7 +26,7 @@ import {
   Wand2,
 } from 'lucide-preact';
 import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
-import { renameSequence, sequenceList, timelines, CAPTION_LANE, EFFECTS, REDACT_MODES, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject } from '../../shared/model.js';
+import { renameSequence, sequenceList, CAPTION_LANE, EFFECTS, REDACT_MODES, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { parseSrt, speechSources, toSrt, toVtt } from '../../shared/srt.js';
 import { addMediaRecords, switchSequence, usedMedia, projectFolders, audioSkimming, commit, endPreview, getWave, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
@@ -35,7 +35,6 @@ import { fileUrl, mediaPreviewProject, openSource, scrubAudio, seek } from './pl
 import * as commands from './commands.js';
 import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { startLibraryDrag } from './libraryDrag.js';
-import { multicamMedia } from '../../shared/multicam.js';
 import { newMulticamClip } from './multicam.js';
 import { CaptionStyleEditor } from './Inspector.jsx';
 import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
@@ -649,7 +648,6 @@ async function mediaContextMenu(e, m, used) {
   const hasVideo = picked.some((x) => x.kind === 'video' || x.kind === 'recording');
   const hasAudio = picked.some((x) => x.kind === 'audio');
   const synced = picked.some((x) => Object.values(x.streams).some((st) => st.syncedFrom));
-  const inUse = picked.some((x) => timelines(project.value).some((t) => Object.values(t.clips).some((c) => c.mediaId === x.id)) || multicamMedia(project.value).has(x.id));
   const id = await api.popupMenu([
     { id: 'append', label: 'Append to Storyline', accelerator: 'E' },
     { id: 'insert', label: 'Insert at Playhead', accelerator: 'W' },
@@ -664,7 +662,7 @@ async function mediaContextMenu(e, m, used) {
     { separator: true },
     { id: 'relink', label: m.offline ? 'Relink Missing File…' : 'Relink File…', enabled: n === 1 },
     { id: 'reveal', label: isMac ? 'Reveal in Finder' : 'Show in Explorer', enabled: !m.offline },
-    { id: 'remove', label: n > 1 ? `Remove ${n} Clips from Project` : 'Remove from Project', enabled: !inUse },
+    { id: 'remove', label: n > 1 ? `Remove ${n} Clips from Project` : 'Remove from Project', accelerator: 'Backspace' },
   ]);
   if (['append', 'insert', 'connect', 'overwrite'].includes(id)) commands.addBrowserSelection(id);
   else if (id === 'slideshow') commands.openSlideshow(mediaOrder);
@@ -674,10 +672,7 @@ async function mediaContextMenu(e, m, used) {
   else if (id === 'optimize') commands.optimizeMedia();
   else if (id === 'reveal') api.reveal(m.path);
   else if (id === 'relink') commands.relinkDialog(m.id);
-  else if (id === 'remove') {
-    commit((p) => picked.forEach((x) => delete p.media[x.id]));
-    commands.browserPicked.value = [];
-  }
+  else if (id === 'remove') commands.removeBrowserMedia(picked.map((x) => x.id));
 }
 
 /* Små forhåndsvisninger tegnet med tegnemotoren */

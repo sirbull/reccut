@@ -5957,9 +5957,14 @@ kbd.keycap {
 .mc-tile:hover {
   outline-color: rgba(255, 255, 255, 0.35);
 }
-.mc-tile.active {
-  outline: 4px solid var(--green);
-  outline-offset: -4px;
+.mc-tile.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 4px solid var(--green);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
 }
 .mc-frame {
   position: relative;
@@ -6014,10 +6019,6 @@ kbd.keycap {
   justify-content: center;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
-.mc-tile.active .mc-badge {
-  background: var(--green);
-  color: #04210d;
-}
 .mc-tile-name {
   position: absolute;
   left: 6px;
@@ -6050,7 +6051,6 @@ kbd.keycap {
 }
 .mc-program-box canvas {
   background: #000;
-  outline: 3px solid var(--green);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
 }
 .mc-transport {

@@ -41,6 +41,7 @@
       "build/**/*",
       "!build/licenses/**/*",
       "src/main/**/*",
+      "assets/icon.png",
       "assets/reccut-wordmark.svg",
       "src/shared/pluginTerms.json",
       "src/shared/recordingFormats.cjs",
