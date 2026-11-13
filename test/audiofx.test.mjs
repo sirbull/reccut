@@ -181,3 +181,20 @@ test('pitch is identical in worklet sized and export sized blocks and resets to 
   assert.equal(chain.latency, 0);
   assert.deepEqual(neutral, input);
 });
+
+test('channels uses one side, swaps or mixes to mono', () => {
+  const L = new Float32Array([1, 0.5]);
+  const R = new Float32Array([0, -0.5]);
+  const go = (mode) => {
+    const l = L.slice(), r = R.slice();
+    const chain = createChain(SR);
+    chain.update([makeEffect('channels', { mode })]);
+    chain.process(l, r, 2);
+    return [[...l], [...r]];
+  };
+  assert.deepEqual(go(0), [[1, 0.5], [0, -0.5]]);
+  assert.deepEqual(go(1), [[1, 0.5], [1, 0.5]]);
+  assert.deepEqual(go(2), [[0, -0.5], [0, -0.5]]);
+  assert.deepEqual(go(3), [[0, -0.5], [1, 0.5]]);
+  assert.deepEqual(go(4), [[0.5, 0], [0.5, 0]]);
+});

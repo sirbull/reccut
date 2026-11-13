@@ -61,6 +61,7 @@ import { helpOpen, paletteOpen } from './registry.js';
 import wordmark from '../../assets/reccut-wordmark.svg';
 import { isTyping, isSpaceInput, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } from './keyboard.js';
 import { installFileDrop } from './fileDrop.js';
+import { multicamMenu } from './editor/multicam.js';
 import { UpdateDialog } from './UpdateDialog.jsx';
 import { startUpdateChecks } from './updates.js';
 import { VoiceoverBooth } from './voiceover/Booth.jsx';
@@ -321,6 +322,8 @@ function handleMenu(id) {
   }
   // Voice Over Studio har sin egen angrehistorikk og sitt eget utvalg (Cmd Z, Shift Cmd Z, Cmd A).
   if (boothOpen.value && studioMenu(id)) return;
+  // Multicam-vinduet har egen angrehistorikk.
+  if (multicamMenu.handle?.(id)) return;
   // Menyen bygges om etter et rombytte, så et tastetrykk rett etter byttet kan treffe den gamle menyen.
   if (dialogOwnsKeyboard() || !cmd || !inRoom(cmd)) return;
   runCommand(id);

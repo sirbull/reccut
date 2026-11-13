@@ -214,8 +214,9 @@ async function mixAudio(jobId, ctx, a, b, wavPath, onProgress) {
       const to = Math.max(s0, s1) - info.offset;
       if (to <= from) continue;
       // Clean Voice: den rensede filen har original og renset lyd, som blandes med styrken.
+      // Baklengs klipp bruker originalen, som i avspillingen.
       const st = m.streams[key];
-      const clean = cleanAmount(c, key) > 0 && exists(st.cleaned);
+      const clean = !c.reverse && cleanAmount(c, key) > 0 && exists(st?.cleaned);
       const g = cleanNoiseGain(cleanAmount(c, key));
       const pan = clean ? `pan=stereo|c0=${1 - g}*c2+${g}*c0|c1=${1 - g}*c3+${g}*c1` : null;
       pairs.set(`${c.id}:${key}`, { path: clean ? st.cleaned : info.path, pan, from, to, speed: generic ? 1 : speed, generic, tempo: generic ? null : tempoFilter(speed, c.props.preservePitch), afx: componentEffects(c, key), file: path.join(tmp, `a_${pairs.size}.f32`) });

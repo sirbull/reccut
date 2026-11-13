@@ -64,6 +64,7 @@ const DEFAULTS = {
   syncGroup: true,
   askSequenceSettings: true,
   confirmEffectRemoval: true,
+  confirmMediaRemoval: true,
 };
 
 function load() {

@@ -57,6 +57,7 @@ import { recordingChildren, setClipDuration, setSpeed, setTransition } from '../
 import { GRADE_PROPS, CAMERA_LOGS } from '../../shared/grade.js';
 import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { BUILTIN_TEMPLATES, findTemplate, templateDefaults } from '../../shared/titletemplates.js';
+import { editMulticam } from './multicam.js';
 import { beginTransient, commit, endPreview, projectPath, renameProject, endTransient, enterGroup, getWave, importPaths, mirror, previewEdit, motionVersion, project, selectedClips, selectedGroup, selectedTransition, selection, tasks, timeSig, updateTransient, waveVersion } from './store.js';
 import { groupPositionClips, groupVisuals, setGroupOpacity, setGroupPosition } from '../../shared/groupSettings.js';
 import { seek } from './playback.js';
@@ -213,7 +214,10 @@ function ClipInspector({ clip, clips = [clip], group = false }) {
       <div class="insp-body">
         {group ? <>
           <p class="hint">Change shared settings here, or double click a clip to edit the group’s contents.</p>
-          <Button class="small" onClick={() => enterGroup(clip.id)}>Edit Group</Button>
+          <div class="insp-group-actions">
+            <Button class="small" onClick={() => enterGroup(clip.id)}>Edit Group</Button>
+            {clip.multicam && <Button class="small" onClick={() => editMulticam(clip.id)}>Edit Multicam Clip</Button>}
+          </div>
         </> : multi && <p class="hint">{tabs.length ? 'Changes apply to all selected clips. The values shown are from the first clip.' : 'These clips have no settings in common.'}</p>}
         {tab === 'text' && <TextTab clip={clip} />}
         {tab === 'caption' && <CaptionTab clip={clip} />}

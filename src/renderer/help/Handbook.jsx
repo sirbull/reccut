@@ -52,6 +52,7 @@ function Body({ text, onImage }) {
         <img src={`help/${image[2]}`} alt={image[1]} loading="lazy" /><span><ZoomIn size={14} /> Enlarge</span>
       </button><figcaption>{image[1]}</figcaption>
     </figure>;
+    if (t.startsWith('### ')) return <h4 key={i}><Inline text={t.slice(4)} /></h4>;
     if (t.startsWith('## ')) return <h3 id={headingId(i)} key={i} tabIndex={-1}><Inline text={t.slice(3)} /></h3>;
     const lines = t.split('\n');
     if (lines.every((l) => /^- /.test(l))) return <ul key={i}>{lines.map((l) => <li><Inline text={l.slice(2)} /></li>)}</ul>;

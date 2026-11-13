@@ -7,6 +7,8 @@ import { addMask, canMask, removeMask } from '../../shared/shapes.js';
 import { AUDIO_EFFECTS, AUDIO_PRESETS, makeEffect, presetEffects } from '../../shared/audiofx.js';
 import { effectWarning } from '../../shared/effectSupport.js';
 import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../../shared/videoEffects.js';
+import { createMulticamFromSelection, editMulticam, newMulticamClip, setActiveAudioAngle, setActiveVideoAngle } from './multicam.js';
+import { angleHasAudio, angleLabel, isVideoAngle, multicamOfClip } from '../../shared/multicam.js';
 import { ALL_GROUPS, groupsWithContent, pasteAttributes, removeAttributes } from '../../shared/attributes.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
 import {
@@ -41,6 +43,7 @@ import {
 } from '../../shared/ops.js';
 import {
   addMediaRecords,
+  checkOffline,
   reportFailed,
   commit,
   commitClipEdit,
@@ -56,6 +59,7 @@ import {
   makeCaptionClip,
   makeTitleClip,
   project,
+  projectEpoch,
   projectFolders,
   relinkMedia,
   room,
@@ -65,6 +69,7 @@ import {
   editingGroup,
   inEditingGroup,
   sourceMediaId,
+  skim,
   sequenceSettingsOpen,
 } from './store.js';
 import { getViewerTime, openSource, pause, seek, seekViewer, sourceProject } from './playback.js';
@@ -75,6 +80,7 @@ import { droppedPaths } from '../fileDrop.js';
 import { setKeyframe } from './keyframes.js';
 import { enableKenBurns } from '../../shared/imageMotion.js';
 import { addSlideshow, slideshowOptions } from '../../shared/slideshow.js';
+import { mediaRemovalPlan, removeProjectMedia } from '../../shared/mediaRemoval.js';
 
 const api = window.api;
 
@@ -84,6 +90,78 @@ export const browserSelection = signal(null);
 // Alle medier som er valgt i biblioteket, og om biblioteket sist ble brukt (for Cmd A og synk).
 export const browserPicked = signal([]);
 export const browserFocus = signal(false);
+export const mediaRemovalDialog = signal(null);
+
+export function deleteFocusedSelection(ripple = true) {
+  if (browserFocus.value && browserTab.value === 'media') return removeBrowserMedia();
+  return deleteSelection(ripple);
+}
+
+export function removeBrowserMedia(ids = browserPicked.value, { forceDialog = false } = {}) {
+  if (mediaRemovalDialog.value) return;
+  endTransient(true);
+  endPreview();
+  const p = project.value;
+  const plan = mediaRemovalPlan(p, ids);
+  if (!plan.mediaIds.length) return;
+  pause();
+  const records = plan.mediaIds.map((id) => p.media[id]);
+  const request = { ...plan, records, names: records.map((media) => media.name), projectId: p.id, epoch: projectEpoch.value };
+  mediaRemovalDialog.value = request;
+  if (!forceDialog && !prefs.value.confirmMediaRemoval) confirmMediaRemoval();
+}
+
+export function confirmMediaRemoval(skipWarning = false) {
+  const request = mediaRemovalDialog.value;
+  if (request?.busy) return;
+  mediaRemovalDialog.value = null;
+  if (!request || request.projectId !== project.value.id || request.epoch !== projectEpoch.value) return;
+  if (skipWarning) setPrefs({ confirmMediaRemoval: false });
+  finishMediaRemoval(request.mediaIds);
+}
+
+export async function deleteBrowserMediaFromDisk() {
+  const request = mediaRemovalDialog.value;
+  if (!request || request.busy || request.projectId !== project.value.id || request.epoch !== projectEpoch.value) return;
+  pause();
+  mediaRemovalDialog.value = { ...request, busy: true, error: null };
+  try {
+    const result = await api.trashMedia(request.records);
+    if (request.projectId !== project.value.id || request.epoch !== projectEpoch.value) {
+      mediaRemovalDialog.value = null;
+      return;
+    }
+    if (result.removedIds.length) finishMediaRemoval(result.removedIds);
+    if (result.failed.length) {
+      const remaining = request.records.filter((media) => result.failed.some((failure) => failure.mediaId === media.id));
+      mediaRemovalDialog.value = { ...request, ...mediaRemovalPlan(project.value, remaining.map((media) => media.id)),
+        records: remaining, names: remaining.map((media) => media.name), busy: false,
+        error: result.failed.flatMap((failure) => failure.errors.map((error) => `${error.path || failure.name}: ${error.error}`)).join('\n') };
+    } else mediaRemovalDialog.value = null;
+    if (result.trashedPaths.length) {
+      const bin = api.platform === 'win32' ? 'Recycle Bin' : 'Trash';
+      toast(`Source files moved to the ${bin}. Restore them there before undoing the project removal.`, { timeout: 9000 });
+      checkOffline().catch((error) => console.warn('Could not check remaining media after deletion', error));
+    }
+  } catch (error) {
+    if (request.projectId === project.value.id && request.epoch === projectEpoch.value) {
+      mediaRemovalDialog.value = { ...request, busy: false, error: error.message };
+    }
+  }
+}
+
+function finishMediaRemoval(ids) {
+  const removed = new Set(ids);
+  commit((p) => removeProjectMedia(p, ids));
+  browserPicked.value = browserPicked.value.filter((id) => !removed.has(id));
+  if (removed.has(browserSelection.value)) browserSelection.value = null;
+  if (removed.has(browserRange.value?.mediaId)) browserRange.value = null;
+  if (removed.has(browserPlayhead.value?.mediaId)) browserPlayhead.value = null;
+  if (removed.has(browserSkimPos.mediaId)) browserSkimPos.mediaId = null;
+  if (removed.has(skim.value?.mediaId)) skim.value = null;
+  if (removed.has(sourceMediaId.value)) sourceMediaId.value = null;
+}
+
 export const slideshowDialog = signal(null);
 export function openSlideshow(order = null) {
   const ordered = [...(order || []), ...mediaOrderOf(browserPicked.value)];
@@ -450,20 +528,20 @@ export function toggleComponent(clipId, key, on = null) {
   });
 }
 
-export function setComponentMono(clipId, key, mono) {
-  commit((p) => {
-    const q = p.clips[clipId];
-    q.props.audioMono = { ...q.props.audioMono, [key]: mono };
-    if (!mono) delete q.props.audioMono[key];
-  });
-}
-
 // Clean Voice (AI-støyfjerning) for én lydkomponent: styrke 0 til 1, null slår det av.
 export function setCleanVoice(clipId, key, amount) {
   commit((p) => {
     const q = p.clips[clipId];
     q.props.cleanVoice = { ...q.props.cleanVoice, [key]: amount };
     if (amount == null) delete q.props.cleanVoice[key];
+  });
+}
+
+export function setComponentMono(clipId, key, mono) {
+  commit((p) => {
+    const q = p.clips[clipId];
+    q.props.audioMono = { ...q.props.audioMono, [key]: mono };
+    if (!mono) delete q.props.audioMono[key];
   });
 }
 
@@ -668,7 +746,8 @@ export function deleteMarkerAt(id) {
 
 export function setRange(which) {
   // I og O i biblioteket markerer i klippet under skummeren (eller ved bibliotekets spillhode).
-  if (browserFocus.value && browserMark(which)) return;
+  // Viser visningen et klipp fra biblioteket (liste- eller ikonvisning), markerer I og O i det.
+  if ((browserFocus.value || sourceProject.value) && browserMark(which)) return;
   const T = getTime();
   // I og O på samme sted fjerner området.
   const other = project.value.range?.[which === 'in' ? 'out' : 'in'];
@@ -839,6 +918,20 @@ export async function confirmImport(opts) {
 
 // Utvalg i biblioteket: et helt klipp eller et område valgt i filmstripen.
 export const browserRange = signal(null); // { mediaId, in, out }
+// Visningen i biblioteket: filmstriper (standard), ikoner eller liste.
+export const browserView = signal((() => {
+  try {
+    return ['filmstrip', 'grid', 'list'].includes(localStorage.getItem('browserView')) ? localStorage.getItem('browserView') : 'filmstrip';
+  } catch {
+    return 'filmstrip';
+  }
+})());
+export function setBrowserView(v) {
+  browserView.value = v;
+  try {
+    localStorage.setItem('browserView', v);
+  } catch {}
+}
 
 // Hvor skummeren står i biblioteket nå, og bibliotekets eget spillhode (satt med klikk).
 export const browserSkimPos = { mediaId: null, t: 0 };
@@ -1397,6 +1490,27 @@ export async function clipContextMenu(clipId, T) {
   if (hasAudio || c.type === 'audio') items.push({ id: 'solo', label: c.solo ? 'Unsolo' : 'Solo', accelerator: 'Alt+S' });
   if (c.type === 'audio') items.push({ id: 'sync', label: 'Auto Sync Audio', accelerator: isMac ? 'Alt+Cmd+G' : 'Ctrl+Alt+G' });
   items.push({ separator: true });
+  const multiVideo = selection.value.filter((sid) => project.value.clips[sid]?.type === 'video').length;
+  if (c.multicam) {
+    // Som i Final Cut Pro: bytt kamera eller lydkilde for klippet rett fra tidslinjen.
+    const mc = multicamOfClip(project.value, clipId);
+    if (mc) {
+      const pv = project.value;
+      const cams = mc.angles.filter((a) => isVideoAngle(pv, a));
+      const name = (a) => `${isVideoAngle(pv, a) ? `Camera ${angleLabel(pv, mc, a.id)}` : angleLabel(pv, mc, a.id)}: ${pv.media[a.mediaId]?.name || 'missing file'}`;
+      if (c.type !== 'audio') items.push({ label: 'Active Video Angle', submenu: cams.map((a) => ({ id: `mcv:${a.id}`, label: name(a), checked: c.multicam.angle === a.id })) });
+      items.push({
+        label: 'Active Audio Angle',
+        submenu: [
+          ...mc.angles.filter((a) => angleHasAudio(pv, a)).map((a) => ({ id: `mca:${a.id}`, label: name(a), checked: mc.audio === a.id })),
+          { separator: true },
+          { id: 'mca:follow', label: 'Follow the Picture', checked: mc.audio === 'follow' },
+        ],
+      });
+    }
+    items.push({ id: 'editMulticam', label: 'Edit Multicam Clip' });
+  }
+  else if (multiVideo > 1 || (multiVideo === 1 && selection.value.length > 1)) items.push({ id: 'createMulticam', label: 'Create Multicam Clip…' });
   if (selection.value.length > 1) items.push({ id: 'group', label: 'Group Clips', accelerator: 'CmdOrCtrl+G' });
   if (c.group) items.push({ id: 'ungroup', label: 'Ungroup', accelerator: 'Shift+CmdOrCtrl+G' });
   if (c.lane === 0 && c.type !== 'gap') items.push({ id: 'lift', label: 'Lift from Storyline', accelerator: isMac ? 'Alt+Cmd+Up' : 'Ctrl+Alt+Up' });
@@ -1429,6 +1543,8 @@ export async function clipContextMenu(clipId, T) {
     ],
   }, { separator: true });
   const id = await api.popupMenu(items);
+  if (id?.startsWith('mcv:')) return setActiveVideoAngle(clipId, id.slice(4));
+  if (id?.startsWith('mca:')) return setActiveAudioAngle(clipId, id.slice(4));
   if (id?.startsWith('color:')) return setClipColor(id === 'color:none' ? null : id.slice(6), sel);
   if (id?.startsWith('speed:')) return setSpeedSelected(Number(id.slice(6)));
   if (id?.startsWith('ramp:')) return applyRamp(id === 'ramp:none' ? null : id.slice(5));
@@ -1471,6 +1587,12 @@ export async function clipContextMenu(clipId, T) {
       break;
     case 'sync':
       autoSyncAudio(clipId);
+      break;
+    case 'createMulticam':
+      createMulticamFromSelection();
+      break;
+    case 'editMulticam':
+      editMulticam(clipId);
       break;
     case 'group':
       groupSelected();
@@ -1524,6 +1646,8 @@ export async function laneContextMenu(lane, T) {
     { id: 'paste', label: 'Paste at Playhead', enabled: Boolean(clipboard) },
     { id: 'title', label: 'Add Title Here', enabled: lane > 0 && lane !== CAPTION_LANE },
     { id: 'caption', label: 'Add Caption Here', enabled: lane === CAPTION_LANE },
+    { separator: true },
+    { id: 'multicam', label: 'New Multicam Clip…' },
   ];
   const id = await api.popupMenu(items);
   if (id === 'hide' || id === 'mute') {
@@ -1535,4 +1659,5 @@ export async function laneContextMenu(lane, T) {
   } else if (id === 'paste') paste();
   else if (id === 'title') addTitle('center', T);
   else if (id === 'caption') addCaption(T);
+  else if (id === 'multicam') newMulticamClip();
 }

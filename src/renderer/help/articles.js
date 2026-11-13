@@ -1,5 +1,5 @@
 // Hjelpeartiklene. Teksten er på engelsk, som resten av appen. Se Help.jsx for formatet:
-// ## heading, - bullets, numbered steps, ![caption](file), **bold**, {{key:id}}, [[run:id|label]], [[article:id|label]].
+// ## heading, ### subheading, - bullets, numbered steps, ![caption](file), **bold**, {{key:id}}, [[run:id|label]], [[article:id|label]].
 import { WORKFLOWS } from './workflows.js';
 import { CATALOG_ARTICLES } from './catalog.js';
 export const SECTIONS = ['Getting Started', 'Recording', 'Media', 'Editing', 'Audio', 'Look', 'AI and Plugins', 'Export', 'Design', 'Reference'];
@@ -473,7 +473,7 @@ Your choices are remembered and used when you drag files in. Files that cannot b
     section: 'Media',
     title: 'The Browser',
     summary: 'Filmstrips you can skim, mark with I and O, and add with a key or by dragging.',
-    keywords: 'browser filmstrip select multiple range skim in out mark i o append insert connect overwrite drag row height zoom',
+    keywords: 'browser filmstrip list icon grid view select multiple range skim in out mark i o append insert connect overwrite drag row height zoom viewer scrub',
     body: `
 The browser shows every clip as a filmstrip with its waveform, like in Final Cut Pro. Hold the pointer over a clip to skim it; the viewer shows the frame under the pointer.
 
@@ -491,6 +491,17 @@ The browser shows every clip as a filmstrip with its waveform, like in Final Cut
 - {{key:append}} appends the range to the end of the storyline.
 - {{key:insert}} inserts it at the playhead, {{key:connect}} connects it above the storyline and {{key:overwrite}} overwrites from the playhead.
 - Or drag the yellow range down to the timeline. To use the whole clip, click it and drag it, no In or Out needed.
+
+## List and icon view
+
+The three buttons at the top of the browser switch between **filmstrips** (the default), **icons** and a **list** with the name, length and format of each file. In icon and list view you work in the viewer instead:
+
+1. Click a clip. It opens in the viewer, with a bar under the picture that runs from the start to the end of the clip.
+2. Click or drag in the bar to scrub through the clip, or play it.
+3. Press {{key:setIn}} where the part you want starts and {{key:setOut}} where it ends, or click **In** and **Out**. The yellow frame in the bar shows the range, and you can drag its edges. The list shows how long the range is.
+4. Drag the picture from the viewer down to the timeline, or press {{key:append}}, {{key:insert}}, {{key:connect}} or {{key:overwrite}}.
+
+![List view. The clip opens in the viewer, and the yellow frame in the bar under the picture marks the part that goes on the timeline.](browser-list.jpg)
 
 ## Row length and height
 
@@ -857,6 +868,197 @@ Select clips and choose Group Clips ({{key:group}}). Any kind of clip can be gro
 Ungroup ({{key:ungroup}}) separates them again.
 `,
     see: ['sync', 'cutting'],
+  },
+  {
+    id: 'multicam',
+    section: 'Editing',
+    title: 'Multicam Clips',
+    summary: 'Edit footage from several cameras that filmed at the same time. Switch cameras live with the number keys, and use sound from a separate recorder.',
+    keywords: 'multicam multi camera angle angles cameras switch live cut podcast interview sync auto sync angle viewer fallback external audio recorder channel left right level keyframe reorder tracks',
+    body: `
+A multicam clip holds the clips from several cameras that recorded the same thing at the same time, for example an interview filmed from the front and from the side. Reccut lines them up by their sound. You watch all the cameras at once and press a number to choose which one is shown. Reccut cuts the clips for you, so only one camera shows at a time, and the sound comes from the best microphone the whole way.
+
+![The multicam window. Files on the left, all cameras in Angles, the result in Program, Properties on the right and the multicam timeline at the bottom.](multicam-window.jpg)
+
+## Make a multicam clip
+
+There are two ways to start:
+
+- **From clips on the timeline.** Put the clips from each camera on top of each other, select them and right click one of them. Choose **Create Multicam Clip…**. Their positions are kept. Program starts empty so you can choose the cameras yourself.
+- **From files.** Choose File › **New Multicam Clip…**, or right click an empty part of the timeline. Files you selected in the browser are added straight away. You add more in the window.
+
+![Three cameras stacked on the timeline, selected and ready to become a multicam clip.](multicam-stacked.jpg)
+
+## The multicam window
+
+The window has five parts:
+
+1. **Files** on the left. All video and audio in the project. Double click a file, or drag it to Angles or the timeline, to add it. Switch between list, icon and filmstrip view at the top. The + button imports new files into the project.
+2. **Angles**. All cameras at once, in small views numbered **1, 2, 3** in the order they were added. The views always form an even grid, so three cameras get four views and the empty one is black with the Reccut R. No video is stretched.
+3. **Program**. What goes on the timeline. A **green frame** marks the active camera in Angles. The camera numbers keep their own colors.
+4. **Properties** on the right. Which camera to use when a camera has no picture, and the sound settings.
+5. **The multicam timeline** at the bottom, with the sound, the program and one track for each camera.
+
+The blue **Add to Timeline** button at the top right puts the result on the timeline.
+
+
+### Make room for the pictures
+
+The two buttons at the top right of the window hide and show **Files** and **Properties**, the same buttons as in Edit. With both hidden, Angles and Program get the whole width. Drag the dividers between the parts to change their size, and the divider above the timeline to change its height. The window remembers the layout.
+
+![Files and Properties hidden, so the cameras and the program get more room.](multicam-panels-hidden.jpg)
+
+## Synchronize the cameras
+
+Press **Auto Sync** at the top. Reccut compares the sound in every file and lines them up, so the same moment is at the same place on the timeline. Everything with sound can be synchronized, also a separate audio recorder.
+
+If a file cannot be synchronized, a message at the top says which one and why. For example, the file has no sound, the sound is still being analyzed, or no matching sound was found because it was recorded at another time. The other files are still synchronized.
+
+![Auto Sync could not find matching sound in camera 4, a phone that recorded something else. The other files were lined up.](multicam-sync.jpg)
+
+To line up one file by hand, drag its clip sideways in its track. Snapping (N) helps you hit the start or end of the other clips. To synchronize only one file, for example one you just added, right click its clip and choose **Synchronize to Audio**. The other files stay where they are.
+
+## Switch cameras
+
+New multicam clips start with an empty Program. Choose a camera to begin, then switch cameras manually or during playback. Only the sections you have reviewed and chosen are added to the result; unreviewed gaps and the remaining tail stay empty. Opening an existing multicam clip keeps its previous choices and lets you continue beyond its old endpoint.
+
+- Press **1** to **9** to cut to that camera at the playhead. This works while the video plays, so you can switch cameras live, like a director.
+- When paused, the choice applies from the playhead to the next existing cut or the end of the chosen section. A first choice in an empty section starts with one frame. You can try different cameras at the same position without changing the choices before or after that section.
+- Click a camera in Angles to do the same.
+- Hold **Shift** with the number, or Shift click, to change the camera of the piece you are in without making a new cut.
+- Each cut shows in the **Program** track with the number and color of the camera.
+
+![Angles and Program. The active camera is marked in Angles.](multicam-angles.jpg)
+
+### When a camera has no picture
+
+Cameras often start and stop at different times. If the camera you cut to has no picture at that moment, Reccut shows another camera instead, so the video never goes black. Those pieces are striped in the Program track. Under **Properties**, choose which camera to use instead in **When a camera has no picture**:
+
+- **Use the first camera with a picture** (the default).
+- **Use camera 2**, or any other camera, as the fallback. If that camera has no picture either, the first camera with a picture is used.
+- **Leave a gap**, for an empty space instead.
+
+You can also right click a camera's clip and choose **Use as Fallback Camera**.
+
+### Change the angle by hand
+
+Right click anywhere in the multicam timeline and choose **Active Video Angle** to show another camera in the piece you clicked, without making a new cut. **Active Audio Angle** chooses where the sound comes from: one of the cameras, a separate audio file or **Follow the Picture**. The current choice has a check mark.
+
+The same menus are on the multicam clip in the Edit timeline. Right click a clip from the multicam clip and choose **Active Video Angle** or **Active Audio Angle**. The clip changes camera, or the sound changes, without opening the multicam window. The clip keeps its trim, effects, keyframes and transitions; only the camera changes. If the camera has no picture for the whole clip, Reccut says so and leaves the clip as it is.
+
+## The multicam timeline
+
+![The multicam timeline. Sound at the top, then Program with the cuts, one track per camera, an empty track for a new camera and the separate sound at the bottom.](multicam-timeline.jpg)
+
+From the top:
+
+- **Sound**: the sound that is used, with its level.
+- **Program**: the cuts, which go on the timeline.
+- **One track per camera**, named **1, 2, 3** with the keyboard shortcut next to the name. The headphones use the sound from that file, and the sliders button opens its settings.
+- **New camera**: an empty track. Drag a video here from Files to add another camera.
+- **Separate sound**: audio recorded separately, named **A1, A2**.
+
+Sound, Program and the ruler stay at the top when you scroll down through many cameras.
+
+### Track height
+
+Program is a little taller than the other tracks. To make any track taller or lower, drag the bottom edge of its header on the left. Hold **Shift** while you drag a camera or sound track to change all of them at once. Double click the edge to go back to the standard height.
+
+The timeline works like the one in Edit:
+
+- Zoom with **Cmd +** and **Cmd -** (Ctrl on Windows), pinch, or the slider. **Shift Z** or **Fit** shows everything.
+- Scroll sideways with the trackpad, Shift and the mouse wheel, or the Hand tool (H).
+- **Skimming** (S) shows the frame under the pointer in Angles and Program. **Snapping** (N) makes cuts and clips snap to each other and to the playhead.
+- **Select** (A) and **Trim** (T): drag a cut sideways to fine tune it. **Blade** (B): click the Program track to add a cut.
+- **Backspace** removes the cut under the playhead or the selected cut.
+- **Up** and **Down Arrow** jump between cuts. **Left** and **Right Arrow** step one frame.
+- **I** and **O** set which part goes on the timeline. The rest is darker. **Alt X** clears it.
+- **Space** plays and pauses, and **J**, **K** and **L** play backward, pause and forward.
+- The window has its own **Undo** ({{key:undo}}) and **Redo** ({{key:redo}}).
+
+### Change the order of the tracks
+
+Drag a track by its header on the left, up or down. The numbers and the keyboard shortcuts follow the new order, so the camera you drag to the top becomes camera 1. Separate sound tracks can be reordered among themselves in the same way.
+
+![Dragging camera 3 to the top. The blue line shows where it lands.](multicam-reorder.jpg)
+
+### Add a camera afterwards
+
+You can add cameras at any time, also to a multicam clip that is already on the timeline. Open it with **Edit Multicam Clip**, then drag a video from Files to the **New camera** track, or to the place in time where it belongs. Then right click it and choose **Synchronize to Audio**.
+
+![A new camera dragged to the timeline. It becomes camera 4.](multicam-new-camera.jpg)
+
+## Sound
+
+### Sound recorded separately
+
+Sound from an external recorder or a lavalier microphone is usually better than the sound in the cameras. Add the audio file like a camera: double click it in Files, or drag it to the **Separate sound** part of the timeline. It is named **A1** and is used for the sound straight away. Press **Auto Sync**, or right click it and choose **Synchronize to Audio**, to line it up.
+
+### Choose where the sound comes from
+
+Choose the sound at the top of the window, in **Properties**, with the headphones in a track, or by right clicking a clip and choosing **Use Sound from This File**:
+
+- One of the cameras.
+- One of the separate audio files.
+- **Sound follows the picture**: the sound switches together with the camera.
+
+### The Sound track
+
+The sound that is used lies at the top of the timeline, so it is easy to see and adjust:
+
+- Drag the **yellow line** up or down to change the level. The level shows on the left.
+- **Alt (Option) click** the line to add a keyframe. Drag a keyframe up or down to change the level there, or sideways to move it.
+- Drag the line between two keyframes to move both.
+- Right click a keyframe to delete it, or right click the track to remove all keyframes.
+
+![The Sound track with two keyframes. The sound is turned down after 10 seconds.](multicam-sound-track.jpg)
+
+### Adjust the sound
+
+Under **Properties**, choose the file in **Adjust** and set:
+
+- **Level**: the volume. With keyframes, Level moves the whole line up or down.
+- **Channels**: **Both channels**, **Left channel only**, **Right channel only**, **Swap left and right** or **Mix to mono**. Use one side when a microphone was only recorded on the left or right channel, which is common with external recorders and cameras with two microphone inputs.
+- **Gain**: turns the sound up or down before the other settings.
+- **EQ**: a starting point such as **Voice Boost** or **Podcast**, and **Bass**, **Mid** and **Treble** to adjust it.
+- **Remove rumble**: removes low noise from wind, traffic and handling.
+- **Reduce noise**: removes steady hiss and fan noise.
+- **AI Clean Voice**: removes background noise such as fans, traffic, hum and room sound from speech, with a **Strength** slider. The first time, Reccut cleans the sound in the background; you hear the original until it is done. It is the same AI Clean Voice as in the Audio tab in Edit, it runs on this computer and nothing is sent anywhere.
+- **Reset Sound** sets everything back.
+
+![From the left: Files in icon view, where a check mark shows the files that are already added. Properties with the camera to use when a camera has no picture and where the sound comes from. The sound settings for the separate recorder: Voice Boost, a little more bass, Remove rumble and the AI Clean Voice switch.](multicam-panels.jpg)
+
+Nothing is changed automatically. You hear the settings while you play in the multicam window, and they follow the sound to the timeline as the clip level, keyframes, AI Clean Voice and ordinary audio effects. You can fine tune them later in the Audio tab in Edit.
+
+## Add it to the timeline
+
+Press the blue **Add to Timeline** button at the top right, or **Cmd Return** (Ctrl Enter on Windows). The result is a group of clips with an **MC** badge: one video clip for each cut, and the sound below.
+
+- Made from clips on the timeline, the multicam clip replaces them in the same place.
+- Made from files, it is added at the end of the storyline.
+
+![The multicam clip on the timeline: one clip per cut, and the sound from the separate recorder below.](multicam-result.jpg)
+
+## Change it later
+
+- **Double click** the multicam clip to edit the clips inside like any other clips, for example to add effects, color or titles. Press Esc when you are done.
+- **Cmd double click** (Ctrl double click on Windows), right click and choose **Edit Multicam Clip**, or press **Edit Multicam Clip** in the inspector, to open the multicam window again. Switch cameras, add cameras or change the sound, then press **Update Timeline**.
+
+Work you did on the timeline is kept. When the window opens, it reads the clips as they are: cuts you moved or trimmed, clips you split with the blade, a trimmed start or end, and the level and keyframes of the sound. When you update, every piece gets back its effects, keyframes, color, transitions and on or off state, and a trimmed audio clip keeps its length.
+
+There is one exception. If you deleted a piece in the middle of the multicam clip, or changed the speed of one of its clips, that cannot be described as cuts. The window then tells you, and asks before **Update Timeline** puts the removed part back. Switching a camera with **Active Video Angle** on the timeline always keeps everything.
+
+Close the window with **Esc** or the X. Changes are saved automatically as a local draft, separately for each project and sequence. The header shows when the draft is saved. Choose **File › Resume Multicam Draft…** or the recovery notification to continue, also after restarting Reccut. Drafts stay on this computer and are not included in the project file. The trash button discards a draft after confirmation. Applying it to the timeline clears the draft.
+
+If the timeline changed after a draft was started, Reccut warns before applying it replaces the current multicam clips.
+
+## Tips
+
+- Start every camera before the action begins and clap once in front of all of them. A clear sound makes Auto Sync more reliable.
+- Keep the camera sound on even when you use an external recorder. Auto Sync needs it to find the right place.
+- Reccut recordings already switch between screen and camera, so they cannot be used as cameras in a multicam clip.
+`,
+    see: ['grouping', 'sync', 'audio', 'cutting', 'browser'],
   },
   {
     id: 'range',
@@ -1588,7 +1790,7 @@ Templates are ready made chains of effects that you can adjust afterwards.
 
 ## Effects
 
-- **Repair**: High Pass (rumble and wind), Hum Removal, Noise Reduction, Noise Gate, De-esser and Auto Level.
+- **Repair**: High Pass (rumble and wind), Hum Removal, Noise Reduction, Noise Gate, De-esser, Auto Level and Channels (left only, right only, swap or mono).
 - **EQ**: a 10 band Equalizer with a curve and presets such as Voice Boost, Podcast, Bass Boost and Clear Up Muddy, Low Pass and Band Pass.
 - **Dynamics**: Compressor, Limiter, Gain, and Pan and Width.
 - **Space**: Reverb and Echo (with ping pong).

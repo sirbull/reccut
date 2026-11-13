@@ -53,6 +53,43 @@ function applyFx(entry, clip, stream) {
   entry.fx?.port.postMessage(msg);
 }
 
+// Lyd fra et eget mediaelement (multicam-vinduet) gjennom samme effektkjede som tidslinjen,
+// så det som høres der er det samme som i redigeringen og eksporten. Elementet må ha crossOrigin.
+const sinks = new WeakMap();
+// clean: elementet spiller Clean Voice-filen med fire kanaler, som blandes med styrken.
+export function elementAudio(el, { clean = false } = {}) {
+  if (sinks.has(el)) return sinks.get(el);
+  const src = audioCtx.createMediaElementSource(el);
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0;
+  src.connect(gain).connect(audioCtx.destination);
+  let fx = null;
+  let key = '[]';
+  const sink = {
+    setEffects(list, amount = 0) {
+      const msg = clean ? { list, clean: amount } : list;
+      const k = JSON.stringify(msg);
+      if (k === key) return;
+      if ((list.length || clean) && !fx) {
+        if (!fxReady) return;
+        fx = new AudioWorkletNode(audioCtx, 'reccut-fx', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: clean ? 4 : 2, channelCountMode: 'explicit' });
+        src.disconnect();
+        src.connect(fx).connect(gain);
+      }
+      key = k;
+      fx?.port.postMessage(msg);
+    },
+    setGain(v) {
+      if (Math.abs(gain.gain.value - v) > 1e-4) gain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.01);
+    },
+    resume() {
+      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    },
+  };
+  sinks.set(el, sink);
+  return sink;
+}
+
 /**
  * getProject: gir prosjektet som skal spilles.
  * playing: signal med true/false. getTime/setTime: spillhodet.

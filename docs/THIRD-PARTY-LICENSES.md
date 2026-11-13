@@ -32,6 +32,7 @@ also have their own license files in the installed application's resources.
 | Transformers.js and ONNX Runtime | Local inference | Apache 2.0 and MIT, with additional ONNX Runtime third-party notices. These runtime licenses are separate from model licenses. |
 | Whisper model weights | Local transcription | MIT. Converted models have their own repository and pinned revision, shown by the model manager. |
 | BiRefNet model weights, downloaded on request | Background removal | The model variants declare MIT. They are not in the installer; their pinned revisions and original license texts are listed in the reader. |
+| DeepFilterNet 3 model | AI Clean Voice (noise removal) | MIT or Apache 2.0. Included with the app, checked with SHA-256, and runs on the computer. |
 | OpenMoji | Color and outline emoji | CC BY-SA 4.0. Preserve attribution, the license reference and applicable ShareAlike terms when adapting the artwork. |
 | Unicode data | Emoji names and sequences | Unicode License V3. System-style emoji are rendered with installed fonts. |
 | PDF.js | PDF import | Apache 2.0, plus the licenses for bundled fonts, character maps, color profiles and decoder components. These additional texts are included in the reader. |
@@ -90,7 +91,9 @@ development repository.
 
 `scripts/build-licenses.mjs` generates the offline reader during `npm run build`
 and `npm start`. It reads versions and license files from installed dependencies
-and the pinned background-model catalogue. Missing required license files stop
+and checked-in model notices verified against the pinned background-model catalogue.
+Model weights in `vendor/` are not needed to build this reader or start the app.
+Missing required license files stop
 the build rather than silently omitting their texts. No network request is needed
 by this generation step. Review `assets/licenses/README.md` when updating ONNX
 Runtime or other supplemental notices. Add newly bundled components to the

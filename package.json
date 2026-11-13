@@ -45,6 +45,7 @@
       "assets/reccut-wordmark.svg",
       "src/shared/pluginTerms.json",
       "src/shared/recordingFormats.cjs",
+      "src/shared/mediaSources.cjs",
       "src/shared/stockSources.cjs",
       "src/shared/tts.js",
       "package.json"

@@ -16,6 +16,7 @@ import {
 } from '../../shared/model.js';
 import { addMediaClip, autoFormat, editGroupContents, groupMembers } from '../../shared/ops.js';
 import { templateDefaults } from '../../shared/titletemplates.js';
+import { multicamMedia } from '../../shared/multicam.js';
 import { hasMotion, setMotion } from '../../shared/stabilize.js';
 import { CAMERA_LOGS, hasLut, setLut } from '../../shared/grade.js';
 import { couldNotRead } from '../../shared/formats.js';
@@ -218,6 +219,7 @@ function pruneTracks(prev, p) {
 export const usedMedia = computed(() => {
   const set = new Set();
   for (const c of Object.values(project.value.clips)) if (c.mediaId) set.add(c.mediaId);
+  for (const id of multicamMedia(project.value)) set.add(id);
   return set;
 });
 

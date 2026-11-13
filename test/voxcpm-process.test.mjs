@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import { createRequire } from 'node:module';
 import { fakeVoxcpmProcess } from './helpers/voxcpm-process.mjs';
 const { createVoxcpmProcess, verifyVoxcpmProtocol } = createRequire(import.meta.url)('../src/main/voxcpmProcess.js');
@@ -86,7 +87,8 @@ test('startup and generation timeouts settle and terminate their process', async
 test('idle expiry releases the model; changed model or executable checksum forces a fresh process', async (t) => {
   const { native, client } = fixture(t, {}, { idleTimeoutMs: 10 });
   await client.run(config, request);
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  // Process exit runs on a later event-loop turn, also when timers fire late under load.
+  await once(native.children[0], 'close', { signal: AbortSignal.timeout(3000) });
   assert.ok(native.children[0].closed);
   await client.run(config, request);
   await client.run({ ...config, sha256: 'b'.repeat(64) }, request);

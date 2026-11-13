@@ -728,6 +728,11 @@ ipcMain.handle('rec:finish', async (_e, meta) => {
 const notifyAnalyzed = (payload) => send('media:analyzed', payload);
 
 ipcMain.handle('media:import', (_e, files) => media.importFiles(files, notifyAnalyzed));
+ipcMain.handle('media:trash', async (_e, items) => {
+  const ids = new Set(items.map((item) => item.id));
+  for (const task of jobs.snapshot()) if (ids.has(task.mediaId)) jobs.cancel(task.id);
+  return require('./mediaTrash').trashMedia(items, (file) => shell.trashItem(file));
+});
 // Bildesekvens: videoen lages i bakgrunnen og importeres så som vanlig video.
 // outDir: prosjektets mediemappe når filene kopieres inn, ellers ved siden av bildene.
 ipcMain.handle('media:importSequence', async (_e, file, fps, outDir) => {

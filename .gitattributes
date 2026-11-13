@@ -1,3 +1,5 @@
 # Preserve the exact bytes of pinned model licenses on every platform.
 assets/licenses/jiabins0303-birefnet-lite-1024-webgpu-LICENSE.txt text eol=lf
 assets/licenses/studioludens-birefnet-lite-512-LICENSE.txt text eol=lf
+# Preserve the upstream bytes checked against the model catalogue on every OS.
+assets/licenses/models/** -text

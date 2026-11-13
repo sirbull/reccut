@@ -6,11 +6,44 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { buildLicenses } from '../scripts/build-licenses.mjs';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { models } = require('../src/main/designModels.js');
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const out = fs.mkdtempSync(path.join(os.tmpdir(), 'reccut-license-test-'));
 after(() => fs.rmSync(out, { recursive: true, force: true }));
 const manifest = buildLicenses({ root, out });
+
+test('offline license build works without downloaded models and rejects altered or missing notices', () => {
+  const source = path.join(out, 'source-without-models');
+  fs.mkdirSync(source);
+  // Only the build inputs; deliberately leave out vendor/ and all model weights.
+  for (const file of ['package.json', 'assets/licenses', 'src/main/designModels.js', 'src/main/ttsCatalog.json',
+    'native/voxcpm/voices/LICENSE.txt',
+    'src/renderer/design/tool-icons/LICENSE.tabler.txt', 'scripts/fetch-ffmpeg.mjs', 'docs/THIRD-PARTY-LICENSES.md']) {
+    const target = path.join(source, file);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.cpSync(path.join(root, file), target, { recursive: true });
+  }
+  fs.symlinkSync(path.join(root, 'node_modules'), path.join(source, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal(fs.existsSync(path.join(source, 'vendor')), false);
+  const fixtureOut = path.join(source, 'build/licenses');
+  const offline = buildLicenses({ root: source, out: fixtureOut });
+  for (const model of models) {
+    const entry = offline.components.find(c => c.id === model.id.replaceAll('/', '-'));
+    assert.equal(entry.version, model.revision);
+    const license = model.files.find(file => /^LICENSE(?:\.txt)?$/.test(file.file));
+    assert.equal(fs.readFileSync(path.join(fixtureOut, entry.files[0].file), 'utf8'),
+      fs.readFileSync(path.join(root, 'assets/licenses/models', model.id, license.file), 'utf8'));
+  }
+  const license = path.join(source, 'assets/licenses/models', models[0].id, 'LICENSE.txt');
+  fs.appendFileSync(license, '\nChanged notice\n');
+  assert.throws(() => buildLicenses({ root: source, out: fixtureOut }), /Model license changed/);
+  fs.unlinkSync(license);
+  assert.throws(() => buildLicenses({ root: source, out: fixtureOut }), { code: 'ENOENT' });
+});
 
 test('offline notices preserve full texts, package versions and native-library distinctions', () => {
   const page = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
