@@ -252,6 +252,12 @@ export const REDACT_MODES = [
   { id: 'solid', label: 'Solid', desc: 'A solid color box. The safest for passwords.' },
   { id: 'frosted', label: 'Frosted', desc: 'Blur and pixelate together, like frosted glass.' },
 ];
+// Effekter som dekker hele bildet (Browser › Effects › Whole Frame).
+export const FRAME_FX = [
+  { id: 'blur', label: 'Blur', desc: 'Blurs the whole picture.' },
+  { id: 'pixelate', label: 'Pixelate', desc: 'Pixelates the whole picture.' },
+  { id: 'frosted', label: 'Frosted Glass', desc: 'Blur and blocks together.' },
+];
 export const REDACT_SHAPES = [
   { id: 'full', label: 'Whole Frame' },
   { id: 'rect', label: 'Rectangle' },
@@ -458,7 +464,7 @@ export function deleteSequence(p, id) {
 }
 
 export function defaultProps(type, media) {
-  const visual = { opacity: 1, x: 0, y: 0, scale: 1, rotation: 0, anchorX: 0, anchorY: 0, exposure: 0, contrast: 0, saturation: 0, temperature: 0, vFadeIn: 0, vFadeOut: 0, ...EFFECT_DEFAULTS, fx: [] };
+  const visual = { opacity: 1, blendMode: 'source-over', x: 0, y: 0, scale: 1, rotation: 0, anchorX: 0, anchorY: 0, exposure: 0, contrast: 0, saturation: 0, temperature: 0, vFadeIn: 0, vFadeOut: 0, ...EFFECT_DEFAULTS, fx: [] };
   const audio = { volume: 0, aFadeIn: 0, aFadeOut: 0 };
   switch (type) {
     case 'video':

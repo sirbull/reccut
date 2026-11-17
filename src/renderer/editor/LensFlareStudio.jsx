@@ -3,7 +3,7 @@
 // (vanlige angresteg); Revert setter effekten tilbake slik den var da studioet ble åpnet.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Focus, Trash2 } from 'lucide-preact';
-import { FLARE_ASSETS, FLARE_BLENDS, FLARE_GROUPS, elementCenter, flareAsset, keepsOwnColors, makeElement, newElementId } from '../../shared/lensFlare.js';
+import { FLARE_ASSETS, FLARE_BLENDS, FLARE_DEFAULTS, FLARE_GRADIENTS, FLARE_GROUPS, FLARE_PRESETS, PROC_DEFAULTS, PROC_KEYS, elementCenter, flareAsset, keepsOwnColors, makeElement, newElementId, procParams } from '../../shared/lensFlare.js';
 import { drawLensFlare, onFlareSprites } from '../../shared/lensFlareRender.js';
 import { animatedEffect } from '../../shared/videoEffectsRender.js';
 import { effectParams } from '../../shared/videoEffects.js';
@@ -16,8 +16,26 @@ import { prefs, setPrefs } from '../prefs.js';
 import { ColorField } from './Inspector.jsx';
 import { FlareGlobals, applyFlarePreset, flareLookModified, flarePresets, flareStudio } from './LensFlareControls.jsx';
 
-const elementThumb = (id) => `lensflare/thumbs/elements/${id}.png`;
-const presetThumb = (x) => x.thumb || `lensflare/thumbs/presets/${x.id}.jpg`;
+// Miniatyrene av presets og prosedyriske elementer tegnes med samme renderer som bildet, så de stemmer med eksporten.
+function flareThumb(p, w, h) {
+  const t = document.createElement('canvas'), b = document.createElement('canvas');
+  t.width = b.width = w;
+  t.height = b.height = h;
+  b.getContext('2d').fillRect(0, 0, w, h);
+  drawLensFlare(t.getContext('2d'), b, w, h, p);
+  return t.toDataURL('image/jpeg', 0.85);
+}
+const procThumbs = new Map();
+function elementThumb(id) {
+  const a = flareAsset(id);
+  if (!a?.proc) return `lensflare/thumbs/elements/${id}.png`;
+  if (!procThumbs.has(id)) {
+    const el = { ...makeElement(id), distance: 1, size: a.proc === 'halo' ? 0.62 : 0.78, intensity: 1 };
+    procThumbs.set(id, flareThumb({ ...FLARE_DEFAULTS, x: 0.5, y: 0.5, cx: 0.5, cy: 0.5, intensity: 1, scale: 1, spread: 1, opacity: 1, colorize: 0, elements: [el] }, 112, 112));
+  }
+  return procThumbs.get(id);
+}
+const kitThumbs = () => Object.fromEntries(FLARE_PRESETS.map((x) => [x.id, flareThumb(x.p, 320, 180)]));
 const groupLabel = (id) => FLARE_GROUPS.find((g) => g.id === id)?.label || id;
 const r4 = (v) => Math.round(v * 10000) / 10000;
 // Avstanden på aksen tilbake til elementets egen verdi (motsatt av spreadDistance).
@@ -54,6 +72,8 @@ function Studio({ clip, effect }) {
   const [tick, setTick] = useState(0);
   const canvasRef = useRef(null), baseRef = useRef(null), svgRef = useRef(null), stageRef = useRef(null);
   const [fit, setFit] = useState(null);
+  const [thumbs, setThumbs] = useState(kitThumbs);
+  const presetThumb = (x) => x.thumb || thumbs[x.id];
 
   const T = timeSig.value, fps = project.value.fps;
   const Tc = Math.min(Math.max(T, clip.start), clip.start + clip.dur - 1e-3);
@@ -69,6 +89,12 @@ function Studio({ clip, effect }) {
   const k = Math.min(960 / aw, 540 / ah), W = Math.max(2, Math.round(aw * k)), H = Math.max(2, Math.round(ah * k));
 
   useEffect(() => onFlareSprites(() => setTick((t) => t + 1)), []);
+  // Teksturene kommer én og én; tegn preset-miniatyrene på nytt når de har kommet.
+  useEffect(() => {
+    if (!tick) return;
+    const timer = setTimeout(() => setThumbs(kitThumbs()), 200);
+    return () => clearTimeout(timer);
+  }, [tick]);
   useEffect(() => { document.querySelector('.fs-row.sel')?.scrollIntoView({ block: 'nearest' }); }, [selected]);
   useEffect(() => {
     const stage = stageRef.current;
@@ -156,14 +182,7 @@ function Studio({ clip, effect }) {
   const presets = flarePresets(), saved = prefs.value.lensFlarePresets || [];
   const current = presets.find((x) => x.id === base.preset), modified = flareLookModified(base);
   const userCurrent = saved.find((x) => x.id === base.preset);
-  const snapshot = () => {
-    const t = document.createElement('canvas'), b = document.createElement('canvas');
-    t.width = b.width = 320;
-    t.height = b.height = 180;
-    b.getContext('2d').fillRect(0, 0, 320, 180);
-    drawLensFlare(t.getContext('2d'), b, 320, 180, base);
-    return t.toDataURL('image/jpeg', 0.8);
-  };
+  const snapshot = () => flareThumb(base, 320, 180);
   const look = () => structuredClone(base);
   const savePreset = () => {
     const id = `user-${uid()}`, label = name.trim() || `My flare ${saved.length + 1}`;
@@ -374,12 +393,21 @@ function ElNum({ value, label, min, max, step = 0.01, scale = 1, unit = '', prec
   );
 }
 
+// Bytter du til et prosedyrisk element, får det variantens form (for eksempel antall lameller);
+// resten av innstillingene beholdes.
+function textureChange(el, id) {
+  const a = flareAsset(id);
+  if (!a?.proc) return { asset: id };
+  return { asset: id, ...Object.fromEntries(PROC_KEYS.filter((k) => el[k] === undefined).map((k) => [k, PROC_DEFAULTS[k]])), ...a.defaults };
+}
+
 function ElementInspector({ el, set, live }) {
-  const dirt = el.blend === 'dirt';
-  const n = (key, label, min, max, o = {}) => <ElNum value={el[key] ?? 0} label={label} min={min} max={max} onLive={(v) => live({ [key]: v })} {...o} />;
+  const dirt = el.blend === 'dirt', asset = flareAsset(el.asset), q = asset?.proc ? procParams(el, asset) : null;
+  const n = (key, label, min, max, o = {}) => <ElNum value={(q && PROC_KEYS.includes(key) ? q[key] : el[key]) ?? 0} label={label} min={min} max={max} onLive={(v) => live({ [key]: v })} {...o} />;
+  const pct = (key, label, max, o = {}) => n(key, label, o.min ?? 0, max, { step: 1, scale: 100, unit: '%', precision: 0, ...o });
   return <>
     <Row label="Texture">
-      <Select value={el.asset} onChange={(v) => set({ asset: v })}
+      <Select value={el.asset} onChange={(v) => set(textureChange(el, v))}
         options={FLARE_ASSETS.filter((a) => a.dirt === dirt).map((a) => ({ value: a.id, label: `${groupLabel(a.group)} · ${a.label}` }))} />
     </Row>
     {n('distance', 'Distance', -3, 3, { center: 0 })}
@@ -391,9 +419,23 @@ function ElementInspector({ el, set, live }) {
     {n('opacity', 'Opacity', 0, 100, { step: 1, scale: 100, unit: '%', precision: 0 })}
     <Row label="Tint"><ColorField value={el.tint || '#ffffff'} onLive={(v) => live({ tint: v })} /></Row>
     {!dirt && <Row label="Blend"><Select value={el.blend} options={FLARE_BLENDS} onChange={(v) => set({ blend: v })} /></Row>}
- {keepsOwnColors(flareAsset(el.asset)) && <p class="hint">Keeps its own rainbow colors. Flare color does not change it; Tint still does.</p>}
+    {q && <>
+      {n('blades', 'Blades', 0, 16, { step: 1, precision: 0 })}
+      {q.kind === 'iris' && pct('edge', 'Edge', 400)}
+      {pct('softness', 'Softness', 100)}
+      {q.kind !== 'iris' && n('thickness', 'Thickness', 0.2, 100, { step: 0.1, scale: 100, unit: '%', precision: 1 })}
+      {n('chroma', 'Aberration', 0, 30, { step: 0.1, scale: 100, unit: '%', precision: 1 })}
+      {pct('spectrum', 'Spectrum', 100)}
+      {q.spectrum > 0 && <>
+        <Row label="Direction"><Select value={q.gradient} options={FLARE_GRADIENTS} onChange={(v) => set({ gradient: v })} /></Row>
+        {pct('phase', 'Hue shift', 100)}
+      </>}
+    </>}
+    {asset && keepsOwnColors(asset) && <p class="hint">Keeps its own rainbow colors. Flare color does not change it; Tint still does.</p>}
+    {q?.spectrum > 0 && <p class="hint">Flare color changes the white part of the element; the spectrum keeps its colors. Tint still colors it all.</p>}
     <p class="hint">{dirt
       ? 'Lens dirt stays fixed on the lens and only shows where the light falls on it. Distance and Size move and widen the light that reveals it.'
+      : q ? 'Procedural: the shape is calculated for every pixel, so it stays sharp at any resolution. Size is the diameter of the outline as a share of the picture height. Blades is the number of aperture blades; 0 gives a circle. Edge brightens the rim, and Aberration splits the outline into red and blue.'
       : 'Size is the element’s width as a share of the picture height, so it keeps its shape in any aspect ratio.'}</p>
   </>;
 }

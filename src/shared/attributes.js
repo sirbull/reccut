@@ -13,7 +13,7 @@ export const ATTRIBUTE_GROUPS = [
   { id: 'cameraColor', kind: 'video', label: 'Camera Color', desc: 'Color correction for the camera in a screen recording', keys: (k) => k in CAMERA_COLOR_PROPS },
   { id: 'transform', kind: 'video', label: 'Transform', desc: 'Position, scale, rotation, anchor point, image fit and Ken Burns', keys: (k) => ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'cameraOffsetX', 'cameraOffsetY', 'imageFit'].includes(k) || k.startsWith('kenBurns') },
   { id: 'crop', kind: 'video', label: 'Crop', desc: 'Crop edges', keys: (k) => ['cropL', 'cropR', 'cropT', 'cropB'].includes(k) },
-  { id: 'compositing', kind: 'video', label: 'Compositing', desc: 'Opacity', keys: (k) => k === 'opacity' },
+  { id: 'compositing', kind: 'video', label: 'Compositing', desc: 'Opacity and blend mode', keys: (k) => k === 'opacity' || k === 'blendMode' },
   { id: 'masks', kind: 'video', label: 'Masks', desc: 'Shape masks', keys: isMask },
   { id: 'stabilization', kind: 'video', label: 'Stabilization', desc: 'Stabilization settings', keys: (k) => k === 'stabilize' || k in STAB_DEFAULTS },
   { id: 'vfades', kind: 'video', label: 'Video Fades', desc: 'Fade in and out', keys: (k) => k === 'vFadeIn' || k === 'vFadeOut' },

@@ -579,8 +579,14 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
       entry.el.pause();
       entry.gain?.gain.setTargetAtTime(0, audioCtx.currentTime, 0.01);
     }
-    setTime(getTime(), { force: true });
+    setTime(onFrame(getTime()), { force: true });
     dirty = true;
+  }
+
+  // Spillhodet står alltid på starten av en frame når det ikke spiller.
+  function onFrame(T) {
+    const fps = getProject().fps || 30;
+    return Math.floor(T * fps + 1e-6) / fps;
   }
 
   function toggle() {
@@ -603,7 +609,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
 
   function seek(T) {
     const wasPlaying = playing.value;
-    setTime(Math.max(0, T), { force: true });
+    setTime(onFrame(Math.max(0, T)), { force: true });
     if (wasPlaying) {
       clockBase = getTime();
       clockStart = performance.now();

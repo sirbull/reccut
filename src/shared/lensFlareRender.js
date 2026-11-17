@@ -4,7 +4,10 @@
 // 2. Lyset legges sammen i en flyttallsbuffer (Add, eller Screen per element).
 // 3. Bufferen legges over bildet i lineært lys og kodes tilbake til sRGB. Appen har ingen tonemapping ennå,
 //    så Add klipper ved hvitt som ellers i bildet. ponytail: tonemapping legges her når HDR-eksporten kommer.
-// Uten WebGL2 tegnes spritene med Canvas 2D (gammakodet, uten Flare color, elementfarge og smuss).
+// Prosedyriske elementer (iris ghosts, ringer, halos) har ingen tekstur: SHAPE_FS regner ut form, farge og
+// styrke hver for seg per piksel, så de er skarpe i alle oppløsninger.
+// Uten WebGL2 tegnes spritene med Canvas 2D (gammakodet, uten Flare color, elementfarge og smuss), og de
+// prosedyriske elementene som enkle radielle gradienter.
 import { FLARE_ASSETS, flareDraws } from './lensFlare.js';
 
 const makeCanvas = () => (typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas'));
@@ -53,7 +56,7 @@ export function loadFlareSprites(project) {
   const ids = new Set();
   for (const clip of Object.values(project.clips || {}))
     for (const e of clip.props?.vfx || []) if (e.type === 'lensFlare' && e.on !== false) for (const el of e.p?.elements || []) ids.add(el.asset);
-  return Promise.all(FLARE_ASSETS.filter((a) => ids.has(a.id)).map(load));
+  return Promise.all(FLARE_ASSETS.filter((a) => a.file && ids.has(a.id)).map(load));
 }
 
 const SPRITE_VS = `#version 300 es
@@ -85,6 +88,63 @@ void main(){
  }
  if(mode==2) e=min(e, vec3(1.0));
  outColor=vec4(e, 0.0);
+}`;
+// Prosedyriske elementer. q er punktet i radier (omrisset ligger på 1). Tre ting regnes ut hver for seg:
+// - Form: avstand til omrisset (sirkel eller regulær N-kant). Kantene glattes med fwidth, altså omtrent én
+//   piksel uansett oppløsning. Kromatisk aberrasjon gir hver fargekanal sin egen skala.
+// - Farge: et periodisk cosinusspektrum. Vinkelen kommer fra retningsvektoren, ikke atan, så det finnes ingen
+//   søm ved 0°/360°, og spekteret glir over i grunnfargen mot sentrum, der retningen er udefinert.
+// - Styrke: gain (farge · styrke · opasitet), som for teksturene.
+const SHAPE_FS = `#version 300 es
+precision highp float;
+in vec2 uv; out vec4 outColor;
+uniform vec3 gain, hue; uniform int kind, mode;
+uniform float extent, blades, edge, softness, thickness, chroma, spectrum, phase, colorize, radial;
+const float TAU = 6.28318530718;
+float gauss(float x, float s){ return exp(-0.5*x*x/(s*s)); }
+// Avstand til omrisset i radier: 0 på kanten, negativ inne. N-kanten brettes inn i én sektor; 2π/N går opp
+// i hele sirkelen, så brettet er sammenhengende over ±180°. I sentrum er vinkelen ubrukt (r = 0).
+float outline(vec2 q){
+  float r = length(q);
+  if (blades < 3.0) return r - 1.0;
+  float s = TAU/blades;
+  float a = mod(atan(q.y, q.x + (r < 1e-7 ? 1.0 : 0.0)) + 0.5*s, s) - 0.5*s;
+  return r*cos(a)/cos(0.5*s) - 1.0;
+}
+float profile(float d){
+  float aa = max(fwidth(d), 1e-5);
+  float soft = softness*0.5;
+  if (kind == 0) {
+    // Iris ghost: flat kropp, lysere kant innenfor omrisset, myk ytterkant.
+    float cover = 1.0 - smoothstep(-soft - aa, aa, d);
+    float rs = max(0.038, aa);
+    return cover*(0.22 + 0.28*edge*gauss(d + 0.08, rs)*(0.038/rs));
+  }
+  if (kind == 1) {
+    // Ring: smal topp og bred glød. Smalere enn en piksel blir den bredere, med samme energi (ingen flimring).
+    float s1 = max(thickness, aa), s2 = max(2.6*thickness + 0.3*softness, aa);
+    return 0.42*gauss(d, s1)*(thickness/s1) + 0.11*gauss(d, s2)*(2.6*thickness + 0.3*softness)/s2;
+  }
+  // Halo: lyset bygger seg opp innover mot omrisset og faller mykt av utenfor.
+  float inner = smoothstep(-thickness - aa, aa, d);
+  return 0.4*inner*inner*(1.0 - smoothstep(-aa, soft + aa, d));
+}
+void main(){
+  vec2 q = (uv*2.0 - 1.0)*extent;
+  vec3 shape = vec3(profile(outline(q/(1.0 + chroma))), profile(outline(q)), profile(outline(q/(1.0 - chroma))));
+  float r = length(q);
+  vec2 dir = q/max(r, 1e-7);
+  vec3 psi = TAU*(phase - vec3(0.0, 1.0, 2.0)/3.0);
+  // cos(θ + ψ) = dir.x·cos ψ − dir.y·sin ψ, og cos(2π·r + ψ) for gradient fra sentrum til kant.
+  vec3 wave = radial > 0.5 ? cos(TAU*r + psi) : dir.x*cos(psi) - dir.y*sin(psi);
+  // Spekteret har samme sum i alle vinkler (2 · (0,5 + 0,5 cos) summerer til 3), så lysstyrken er jevn.
+  vec3 col = mix(vec3(1.0), 1.0 + wave, spectrum*smoothstep(0.0, 0.3, r));
+  // Flare color gir den hvite delen ny farge; spekteret beholder sine farger.
+  float v = max(col.r, max(col.g, col.b)), sat = v > 0.0 ? (v - min(col.r, min(col.g, col.b)))/v : 0.0;
+  col = mix(col, mix(vec3(v), hue*v, max(sat, 0.75)), colorize*(1.0 - spectrum));
+  vec3 e = max(col*shape*gain, 0.0);
+  if (mode == 2) e = min(e, vec3(1.0));
+  outColor = vec4(e, 0.0);
 }`;
 const COMPOSITE_VS = `#version 300 es
 layout(location=0) in vec2 pos; out vec2 uv;
@@ -127,6 +187,7 @@ function setup() {
       return { p, u: Object.fromEntries(names.map((n) => [n, gl.getUniformLocation(p, n)])) };
     };
     const sprite = program(SPRITE_VS, SPRITE_FS, ['center', 'halfSize', 'frame', 'angle', 'sprite', 'gain', 'hue', 'colorize', 'mode', 'maskCenter', 'maskRadius']);
+    const shape = program(SPRITE_VS, SHAPE_FS, ['center', 'halfSize', 'frame', 'angle', 'gain', 'hue', 'kind', 'mode', 'extent', 'blades', 'edge', 'softness', 'thickness', 'chroma', 'spectrum', 'phase', 'colorize', 'radial']);
     const composite = program(COMPOSITE_VS, COMPOSITE_FS, ['video', 'emission', 'screen']);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
@@ -145,7 +206,7 @@ function setup() {
     };
     // Halvflyt-buffer, så lys over 1,0 summeres riktig. Uten utvidelsen klipper lyset i bufferen.
     const half = Boolean(gl.getExtension('EXT_color_buffer_float'));
-    g = { gl, canvas, sprite, composite, texture, half, video: texture(), emission: texture(), fbo: gl.createFramebuffer(), size: '', max: gl.getParameter(gl.MAX_TEXTURE_SIZE) };
+    g = { gl, canvas, sprite, shape, composite, texture, half, video: texture(), emission: texture(), fbo: gl.createFramebuffer(), size: '', max: gl.getParameter(gl.MAX_TEXTURE_SIZE) };
   } catch (err) {
     failed = true;
     console.warn('Lens flare uses the 2D fallback:', err.message);
@@ -170,7 +231,7 @@ function spriteTexture(asset) {
 }
 
 function gpuFlare(img, w, h, draws, screen) {
-  const { gl, canvas, sprite, composite } = g;
+  const { gl, canvas, sprite, shape, composite } = g;
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w;
     canvas.height = h;
@@ -192,6 +253,26 @@ function gpuFlare(img, w, h, draws, screen) {
   gl.uniform1i(sprite.u.sprite, 0);
   gl.enable(gl.BLEND);
   for (const d of draws) {
+    // Add: E + e. Screen: E + e − E·e (= E·(1 − e) + e).
+    gl.blendFunc(gl.ONE, d.blend === 'screen' ? gl.ONE_MINUS_SRC_COLOR : gl.ONE);
+    if (d.shape) {
+      const q = d.shape, u = shape.u;
+      gl.useProgram(shape.p);
+      gl.uniform2f(u.frame, w, h);
+      gl.uniform2f(u.center, d.x, d.y);
+      gl.uniform2f(u.halfSize, d.w / 2, d.h / 2);
+      gl.uniform1f(u.angle, d.angle);
+      gl.uniform3fv(u.gain, d.gain);
+      gl.uniform3fv(u.hue, d.hue);
+      gl.uniform1i(u.kind, q.kind === 'iris' ? 0 : q.kind === 'ring' ? 1 : 2);
+      gl.uniform1i(u.mode, d.blend === 'screen' ? 2 : 0);
+      for (const k of ['extent', 'blades', 'edge', 'softness', 'thickness', 'chroma', 'spectrum', 'phase', 'colorize'])
+        gl.uniform1f(u[k], k === 'extent' ? d.extent : k === 'colorize' ? d.colorize : q[k]);
+      gl.uniform1f(u.radial, q.gradient === 'radial' ? 1 : 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.useProgram(sprite.p);
+      continue;
+    }
     const t = spriteTexture(d.asset);
     if (!t) continue;
     gl.bindTexture(gl.TEXTURE_2D, t);
@@ -207,8 +288,6 @@ function gpuFlare(img, w, h, draws, screen) {
     gl.uniform1i(sprite.u.mode, dirt ? 1 : d.blend === 'screen' ? 2 : 0);
     gl.uniform2f(sprite.u.maskCenter, d.x, d.y);
     gl.uniform1f(sprite.u.maskRadius, d.w / 2);
-    // Add: E + e. Screen: E + e − E·e (= E·(1 − e) + e).
-    gl.blendFunc(gl.ONE, d.blend === 'screen' ? gl.ONE_MINUS_SRC_COLOR : gl.ONE);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
   gl.disable(gl.BLEND);
@@ -244,10 +323,24 @@ export function drawLensFlare(ctx, img, w, h, p, only = null) {
   } else {
     ctx.drawImage(img, 0, 0, w, h);
     for (const d of draws) {
-      const bmp = d.blend !== 'dirt' && loaded(d.asset);
-      if (!bmp) continue;
       ctx.globalCompositeOperation = d.blend === 'screen' || p.blend === 'screen' ? 'screen' : 'lighter';
       ctx.globalAlpha = Math.min(1, Math.max(...d.gain));
+      if (d.shape) {
+        // ponytail: bare en tilnærming når skjermkortet mangler; formen og spekteret krever shaderen.
+        const R = d.w / 2 / d.extent, c = d.gain.map((v) => Math.round(255 * Math.min(1, v / Math.max(...d.gain)))).join(',');
+        const grad = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, R * 1.05);
+        const ring = d.shape.kind !== 'iris';
+        grad.addColorStop(0, `rgba(${c},${ring ? 0 : 0.22})`);
+        grad.addColorStop(ring ? 0.85 : 0.9, `rgba(${c},${ring ? 0 : 0.4})`);
+        grad.addColorStop(0.95, `rgba(${c},0.4)`);
+        grad.addColorStop(1, `rgba(${c},0)`);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = grad;
+        ctx.fillRect(d.x - R * 1.05, d.y - R * 1.05, R * 2.1, R * 2.1);
+        continue;
+      }
+      const bmp = d.blend !== 'dirt' && loaded(d.asset);
+      if (!bmp) continue;
       ctx.setTransform(1, 0, 0, 1, d.x, d.y);
       ctx.rotate(d.angle);
       ctx.drawImage(bmp, -d.w / 2, -d.h / 2, d.w, d.h);

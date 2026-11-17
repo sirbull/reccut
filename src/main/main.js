@@ -1035,6 +1035,12 @@ ipcMain.handle('projects:folders', (_e, file) => projects.folders(baseDir(), fil
 ipcMain.handle('projects:forget', (_e, file) => projects.forget(file));
 ipcMain.handle('projects:trash', (_e, file) => projects.trash(baseDir(), file));
 ipcMain.handle('projects:rename', (_e, file, name) => projects.rename(file, name));
+ipcMain.handle('projects:move', (_e, { project, file, location }) => {
+  if (recordingDir || jobs.snapshot().some((task) => task.state === 'running' || task.state === 'queued')) {
+    throw new Error('Finish recording and background tasks before moving the project.');
+  }
+  return projects.move(baseDir(), project, file, location);
+});
 ipcMain.handle('dialog:openProject', async () => {
   const r = await dialog.showOpenDialog(win, { title: 'Open Project', defaultPath: baseDir(), properties: ['openFile'], filters: [{ name: 'Reccut Project', extensions: ['reccut', 'obslite'] }] });
   return r.canceled ? null : r.filePaths[0];

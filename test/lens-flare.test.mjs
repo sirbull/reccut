@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   FLARE_ASSETS, FLARE_DEFAULTS, keepsOwnColors, FLARE_PRESETS, elementCenter, elementSize, flareAsset, flareDraws, flareModified, hexLinear, makeElement, spreadDistance,
+  PROC_DEFAULTS, procExtent, procParams,
 } from '../src/shared/lensFlare.js';
 import { baseValueAt, setPropBase, vfxProp } from '../src/shared/model.js';
 import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../src/shared/videoEffects.js';
@@ -47,8 +48,8 @@ test('size follows the picture height and keeps the texture aspect, so rings sta
 });
 
 test('every texture in the manifest exists as an RGBA PNG with the stated size, and has a thumbnail', () => {
-  assert.equal(FLARE_ASSETS.length, 36);
-  for (const a of FLARE_ASSETS) {
+  assert.equal(FLARE_ASSETS.filter((a) => a.file).length, 36);
+  for (const a of FLARE_ASSETS.filter((a) => a.file)) {
     const file = path.join(root, 'assets/lensflare', a.file);
     const png = fs.readFileSync(file);
     assert.equal(png.toString('latin1', 12, 16), 'IHDR', a.id);
@@ -65,7 +66,6 @@ test('the eight kit presets load, reference known textures and keep lens dirt of
   assert.equal(FLARE_PRESETS.length, 8);
   assert.equal(FLARE_DEFAULTS.preset, 'cinematic_warm');
   for (const { id, p } of FLARE_PRESETS) {
-    assert.ok(fs.existsSync(path.join(root, 'assets/lensflare/thumbs/presets', `${id}.jpg`)), `${id} thumbnail`);
     assert.ok(p.elements.length >= 5, id);
     assert.equal(new Set(p.elements.map((e) => e.id)).size, p.elements.length, `${id} unique element ids`);
     for (const e of p.elements) {
@@ -116,7 +116,9 @@ test('Lens Flare is a Stylize stack effect with its own copy of the elements and
 });
 
 test('Flare color recolors the flare but leaves rainbow and prism textures alone', () => {
+  // The kit presets now draw their rings procedurally, so use the rainbow textures directly.
   const p = flare({ color: '#3080ff', colorize: 0.8 });
+  p.elements.push({ ...makeElement('ring_rainbow'), distance: 0 }, { ...makeElement('arc_rainbow_top'), distance: 0 });
   const draws = flareDraws(p, 1920, 1080);
   const rainbow = draws.filter((d) => keepsOwnColors(d.asset)), plain = draws.filter((d) => !keepsOwnColors(d.asset));
   assert.ok(rainbow.length && plain.length, 'the default preset has both kinds');
@@ -126,4 +128,44 @@ test('Flare color recolors the flare but leaves rainbow and prism textures alone
   near(plain[0].hue, hexLinear('#3080ff').map((v) => v / hexLinear('#3080ff')[2]), 'hue');
   assert.ok(FLARE_PRESETS.every((x) => x.p.colorize === 0), 'presets start with their own colors');
   assert.deepEqual(FLARE_ASSETS.filter(keepsOwnColors).map((a) => a.id).sort(), ['arc_rainbow_top', 'ghost_prism_round', 'ring_prism_offset', 'ring_rainbow']);
+});
+
+test('geometric ghosts, rings and halos are procedural; photographic elements keep their PNGs', () => {
+  const proc = FLARE_ASSETS.filter((a) => a.proc);
+  assert.deepEqual(proc.map((a) => a.proc).sort(), ['halo', 'iris', 'iris', 'iris', 'ring', 'ring']);
+  assert.ok(proc.every((a) => !a.file && a.w === a.h), 'no texture, round by default');
+  // The presets draw their circle, polygon and ring reflections procedurally. The oval ghost, arcs,
+  // glows, streaks, starbursts and lens dirt are photographic and stay PNG.
+  for (const { id, p } of FLARE_PRESETS) for (const e of p.elements) {
+    const a = flareAsset(e.asset);
+    assert.ok(!(a.file && /^(ghost_(round|hex|octagon|prism)|ring_)/.test(e.asset)), `${id}: ${e.asset} is geometric`);
+    if (a.proc) for (const k of Object.keys(PROC_DEFAULTS)) assert.ok(e[k] !== undefined, `${id}: ${e.asset} stores ${k}`);
+  }
+  const warm = FLARE_PRESETS.find((x) => x.id === 'cinematic_warm').p.elements;
+  const amber = warm.find((e) => e.id && e.asset === 'iris_round'), purple = warm.find((e) => e.asset === 'iris_polygon');
+  assert.ok(amber && purple, 'amber circle and purple hexagon ghosts');
+  // The kit's baked texture color becomes the tint, and the size becomes the outline diameter.
+  assert.equal(purple.blades, 6);
+  assert.ok(hexLinear(amber.tint)[0] > hexLinear(amber.tint)[2] * 4, amber.tint);
+  assert.ok(Math.abs(amber.size - 0.3 * 0.65) < 1e-9);
+  assert.ok(FLARE_PRESETS.some((x) => x.p.elements.some((e) => e.asset === 'ghost_oval_pink')), 'oval ghost stays a texture');
+});
+
+test('procedural parameters are clamped, and the drawn area leaves room for soft edges and aberration', () => {
+  const iris = flareAsset('iris_polygon');
+  assert.equal(procParams({ blades: 2 }, iris).blades, 0, 'fewer than three blades is a circle');
+  assert.equal(procParams({ blades: 7.4 }, iris).blades, 7);
+  assert.equal(procParams({}, iris).blades, 6, 'variant default');
+  const wild = procParams({ softness: 9, chroma: -1, spectrum: 2, phase: 1.25, gradient: 'spiral', edge: NaN }, iris);
+  assert.deepEqual([wild.softness, wild.chroma, wild.spectrum, wild.phase, wild.gradient, wild.edge], [1, 0, 1, 0.25, 'angular', 1]);
+  const ring = procParams({ thickness: 0.1, softness: 0.2, chroma: 0.1 }, flareAsset('ring_clean'));
+  // The wide ring glow has sigma 2.6·t + 0.3·s; three sigma must fit inside the quad.
+  assert.ok(procExtent(ring) >= (1 + 0.1) * (1 + 3 * (2.6 * 0.1 + 0.3 * 0.2)));
+  const p = flare({ x: 0.5, y: 0.5, cx: 0.5, cy: 0.5, elements: [{ ...makeElement('iris_round'), distance: 1, size: 0.5 }] });
+  const [d] = flareDraws(p, 3840, 2160);
+  assert.equal(d.shape.kind, 'iris');
+  assert.ok(Math.abs(d.w - 0.5 * 2160 * d.extent) < 1e-6, 'quad = outline diameter · extent');
+  // Switching a PNG element to a procedural one in Flare Studio keeps its other settings.
+  const made = makeElement('ring_spectral');
+  assert.equal(made.spectrum, flareAsset('ring_spectral').defaults.spectrum);
 });

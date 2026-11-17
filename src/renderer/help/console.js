@@ -9,7 +9,13 @@ import {
   TRANSITIONS,
   applyAnimationPreset,
   isVisual,
+  FRAME_FX,
+  REDACT_MODES,
 } from '../../shared/model.js';
+import { AUDIO_EFFECTS, AUDIO_PRESETS } from '../../shared/audiofx.js';
+import { BROWSER_VIDEO_EFFECTS } from '../../shared/videoEffects.js';
+import { FILM_LOOKS } from '../../shared/filmLooks.js';
+
 import { commit, project, room, selection } from '../editor/store.js';
 import * as commands from '../editor/commands.js';
 import { COMMANDS, runCommand } from '../registry.js';
@@ -106,6 +112,69 @@ function itemsFor() {
         commands.addEffect(fx.id, ids.length === 1 ? ids[0] : null);
         commands.inspectorTab.value = 'effects';
         flash(`.inspector [data-fx="${fx.id}"]`, { focus: true });
+      },
+    });
+  }
+  // Samme utvalg som Effects-fanen i Browser: fargekorrigering, fyll, stylize og fotobevegelse.
+  for (const fx of [...BROWSER_VIDEO_EFFECTS, { type: 'kenBurns', label: 'Ken Burns', category: 'Photo motion' }]) {
+    out.push({
+      kind: 'Effect',
+      id: `vfx:${fx.type}`,
+      label: fx.label,
+      sub: `${fx.category}. Apply to the selected clips`,
+      keywords: `effect filter video ${fx.category}`,
+      run: () => {
+        const ids = visualTargets();
+        if (!ids.length && fx.category === 'Stylize') return commands.addAdjustmentLayer(fx.type);
+        if (!ids.length) return toast('Select a video or image clip first.');
+        commands.addEffect(fx.type, ids.length === 1 ? ids[0] : null);
+      },
+    });
+  }
+  for (const [id, fx] of Object.entries(AUDIO_EFFECTS)) {
+    out.push({
+      kind: 'Effect',
+      id: `afx:${id}`,
+      label: fx.label,
+      sub: `Audio › ${fx.category}. Apply to the selected clips`,
+      keywords: `audio sound effect ${fx.category} ${fx.desc || ''}`,
+      run: () => {
+        if (!selection.value.length) commands.selectClipAtPlayhead();
+        commands.addAudioEffect(id);
+        flash(`.inspector [data-afx-item="${id}"]`);
+      },
+    });
+  }
+  for (const pr of AUDIO_PRESETS) {
+    out.push({
+      kind: 'Effect',
+      id: `apreset:${pr.id}`,
+      label: pr.label,
+      sub: `Audio template › ${pr.category === 'Repair' ? 'Fix and Enhance' : pr.category}`,
+      keywords: `audio sound template preset chain ${pr.category} ${pr.desc || ''}`,
+      run: () => {
+        if (!selection.value.length) commands.selectClipAtPlayhead();
+        commands.applyAudioPreset(pr.id);
+      },
+    });
+  }
+  const layer = (id, label, sub, keywords, run) => out.push({ kind: 'Effect', id, label, sub, keywords, run });
+  layer('layer:adjustment', 'Adjustment Layer', 'Empty layer above the picture at the playhead', 'adjustment layer effects color masks', () => commands.addAdjustmentLayer());
+  layer('layer:highlight', 'Highlight Area', 'Zoom in on an area and darken the rest', 'highlight spotlight focus zoom area', () => commands.addHighlight());
+  for (const m of FRAME_FX) layer(`frame:${m.id}`, `${m.label} (Whole Frame)`, 'Covers everything below it', `whole frame full ${m.desc}`, () => commands.addFrameEffect(m.id));
+  for (const m of REDACT_MODES) layer(`redact:${m.id}`, `Redact: ${m.label}`, m.desc, 'redact hide censor privacy password face', () => commands.addRedact(m.id));
+  for (const f of FILM_LOOKS) {
+    out.push({
+      kind: 'Look',
+      id: `film:${f.id}`,
+      label: f.label,
+      sub: `Film look › ${f.group}`,
+      keywords: 'film look stock emulation color grade',
+      run: () => {
+        const ids = visualTargets().filter((id) => project.value.clips[id]?.type !== 'title');
+        if (!ids.length) return toast('Select a video or image clip first.');
+        commands.applyFilm(f.id, ids);
+        commands.inspectorTab.value = 'color';
       },
     });
   }

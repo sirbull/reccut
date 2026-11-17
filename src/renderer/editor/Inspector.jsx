@@ -1,6 +1,8 @@
 import { PATTERN_SHAPES, PATTERN_DISTRIBUTIONS, patternClipProps } from '../../shared/designPattern.js';
+import { BLEND_MODE_OPTIONS, canBlend, clipBlendMode } from '../../shared/blendModes.js';
 import { INPUT_POSITION, SIDE_LAYOUT, baseValueAt, setPropBase } from '../../shared/model.js';
 import { SequenceFormatSettings } from './SequenceFormatSettings.jsx';
+import { ProjectLocation } from './ProjectLocation.jsx';
 import { ExpressionControls } from './ExpressionControls.jsx';
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
 import { ProcessorEffects } from './ProcessorEffects.jsx';
@@ -93,6 +95,7 @@ function GroupVideoTab({ clips }) {
   const p = project.value;
   const ids = clips.map((c) => c.id);
   const visuals = groupVisuals(p, ids);
+  const blended = visuals.filter(canBlend);
   const positioned = groupPositionClips(p, ids);
   const T = timeSig.value;
   const field = (label, value, min, max, unit, change) => <Row label={label}>
@@ -102,6 +105,8 @@ function GroupVideoTab({ clips }) {
   return <>
       {!!visuals.length && <Section title="Compositing">
         {field('Opacity', (valueAt(visuals[0], 'opacity', T) ?? 1) * 100, 0, 100, '%', (q, v) => setGroupOpacity(q, ids, v / 100, T))}
+        {!!blended.length && <Row label="Blend mode"><Select value={clipBlendMode(blended[0])} options={BLEND_MODE_OPTIONS}
+          onChange={(blendMode) => commit((q) => { for (const c of blended) q.clips[c.id].props.blendMode = blendMode; })} /></Row>}
         <p class="hint">Applies to the group’s visual clips. The value shown is from the first visual clip.</p>
       </Section>}
       {!!positioned.length && <Section title="Transform">
@@ -427,6 +432,9 @@ function VideoTab({ clip }) {
       </Section>}
       <Section title="Compositing">
         <Param clip={clip} prop="opacity" label={clip.type === 'adjustment' ? 'Layer strength' : 'Opacity'} min={0} max={100} scale={100} unit="%" />
+        {canBlend(clip) && <Row label="Blend mode"><Select value={clipBlendMode(clip)} options={BLEND_MODE_OPTIONS}
+          onChange={(blendMode) => commit((q) => { q.clips[clip.id].props.blendMode = blendMode; })} /></Row>}
+        {canBlend(clip) && <p class="hint">Blends this clip with the picture on lower video tracks.</p>}
         {clip.type === 'adjustment' && <p class="hint">Processes the combined picture on lower video tracks during this layer’s duration. Clips above it and captions stay unchanged. Use Color, Effects and Masks to build the look.</p>}
       </Section>
       {clip.type !== 'adjustment' && <TransformSection clip={clip} />}
@@ -2458,6 +2466,7 @@ export function ProjectSettings({ name = true }) {
           }}
         />
       </Row>}
+      {name && <ProjectLocation />}
       <SequenceFormatSettings settings={p} onChange={commit} onStart={beginTransient} onPreview={updateTransient} onCommit={() => endTransient(true)} />
     </>
   );

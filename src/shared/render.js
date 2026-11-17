@@ -1,4 +1,5 @@
 import { paintPattern, patternFromClip } from './designPattern.js';
+import { clipBlendMode } from './blendModes.js';
 // Tegner ett bilde av prosjektet. Samme kode brukes i forhåndsvisning og eksport,
 // så det du ser i redigeringen er det som havner i filen.
 import { containRect, followed } from './follow.js';
@@ -87,6 +88,25 @@ function drawVisualSide(ctx, project, side, getSource, alpha = 1) {
     ctx.restore();
     return;
   }
+  if (visualSideBlends(side)) {
+    // Fade the result against the actual lower tracks, including transparent
+    // exports. Blending on an empty canvas would lose the backdrop colors.
+    const w = ctx.canvas.width, h = ctx.canvas.height;
+    const { c: result, g: rg } = scratchCanvas(20, w, h);
+    rg.drawImage(ctx.canvas, 0, 0);
+    rg.setTransform(ctx.getTransform());
+    drawVisualSide(rg, project, side, getSource);
+    const { c: mixed, g: mg } = scratchCanvas(21, w, h);
+    mg.globalAlpha = 1 - alpha;
+    mg.drawImage(ctx.canvas, 0, 0);
+    mg.globalAlpha = alpha;
+    mg.globalCompositeOperation = 'lighter';
+    mg.drawImage(result, 0, 0);
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'copy'; ctx.filter = 'none';
+    ctx.drawImage(mixed, 0, 0); ctx.restore();
+    return;
+  }
   // Fade the image + background as one picture, so portrait/landscape changes
   // never expose an opaque copy of the previous foreground during a dissolve.
   const { c, g } = scratchCanvas(10, ctx.canvas.width, ctx.canvas.height);
@@ -98,6 +118,10 @@ function drawVisualSide(ctx, project, side, getSource, alpha = 1) {
   g.restore();
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = alpha;
   ctx.drawImage(c, 0, 0); ctx.restore();
+}
+
+function visualSideBlends(side) {
+  return side && [side.clip, ...(side.companions || [])].some(c => clipBlendMode(c) !== 'source-over');
 }
 
 function drawTransition(ctx, project, layer, getSource, transparent = false) {
@@ -116,6 +140,11 @@ function drawTransition(ctx, project, layer, getSource, transparent = false) {
     g.restore();
   };
   if (motionBlur && [layer.a, layer.b].every((side) => !side || canMotionBlur(type, side.clip))) {
+    // Blended clips need the actual lower tracks in every shutter sample.
+    // Rendering a side onto transparency first would discard its blend mode.
+    if ([layer.a, layer.b].some(visualSideBlends)) {
+      return drawBlendedMotionBlur(ctx, W, H, type, p, SHUTTER / (project.fps * dur), (g, key, alpha) => drawSide(g, layer[key], alpha));
+    }
     return drawMotionBlur(ctx, W, H, type, p, SHUTTER / (project.fps * dur), (g, key) => drawSide(g, layer[key]));
   }
   paintTransition(ctx, W, H, type, p, (alpha) => drawSide(ctx, layer.a, alpha), (alpha) => drawSide(ctx, layer.b, alpha));
@@ -123,6 +152,32 @@ function drawTransition(ctx, project, layer, getSource, transparent = false) {
 
 // Andel av et bilde lukkeren står åpen: 180 grader, som på et filmkamera.
 const SHUTTER = 0.5;
+
+function drawBlendedMotionBlur(ctx, W, H, type, p, span, drawSide) {
+  const w = ctx.canvas.width, h = ctx.canvas.height, transform = ctx.getTransform();
+  const { c: original, g: og } = scratchCanvas(17, w, h);
+  og.drawImage(ctx.canvas, 0, 0);
+  const { c: sample, g: sg } = scratchCanvas(18, w, h);
+  const { c: mean, g: mg } = scratchCanvas(19, w, h);
+  shutterSamples(p, span, Math.max(W * Math.hypot(transform.a, transform.b), H * Math.hypot(transform.c, transform.d))).forEach((t, i) => {
+    sg.setTransform(1, 0, 0, 1, 0, 0);
+    sg.clearRect(0, 0, w, h);
+    sg.drawImage(original, 0, 0);
+    sg.setTransform(transform);
+    paintTransition(sg, W, H, type, t, alpha => drawSide(sg, 'a', alpha), alpha => drawSide(sg, 'b', alpha));
+    mg.globalAlpha = 1 / (i + 1);
+    mg.globalCompositeOperation = 'destination-out';
+    mg.fillRect(0, 0, w, h);
+    mg.globalCompositeOperation = 'lighter';
+    mg.drawImage(sample, 0, 0);
+  });
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'copy';
+  ctx.drawImage(mean, 0, 0);
+  ctx.restore();
+}
 
 // Punktene i overgangen som snittes for ett bilde, midt rundt p. span er lukkertiden
 // som andel av overgangen, og size lengste kant i piksler. Antallet følger hvor langt bildet
@@ -396,6 +451,23 @@ function applyTemperature(ctx, clip, T, rect) {
 export function drawClip(ctx, project, clip, T, getSource, alphaMul = 1, unmasked = false) {
   // Levende kobling til et spor: klippet tegnes der objektet er nå.
   clip = followed(project, clip, T);
+  const blend = clipBlendMode(clip);
+  if (blend === 'source-over') return drawClipContent(ctx, project, clip, T, getSource, alphaMul, unmasked);
+  if (visualOpacity(clip, T) * alphaMul <= 0.001) return;
+  const w = ctx.canvas.width, h = ctx.canvas.height;
+  const { c, g } = scratchCanvas(16, w, h);
+  g.setTransform(ctx.getTransform());
+  drawClipContent(g, project, clip, T, getSource, alphaMul, unmasked);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = blend;
+  ctx.filter = 'none';
+  ctx.drawImage(c, 0, 0);
+  ctx.restore();
+}
+
+function drawClipContent(ctx, project, clip, T, getSource, alphaMul = 1, unmasked = false) {
   const W = project.width;
   const H = project.height;
   const alpha = visualOpacity(clip, T) * alphaMul;
@@ -685,7 +757,7 @@ function drawMasked(ctx, project, clip, T, getSource, alphaMul) {
   // Apply the shadow after the user mask, including its soft edges.
   const shadow = valueAt(clip, 'shadow', T) || 0;
   const content = shadow > 0 ? { ...clip, props: { ...clip.props, shadow: 0 }, kf: { ...clip.kf, shadow: [] } } : clip;
-  drawClip(lg, project, content, T, getSource, 1 / visualOpacity(clip, T), true);
+  drawClipContent(lg, project, content, T, getSource, 1 / visualOpacity(clip, T), true);
   const { c: M, g: mg } = scratchCanvas(3, cw, ch);
   paintMask(mg, clip, T, project.width, project.height, base, cw, ch, project);
   lg.setTransform(1, 0, 0, 1, 0, 0);

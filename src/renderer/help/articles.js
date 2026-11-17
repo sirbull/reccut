@@ -318,7 +318,7 @@ To collect everything into one folder for archiving, use Package Project.
     body: `
 Press {{key:findCommand}} when you are not typing in a field. A search window opens in the middle of the screen. Type a few letters of what you want and press Enter:
 
-- **Effects** are applied to the selected clips (or the clip under the playhead), and the effect is shown and highlighted in the inspector so you can adjust it right away.
+- **Effects** are applied to the selected clips (or the clip under the playhead), and the effect is shown and highlighted in the inspector so you can adjust it right away. Everything in the Effects browser can be found: color correction, color fills, Stylize effects such as Light leaks and Blinking Lights, Ken Burns, audio effects and audio templates. A Stylize effect with nothing selected becomes an adjustment layer. Adjustment Layer, Highlight Area, the Whole Frame effects and the Redact modes are added at the playhead.
 - **Transitions** are added at the selected edit, or the edit nearest the playhead. With the playhead at the end of the last clip, the clip fades out.
 - **Titles** are added at the playhead.
 - **Looks** and **animations** are applied to the selected clips.
@@ -658,7 +658,8 @@ The main row is the **storyline**. Clips in it always sit next to each other, so
 - The track headers hide a track, mute it or lock it. To add a track, drop a clip on the empty row at the top or bottom.
 - Lift from Storyline ({{key:lift}}) moves a clip up so you can place it freely; Overwrite to Storyline ({{key:overwriteDown}}) brings it back.
 - Insert Gap ({{key:insertGap}}) adds an empty space at the playhead.
-- Zoom with {{key:zoomIn}} and {{key:zoomOut}}, or {{key:zoomFit}} to fit everything.
+- Zoom with {{key:zoomIn}} and {{key:zoomOut}}, or {{key:zoomFit}} to fit everything. Zoom far enough in and the ruler shows each frame as its own cell.
+- Every edit lands on a whole frame: moving, trimming, snapping and cutting, also when you cut while the video plays.
 
 ## Trackpad and mouse
 
@@ -682,6 +683,7 @@ Drag a clip in the storyline to move it; the other clips make room. Drag connect
 - Delete and Leave Gap ({{key:deleteGap}}) leaves an empty space.
 - Cut, copy and paste work as usual ({{key:cut}}, {{key:copy}}, {{key:paste}}). Pasted clips are placed at the playhead.
 - Comma and period nudge a clip one frame ({{key:nudgeLeft}} {{key:nudgeRight}}).
+- Audio stays on the audio track you drop it on. Audio clips it overlaps there move down to the nearest free audio track.
 
 ## Track height
 
@@ -1561,11 +1563,13 @@ Noise, film grain, glitch and VHS animate from the timeline, so seeking and expo
 
 **Light leaks** adds soft, procedural light that drifts across the picture or along its edges, like light leaking into a film camera. Pick a preset (Classic Film, Pastel Dream, Golden Hour, Neon Nights, Vintage 8mm, Prism or Custom) and adjust **Intensity**; changing a setting turns the preset into your own variant without altering the preset. **Save as preset** keeps a look for later projects. Colors blends from Start color to End color in OKLab, with Color transition, Saturation and Color variation. Motion & Shape sets Direction, Speed, Size, Softness, Spread, Position, Organic motion and Flicker. Light & Blending chooses Screen, Add or Soft Light, Opacity, Bloom and Edge bias. Click a diamond to keyframe a setting at the playhead, for example a faint orange leak on the left that moves right, turns purple and fades out. The animation follows the clip's own time, so keyframes stay with the clip when you move or trim it, and preview and export match at any frame rate.
 
+![Light leaks with the Golden Hour preset. The warm light drifts in from the lower right corner.](effects-light-leaks.jpg)
+
 **Blinking Lights** simulates flashing or pulsing light sources, from police lights outside the shot to a blinking lamp in it. Pick a preset (Police Lights, Emergency Red, Emergency Amber, Strobe, Flickering Neon, Broken Light, Beacon or Camera Flash) for a ready result, then edit any setting; **Save as preset** keeps your own. **Position & Shape** places the light anywhere, also outside the frame so only the light falling into the picture shows. With the Effects tab open, drag the light in the viewer to move it and drag its round handle to resize it. **Colors & Light Sources** sets the colors, Single, Alternate or Blend color mode, and **Dual light mode** for two lights with their own position, size, color and phase offset, such as red on the left and blue on the right. **Flash Pattern** chooses Single, Double, Triple, Alternating or Random with Frequency, Flash duration, Attack, Decay, Pause, Phase offset, Randomness and Base level. **Intensity & Blending** sets Intensity, Opacity, Glow, Falloff, Exposure influence (lights the picture instead of tinting it) and Screen, Add, Soft Light or Overlay. Turn on **Visible light source** for a bright core when the lamp is in the shot. Click a diamond to keyframe position, size, colors, frequency or intensity, for example to keep a blue light on a moving car's headlight. Flashes follow the clip's own time, so preview, scrubbing and export always match at any frame rate.
 
-**Lens Flare** adds an optical flare: a bright light source plus the chain of reflections a real lens makes. Pick a preset (Cinematic Warm, Anamorphic Blue, Prism Rainbow, Sci-Fi Violet, Golden Sunset, Vintage 35mm, Flashlight White or Concert Cyan). **Flare color** gives the whole flare a new color, for example a blue flare from Cinematic Warm; rainbow and prism reflections keep their own colors, and bright cores stay partly white. **Color amount** blends between the preset's own colors (0 %) and the chosen color (100 %). Changing preset keeps the light where you put it and your Flare color. With the Effects tab open, drag the sun in the viewer to move the light, also outside the frame so only its spill shows. Drag the crosshair to move the optical center. The reflections lie on the line from the light through the optical center and move the opposite way when the light moves. **Intensity**, **Global scale**, **Spread** (stretches the reflections without moving the light), Flare color and Color amount, the light position, the optical center and **Opacity** can all be keyframed, for example to follow the sun as the camera pans. **Add** blends the light in linear light like real light; **Screen** is softer on bright pictures.
+![Blinking Lights with the Police Lights preset. The red light is outside the frame, so only its spill shows. With the Effects tab open, the lights and their size handles appear in the viewer.](effects-blinking-lights.jpg)
 
-**Open Flare Studio** to build your own flare. The large preview shows the flare over the clip, black or a checkerboard; the guides are never exported. Drag the sun and the crosshair, or drag an element's dot along the axis to change its distance. **Elements** lists every layer from top to bottom: hide it, show only that one (solo), move, duplicate (⌘D) or delete it (Delete). **Add element** has glows, starbursts, streaks, ghosts, rings, arcs, glints, diffraction and lens dirt; click one to add it. The element settings are Texture, Distance (1 at the light, 0 at the optical center, −1 mirrored on the other side), Offset, Size (width as a share of the picture height, so shapes stay round in 9:16), Rotation, Intensity, Opacity, Tint and Blend. Lens dirt stays fixed on the lens and only shows where the light falls on it. **Save as Preset** keeps the flare for later projects, with a thumbnail, and **Update** replaces a saved preset with your changes. Hover a saved preset to delete it. **Revert** undoes everything since the studio opened. The project keeps its own copy of the flare, so later changes to a preset never alter a finished edit.
+**Lens Flare** adds an optical flare: a bright light source plus the chain of reflections a real lens makes. Pick one of eight presets, drag the sun in the viewer to place the light, and open **Flare Studio** to build your own flare element by element. See [[article:lens-flare|Lens Flare and Flare Studio]].
 
 **VHS** treats the whole picture as a soft, low-bandwidth tape image. Color bleeds more than luminance, static changes from frame to frame, and brief tracking faults occasionally bend the picture. Choose an SP, LP or EP-inspired preset, then adjust Picture softness, Color bleed, Static noise and Tracking faults. Advanced includes chroma delay, subtle scanlines, faded color, speed and seed. These are creative tape simulations, not a measured hardware-deck profile.
 
@@ -1585,7 +1589,229 @@ Choose **Solid color** or **Gradient ramp** under **Color fills** in the Effects
 
 Drag a color handle down off the color bar to remove it, or select it and press **Backspace/Delete**. At least two colors remain. Press Escape during a drag to cancel it. **Add point/stop** and **Remove point/stop** also work. A gradient supports up to 32 stops or points. Arrow keys move focused handles; Shift makes larger steps. Edits support undo and redo and are saved in the project. Gradient settings are static. Preview and export use the same renderer. Design fills use these same controls.
 `,
-    see: ['keying', 'ai-plugins', 'keyframes', 'color', 'redact'],
+    see: ['keying', 'lens-flare', 'ai-plugins', 'keyframes', 'color', 'redact'],
+  },
+  {
+    id: 'lens-flare',
+    section: 'Look',
+    title: 'Lens Flare and Flare Studio',
+    summary: 'Add an optical lens flare, adjust it in Properties, animate the light and build your own flares in Flare Studio.',
+    keywords: 'lens flare flare studio sun light source optical center ghost ghosts ring arc starburst streak glow glint diffraction lens dirt anamorphic preset flare color spread reflections axis solo',
+    body: `
+**Lens Flare** imitates what happens when strong light hits a camera lens: a bright light source, and a chain of reflections (ghosts, rings and arcs) on a straight line through the middle of the lens. You choose a ready preset and adjust it in **Properties**, or open **Flare Studio** to build the flare element by element.
+
+![Lens Flare on the Mountain lake clip. The sun handle in the viewer is the light source, the crosshair is the optical center, and the dashed line is the axis the reflections follow. The settings are in the Effects tab on the right.](lensflare-editor.jpg)
+
+## Add a lens flare
+
+1. Open the Effects browser ({{key:browser:effects}}) and find **Lens Flare** under **Stylize**.
+2. Select a video, image or recording clip and click Lens Flare, or drag it onto the clip.
+3. Open the **Effects** tab in the inspector ({{key:inspector:effects}}). The Lens Flare settings appear in the effect list.
+4. Drag the sun in the viewer to where the light should come from.
+
+To put one flare over several clips, drag Lens Flare onto an empty video track. That creates an adjustment layer, and the flare then lies over everything below it for as long as the layer lasts. Clicking Lens Flare with nothing eligible selected does the same. You can also add it with **Add stack effect…** in the Effects tab.
+
+The flare is part of the clip's effect stack. Use the switch beside its name to turn it off and compare, the arrows to change its order, the copy button to duplicate it (keyframes included) and **×** to remove it.
+
+## How a flare works
+
+A real flare is light bouncing between the glass elements inside the lens. Reccut models it with two points:
+
+- **The light source (sun handle)** is where the light comes from, for example the sun or a lamp. Glows, starbursts and streaks sit here.
+- **The optical center (crosshair)** is the middle of the lens, normally the middle of the picture.
+
+The reflections lie on the line from the light through the optical center and continue out on the other side. When the light moves right, the reflections move left. This mirror movement is what makes a flare look real when the camera pans.
+
+Every element has a **Distance** on this line. **1** is at the light source, **0** is at the optical center and **−1** is just as far out on the other side, mirrored. Values above 1 lie beyond the light, and values below −1 lie further out on the opposite side.
+
+The light is added in linear light, the way real light adds up. Bright cores therefore bloom towards white instead of turning grey, and the result looks the same in preview and export at any resolution.
+
+## The Lens Flare settings in Properties
+
+![The Lens Flare settings in the Effects tab, with Optical center & opacity opened.](lensflare-properties.jpg)
+
+- **Preset** chooses a ready flare: Cinematic Warm, Anamorphic Blue, Prism Rainbow, Sci-Fi Violet, Golden Sunset, Vintage 35mm, Flashlight White or Concert Cyan. Your own presets are listed with a ★. Changing preset keeps the light where you put it, the optical center and your Flare color. When you have changed a setting, the preset shows **(modified)**.
+- **Open Flare Studio** opens the large editor for the elements in the flare. See Flare Studio below.
+- **Flare color** gives the whole flare a new color. Choosing a color while Color amount is 0 turns Color amount up to 100 %, so you see the result at once.
+- **Color amount** blends between the preset's own colors (0 %) and Flare color (100 %). Rainbow and prism elements keep their own colors, and very bright cores stay partly white.
+- **Light X** and **Light Y** place the light source, as a percentage of the picture's width and height. 0 % is the left or top edge and 100 % the right or bottom edge. Values from −100 % to 200 % put the light outside the frame, so only its spill shows.
+- **Intensity** is the brightness of the whole flare, from 0 to 400 %.
+- **Global scale** makes every element larger or smaller together, from 10 to 400 %.
+- **Spread** stretches the reflections along the axis without moving the light or the optical center. Below 100 % the reflections gather towards the center; above 100 % they spread further out. Elements between the light and the optical center stay where they are.
+- **Blend mode**: **Add (linear light)** adds the light to the picture like real light and is the right choice for most shots. **Screen** is softer and keeps very bright pictures from burning out.
+
+Under **Optical center & opacity**:
+
+- **Center X** and **Center Y** move the optical center. Leave it at 50 % / 50 % for a normal lens. Moving it changes the angle of the reflection line.
+- **Opacity** fades the whole flare, from 0 to 100 %.
+
+![Flare color set to blue with Color amount at 100 %. The Cinematic Warm preset turns blue, while the rainbow ring keeps its colors.](lensflare-color.jpg)
+
+## Move the light in the viewer
+
+With the Effects tab open and the clip selected, the viewer shows the flare handles:
+
+- Drag the **sun** to move the light source. You can drag it outside the picture.
+- Drag the **crosshair** to move the optical center.
+- The dashed line shows the axis the reflections follow.
+
+![The handles in the viewer. The reflections lie on the dashed line, on the other side of the crosshair from the sun.](lensflare-viewer.jpg)
+
+The handles are guides only. They are never exported.
+
+## Animate the flare
+
+Light position, optical center, Intensity, Global scale, Spread, Flare color, Color amount and Opacity can all have keyframes. Click the diamond beside a setting to add a keyframe at the playhead. See [[article:keyframes|Keyframes]].
+
+To make the flare follow the sun as the camera pans:
+
+1. Place the playhead at the start of the shot and drag the sun onto the real sun.
+2. Click the diamonds for **Light X** and **Light Y**.
+3. Move the playhead to the end of the shot and drag the sun onto the sun again. Because Light X and Light Y now have keyframes, dragging adds new keyframes at the playhead.
+4. Add more keyframes in between if the movement is uneven.
+
+Other ideas: animate **Intensity** from 0 for a flare that flashes up as a lamp turns on, or **Spread** for reflections that grow outwards. The animation follows the clip's own time, so keyframes stay with the clip when you move or trim it.
+
+## Flare Studio
+
+Click **Open Flare Studio** to build or change the flare itself. Everything you do here changes the effect on the clip right away, with normal Undo ({{key:undo}}).
+
+![Flare Studio. Presets at the top, the large preview in the middle, the element list and element library below, and the settings on the right.](lensflare-studio.jpg)
+
+The window has five parts:
+
+- **Presets** along the top. Click one to use it.
+- **The preview** shows the flare large, over the clip, black or a checkerboard.
+- **Elements** lists every part of the flare.
+- **Add element** is the library of new parts.
+- **The inspector** on the right has the Flare settings (the same as in Properties) and the settings for the selected element.
+
+### The preview
+
+Choose the background above the preview. **Video** shows the clip's picture at the playhead (without its other effects), **Black** shows the flare alone, and **Checkerboard** makes faint parts easier to see. Video is only available for video, image and recording clips. The slider on the right moves the playhead within the clip, so you can check the flare at other frames and set keyframes.
+
+With **Guides** on, the preview shows the same sun and crosshair as the viewer, the axis and a dot for every element. Drag the sun and the crosshair as in the viewer. Drag an element's dot along the axis to change its distance; the selected element's dot is blue. Hover a dot to see which element it is. Turn Guides off to judge the flare without them. Guides are never exported.
+
+![One ghost element shown alone with solo. Its blue dot can be dragged along the axis.](lensflare-studio-solo.jpg)
+
+### Elements
+
+![The element list (left) and the element library (right).](lensflare-studio-lower.jpg)
+
+Each row shows a thumbnail, the element's name and where it sits: at the light source, at the optical center, on the lens, or its distance. The buttons on each row are:
+
+- **Eye**: hide or show the element. Hidden elements are not rendered in the preview or the export.
+- **Solo**: show only this element in the preview, to see exactly what it adds. Click again, or **show all** above the preview, to see the whole flare. Solo only affects the Flare Studio preview.
+- **Up** and **Down** arrows: change the order.
+- **Duplicate** (Cmd/Ctrl D): copy the element, for example to make a second ghost further out.
+- **Delete** (Delete or Backspace): remove the element.
+
+### Add element
+
+Choose a group, then click a texture to add it. The new element is selected so you can adjust it at once.
+
+- **Glows**: soft light around the source.
+- **Starbursts**: rays from the light, like the aperture blades of a lens.
+- **Streaks**: long horizontal lines, typical of anamorphic lenses.
+- **Ghosts**: round or polygon reflections along the axis.
+- **Rings**: thin rings, also in rainbow colors.
+- **Halos**: a large ring of light that fades in towards the rim.
+- **Arcs**: parts of a ring.
+- **Glints**: small, sharp sparkles.
+- **Diffraction**: fine rainbow patterns around the light.
+- **Lens dirt**: dust and smudges on the lens that only show where the light falls.
+
+Glows, starbursts, streaks, halos, glints, diffraction and lens dirt start at the light source. Ghosts, rings and arcs start on the other side of the optical center, at distance −0.6.
+
+### Procedural and photographic elements
+
+The first elements under Ghosts (**Iris ghost round**, **Iris ghost polygon** and **Iris ghost spectral**), Rings (**Ring** and **Ring spectral**) and **Halo** are procedural. Reccut calculates their shape, color and brightness for every pixel when it draws the picture, so they stay sharp at 4K, 8K and any zoom, with clean edges and no seams. The geometric ghosts and rings in the presets are drawn this way.
+
+The other elements are photographic textures: glows, starbursts, streaks, arcs, glints, diffraction, lens dirt and the textured ghosts and rings further down the lists. Use them for complex, organic reflections.
+
+### Element settings
+
+![The inspector in Flare Studio, with the Flare settings at the top and the selected element below.](lensflare-studio-inspector.jpg)
+
+- **Texture** swaps the picture the element uses, and keeps its other settings. Choosing a procedural element gives it that element's shape, for example a polygon or a spectrum.
+- **Distance** places the element on the axis, from −3 to 3: 1 at the light, 0 at the optical center, −1 mirrored on the other side.
+- **Offset X** and **Offset Y** move the element away from the axis, as a percentage of the picture.
+- **Size** is the width of the element as a share of the picture height. Shapes therefore stay round in 16:9, 9:16 and 1:1.
+- **Rotation** turns the element, from −180° to 180°.
+- **Intensity** is the brightness of the element, from 0 to 400 %.
+- **Opacity** fades the element.
+- **Tint** colors the element. Tint also works on rainbow and prism elements, which Flare color does not change.
+- **Blend**: **Add (linear light)** adds the light; **Screen** is softer where elements overlap and never brighter than white.
+
+Procedural elements have these extra settings:
+
+- **Blades**: the number of aperture blades. 0 gives a circle, 5 a pentagon, 6 a hexagon and so on, up to 16. Rotation turns the polygon.
+- **Edge** (iris ghosts): how much brighter the rim is than the body, from 0 % (a flat disk) to 400 %.
+- **Softness**: how soft the edge is. At 0 % the edge is about one pixel wide at any resolution. On rings it widens the glow around the ring.
+- **Thickness** (rings and halos): the width of the ring, as a share of its radius. On a halo it is how far in the light fades.
+- **Aberration**: chromatic aberration. The outline is drawn slightly larger in red and smaller in blue, like a real lens, giving colored fringes.
+- **Spectrum**: blends the element's color with a rainbow. At 0 % it uses only Tint.
+- **Direction** (with Spectrum): **Around the shape** sweeps the colors around the element; **Center to edge** goes from the middle outwards. The colors run seamlessly all the way round and fade to the base color in the middle.
+- **Hue shift** (with Spectrum): turns the rainbow, so another color comes first.
+
+Flare color changes the white part of a procedural element; the spectrum keeps its colors.
+
+Lens dirt has no Rotation or Blend. It stays fixed on the lens and covers the whole picture, but only shows where the light falls on it. Its Distance and Size move and widen the light that reveals the dirt.
+
+The element settings apply to the whole clip and do not have keyframes. To animate the flare, use the Flare settings at the top, which do.
+
+### Presets
+
+![The presets at the top of Flare Studio. The selected one is outlined.](lensflare-studio-presets.jpg)
+
+To keep a flare for later projects, type a name in the field at the bottom left and click **Save as Preset** (or press Enter). The preset gets a thumbnail, is marked with a ★ and appears in the preset list in Properties as well.
+
+When you change a saved preset of your own, **Update “name”** replaces it with the new settings. Hover a saved preset and click **×** to delete it. Clips that use it keep their flare.
+
+Saved presets belong to Reccut on this computer, not to a project. Each project keeps its own copy of every flare, so changing or deleting a preset never alters a finished edit.
+
+### Revert and Done
+
+**Revert** undoes every change made since Flare Studio was opened, including keyframes on the flare settings. **Done** closes the studio and keeps the changes. You can still undo them in the editor afterwards.
+
+## Recipes
+
+### Sun behind a mountain
+
+1. Choose **Golden Sunset** or **Cinematic Warm**.
+2. Drag the sun just outside the top edge, above the mountain, so only the spill and the reflections show.
+3. Lower **Intensity** to about 60 % so the picture keeps its contrast.
+
+### Anamorphic car headlight
+
+1. Choose **Anamorphic Blue**.
+2. Drag the sun onto the headlight.
+3. Keyframe **Light X** and **Light Y** as the car moves. Keyframe **Intensity** down to 0 as the car leaves the shot.
+
+### A subtle, natural flare
+
+1. Choose **Vintage 35mm**.
+2. Set **Intensity** to 40–60 % and **Spread** to about 80 %.
+3. Open Flare Studio and hide the ghosts you find too strong. Vintage 35mm already has lens dirt; lower its Intensity if the dirt shows too much.
+
+### Your own flare from scratch
+
+1. Open Flare Studio and set the background to **Black**.
+2. Delete the elements you don't want, or start from **Flashlight White**, which has few elements.
+3. Add a glow and a starburst at the light, then two or three ghosts at different distances, for example −0.3, −0.7 and −1.2.
+4. Vary Size and Tint so the ghosts don't look identical, and solo each one to check it.
+5. Switch back to **Video**, then type a name and click **Save as Preset**.
+
+## Tips and troubleshooting
+
+- **The flare is too strong.** Lower Intensity, or try the Screen blend mode on bright pictures.
+- **The reflections lie in the wrong direction.** Check the optical center. The reflections always lie on the line from the sun through the crosshair.
+- **The handles are missing in the viewer.** Select the clip, open the Effects tab and place the playhead inside the clip. The effect must be switched on.
+- **An element doesn't show.** Check that its eye is on, that no other element is soloed, and that it isn't placed completely outside the picture. Elements that lie entirely outside the frame are not drawn.
+- **Flare color doesn't change a ring.** Rainbow and prism elements keep their own colors. Use the element's Tint instead.
+- **Titles and text get the flare too.** Put the text on a track above the clip or adjustment layer that has the flare.
+`,
+    see: ['effects', 'keyframes', 'color', 'effect-reference'],
   },
   {
     id: 'keying',
@@ -1675,7 +1901,7 @@ Native OFX and Adobe plugins cannot be loaded directly. CorridorKey from Corrido
 Select a clip and its properties appear in the inspector on the right. The icons at the top switch between the parts of the clip, and you only see the ones that fit the clip:
 
 - **Text** for titles and lower thirds: the text, template, colors, font and animation.
-- **Video** ({{key:inspector:video}}): opacity, position, scale, rotation, anchor point, crop, animation presets and fades. While this tab is open, the selected clip has handles in the viewer: drag a corner to scale, the round handle to rotate (Shift for 15° steps) and the crosshair to move the **anchor point**. Scale and rotation pivot around the anchor point. Dragging the crosshair leaves the picture where it is. **Anchor X** and **Anchor Y** have keyframe diamonds, so the anchor point can be animated.
+- **Video** ({{key:inspector:video}}): opacity, blend mode, position, scale, rotation, anchor point, crop, animation presets and fades. Under **Compositing → Blend mode**, choose how a video, image, recording or title blends with the picture on lower video tracks, for example Multiply, Screen, Overlay or Difference. Normal is the default; Opacity controls the strength. The same blend is used in preview and export. While this tab is open, the selected clip has handles in the viewer: drag a corner to scale, the round handle to rotate (Shift for 15° steps) and the crosshair to move the **anchor point**. Scale and rotation pivot around the anchor point. Dragging the crosshair leaves the picture where it is. **Anchor X** and **Anchor Y** have keyframe diamonds, so the anchor point can be animated.
 - **Color** ({{key:inspector:color}}): looks, light, color and color wheels.
 - **Effects** ({{key:inspector:effects}}): the effects on the clip.
 - **Audio** ({{key:inspector:audio}}): levels, audio components, volume, fades and the audio format.
@@ -1683,6 +1909,8 @@ Select a clip and its properties appear in the inspector on the right. The icons
 - **Info** ({{key:inspector:info}}): clip info.
 
 ![The Video tab with crop.](video.jpg)
+
+![Blend mode Screen: the blossoms on V2 blend with the mountain lake on V1 like a double exposure.](effects-blend-mode.jpg)
 
 ## Clip info
 
@@ -2062,6 +2290,8 @@ The correction runs on the graphics card in 16-bit floating point. 10-bit clips 
 For more detailed control, add **Advanced Hue / Saturation** from **Effects → Color correction**. Basic Saturation stays in Color; the advanced effect has independent controls for Reds, Oranges, Yellows, Greens, Aquas, Blues, Purples and Magentas. The effect starts neutral.
 
 Select a color swatch, then change **Saturation** (−100% to +100%) or **Hue shift** (−180° to +180°). For example, choose Reds to change a red jacket to another color. Lightness, neutral grays and transparency are preserved. The ranges have soft edges and are measured from the original colors entering this effect, so a red shifted to blue is not adjusted again by the same instance’s Blues controls.
+
+![Advanced Hue / Saturation with Greens shifted −75°. The green trees by the waterfall turn autumn orange; the water and rocks keep their colors.](effects-hue-saturation.jpg)
 
 Under **Refine color range**, use **Target hue** to select a particular source shade and **Range width** to narrow or widen the selection. **Strength** blends the whole effect. All numeric controls support keyframes, and **Reset this range** clears that range’s adjustments and animation. Toggle the effect off to compare.
 

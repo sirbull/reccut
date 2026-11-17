@@ -186,6 +186,7 @@ contextBridge.exposeInMainWorld('api', {
   forgetProject: invoke('projects:forget'),
   trashProject: invoke('projects:trash'),
   renameProject: invoke('projects:rename'),
+  moveProject: invoke('projects:move'),
   openProjectDialog: invoke('dialog:openProject'),
   copyIntoProject: invoke('media:copyIn'),
 

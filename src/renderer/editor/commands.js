@@ -55,7 +55,7 @@ import {
   endTransient,
   updateTransient,
   browserPlayhead,
-  getTime,
+  getTime as playTime,
   importPaths,
   makeCaptionClip,
   makeTitleClip,
@@ -73,6 +73,11 @@ import {
   skim,
   sequenceSettingsOpen,
 } from './store.js';
+// Redigering skjer alltid på en hel frame, også når man kutter mens videoen spiller.
+const getTime = () => {
+  const fps = project.value.fps || 30;
+  return Math.floor(playTime() * fps + 1e-6) / fps;
+};
 import { getViewerTime, openSource, pause, seek, seekViewer, sourceProject } from './playback.js';
 import { applyMediaDrop, frameEffectPlacement, libraryDropTarget } from '../../shared/libraryDrop.js';
 import { toast } from '../ui.jsx';

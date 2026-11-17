@@ -48,6 +48,7 @@ export const projectEpoch = signal(0);
 // Hver versjon av prosjektet endres aldri etter at den er laget, så tidsindeksen kan gjenbrukes.
 effect(() => sealProject(project.value));
 export const projectPath = signal(null);
+export const projectMoving = signal(false);
 // Sekvensinnstillinger: null, {} fra menyen, { mediaId } for første klipp, eller { create, projectId } for ny sekvens.
 export const sequenceSettingsOpen = signal(null);
 export const selection = signal([]);
@@ -409,27 +410,68 @@ export function commitSequence(mutator) {
 /* Lagring */
 
 let saveTimer = null;
+let saveQueue = Promise.resolve(true);
 export function scheduleSave() {
   saveState.value = 'dirty';
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveNow, 800);
 }
 
-export async function saveNow() {
+export function saveNow() {
   clearTimeout(saveTimer);
+  if (projectMoving.value) return Promise.resolve(false);
   if (!projectPath.value) {
     saveState.value = 'saved';
-    return;
+    return Promise.resolve(true);
   }
+  const file = projectPath.value;
+  const current = previewBase || project.value;
+  const p = { ...restoreEditHistory(current), modified: Date.now() };
   saveState.value = 'saving';
+  // Serialize writes to the atomic-save temporary file and wait for earlier saves.
+  saveQueue = saveQueue.then(async () => {
+    try {
+      const savedFile = await api.saveProject(p, file);
+      if (projectPath.value === file) {
+        projectPath.value = savedFile;
+        localStorage.setItem('lastProject', savedFile);
+        if ((previewBase || project.value) === current) saveState.value = 'saved';
+      }
+      return true;
+    } catch (err) {
+      console.error(err);
+      if (projectPath.value === file) saveState.value = 'error';
+      return false;
+    }
+  });
+  return saveQueue;
+}
+
+export async function moveProject(location) {
+  if (projectMoving.value) throw new Error('A project is already being moved.');
+  const { recording, finishing, countdown } = await import('../recorder/engine.js');
+  if (recording.value || finishing.value || countdown.value || tasks.value.some((t) => t.state === 'running' || t.state === 'queued')) {
+    throw new Error('Finish recording and background tasks before moving the project.');
+  }
+  if (projectMoving.value) throw new Error('A project is already being moved.');
+  playing.value = false;
+  const saved = saveNow();
+  projectMoving.value = true;
   try {
-    const p = { ...restoreEditHistory(previewBase || project.value), modified: Date.now() };
-    projectPath.value = await api.saveProject(p, projectPath.value);
-    localStorage.setItem('lastProject', projectPath.value);
+    if (!await saved) throw new Error('The project could not be saved. It has not been moved.');
+    const r = await api.moveProject({ project: { ...restoreEditHistory(previewBase || project.value), modified: Date.now() }, file: projectPath.value, location });
+    // Switch paths and data together so even a failed media check cannot leave
+    // a subsequent save pointing back to files in the removed source folder.
+    if (r.project) setProject(r.project, r.file);
+    try { await openProjectFile(r.file); }
+    catch (err) {
+      if (!r.project) throw err;
+      r.warning = `${r.warning ? r.warning + ' ' : ''}The project was moved and loaded, but media checks could not finish: ${err.message}`;
+    }
     saveState.value = 'saved';
-  } catch (err) {
-    console.error(err);
-    saveState.value = 'error';
+    return r;
+  } finally {
+    projectMoving.value = false;
   }
 }
 

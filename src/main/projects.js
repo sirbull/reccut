@@ -59,7 +59,11 @@ async function create(location, name) {
 
 // Mappene et prosjekt bruker. Eldre prosjekter uten egen mappe bruker felles mapper i basismappen.
 async function folders(base, file) {
-  const own = file && !legacyDirs(base).some((d) => path.dirname(file).startsWith(d));
+  const own = file && !legacyDirs(base).some((d) => {
+    if (path.dirname(file) === d) return true;
+    try { return fs.realpathSync(path.dirname(file)) === fs.realpathSync(d); }
+    catch { return false; }
+  });
   const root = own ? path.dirname(file) : base;
   const out = { root, own };
   for (const [key, sub] of Object.entries(SUBDIRS)) {
@@ -154,7 +158,11 @@ async function save(base, project, file, { history: keepHistory = true } = {}) {
   if (!keepHistory) return file;
   lastFile = file;
   // Versjonshistorikk: en kopi med noen minutters mellomrom (i bakgrunnen).
-  history.snapshot(file, text).catch((err) => console.warn('Project history', err.message));
+  const pending = (pendingHistory.get(file) || Promise.resolve())
+    .then(() => history.snapshot(file, text))
+    .catch((err) => console.warn('Project history', err.message));
+  pendingHistory.set(file, pending);
+  pending.finally(() => { if (pendingHistory.get(file) === pending) pendingHistory.delete(file); });
   return file;
 }
 
@@ -189,6 +197,114 @@ async function rename(file, name) {
 }
 
 let lastFile = null;
+const pendingHistory = new Map();
+let moving = false;
+
+// Copy first, including across disks. The saved original is only removed once the
+// destination project and its history have been rewritten and read successfully.
+async function move(base, project, file, location) {
+  if (moving) throw new Error('A project is already being moved.');
+  if (!file || !location) throw new Error('Choose a project location first.');
+  moving = true;
+  let destination;
+  let committed = false;
+  try {
+    await save(base, project, file, { history: false });
+    await pendingHistory.get(file);
+    await historySnapshot(file, 'before move');
+    const { own } = await folders(base, file);
+    const originalRoot = path.resolve(path.dirname(file));
+    const source = await fs.promises.realpath(path.dirname(file));
+    await fs.promises.mkdir(location, { recursive: true });
+    const parent = await fs.promises.realpath(location);
+    if (own && parent === path.dirname(source)) return { file };
+    if (inside(source, parent)) throw new Error('Choose a location outside the current project folder.');
+    const target = path.join(parent, own ? path.basename(source) : safeName(path.basename(file, path.extname(file))));
+    // An exclusive mkdir reserves our destination; never merge with existing data.
+    try { await fs.promises.mkdir(target); }
+    catch (err) {
+      if (err.code === 'EEXIST') throw new Error(`A folder named "${path.basename(target)}" already exists in this location.`);
+      throw err;
+    }
+    destination = target;
+    const nextFile = path.join(target, path.basename(file));
+    const snapshots = await history.list(file);
+    if (own) {
+      for (const entry of await fs.promises.readdir(source)) {
+        await fs.promises.cp(path.join(source, entry), path.join(target, entry), { recursive: true, dereference: true, force: false, errorOnExist: true });
+      }
+    } else {
+      // Legacy projects share their media folders with other projects.
+      await fs.promises.copyFile(file, nextFile, fs.constants.COPYFILE_EXCL);
+      await fs.promises.mkdir(path.join(target, 'Auto-Save'));
+      for (const item of snapshots) {
+        if (isSnapshot(file, item.file)) await fs.promises.copyFile(item.file, path.join(target, 'Auto-Save', path.basename(item.file)));
+      }
+    }
+    const rewrite = (data) => {
+      if (own) {
+        const rebase = (value) => {
+          if (typeof value === 'string' && path.isAbsolute(value)) {
+            for (const root of [originalRoot, source]) if (inside(root, value)) return path.join(target, path.relative(root, value));
+          }
+          if (Array.isArray(value)) return value.map(rebase);
+          if (value && typeof value === 'object') for (const key of Object.keys(value)) value[key] = rebase(value[key]);
+          return value;
+        };
+        // These records also hold thumbnail files and paths to derived media.
+        rebase(data.media);
+        rebase(data.designAssets);
+      }
+      addRelative(data, target);
+      return data;
+    };
+    // Neighbouring project documents and all snapshots travel with an owned folder.
+    for (const entry of await fs.promises.readdir(target)) {
+      if (!EXTENSIONS.some((ext) => entry.endsWith(ext))) continue;
+      const doc = path.join(target, entry);
+      const data = rewrite(JSON.parse(await fs.promises.readFile(doc, 'utf8')));
+      await fs.promises.writeFile(doc, JSON.stringify(data));
+    }
+    const zlib = require('zlib');
+    const auto = path.join(target, 'Auto-Save');
+    for (const entry of await fs.promises.readdir(auto).catch((err) => { if (err.code === 'ENOENT') return []; throw err; })) {
+      if (!entry.endsWith('.reccut.gz')) continue;
+      const snapshot = path.join(auto, entry);
+      const data = rewrite(await history.read(snapshot));
+      await fs.promises.writeFile(snapshot, zlib.gzipSync(JSON.stringify(data)));
+    }
+    // Verify that the new project can be loaded before changing recent projects.
+    const movedProject = JSON.parse(await fs.promises.readFile(nextFile, 'utf8'));
+    await folders(base, nextFile);
+    await writeRecent([nextFile, ...(await readRecent()).filter((f) => f !== file && f !== nextFile)]);
+    lastFile = nextFile;
+    committed = true;
+    let warning;
+    try {
+      if (own) await fs.promises.rm(source, { recursive: true });
+      else {
+        await fs.promises.unlink(file);
+        for (const item of snapshots) if (isSnapshot(file, item.file)) await fs.promises.unlink(item.file);
+      }
+    } catch {
+      warning = 'The project was moved, but some files remain in the original folder.';
+    }
+    return { file: nextFile, project: movedProject, warning };
+  } finally {
+    if (destination && !committed) await fs.promises.rm(destination, { recursive: true, force: true }).catch(() => {});
+    moving = false;
+  }
+}
+
+function inside(root, file) {
+  const relative = path.relative(root, file);
+  return relative === '' || (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative));
+}
+
+function isSnapshot(file, snapshot) {
+  const base = path.basename(file, path.extname(file));
+  return /^ \d{4}-/.test(path.basename(snapshot).slice(base.length));
+}
 
 // Versjoner av prosjektet i Auto-Save-mappen.
 async function historyList(file) {
@@ -200,7 +316,9 @@ async function historyLoad(snapshotFile, projectFile) {
   return data;
 }
 async function historySnapshot(file, reason) {
-  return history.snapshot(file || lastFile, null, { force: true, reason });
+  file ||= lastFile;
+  await pendingHistory.get(file);
+  return history.snapshot(file, null, { force: true, reason });
 }
 
 async function forget(file) {
@@ -214,4 +332,4 @@ async function trash(base, file) {
   await shell.trashItem(f.own ? f.root : file).catch(() => fs.promises.unlink(file).catch(() => {}));
 }
 
-module.exports = { historyList, historyLoad, historySnapshot, lastSaved: () => lastFile, list, load, save, saveAs, create, folders, forget, rename, trash, touchRecent };
+module.exports = { historyList, historyLoad, historySnapshot, lastSaved: () => lastFile, list, load, save, saveAs, create, folders, forget, rename, move, trash, touchRecent };

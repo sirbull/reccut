@@ -692,6 +692,12 @@ export function moveClip(project, id, { start, lane, primaryIndex }) {
   }
   c.start = Math.max(0, round(start));
   c.lane = lane;
+  // Lyd blir i sporet den slippes i; lydklippene den overlapper der bytter til nærmeste ledige spor under.
+  if (lane < 0 && !project.lanes?.[lane]?.locked) {
+    for (const o of Object.values(project.clips)) {
+      if (o.id !== c.id && o.lane === lane && o.start < c.start + c.dur - 1e-6 && c.start < o.start + o.dur - 1e-6) resolveLane(project, o);
+    }
+  }
   resolveLane(project, c);
   syncRecordingTracks(project);
   updateDuration(project);

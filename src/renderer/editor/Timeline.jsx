@@ -149,6 +149,11 @@ export function laneRows(p) {
 }
 
 const tx = (t) => PAD + t * pps.value;
+const MAX_PPS = 2400;
+// Alt som gjøres med musa på tidslinjen, havner på en hel frame.
+const fpsOf = () => project.value.fps || 30;
+const floorFrame = (t) => Math.floor(t * fpsOf() + 1e-6) / fpsOf();
+const roundFrame = (t) => Math.round(t * fpsOf()) / fpsOf();
 
 // Alle spor av samme slag (for Shift og endring av høyden på flere spor samtidig).
 function kindLanes(p, kind) {
@@ -282,7 +287,7 @@ export function Timeline() {
   const anchorRef = useRef(null);
   const zoomTo = (next, t, offset) => {
     const a = anchorRef.current || { t, offset };
-    const value = Math.min(800, Math.max(1, next));
+    const value = Math.min(MAX_PPS, Math.max(1, next));
     // Ved grensen for zoom skjer ingen ny tegning, så ankeret glemmes med en gang.
     if (Math.abs(value - pps.value) < 1e-9) {
       anchorRef.current = null;
@@ -354,7 +359,7 @@ export function Timeline() {
       fit: () => {
         const sc = scrollRef.current;
         const d = Math.max(1, project.value.duration);
-        pps.value = Math.min(800, Math.max(1, (sc.clientWidth - PAD * 2 - 20) / d));
+        pps.value = Math.min(MAX_PPS, Math.max(1, (sc.clientWidth - PAD * 2 - 20) / d));
         sc.scrollLeft = 0;
       },
     });
@@ -362,7 +367,7 @@ export function Timeline() {
 
   const timeAt = (clientX) => {
     const rect = contentRef.current.getBoundingClientRect();
-    return Math.max(0, (clientX - rect.left - PAD) / pps.value);
+    return floorFrame(Math.max(0, (clientX - rect.left - PAD) / pps.value));
   };
   const rowAt = (clientY) => {
     const rect = contentRef.current.getBoundingClientRect();
@@ -371,6 +376,7 @@ export function Timeline() {
   };
 
   const snap = (t, exclude = new Set(), extra = []) => {
+    t = roundFrame(t);
     if (!snapping.value) return { t };
     const thresh = 8 / pps.value;
     let best = null;
@@ -386,7 +392,7 @@ export function Timeline() {
       consider(c.start + c.dur);
     }
     extra.forEach(consider);
-    return best == null ? { t } : { t: best, snapped: true };
+    return best == null ? { t } : { t: roundFrame(best), snapped: true };
   };
 
   /* Pekerhendelser */
@@ -627,7 +633,7 @@ export function Timeline() {
       d.moved = true;
       beginTransient();
     }
-    const dt = (e.clientX - d.x) / pps.value;
+    const dt = roundFrame((e.clientX - d.x) / pps.value);
     const c = d.clip;
 
     if (d.kind === 'transition-resize') {
@@ -768,7 +774,7 @@ export function Timeline() {
         } else {
           const s1 = snap(c.start + dt, new Set([c.id]));
           const s2 = snap(c.start + c.dur + dt, new Set([c.id]));
-          let start = c.start + dt;
+          let start = roundFrame(c.start + dt);
           let sl = null;
           if (s1.snapped && (!s2.snapped || Math.abs(s1.t - (c.start + dt)) <= Math.abs(s2.t - (c.start + c.dur + dt)))) {
             start = s1.t;
@@ -784,7 +790,7 @@ export function Timeline() {
         // Flere klipp: flytt bare de frie i tid. Klipp gruppert med et klipp i hovedsporet blir der videoen er.
         const anchored = new Set(d.originalProject.primary.map((id) => d.originalProject.clips[id].group).filter((g) => g && g !== editingGroup.value));
         updateTransient((p) => {
-          for (const o of d.originals) if (o.lane !== 0 && !anchored.has(o.group) && p.clips[o.id]) p.clips[o.id].start = Math.max(0, o.start + dt);
+          for (const o of d.originals) if (o.lane !== 0 && !anchored.has(o.group) && p.clips[o.id]) p.clips[o.id].start = Math.max(0, roundFrame(o.start + dt));
           syncRecordingTracks(p);
         });
       }
@@ -1071,6 +1077,7 @@ export function Timeline() {
           <div class="tl-skimmer" ref={skimRef} />
           <div class="tl-playhead" ref={playheadRef}>
             <div class="head" />
+            {z / fpsOf() >= 6 && <div class="frame" style={{ width: z / fpsOf() }} />}
           </div>
         </div>
       </div>
@@ -1218,8 +1225,8 @@ function TimelineToolbar() {
           min={0}
           max={100}
           step={0.1}
-          value={Math.log(pps.value) / Math.log(800) * 100}
-          onInput={(e) => (pps.value = Math.max(1, Math.pow(800, Number(e.currentTarget.value) / 100)))}
+          value={Math.log(pps.value) / Math.log(MAX_PPS) * 100}
+          onInput={(e) => (pps.value = Math.max(1, Math.pow(MAX_PPS, Number(e.currentTarget.value) / 100)))}
         />
         <IconButton icon={ZoomIn} title={`Zoom In (${isMac ? '⌘+' : 'Ctrl++'})`} onClick={() => commands.zoom(1.5)} />
       </div>

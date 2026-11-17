@@ -28,7 +28,7 @@ import {
 } from 'lucide-preact';
 import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
 import { AudioFxIcon } from './audioIcons.jsx';
-import { renameSequence, sequenceList, timelines, CAPTION_LANE, EFFECTS, REDACT_MODES, HIGHLIGHT_DEFAULTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject, vfxProp } from '../../shared/model.js';
+import { renameSequence, sequenceList, timelines, CAPTION_LANE, EFFECTS, FRAME_FX, REDACT_MODES, HIGHLIGHT_DEFAULTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject, vfxProp } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { onFlareSprites } from '../../shared/lensFlareRender.js';
 import { parseSrt, speechSources, toSrt, toVtt } from '../../shared/srt.js';
@@ -1021,11 +1021,6 @@ function frameFxFrameAt(mode) {
   }
   return frameFxFrames.get(mode);
 }
-const FRAME_FX = [
-  { id: 'blur', label: 'Blur', desc: 'Blurs the whole picture.' },
-  { id: 'pixelate', label: 'Pixelate', desc: 'Pixelates the whole picture.' },
-  { id: 'frosted', label: 'Frosted Glass', desc: 'Blur and blocks together.' },
-];
 
 function EffectsTab() {
   return (

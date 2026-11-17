@@ -1,4 +1,6 @@
 import { uid, sourceTime } from './model.js';
+import { BLEND_MODES } from './blendModes.js';
+export { BLEND_MODES } from './blendModes.js';
 export { dilateAlpha, erodeAlpha, designClipGroups, layerToSourcePoint, sourceToLayerPoint } from './designMasks.js';
 import { normalizeTextStyles } from './designRichText.js';
 import { normalizeDesignPattern } from './designPattern.js';
@@ -22,7 +24,6 @@ export const DESIGN_SIZES = [
   { id: 'x', label: 'X Post', group: 'Social', width: 1600, height: 900 },
   { id: 'podcast', label: 'Podcast Cover', group: 'Other', width: 3000, height: 3000 },
 ];
-export const BLEND_MODES = ['source-over', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity'];
 const number = (v, fallback, min = -1e6, max = 1e6) => Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
 const object = (v) => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
 const string = (v, fallback) => typeof v === 'string' ? v : fallback;

@@ -117,6 +117,15 @@ test('avslåtte klipp vises ikke og høres ikke', () => {
   assert.equal(computeAudio(p, 1).length, 0);
 });
 
+test('lydklipp som dras over et annet lydklipp skyver det til et nytt spor', () => {
+  const p = setup();
+  const x = addMediaClip(p, p.media.m, 'connect', 0, -1, { dur: 5 });
+  const y = addMediaClip(p, p.media.m, 'connect', 6, -1, { dur: 5 });
+  moveClip(p, y, { start: 3, lane: -1 });
+  assert.equal(p.clips[y].lane, -1);
+  assert.equal(p.clips[x].lane, -2);
+});
+
 test('flytting mellom hovedspor og tilkoblet spor', () => {
   const p = setup();
   const a = p.primary[0];

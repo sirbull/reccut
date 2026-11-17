@@ -5,6 +5,7 @@ import { FilePlus2, FolderOpen, FolderSearch, MoreHorizontal } from 'lucide-prea
 import { PROJECT_TEMPLATES, formatDuration, sequenceList, timelines } from '../shared/model.js';
 import { defaultProjectName, needsProject, newProjectNamed, openProjectFile, project, projectPath, renameProject, restoreProject, saveNow, saveProjectAs, sequenceSettingsOpen } from './editor/store.js';
 import { ProjectSettings } from './editor/Inspector.jsx';
+import { ProjectLocation } from './editor/ProjectLocation.jsx';
 import { SequenceFormatSettings } from './editor/SequenceFormatSettings.jsx';
 import { prefs, setPrefs } from './prefs.js';
 import { designFiles, mediaFiles, reduceProject, trimProject } from '../shared/package.js';
@@ -53,7 +54,7 @@ export function NewProjectDialog() {
   const sep = api.platform === 'win32' ? '\\' : '/';
   const finalName = name.trim() || defaultProjectName();
   const create = async () => {
-    if (busy) return;
+    if (busy || !location) return;
     setBusy(true);
     try {
       const t = PROJECT_TEMPLATES.find((x) => x.id === tpl);
@@ -81,7 +82,7 @@ export function NewProjectDialog() {
               Cancel
             </Button>
           )}
-          <Button variant="primary" onClick={create} disabled={busy}>
+          <Button variant="primary" onClick={create} disabled={busy || !location}>
             Create Project
           </Button>
         </>
@@ -166,9 +167,7 @@ function ProjectInfo({ onRenamed }) {
           </Button>
         )}
       </div>
-      <Row label="Location">
-        <span class="value path" title={projectPath.value || ''}>{projectPath.value || 'Not saved yet'}</span>
-      </Row>
+      <ProjectLocation onMoved={onRenamed} />
       <Row label="Format">
         <span class="value">
           {p.width} × {p.height} · {p.fps} fps

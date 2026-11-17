@@ -1,6 +1,6 @@
 /* Reccut: mørkegrått og rolig, inspirert av Final Cut Pro. */
 :root {
-  --cut-cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'32'%20height%3D'32'%20viewBox%3D'0%200%2024%2024'%20fill%3D'none'%20stroke-linecap%3D'round'%20stroke-linejoin%3D'round'%3E%3Cg%20stroke%3D'black'%20stroke-width%3D'3.5'%3E%3Ccircle%20cx%3D'6'%20cy%3D'6'%20r%3D'3'%2F%3E%3Ccircle%20cx%3D'6'%20cy%3D'18'%20r%3D'3'%2F%3E%3Cpath%20d%3D'M8.12%208.12%2021%2021M8.12%2015.88%2021%203'%2F%3E%3C%2Fg%3E%3Cg%20stroke%3D'white'%20stroke-width%3D'1.7'%3E%3Ccircle%20cx%3D'6'%20cy%3D'6'%20r%3D'3'%2F%3E%3Ccircle%20cx%3D'6'%20cy%3D'18'%20r%3D'3'%2F%3E%3Cpath%20d%3D'M8.12%208.12%2021%2021M8.12%2015.88%2021%203'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 28 4, crosshair;
+  --cut-cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'20'%20height%3D'20'%20viewBox%3D'0%200%2024%2024'%20fill%3D'none'%20stroke-linecap%3D'round'%20stroke-linejoin%3D'round'%3E%3Cg%20stroke%3D'black'%20stroke-width%3D'3.5'%3E%3Ccircle%20cx%3D'6'%20cy%3D'6'%20r%3D'3'%2F%3E%3Ccircle%20cx%3D'6'%20cy%3D'18'%20r%3D'3'%2F%3E%3Cpath%20d%3D'M8.12%208.12%2021%2021M8.12%2015.88%2021%203'%2F%3E%3C%2Fg%3E%3Cg%20stroke%3D'white'%20stroke-width%3D'1.7'%3E%3Ccircle%20cx%3D'6'%20cy%3D'6'%20r%3D'3'%2F%3E%3Ccircle%20cx%3D'6'%20cy%3D'18'%20r%3D'3'%2F%3E%3Cpath%20d%3D'M8.12%208.12%2021%2021M8.12%2015.88%2021%203'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 18 3, crosshair;
   --bg-0: #141416;
   --bg-1: #1c1c1e;
   --bg-2: #232325;
@@ -609,6 +609,20 @@ input[type='color'].color::-webkit-color-swatch {
   text-overflow: ellipsis;
   white-space: nowrap;
   direction: rtl;
+}
+.path-btn.project-location {
+  width: 100%;
+  max-width: 100%;
+}
+.row-control:has(> .project-location) {
+  width: 100%;
+  min-width: 0;
+}
+.project-location svg { flex: none; }
+.project-location span {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
 }
 
 /* Opptaksrom */
@@ -1988,6 +2002,14 @@ input[type='color'].color::-webkit-color-swatch {
   margin-left: -5px;
   background: var(--red);
   clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
+}
+/* Lengden på framen spillhodet står på, vist når man har zoomet langt inn. */
+.tl-playhead .frame {
+  position: sticky;
+  top: 0;
+  height: 3px;
+  margin-top: -13px;
+  background: var(--red);
 }
 
 /* Modaler, meldinger og oppgaver */

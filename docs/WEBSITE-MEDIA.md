@@ -68,3 +68,13 @@ To capture a new recording demo, run `node scripts/capture-recording.cjs [raw-re
 The raw screen and camera feed the real recording engine separately through canvas streams, with the camera's audio routed internally as microphone input. No live screen, camera or microphone is accessed. The capture uses a separate app profile. The saved edit directly references local copies of the raw recording, rather than a flattened video. Its title reads “Play the game yourself at sirbull.itch.io/echoes-of-quite-recent”.
 
 The website's recorder loop is muted; the finished edit and project retain the microphone audio. MP4 is used instead of GIF to keep the animated demo small and preserve legible interface text. The original quality export remains in the project's Exports folder; the website uses a compressed copy. Frame exports at 0, 0.35, 0.8 and 3.5 seconds are retained in the capture workspace for fade/title verification.
+
+## Effects handbook images — 17 November 2026
+
+`assets/help/effects-hue-saturation.jpg`, `effects-light-leaks.jpg`, `effects-blinking-lights.jpg` and `effects-blend-mode.jpg` are photographed from the real editor with the nature clips from the Into the Wild demo (Falling water, Coastal ridge, Quiet coast, Mountain lake, Blossoms and bees). Run `npm run build`, then:
+
+```sh
+node scripts/capture-effects.cjs "$HOME/Movies/Reccut/Website Demos - 2026-11-05/Into the Wild/Media"
+```
+
+The script uses a temporary, isolated app profile like the other capture scripts and writes to `assets/help`. Run `npm run docs` afterwards to copy the images to the website handbook. Lens Flare images are not part of this script.
