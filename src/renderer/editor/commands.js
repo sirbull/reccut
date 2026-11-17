@@ -748,7 +748,7 @@ export function deleteMarkerAt(id) {
 export function setRange(which) {
   // I og O i biblioteket markerer i klippet under skummeren (eller ved bibliotekets spillhode).
   // Viser visningen et klipp fra biblioteket (liste- eller ikonvisning), markerer I og O i det.
-  if ((browserFocus.value || sourceProject.value) && browserMark(which)) return;
+  if ((browserFocus.value || sourceProject.value || browserSkimPos.mediaId) && browserMark(which)) return;
   const T = getTime();
   // I og O på samme sted fjerner området.
   const other = project.value.range?.[which === 'in' ? 'out' : 'in'];
@@ -944,8 +944,10 @@ function mediaDuration(m) {
 
 // Setter start eller slutt på området i et bibliotekklipp. Gir false om ingen klipp er aktuelt.
 export function browserMark(which) {
-  let pos = sourceProject.value
-    ? { mediaId: sourceMediaId.value, t: getViewerTime() }
+  // Skummeren går foran klippet i visningen bare når det er den visningen viser nå (ikke en gammel posisjon).
+  const skimShown = browserSkimPos.mediaId && skim.value?.mediaId === browserSkimPos.mediaId;
+  let pos = skimShown ? browserSkimPos
+    : sourceProject.value ? { mediaId: sourceMediaId.value, t: getViewerTime() }
     : browserSkimPos.mediaId ? browserSkimPos : browserPlayhead.value;
   if (!pos || !project.value.media[pos.mediaId]) {
     const id = browserSelection.value;

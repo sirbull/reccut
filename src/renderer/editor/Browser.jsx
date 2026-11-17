@@ -28,8 +28,9 @@ import {
 } from 'lucide-preact';
 import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
 import { AudioFxIcon } from './audioIcons.jsx';
-import { renameSequence, sequenceList, timelines, CAPTION_LANE, EFFECTS, REDACT_MODES, HIGHLIGHT_DEFAULTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject } from '../../shared/model.js';
+import { renameSequence, sequenceList, timelines, CAPTION_LANE, EFFECTS, REDACT_MODES, HIGHLIGHT_DEFAULTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject, vfxProp } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
+import { onFlareSprites } from '../../shared/lensFlareRender.js';
 import { parseSrt, speechSources, toSrt, toVtt } from '../../shared/srt.js';
 import { addMediaRecords, switchSequence, usedMedia, projectFolders, audioSkimming, commit, endPreview, getWave, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
@@ -393,11 +394,29 @@ function MediaListRow({ m }) {
   const used = usedMedia.value.has(m.id);
   const range = commands.browserRange.value?.mediaId === m.id ? commands.browserRange.value : null;
   const Icon = m.kind === 'audio' ? FileAudio : m.kind === 'image' ? ImageIcon : m.kind === 'recording' ? Video : Film;
+  // Skumming: raden er klippet fra start (venstre) til slutt (høyre). I og O markerer under skummeren.
+  const [skimAt, setSkimAt] = useState(null);
+  const dur = m.kind === 'image' ? prefs.value.stillDur : m.duration || 0.04;
+  const onMove = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const t = Math.max(0, Math.min(dur, ((e.clientX - r.left) / Math.max(1, r.width)) * dur));
+    setSkimAt(t);
+    commands.browserSkimPos.mediaId = m.id;
+    commands.browserSkimPos.t = t;
+    if (skimming.value && !playing.value) skim.value = { project: mediaPreviewProject(m), T: Math.min(t, dur - 1e-3), mediaId: m.id };
+  };
+  const onLeave = () => {
+    setSkimAt(null);
+    if (commands.browserSkimPos.mediaId === m.id) commands.browserSkimPos.mediaId = null;
+    if (skim.value?.mediaId === m.id) skim.value = null;
+  };
   return (
     <div
       class={`media-row${selected ? ' selected' : ''}`}
       role="listitem"
       data-media={m.id}
+      onPointerMove={onMove}
+      onPointerLeave={onLeave}
       draggable
       onDragStart={(e) => dragData(e, { kind: 'media', id: m.id, ids: commands.browserPicked.value.includes(m.id) ? mediaOrder.filter((x) => commands.browserPicked.value.includes(x)) : [m.id] })}
       onClick={(e) => commands.pickMedia(e, m.id, mediaOrder)}
@@ -416,6 +435,7 @@ function MediaListRow({ m }) {
       </span>
       <span class="row-dur">{range ? `${formatDuration(range.out - range.in)} of ${formatDuration(m.duration || 0)}` : m.kind === 'image' ? 'Still' : formatDuration(m.duration || 0)}</span>
       <span class="row-fmt">{mediaFormat(m)}</span>
+      {skimAt != null && m.kind !== 'image' && <div class="film-skimmer" style={{ left: `${(skimAt / dur) * 100}%` }} />}
     </div>
   );
 }
@@ -823,7 +843,8 @@ function MiniPreview({ frameAt, duration = 1.6, still = 0.5, label }) {
     };
     if (!hover) {
       draw(still * duration);
-      return;
+      // Lens flare-teksturer kommer litt etter; tegn stillbildet på nytt når de er klare.
+      return onFlareSprites(() => draw(still * duration));
     }
     let raf = 0;
     const t0 = performance.now();
@@ -941,9 +962,13 @@ function effectFrameAt(fx) {
         : BROWSER_VIDEO_EFFECTS.some((e) => e.type === fx.id)
         ? { vfx: [makeVideoEffect(fx.id)] }
         : { [fx.prop]: fx.def * (0.15 + 0.85 * k), fx: [fx.id] };
+      // The actual mixer starts neutral; the browser thumbnail demonstrates it.
+      if (fx.id === 'hueSaturation') Object.assign(props.vfx[0].p, { redHue: 100 * k, blueSaturation: -0.8 * k });
       const framed = ['radius', 'shadow', 'border'].includes(fx.id);
       if (framed) props.scale = 0.72;
       const clip = imageClip('scene', 0, 2, props);
+      // Lens Flare: lyset glir over bildet, så refleksjonene beveger seg motsatt vei.
+      if (fx.id === 'lensFlare') clip.kf[vfxProp(props.vfx[0].id, 'x')] = [[0, 0.3, 'easeInOut'], [2, 0.78]];
       const proj = { ...PREVIEW_PROJECT, width: 320, height: 180 };
       const layers = framed ? [{ clip: imageClip('scene', 0, 2, { exposure: -0.45, blur: 6 }), T: t }, { clip, T: t }] : [{ clip, T: t }];
       return { project: proj, frame: { layers, captions: [] } };
@@ -1025,6 +1050,18 @@ function EffectsTab() {
         </button>
       </div>
       <p class="hint small">Affects all video tracks below it. Trim or extend the layer across clips, then add Color, Effects or Masks in the inspector. Video → Layer strength blends the result.</p>
+      <div class="sub-head">Color correction</div>
+      <div class="card-grid" onPointerLeave={endPreview}>
+        {BROWSER_VIDEO_EFFECTS.filter((fx) => fx.category === 'Color correction').map((fx) => (
+          <button key={fx.type} class="gen-card" data-colorfx={fx.type} draggable
+            onDragStart={(e) => dragData(e, { kind: 'effect', id: fx.type })}
+            onClick={() => commands.addEffect(fx.type)}
+            title="Adjust hue and saturation for individual color ranges. Click to add to selected clips, or drag onto a clip or an adjustment layer.">
+            <MiniPreview frameAt={effectFrameAt({ id: fx.type })} duration={2} still={1} label={fx.label} />
+            <span>{fx.label}</span>
+          </button>
+        ))}
+      </div>
       <div class="sub-head">Color fills</div>
       <div class="card-grid" onPointerLeave={endPreview}>
         {BROWSER_VIDEO_EFFECTS.filter((fx) => fx.category === 'Color fills').map((fx) => (

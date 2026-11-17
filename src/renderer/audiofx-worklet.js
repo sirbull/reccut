@@ -17,7 +17,10 @@ class ReccutFx extends AudioWorkletProcessor {
       this.chain.update((Array.isArray(d) ? d : d?.list) || []);
     };
     if (options?.processorOptions?.init) apply(options.processorOptions.init);
-    this.port.onmessage = (e) => apply(e.data);
+    // 'stop': klippet er kastet. process() returnerer false, ellers lever noden og regner for alltid.
+    this.alive = true;
+    this.quiet = 0;
+    this.port.onmessage = (e) => (e.data === 'stop' ? (this.alive = false) : apply(e.data));
   }
 
   process(inputs, outputs) {
@@ -41,6 +44,17 @@ class ReccutFx extends AudioWorkletProcessor {
     } else {
       this.L.set(inp[0]);
       this.R.set(inp[1] || inp[0]);
+    }
+    if (!this.alive) return false;
+    // Stille inn lenge nok til at hale og pitch-buffer er tømt: hopp over effektene.
+    // ponytail: 5 s dekker romklang og ekko her; øk hvis en effekt får lengre hale.
+    let silent = true;
+    for (let i = 0; i < n && silent; i++) silent = this.L[i] === 0 && this.R[i] === 0;
+    this.quiet = silent ? this.quiet + n : 0;
+    if (this.quiet > sampleRate * 5) {
+      out[0].fill(0);
+      out[1]?.fill(0);
+      return true;
     }
     this.chain.process(this.L, this.R, n);
     out[0].set(this.L.subarray(0, n));

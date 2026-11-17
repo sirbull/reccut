@@ -96,7 +96,7 @@ import { Button, IconButton } from '../ui.jsx';
 import * as commands from './commands.js';
 import { prefs, setPrefs } from '../prefs.js';
 import { fadePath, formatVolumeDb, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from './volume.js';
-import { libraryDropTarget, mediaDropPreview, resizedTransitionDuration } from '../../shared/libraryDrop.js';
+import { libraryDropTarget, mediaDropPreview, mediaDropProject, resizedTransitionDuration } from '../../shared/libraryDrop.js';
 import { endLibraryDrag, libraryDrag } from './libraryDrag.js';
 import { editMulticam } from './multicam.js';
 
@@ -656,6 +656,7 @@ export function Timeline() {
       const ids = new Set([d.a, d.b, recordingEditId(project.value, d.a), recordingEditId(project.value, d.b)]);
       for (const c of Object.values(project.value.clips)) if (ids.has(c.linkedTo || c.slideshowParent)) ids.add(c.id);
       updateTransient((p) => rollEdit(p, d.a, d.b, s1.t - d.cut), [...ids]);
+      showEdgeFrame(d.b, 'start');
       const cut = project.value.clips[d.b].start;
       setSnapLine(s1.snapped && Math.abs(cut - s1.t) < 1 / project.value.fps ? cut : null);
       return;
@@ -696,6 +697,7 @@ export function Timeline() {
       const s = snap(edgeT, new Set([c.id]));
       setSnapLine(s.snapped ? s.t : null);
       updateTransient((p) => positionTrim(p, c.id, d.edge, s.t - (d.edge === 'start' ? c.start : c.start + c.dur)));
+      showEdgeFrame(c.id, d.edge);
       return;
     }
     if (d.kind === 'trim') {
@@ -704,6 +706,7 @@ export function Timeline() {
       setSnapLine(s.snapped ? s.t : null);
       const delta = s.t - (d.edge === 'start' ? c.start : c.start + c.dur);
       updateTransient((p) => trimClip(p, c.id, d.edge, delta));
+      showEdgeFrame(c.id, d.edge);
       return;
     }
     if (d.kind === 'fade') {
@@ -787,6 +790,12 @@ export function Timeline() {
       }
     }
   };
+  // Under trimming viser visningen den nye første (eller siste) framen i klippet, som i Final Cut Pro.
+  const showEdgeFrame = (id, edge) => {
+    const c = project.value.clips[id];
+    const fps = project.value.fps;
+    if (c) skim.value = { T: edge === 'start' ? c.start : (Math.round((c.start + c.dur) * fps) - 1) / fps };
+  };
   const onPointerMove = (e) => {
     lastMoveRef.current = e;
     withConnectionsOverridden(overrideRef.current, () => dragMove(e));
@@ -811,6 +820,7 @@ export function Timeline() {
     setGhost(null);
     setSnapLine(null);
     if (d?.moved) endTransient(e.type !== 'pointercancel');
+    if (d?.kind === 'trim' || d?.kind === 'ptrim' || d?.kind === 'roll') skim.value = null;
   };
 
   const onContextMenu = async (e) => {
@@ -877,11 +887,15 @@ export function Timeline() {
       const held = over && performance.now() - hoverRef.current.since > REPLACE_HOLD_MS;
       const replace = held ? mediaDropPreview(project.value, item, row.lane, T, over) : [];
       hoverRef.current.replace = replace.length ? over : null;
-      const clips = (replace.length ? replace : mediaDropPreview(project.value, item, row.lane, snap(T).t))
+      // Ved innsetting vises klippene der de havner, så de etter innsettingspunktet glir unna.
+      const drop = replace.length ? null : mediaDropProject(project.value, item, row.lane, snap(T).t);
+      const placed = drop ? drop.ids.map((id) => drop.project.clips[id]).map((c) => ({ a: c.start, b: c.start + c.dur, lane: c.lane })) : replace;
+      const clips = placed
         .map((clip) => ({ ...clip, row: rows.find((r) => r.lane === clip.lane) }))
         .filter((clip) => clip.row);
       e.dataTransfer.dropEffect = clips.length ? 'copy' : 'none';
-      setGhost(clips.length ? { kind: 'media', replace: replace.length > 0, clips, pointer: { x: e.clientX, y: e.clientY } } : null);
+      const shift = drop && clips.length ? { project: drop.project, hide: new Set(drop.ids) } : null;
+      setGhost(clips.length ? { kind: 'media', replace: replace.length > 0, clips, shift, pointer: { x: e.clientX, y: e.clientY } } : null);
     } else if (item && ['transition', 'effect', 'afx', 'apreset', 'frameFx', 'redact', 'adjustment'].includes(item.kind)) {
       skim.value = null;
       if (skimRef.current) skimRef.current.style.display = 'none';
@@ -933,7 +947,7 @@ export function Timeline() {
       <TrackHeaders rows={rows} p={p} scrollRef={scrollRef} />
       <div class="tl-scroll" ref={scrollRef}>
         <div
-          class={`tl-content tool-${tool.value}`}
+          class={`tl-content tool-${tool.value}${ghost?.kind === 'media' || dragRef.current?.kind === 'move' ? ' animate-clips' : ''}`}
           ref={contentRef}
           style={{ width, height: height + RULER_H + 40 }}
           onPointerDown={onPointerDown}
@@ -983,7 +997,9 @@ export function Timeline() {
               const byLane = new Map(rows.map((r) => [r.lane, r]));
               const sel = new Set(selection.value);
               const out = [];
-              for (const c of Object.values(p.clips)) {
+              const shift = ghost?.kind === 'media' ? ghost.shift : null;
+              for (const c of Object.values(shift ? shift.project.clips : p.clips)) {
+                if (shift?.hide.has(c.id)) continue;
                 if (c.start + c.dur < t0 || c.start > t1) continue;
                 const row = byLane.get(c.lane);
                 if (row) out.push(<Clip key={c.id} clip={c} row={row} media={p.media[c.mediaId]} selected={sel.has(c.id)} z={z} labelStart={labelInsets.get(c.id)?.start || 0} labelEnd={labelInsets.get(c.id)?.end || 0} />);
@@ -1481,7 +1497,7 @@ function Keyframes({ clip, z }) {
   const times = new Map();
   for (const [prop, list] of Object.entries(clip.kf || {})) {
     if (['volume', 'micVolume', 'sysVolume', 'layout'].includes(prop)) continue;
-    for (const [t, , e] of list) if (t >= clip.in - 1e-4 && t <= clip.in + clip.dur * kfRate(clip) + 1e-4) times.set(t, [...(times.get(t) || []), prop + (e && e !== 'linear' ? ` (${e})` : '')]);
+    for (const [t, , e] of list) if (t >= clip.in - 1e-4 && t <= clip.in + clip.dur * kfRate(clip) + 1e-4) times.set(t, [...(times.get(t) || []), prop.replace(/^vfx\.[^.]+\./, '') + (e && e !== 'linear' ? ` (${e})` : '')]);
   }
   return (
     <div class="kf-row">

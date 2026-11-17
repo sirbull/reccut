@@ -13,6 +13,11 @@ import { readClipFrame, readClipFrames, encodeReference } from './sourceFrame.js
 import { Button, IconButton, NumberField, Row, Section, Select, Toggle, toast } from '../ui.jsx';
 import { RemoveEffectButton } from './RemoveEffectButton.jsx';
 import { GradientEditor } from './GradientEditor.jsx';
+import { LightLeakControls } from './LightLeakControls.jsx';
+import { BlinkingLights } from './BlinkingLights.jsx';
+import { LensFlareControls } from './LensFlareControls.jsx';
+import { HueSaturationControls } from './HueSaturationControls.jsx';
+import { pruneEffectKeyframes } from '../../shared/model.js';
 
 export function VideoEffects({ clip }) {
   const [busy, setBusy] = useState(false),
@@ -31,6 +36,13 @@ export function VideoEffects({ clip }) {
   const patchLive = (id, values) => updateTransient((q) => {
     const effect = q.clips[clip.id]?.props.vfx?.find((e) => e.id === id);
     if (effect) Object.assign(effect.p, values);
+  });
+  // Keyframes and expressions of a removed effect go with it.
+  const remove = (id) => commit((q) => {
+    const c = q.clips[clip.id];
+    if (!c) return;
+    c.props.vfx = c.props.vfx.filter((x) => x.id !== id);
+    pruneEffectKeyframes(c);
   });
   const add = async (type, auto = false) => {
     const warning = effectWarning(clip, type);
@@ -140,7 +152,7 @@ export function VideoEffects({ clip }) {
         if (!def) return <div key={e.id} class="afx-item"><div class="afx-head">
           <b>Unavailable effect: {e.type}</b>
           <RemoveEffectButton label={e.type} adjusted={true}
-            onRemove={() => edit((pr) => (pr.vfx = pr.vfx.filter((x) => x.id !== e.id)))} />
+            onRemove={() => remove(e.id)} />
         </div></div>;
         const p = effectParams(e),
           keyer = ['chroma', 'luma', 'difference'].includes(e.type);
@@ -174,17 +186,20 @@ export function VideoEffects({ clip }) {
                 size={12}
                 title="Duplicate effect"
                 onClick={() =>
-                  edit((pr) => {
-                    const copy = structuredClone(e);
+                  commit((q) => {
+                    const c = q.clips[clip.id], copy = structuredClone(e);
                     copy.id = makeVideoEffect(e.type).id;
-                    pr.vfx.splice(i + 1, 0, copy);
+                    c.props.vfx.splice(i + 1, 0, copy);
+                    // The copy keeps the original's animation.
+                    for (const [prop, list] of Object.entries(c.kf || {}))
+                      if (prop.startsWith(`vfx.${e.id}.`)) c.kf[`vfx.${copy.id}.${prop.slice(e.id.length + 5)}`] = structuredClone(list);
                   })
                 }
               />
               <RemoveEffectButton
                 label={def.label}
                 adjusted={Object.entries(e.p || {}).some(([key, value]) => JSON.stringify(value) !== JSON.stringify(def.defaults[key]))}
-                onRemove={() => edit((pr) => (pr.vfx = pr.vfx.filter((x) => x.id !== e.id)))}
+                onRemove={() => remove(e.id)}
               />
             </div>
             {e.type === 'solid' && <Row label="Color">
@@ -226,7 +241,7 @@ export function VideoEffects({ clip }) {
                 </p>
               </>
             )}
-            {def.controls ? <>
+            {e.type === 'hueSaturation' ? <HueSaturationControls clip={clip} effect={e} /> : e.type === 'lightLeak' ? <LightLeakControls clip={clip} effect={e} /> : e.type === 'lights' ? <BlinkingLights clip={clip} effect={e} /> : e.type === 'lensFlare' ? <LensFlareControls clip={clip} effect={e} /> : def.controls ? <>
               {def.presets && <Row label="Preset"><Select value="" options={[
                 { value: '', label: 'Choose a look…' }, ...def.presets.map((preset) => ({ value: preset.id, label: preset.label })),
               ]} onChange={(id) => { const preset = def.presets.find((x) => x.id === id); if (preset) patch(e.id, structuredClone(preset.p)); }} /></Row>}

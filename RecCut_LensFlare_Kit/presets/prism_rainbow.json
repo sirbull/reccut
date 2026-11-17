@@ -1,0 +1,191 @@
+{
+  "schema": "reccut.lensflare.preset.v1",
+  "id": "prism_rainbow",
+  "title": "Prism Rainbow",
+  "category": "Creative",
+  "optical_center_uv": [
+    0.5,
+    0.5
+  ],
+  "light_source_uv": [
+    0.29,
+    0.3
+  ],
+  "flare_spread": 1.0,
+  "global_intensity": 1.0,
+  "global_scale": 1.0,
+  "global_tint_linear": [
+    1,
+    1,
+    1
+  ],
+  "global_opacity": 1.0,
+  "coordinate_space": "UV [0..1] frame coordinates; offscreen source can exceed",
+  "width_definition": "display_width_as_fraction_of_video_height = sprite_width_px/video_height_px; preserve original image aspect ratio",
+  "animation": {
+    "enabled": false,
+    "keyframes": []
+  },
+  "elements": [
+    {
+      "id": "glow_white-+1.00",
+      "asset_id": "glow_white",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.95,
+      "rotation_degrees": 0,
+      "intensity": 0.8,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "starburst_12_white-+1.00",
+      "asset_id": "starburst_12_white",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.78,
+      "rotation_degrees": 0,
+      "intensity": 0.62,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "streak_white_thin-+1.00",
+      "asset_id": "streak_white_thin",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 2.5,
+      "rotation_degrees": 0,
+      "intensity": 0.4,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ring_rainbow--0.40",
+      "asset_id": "ring_rainbow",
+      "visible": true,
+      "distance": -0.4,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.92,
+      "rotation_degrees": 0,
+      "intensity": 0.65,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ghost_prism_round--0.80",
+      "asset_id": "ghost_prism_round",
+      "visible": true,
+      "distance": -0.8,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.42,
+      "rotation_degrees": 0,
+      "intensity": 0.64,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ring_prism_offset--1.20",
+      "asset_id": "ring_prism_offset",
+      "visible": true,
+      "distance": -1.2,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.63,
+      "rotation_degrees": 0,
+      "intensity": 0.62,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "arc_rainbow_top--1.55",
+      "asset_id": "arc_rainbow_top",
+      "visible": true,
+      "distance": -1.55,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 1.05,
+      "rotation_degrees": 0,
+      "intensity": 0.6,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ghost_hex_blue--1.85",
+      "asset_id": "ghost_hex_blue",
+      "visible": true,
+      "distance": -1.85,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.21,
+      "rotation_degrees": 0,
+      "intensity": 0.4,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    }
+  ]
+}

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Activity, Maximize2, Minimize2, Settings2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-preact';
-import { deepClone, formatTimecode, isVisual, kfTime, valueAt } from '../../shared/model.js';
+import { deepClone, formatTimecode, isVisual, kfTime, setPropBase, valueAt, vfxProp } from '../../shared/model.js';
+import { LIGHT_DEFAULTS } from '../../shared/lights.js';
+import { imageRectAt } from '../../shared/imageMotion.js';
 import { captionLayout, wrapText } from '../../shared/render.js';
 import { clipBox, clipMatrix, clipPivot, highlightOutline, maskList, shapeAt } from '../../shared/shapes.js';
-import { followMatrix } from '../../shared/follow.js';
+import { containRect, followMatrix } from '../../shared/follow.js';
 import { sourceMediaId } from './store.js';
 import { dragData } from './Browser.jsx';
 import { beginTransient, browserPlayhead, commit, endTransient, getTime, playing, project, selectedClips, room, selectedTransition, selection, skim, timeSig, updateTransient } from './store.js';
@@ -153,10 +155,12 @@ export function Viewer() {
             dragData(e, { kind: 'media', id, ids: [id] });
           }}
         />
+        {!source && !playing.value && <EditPointMarks canvasRef={canvasRef} />}
         {pen && sel?.id === pen.clipId && <PenOverlay clip={sel} canvasRef={canvasRef} />}
         {sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} corner={sel.props.mode === 'highlight' && sel.props.shape !== 'ellipse' ? valueAt(sel, 'corner', clipTime(sel)) ?? 0 : null} label={sel.props.mode === 'highlight' ? 'Highlight area. Drag to move, drag the handles to resize, and the round handle to rotate.' : 'Redaction. Drag to move, drag the handles to resize.'} />}
         {sel && sel.type !== 'redact' && trackArea.value === sel.id && !pen && <ShapeEditor clip={sel} prefix="track." shape="rect" smooth={false} canvasRef={canvasRef} label="Tracking area. Put it over what the clip should follow." />}
         {draggable && sel.type !== 'redact' && sel.type !== 'caption' && (commands.shownInspectorTab.value === 'video' || (commands.shownInspectorTab.value === 'recording' && sel.recordingPart === 'camera')) && !pen && !editMask && trackArea.value !== sel.id && <TransformBox clip={sel} canvasRef={canvasRef} />}
+        {sel && !pen && !editMask && commands.shownInspectorTab.value === 'effects' && <LightHandles clip={sel} canvasRef={canvasRef} />}
         {editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
       </div>
       {source && !fullscreen && <SourceBar mediaId={sourceMediaId.value} duration={source.duration} fps={p.fps} />}
@@ -244,7 +248,20 @@ function SourceBar({ mediaId, duration, fps }) {
   return (
     <div class="source-bar">
       <span class="source-bar-time">{range ? formatTimecode(range.in, fps) : '00:00:00:00'}</span>
-      <div class="source-bar-track" ref={barRef} onPointerDown={onDown} title="Scrub the clip. Press I and O to mark what to keep.">
+      <div
+        class="source-bar-track"
+        ref={barRef}
+        onPointerDown={onDown}
+        // Skumming: bildet følger pekeren over linjen; spillhodet står til du klikker.
+        onPointerMove={(e) => {
+          if (e.buttons || playing.value || !playback.sourceProject.value) return;
+          skim.value = { project: playback.sourceProject.value, T: Math.min(timeAt(e.clientX), dur - 1e-3), mediaId };
+        }}
+        onPointerLeave={() => {
+          if (skim.value?.mediaId === mediaId) skim.value = null;
+        }}
+        title="Scrub the clip. Press I and O to mark what to keep."
+      >
         {range && (
           <div class="source-bar-range" style={{ left: `${(range.in / dur) * 100}%`, width: `${((range.out - range.in) / dur) * 100}%` }}>
             <span class="source-bar-edge in" data-edge="in" title="Drag to change the start (I)" />
@@ -265,7 +282,7 @@ function SourceBar({ mediaId, duration, fps }) {
 // Skriver en verdi på klippet; har egenskapen nøkkelbilder, settes et nøkkelbilde ved spillhodet.
 function putValue(c, prop, v, T) {
   if (c.kf?.[prop]?.length) setKeyframe(c, prop, kfTime(c, T), v);
-  else c.props[prop] = v;
+  else setPropBase(c, prop, v);
 }
 
 // Klippets rom i bildet, med levende kobling til et spor (se follow.js).
@@ -320,6 +337,42 @@ function drawRedactBox(e, clip, canvas, p) {
   };
   canvas.addEventListener('pointermove', move);
   canvas.addEventListener('pointerup', up);
+}
+
+/* Kantmarkører som i Final Cut Pro: └ nede til venstre på første frame i et klipp, ┘ nede til høyre på siste.
+   Bare et overlegg i visningen, aldri i eksporten, og skjult under avspilling. */
+function EditPointMarks({ canvasRef }) {
+  const p = project.value;
+  const s = skim.value;
+  const T = s && !s.project && !s.mediaId ? s.T : timeSig.value;
+  const [box, setBox] = useState(null);
+  useEffect(() => {
+    const cv = canvasRef.current;
+    const measure = () => setBox({ left: cv.offsetLeft, top: cv.offsetTop, width: cv.offsetWidth, height: cv.offsetHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(cv);
+    return () => ro.disconnect();
+  }, []);
+  if (!box) return null;
+  const f = Math.round(T * p.fps);
+  let first = false;
+  let last = false;
+  for (const c of Object.values(p.clips)) {
+    if (c.type !== 'video' && c.type !== 'image' && c.type !== 'recording') continue;
+    const a = Math.round(c.start * p.fps);
+    const b = Math.round((c.start + c.dur) * p.fps) - 1;
+    if (b < a) continue;
+    if (f === a) first = true;
+    if (f === b) last = true;
+  }
+  if (!first && !last) return null;
+  return (
+    <div class="edit-point-marks" style={box}>
+      {first && <span class="first" />}
+      {last && <span class="last" />}
+    </div>
+  );
 }
 
 /* Transform i bildet: hjørnene skalerer, det runde håndtaket roterer, og krysset flytter ankerpunktet.
@@ -764,6 +817,119 @@ function PenOverlay({ clip, canvasRef }) {
         {pts.length < 3 ? 'Click to place points' : 'Click the first point or press Return to close'}
         {smooth ? ' (smooth)' : ''}
       </text>
+    </svg>
+  );
+}
+
+/* Blinking Lights i bildet: dra midten for å flytte lyset, det runde håndtaket for å endre størrelsen.
+   Posisjonen er en andel av klippets bilde, så lyset kan også ligge utenfor rammen. */
+
+function pictureRect(p, clip, T) {
+  if (clip.type === 'adjustment') return { x: 0, y: 0, w: p.width, h: p.height };
+  const m = p.media[clip.mediaId], st = m?.streams?.main;
+  const sw = st?.width || m?.width, sh = st?.height || m?.height;
+  if (!(sw > 0 && sh > 0) || !['video', 'image'].includes(clip.type)) return null; // ponytail: opptak (kamera/skjerm) plasseres i inspektøren
+  return clip.type === 'image' ? imageRectAt(clip, T, sw, sh, p.width, p.height) : containRect(sw, sh, p.width, p.height);
+}
+
+function LightHandles({ clip, canvasRef }) {
+  const p = project.value;
+  const T = timeSig.value;
+  const [box, setBox] = useState(null);
+  useEffect(() => {
+    const cv = canvasRef.current;
+    const measure = () => setBox({ left: cv.offsetLeft, top: cv.offsetTop, width: cv.offsetWidth, height: cv.offsetHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(cv);
+    return () => ro.disconnect();
+  }, []);
+  const effects = (clip.props.vfx || []).filter((e) => e.type === 'lights' && e.on !== false);
+  const flares = (clip.props.vfx || []).filter((e) => e.type === 'lensFlare' && e.on !== false);
+  if (!box || !(effects.length || flares.length) || T < clip.start || T > clip.start + clip.dur) return null;
+  const Tc = clipTime(clip);
+  const r = pictureRect(p, clip, Tc);
+  if (!r) return null;
+  const W = p.width, H = p.height, k = box.width / W;
+  const M = viewMatrix(p, clip, Tc), inv = M.inverse();
+  const value = (e, key) => valueAt(clip, vfxProp(e.id, key), Tc) ?? LIGHT_DEFAULTS[key];
+  const toClip = (ev, svg) => {
+    const b = svg.getBoundingClientRect();
+    return inv.transformPoint(new DOMPoint(((ev.clientX - b.left) / b.width) * W, ((ev.clientY - b.top) / b.height) * H));
+  };
+  const drag = (ev, e, keys, kind) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const el = ev.currentTarget, svg = el.ownerSVGElement;
+    el.setPointerCapture(ev.pointerId);
+    const start = toClip(ev, svg), x0 = value(e, keys[0]), y0 = value(e, keys[1]);
+    const cx = r.x + x0 * r.w, cy = r.y + y0 * r.h, wide = value(e, 'shape') === 'wide' ? 2 : 1;
+    const round = (v) => Math.round(v * 10000) / 10000;
+    beginTransient();
+    const move = (mv) => {
+      const q = toClip(mv, svg);
+      updateTransient((d) => {
+        const c = d.clips[clip.id];
+        if (kind === 'size') putValue(c, vfxProp(e.id, keys[2]), round(Math.max(0.01, Math.hypot(q.x - cx, q.y - cy) / (r.h * wide))), Tc);
+        else {
+          putValue(c, vfxProp(e.id, keys[0]), round(x0 + (q.x - start.x) / r.w), Tc);
+          putValue(c, vfxProp(e.id, keys[1]), round(y0 + (q.y - start.y) / r.h), Tc);
+        }
+      });
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      endTransient(true);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
+  const hr = 6 / k;
+  return (
+    <svg class="shape-editor light-handles" style={{ left: box.left, top: box.top, width: box.width, height: box.height }} viewBox={`0 0 ${W} ${H}`}>
+      <g transform={`matrix(${M.a} ${M.b} ${M.c} ${M.d} ${M.e} ${M.f})`}>
+        {effects.flatMap((e) => (value(e, 'dual') ? [['x', 'y', 'size', 'primary'], ['x2', 'y2', 'size2', 'secondary']] : [['x', 'y', 'size', 'primary']]).map((keys, i) => {
+          const x = r.x + value(e, keys[0]) * r.w, y = r.y + value(e, keys[1]) * r.h;
+          const shape = value(e, 'shape'), R = value(e, keys[2]) * r.h * (shape === 'wide' ? 2 : 1);
+          const rot = shape === 'round' ? 0 : value(e, 'rotation') || 0, sx = shape === 'round' ? 1 : value(e, 'spread');
+          const a = (rot * Math.PI) / 180, hx = x - Math.sin(a) * R, hy = y + Math.cos(a) * R;
+          return (
+            <g key={`${e.id}${i}`}>
+              <ellipse cx={x} cy={y} rx={R * sx} ry={R} transform={`rotate(${rot} ${x} ${y})`} class="light-radius" vector-effect="non-scaling-stroke" />
+              <line x1={x} y1={y} x2={hx} y2={hy} class="light-radius" vector-effect="non-scaling-stroke" />
+              <circle cx={x} cy={y} r={hr * 1.6} class="shape-handle light-center" style={{ fill: value(e, keys[3]), strokeWidth: 1.5 / k }} onPointerDown={(ev) => drag(ev, e, keys, 'move')}>
+                <title>Light {i + 1}. Drag to move it, also outside the frame.</title>
+              </circle>
+              <circle cx={hx} cy={hy} r={hr} class="shape-handle" style={{ strokeWidth: 1 / k, cursor: 'nwse-resize' }} onPointerDown={(ev) => drag(ev, e, keys, 'size')}>
+                <title>Drag to change the size of the light.</title>
+              </circle>
+            </g>
+          );
+        }))}
+        {/* Lens Flare: solen er lyskilden, krysset det optiske sentrum. Refleksjonene ligger på linjen gjennom begge. */}
+        {flares.map((e) => {
+          const sx = r.x + value(e, 'x') * r.w, sy = r.y + value(e, 'y') * r.h, cx = r.x + value(e, 'cx') * r.w, cy = r.y + value(e, 'cy') * r.h;
+          return (
+            <g key={e.id}>
+              <line x1={sx} y1={sy} x2={cx + (cx - sx) * 1.8} y2={cy + (cy - sy) * 1.8} class="light-radius" vector-effect="non-scaling-stroke" />
+              <g class="flare-center" transform={`translate(${cx} ${cy})`} onPointerDown={(ev) => drag(ev, e, ['cx', 'cy'], 'move')}>
+                <circle r={hr * 1.4} class="shape-handle" style={{ fill: 'transparent', strokeWidth: 1.5 / k }} />
+                <path d={`M${-hr * 2.4} 0H${hr * 2.4}M0 ${-hr * 2.4}V${hr * 2.4}`} class="flare-cross" style={{ strokeWidth: 1.5 / k }} />
+                <title>Optical center of the lens flare. Reflections mirror the light around it.</title>
+              </g>
+              <g class="flare-sun" transform={`translate(${sx} ${sy})`} onPointerDown={(ev) => drag(ev, e, ['x', 'y'], 'move')}>
+                {Array.from({ length: 8 }, (_, i) => <line key={i} x1={hr * 2.2} x2={hr * 3.2} transform={`rotate(${i * 45})`} style={{ strokeWidth: 1.5 / k }} />)}
+                <circle r={hr * 1.6} class="shape-handle light-center" style={{ fill: 'var(--yellow)', strokeWidth: 1.5 / k }} />
+                <title>Lens flare light source. Drag to move it, also outside the frame.</title>
+              </g>
+            </g>
+          );
+        })}
+      </g>
     </svg>
   );
 }

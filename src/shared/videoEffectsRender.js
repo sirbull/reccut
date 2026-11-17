@@ -1,6 +1,11 @@
 import { activeVideoEffects, effectParams, keyPixels, rgb } from './videoEffects.js';
 import { renderGradient } from './gradientRender.js';
 import { isStylizeEffect, renderStylize } from './stylizeRender.js';
+import { drawLights } from './lights.js';
+import { kfIntegral, kfTime, valueAt, vfxProp } from './model.js';
+import { LEAK_COMPOSITE, leakFieldSize, lightLeakField } from './lightLeak.js';
+import { drawLensFlare } from './lensFlareRender.js';
+import { renderHueSaturation } from './hueSaturationRender.js';
 const makeCanvas = () =>
   typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
 const surfaces = [];
@@ -226,24 +231,88 @@ function scaledEffect(effect, scale) {
   return { ...effect, p };
 }
 
-export function applyVideoEffects(src, clip, target = 'main', time = 0) {
+// Stack parameters with keyframes or expressions (vfx.<id>.<key>) take their value at timeline time T.
+export function animatedEffect(clip, effect, T) {
+  if (T == null || (!clip.kf && !clip.expressions)) return effect;
+  const p = effectParams(effect);
+  for (const key of Object.keys(p)) {
+    const prop = vfxProp(effect.id, key);
+    if (clip.kf?.[prop]?.length || clip.expressions?.[prop]) p[key] = valueAt(clip, prop, T);
+  }
+  return { ...effect, p };
+}
+
+let leakCanvas;
+// The light is computed at low resolution (it has no fine detail) and blended on the canvas.
+function drawLightLeak(ctx, copy, w, h, p, clip, effect, T) {
+  const t = T == null ? 0 : kfTime(clip, T);
+  const phase = T == null ? 0 : kfIntegral(clip, vfxProp(effect.id, 'speed'), T, p.speed);
+  const colorPhase = T == null ? 0 : kfIntegral(clip, vfxProp(effect.id, 'transition'), T, p.transition);
+  const [fw, fh] = leakFieldSize(w, h);
+  leakCanvas ||= makeCanvas();
+  if (leakCanvas.width !== fw || leakCanvas.height !== fh) { leakCanvas.width = fw; leakCanvas.height = fh; leakCanvas.key = null; }
+  // Repaints of the same frame (paused, UI updates) reuse the last field.
+  const key = JSON.stringify([p, t, phase, colorPhase, fw, fh]);
+  if (leakCanvas.key !== key) {
+    leakCanvas.getContext('2d').putImageData(new ImageData(lightLeakField(p, t, phase, colorPhase, fw, fh), fw, fh), 0, 0);
+    leakCanvas.key = key;
+  }
+  ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  ctx.drawImage(copy, 0, 0);
+  ctx.globalCompositeOperation = LEAK_COMPOSITE[p.blend] || 'screen';
+  ctx.globalAlpha = Math.max(0, Math.min(1, p.opacity));
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(leakCanvas, 0, 0, w, h);
+  // Light only where the picture is; keyed or transparent areas stay transparent.
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.globalAlpha = 1;
+  ctx.drawImage(copy, 0, 0);
+  ctx.restore();
+}
+
+export function applyVideoEffects(src, clip, target = 'main', time = 0, T = null) {
   const effects = activeVideoEffects(clip, target);
   if (!effects.length) return src;
   const w = Math.max(1, Math.round(src.w)),
     h = Math.max(1, Math.round(src.h));
   let img = src.img;
   for (const original of effects) {
-    const effect = scaledEffect(original, src.pixelScale ?? 1);
+    const effect = scaledEffect(animatedEffect(clip, original, T), src.pixelScale ?? 1);
     const p = effectParams(effect),
       ref = effect.type === 'difference' ? referenceCanvas(p.reference) : null;
     if (effect.type === 'difference' && !ref) continue;
     const cv = surface(0, w, h),
       ctx = cv.getContext('2d', { willReadFrequently: true });
-    if (isStylizeEffect(effect.type)) {
+    if (effect.type === 'hueSaturation') {
+      const result = renderHueSaturation(img, w, h, p);
+      if (result === img) continue;
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(result, 0, 0, w, h);
+    } else if (isStylizeEffect(effect.type)) {
       if (effect.type !== 'vhs' && !(p.amount > 0) && !(effect.type === 'filmGrain' && (p.dust || p.scratches || p.weave || p.flicker))) continue;
       const result = renderStylize(img, w, h, effect.type, p, time, src.pixelScale ?? 1);
       ctx.clearRect(0, 0, w, h);
       ctx.drawImage(result, 0, 0, w, h);
+    } else if (effect.type === 'lightLeak') {
+      if (!(p.opacity > 0) || !(p.intensity > 0)) continue;
+      const copy = surface(1, w, h), cc = copy.getContext('2d');
+      cc.clearRect(0, 0, w, h);
+      cc.drawImage(img, 0, 0, w, h);
+      drawLightLeak(ctx, copy, w, h, p, clip, effect, T);
+    } else if (effect.type === 'lights') {
+      const copy = surface(1, w, h), cc = copy.getContext('2d');
+      cc.clearRect(0, 0, w, h);
+      cc.drawImage(img, 0, 0, w, h);
+      // Syklusene er integralet av frekvensen, så animert frekvens endrer tempoet uten hopp.
+      const cycles = T == null ? 0 : kfIntegral(clip, vfxProp(effect.id, 'frequency'), T, p.frequency);
+      drawLights(ctx, copy, w, h, p, cycles + (p.phase || 0));
+    } else if (effect.type === 'lensFlare') {
+      const copy = surface(1, w, h), cc = copy.getContext('2d');
+      cc.clearRect(0, 0, w, h);
+      cc.drawImage(img, 0, 0, w, h);
+      drawLensFlare(ctx, copy, w, h, p);
     } else if (effect.type === 'glow') {
       if (!(p.amount > 0)) continue;
       const copy = surface(1, w, h), cc = copy.getContext('2d');

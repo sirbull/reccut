@@ -1,0 +1,171 @@
+{
+  "schema": "reccut.lensflare.preset.v1",
+  "id": "vintage_35mm",
+  "title": "Vintage 35mm",
+  "category": "Optical",
+  "optical_center_uv": [
+    0.5,
+    0.5
+  ],
+  "light_source_uv": [
+    0.68,
+    0.34
+  ],
+  "flare_spread": 1.0,
+  "global_intensity": 1.0,
+  "global_scale": 1.0,
+  "global_tint_linear": [
+    1,
+    1,
+    1
+  ],
+  "global_opacity": 1.0,
+  "coordinate_space": "UV [0..1] frame coordinates; offscreen source can exceed",
+  "width_definition": "display_width_as_fraction_of_video_height = sprite_width_px/video_height_px; preserve original image aspect ratio",
+  "animation": {
+    "enabled": false,
+    "keyframes": []
+  },
+  "elements": [
+    {
+      "id": "glow_warm-+1.00",
+      "asset_id": "glow_warm",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.73,
+      "rotation_degrees": 0,
+      "intensity": 0.55,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "starburst_6_blue-+1.00",
+      "asset_id": "starburst_6_blue",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.51,
+      "rotation_degrees": 0,
+      "intensity": 0.26,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        0.8,
+        0.4
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ghost_round_amber--0.33",
+      "asset_id": "ghost_round_amber",
+      "visible": true,
+      "distance": -0.33,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.44,
+      "rotation_degrees": 0,
+      "intensity": 0.27,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ghost_hex_purple--0.70",
+      "asset_id": "ghost_hex_purple",
+      "visible": true,
+      "distance": -0.7,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.29,
+      "rotation_degrees": 0,
+      "intensity": 0.34,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ghost_octagon_green--1.40",
+      "asset_id": "ghost_octagon_green",
+      "visible": true,
+      "distance": -1.4,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.36,
+      "rotation_degrees": 0,
+      "intensity": 0.25,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ring_rainbow--1.00",
+      "asset_id": "ring_rainbow",
+      "visible": true,
+      "distance": -1.0,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.52,
+      "rotation_degrees": 0,
+      "intensity": 0.15,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "lens_dirt_smudges-+1.00",
+      "asset_id": "lens_dirt_smudges",
+      "visible": false,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 1.5,
+      "rotation_degrees": 0,
+      "intensity": 0.15,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "lens_dirt_modulation"
+    }
+  ]
+}

@@ -57,6 +57,8 @@ function copyStatic() {
   fs.cpSync(path.join(root,'assets/voice-samples'),path.join(out,'voice-samples'),{recursive:true});
   // Støyfjerningsmodellen (16 MB) følger med appen, så Clean Voice virker uten nedlasting.
   fs.cpSync(path.join(root,'assets/denoise'),path.join(out,'denoise'),{recursive:true});
+  // Teksturene og miniatyrene til Lens Flare (presetene og manifestet bygges inn i koden).
+  for (const dir of ['assets', 'thumbs']) fs.cpSync(path.join(root, 'assets/lensflare', dir), path.join(out, 'lensflare', dir), { recursive: true });
   if(fs.existsSync(licenses))fs.cpSync(licenses,path.join(out,'licenses'),{recursive:true});
   buildLicenses({ root, out: path.join(out, 'licenses') });
   // Bilder til hjelpen.

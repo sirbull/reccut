@@ -43,6 +43,8 @@ const DEFAULTS = {
   designPalettes: [],
   designFontPairs: [],
   designElements: [],
+  lightLeakPresets: [],
+  lensFlarePresets: [],
   reopenLast: true,
   checkUpdates: true,
   checkOfflineOnFocus: true,

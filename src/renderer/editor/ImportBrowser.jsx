@@ -1,16 +1,18 @@
 // Filbrowseren i importvinduet, litt som Finder: steder til venstre, mappen i midten med miniatyrbilder,
 // og forhåndsvisning til høyre. Kryss av filene som skal importeres, også fra flere mapper.
+// Visningen kan byttes mellom liste, ikoner i tre størrelser og detaljer. Mapper åpnes med dobbeltklikk.
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { ArrowUp, Check, FileAudio, Film, Folder, HardDrive, House, Image as ImageIcon } from 'lucide-preact';
+import { ArrowUp, Check, FileImage, FileMusic, FilePlay, Folder, Grid2x2, Grid3x3, HardDrive, House, List, Square, TableProperties } from 'lucide-preact';
 import { formatDuration } from '../../shared/model.js';
 import { fileUrl } from './playback.js';
 import { isTyping } from '../keyboard.js';
 import { audioSink } from '../prefs.js';
-import { Select } from '../ui.jsx';
+import { Segmented, Select } from '../ui.jsx';
 
 const api = window.api;
 const infos = new Map(); // fil -> { thumb, duration, width, height } fra main, gjelder hele økten
-const KIND_ICON = { folder: Folder, video: Film, audio: FileAudio, image: ImageIcon };
+const KIND_ICON = { folder: Folder, video: FilePlay, audio: FileMusic, image: FileImage };
+const KIND_LABEL = { folder: 'Folder', video: 'Video', audio: 'Audio', image: 'Image' };
 const WEB_IMAGE = /\.(png|jpe?g|gif|webp|bmp|avif)$/i;
 
 // Mapper først når man sorterer på navn eller type, ellers blandet med filene slik som i Finder.
@@ -25,6 +27,21 @@ const SORTS = {
   kind: { label: 'Kind', cmp: (a, b) => foldersFirst(a, b) || a.kind.localeCompare(b.kind) || byName(a, b) },
 };
 const SORT_OPTIONS = Object.entries(SORTS).map(([value, s]) => ({ value, label: s.label }));
+const VIEWS = [
+  { value: 'list', label: 'List', icon: List },
+  { value: 'small', label: 'Small icons', icon: Grid3x3 },
+  { value: 'medium', label: 'Medium icons', icon: Grid2x2 },
+  { value: 'large', label: 'Large icons', icon: Square },
+  { value: 'details', label: 'Details', icon: TableProperties },
+];
+const ROWS = new Set(['list', 'details']);
+const ICON_SIZE = { small: 30, medium: 40, large: 56 };
+
+// Mappen en fil ligger i, også på Windows (C:\fil.mp4 gir C:\).
+export const dirOf = (p) => {
+  const d = p.replace(/[\\/][^\\/]*$/, '');
+  return !d ? '/' : /^[A-Za-z]:$/.test(d) ? `${d}\\` : d;
+};
 
 function readStored(key) {
   try {
@@ -48,6 +65,7 @@ function crumbs(dir) {
   return out;
 }
 
+const formatDate = (ms) => new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const formatSize = (b) => (b > 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b > 1e6 ? `${(b / 1e6).toFixed(0)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`);
 
 function useInfo(entry, ref) {
@@ -70,38 +88,65 @@ function useInfo(entry, ref) {
   return info;
 }
 
-function Tile({ entry, checked, focused, onPick, onToggle, onOpen }) {
+function Item({ entry, view, checked, focused, onPick, onToggle, onOpen }) {
   const ref = useRef(null);
   const info = useInfo(entry, ref);
   const Icon = KIND_ICON[entry.kind];
   const folder = entry.kind === 'folder';
+  const rows = ROWS.has(view);
   const thumb = info?.thumb ? fileUrl(info.thumb) : entry.kind === 'image' && WEB_IMAGE.test(entry.name) ? fileUrl(entry.path) : null;
+  const dur = info?.duration > 0 && entry.kind !== 'image' ? formatDuration(info.duration) : '';
+  useEffect(() => {
+    if (focused) ref.current.scrollIntoView({ block: 'nearest' });
+  }, [focused]);
+  const box = !folder && (
+    <button
+      class="ib-check"
+      aria-label={checked ? `Do not import ${entry.name}` : `Import ${entry.name}`}
+      aria-pressed={checked}
+      onClick={(e) => {
+        e.stopPropagation();
+        onPick(entry, e, true);
+      }}
+      onDblClick={(e) => e.stopPropagation()}
+    >
+      {checked && <Check size={rows ? 10 : 13} strokeWidth={3} />}
+    </button>
+  );
   return (
     <div
       ref={ref}
-      class={`ib-tile${checked ? ' checked' : ''}${focused ? ' focused' : ''}${folder ? ' folder' : ''}`}
+      class={`${rows ? 'ib-row' : 'ib-tile'} kind-${entry.kind}${checked ? ' checked' : ''}${focused ? ' focused' : ''}${folder ? ' folder' : ''}`}
       title={entry.path}
-      onClick={(e) => (folder ? onOpen(entry.path) : onPick(entry, e))}
-      onDblClick={() => !folder && onToggle(entry.path)}
+      onClick={(e) => onPick(entry, e)}
+      onDblClick={() => (folder ? onOpen(entry.path) : onToggle(entry.path))}
     >
-      <div class="ib-thumb">
-        {thumb ? <img src={thumb} alt="" loading="lazy" draggable={false} /> : <Icon size={folder ? 40 : 28} />}
-        {!folder && (
-          <button
-            class="ib-check"
-            aria-label={checked ? `Do not import ${entry.name}` : `Import ${entry.name}`}
-            aria-pressed={checked}
-            onClick={(e) => {
-              e.stopPropagation();
-              onPick(entry, e, true);
-            }}
-          >
-            {checked && <Check size={13} strokeWidth={3} />}
-          </button>
-        )}
-        {info?.duration > 0 && entry.kind !== 'image' && <span class="ib-dur">{formatDuration(info.duration)}</span>}
-      </div>
-      <span class="ib-name">{entry.name}</span>
+      {rows ? (
+        <>
+          <span class="ib-cell">{box}</span>
+          <span class="ib-icon">
+            <Icon size={16} />
+          </span>
+          <span class="ib-name">{entry.name}</span>
+          {view === 'details' && (
+            <>
+              <span class="ib-meta">{KIND_LABEL[entry.kind]}</span>
+              <span class="ib-meta num">{dur}</span>
+              <span class="ib-meta num">{folder ? '' : formatSize(entry.size)}</span>
+              <span class="ib-meta">{formatDate(entry.modified)}</span>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <div class="ib-thumb">
+            {thumb ? <img src={thumb} alt="" loading="lazy" draggable={false} /> : <Icon size={ICON_SIZE[view] * (folder ? 1.4 : 1)} />}
+            {box}
+            {dur && view !== 'small' && <span class="ib-dur">{dur}</span>}
+          </div>
+          <span class="ib-name">{entry.name}</span>
+        </>
+      )}
     </div>
   );
 }
@@ -115,11 +160,12 @@ function Preview({ entry }) {
   const info = infos.get(entry.path);
   const thumb = info?.thumb ? fileUrl(info.thumb) : null;
   let view;
-  if (entry.kind === 'video' && !failed) view = <video key={entry.path} ref={applySink} src={fileUrl(entry.path)} poster={thumb} controls autoPlay onError={() => setFailed(true)} />;
+  if (entry.kind === 'folder') view = <Folder class="ib-folder-icon" size={56} />;
+  else if (entry.kind === 'video' && !failed) view = <video key={entry.path} ref={applySink} src={fileUrl(entry.path)} poster={thumb} controls autoPlay onError={() => setFailed(true)} />;
   else if (entry.kind === 'audio') view = <audio key={entry.path} ref={applySink} src={fileUrl(entry.path)} controls autoPlay />;
   else if (entry.kind === 'image' && WEB_IMAGE.test(entry.name)) view = <img src={fileUrl(entry.path)} alt="" />;
-  else view = thumb ? <img src={thumb} alt="" /> : <Film size={32} />;
-  const meta = [info?.width ? `${info.width} × ${info.height}` : null, info?.duration > 0 && entry.kind !== 'image' ? formatDuration(info.duration) : null, formatSize(entry.size)].filter(Boolean).join(' · ');
+  else view = thumb ? <img src={thumb} alt="" /> : <FilePlay size={32} />;
+  const meta = [info?.width ? `${info.width} × ${info.height}` : null, info?.duration > 0 && entry.kind !== 'image' ? formatDuration(info.duration) : null, entry.kind === 'folder' ? 'Folder' : formatSize(entry.size)].filter(Boolean).join(' · ');
   return (
     <div class="ib-preview">
       <div class="ib-preview-view">{view}</div>
@@ -135,18 +181,23 @@ export function ImportBrowser({ paths, onChange, children }) {
   const [error, setError] = useState(null);
   const [focused, setFocused] = useState(null);
   const [sort, setSort] = useState(() => (SORTS[readStored('importSort')] ? readStored('importSort') : 'name'));
-  const changeSort = (value) => {
-    setSort(value);
+  const [view, setView] = useState(() => (VIEWS.some((v) => v.value === readStored('importView')) ? readStored('importView') : 'medium'));
+  const remember = (set, key) => (value) => {
+    set(value);
     try {
-      localStorage.setItem('importSort', value);
+      localStorage.setItem(key, value);
     } catch {}
   };
+  const changeSort = remember(setSort, 'importSort');
+  const changeView = remember(setView, 'importView');
 
-  const open = async (dir) => {
+  // focus: filen som skal markeres i mappen, f.eks. den som nettopp ble sluppet inn.
+  const open = async (dir, focus) => {
     try {
-      setListing(await api.browseDir(dir));
+      const next = await api.browseDir(dir);
+      setListing(next);
       setError(null);
-      setFocused(null);
+      setFocused(next.entries.find((e) => e.path === focus) || null);
       try {
         localStorage.setItem('importDir', dir);
       } catch {}
@@ -155,9 +206,21 @@ export function ImportBrowser({ paths, onChange, children }) {
     }
   };
 
+  // Filer som slippes inn (fra Finder eller mediebrowseren) åpner mappen de ligger i.
+  // Filer som krysses av i browseren ligger alltid i mappen som er åpen, så de flytter ingenting.
+  const seen = useRef(paths);
+  useEffect(() => {
+    const added = paths.filter((p) => !seen.current.includes(p));
+    seen.current = paths;
+    const last = added[added.length - 1];
+    if (last && dirOf(last) !== listing?.dir) open(dirOf(last), last);
+  }, [paths]);
+
   useEffect(() => {
     api.browsePlaces().then(async (p) => {
       setPlaces(p);
+      const dropped = seen.current[seen.current.length - 1];
+      if (dropped) return open(dirOf(dropped), dropped);
       const fallback = p.start;
       const stored = readStored('importDir');
       // Mappen fra sist kan være på en disk som ikke er koblet til lenger.
@@ -177,6 +240,7 @@ export function ImportBrowser({ paths, onChange, children }) {
   // Som i Finder: Shift-klikk merker alt fra forrige klikk, Cmd/Ctrl-klikk (og avkrysningsboksen) slår av og på én fil.
   const anchor = useRef(null);
   const pick = (entry, e, box = false) => {
+    if (entry.kind === 'folder') return setFocused(entry);
     const from = files.findIndex((f) => f.path === anchor.current);
     if (e.shiftKey && from >= 0) {
       const to = files.findIndex((f) => f.path === entry.path);
@@ -192,7 +256,10 @@ export function ImportBrowser({ paths, onChange, children }) {
     if (e.key.toLowerCase() === 'a' && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && !isTyping(e)) {
       e.preventDefault();
       add(files);
-    } else if (e.key === ' ' && focused) {
+    } else if (e.key === 'Enter' && focused?.kind === 'folder') {
+      e.preventDefault();
+      open(focused.path);
+    } else if (e.key === ' ' && focused && focused.kind !== 'folder') {
       e.preventDefault();
       toggle(focused.path);
     } else if (e.key === 'ArrowUp' && (e.metaKey || e.ctrlKey) && listing?.parent) {
@@ -228,16 +295,28 @@ export function ImportBrowser({ paths, onChange, children }) {
                 </button>
               ))}
           </div>
+          <Segmented value={view} options={VIEWS} onChange={changeView} />
           <Select value={sort} options={SORT_OPTIONS} onChange={changeSort} title="Sort by" />
           <button class="link" disabled={!files.length} onClick={setAll}>
             {allChecked ? 'Deselect All' : 'Select All'}
           </button>
         </div>
-        <div class="ib-grid">
+        <div class={`ib-grid ib-view-${view}`}>
           {error && <p class="hint">{error}</p>}
           {listing && !listing.entries.length && <p class="hint">No folders or media files here.</p>}
+          {view === 'details' && entries.length > 0 && (
+            <div class="ib-row ib-head">
+              <span />
+              <span />
+              <span>Name</span>
+              <span>Kind</span>
+              <span class="num">Duration</span>
+              <span class="num">Size</span>
+              <span>Date Modified</span>
+            </div>
+          )}
           {entries.map((e) => (
-            <Tile key={e.path} entry={e} checked={checked.has(e.path)} focused={focused?.path === e.path} onPick={pick} onToggle={toggle} onOpen={open} />
+            <Item key={e.path} entry={e} view={view} checked={checked.has(e.path)} focused={focused?.path === e.path} onPick={pick} onToggle={toggle} onOpen={open} />
           ))}
         </div>
       </div>

@@ -1,0 +1,151 @@
+{
+  "schema": "reccut.lensflare.preset.v1",
+  "id": "concert_cyan",
+  "title": "Concert Cyan",
+  "category": "Special",
+  "optical_center_uv": [
+    0.5,
+    0.5
+  ],
+  "light_source_uv": [
+    0.4,
+    0.27
+  ],
+  "flare_spread": 1.0,
+  "global_intensity": 1.0,
+  "global_scale": 1.0,
+  "global_tint_linear": [
+    1,
+    1,
+    1
+  ],
+  "global_opacity": 1.0,
+  "coordinate_space": "UV [0..1] frame coordinates; offscreen source can exceed",
+  "width_definition": "display_width_as_fraction_of_video_height = sprite_width_px/video_height_px; preserve original image aspect ratio",
+  "animation": {
+    "enabled": false,
+    "keyframes": []
+  },
+  "elements": [
+    {
+      "id": "glow_blue-+1.00",
+      "asset_id": "glow_blue",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.95,
+      "rotation_degrees": 0,
+      "intensity": 0.82,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "glint_blue_cross-+1.00",
+      "asset_id": "glint_blue_cross",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.6,
+      "rotation_degrees": 0,
+      "intensity": 0.82,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "diffraction_cool_12-+1.00",
+      "asset_id": "diffraction_cool_12",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 1.0,
+      "rotation_degrees": 0,
+      "intensity": 0.65,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "streak_cyan_double-+1.00",
+      "asset_id": "streak_cyan_double",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 2.4,
+      "rotation_degrees": 0,
+      "intensity": 0.75,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ghost_hex_blue--0.52",
+      "asset_id": "ghost_hex_blue",
+      "visible": true,
+      "distance": -0.52,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.27,
+      "rotation_degrees": 0,
+      "intensity": 0.33,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ring_blue_thin--1.40",
+      "asset_id": "ring_blue_thin",
+      "visible": true,
+      "distance": -1.4,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.7,
+      "rotation_degrees": 0,
+      "intensity": 0.28,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    }
+  ]
+}

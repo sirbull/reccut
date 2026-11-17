@@ -259,7 +259,7 @@ function zoomAround(ctx, W, H, s) {
 
 // Fargekorrigering på skjermkortet når det finnes. Uten WebGL2 brukes enkle 2D-filtre.
 function graded(clip, T, src, target = 'main', media = null) {
-  src = applyVideoEffects(src, clip, target, sourceTime(clip, T));
+  src = applyVideoEffects(src, clip, target, sourceTime(clip, T), T);
   const g = gradeParams(clip, T, target);
   const cam = media?.cameraLut || null;
   if (!g && !cam) return src;

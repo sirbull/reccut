@@ -1,0 +1,251 @@
+{
+  "schema": "reccut.lensflare.preset.v1",
+  "id": "cinematic_warm",
+  "title": "Cinematic Warm",
+  "category": "Cinematic",
+  "optical_center_uv": [
+    0.5,
+    0.5
+  ],
+  "light_source_uv": [
+    0.68,
+    0.39
+  ],
+  "flare_spread": 1.0,
+  "global_intensity": 1.0,
+  "global_scale": 1.0,
+  "global_tint_linear": [
+    1,
+    1,
+    1
+  ],
+  "global_opacity": 1.0,
+  "coordinate_space": "UV [0..1] frame coordinates; offscreen source can exceed",
+  "width_definition": "display_width_as_fraction_of_video_height = sprite_width_px/video_height_px; preserve original image aspect ratio",
+  "animation": {
+    "enabled": false,
+    "keyframes": []
+  },
+  "elements": [
+    {
+      "id": "glow_warm-+1.00",
+      "asset_id": "glow_warm",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.98,
+      "rotation_degrees": 0,
+      "intensity": 0.9,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "glow_white-+1.00",
+      "asset_id": "glow_white",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.37,
+      "rotation_degrees": 0,
+      "intensity": 0.65,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "glint_gold_micro-+1.00",
+      "asset_id": "glint_gold_micro",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.4,
+      "rotation_degrees": 0,
+      "intensity": 0.9,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "starburst_8_amber-+1.00",
+      "asset_id": "starburst_8_amber",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 1.0,
+      "rotation_degrees": 0,
+      "intensity": 0.68,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "streak_warm_horizontal-+1.00",
+      "asset_id": "streak_warm_horizontal",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 2.7,
+      "rotation_degrees": 0,
+      "intensity": 0.42,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ring_rainbow--0.58",
+      "asset_id": "ring_rainbow",
+      "visible": true,
+      "distance": -0.58,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.72,
+      "rotation_degrees": 0,
+      "intensity": 0.25,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ghost_round_amber--0.48",
+      "asset_id": "ghost_round_amber",
+      "visible": true,
+      "distance": -0.48,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.3,
+      "rotation_degrees": 0,
+      "intensity": 0.5,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ghost_hex_purple--1.18",
+      "asset_id": "ghost_hex_purple",
+      "visible": true,
+      "distance": -1.18,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.24,
+      "rotation_degrees": 0,
+      "intensity": 0.5,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ghost_prism_round--1.75",
+      "asset_id": "ghost_prism_round",
+      "visible": true,
+      "distance": -1.75,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.36,
+      "rotation_degrees": 0,
+      "intensity": 0.32,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "arc_gold_bottom--0.65",
+      "asset_id": "arc_gold_bottom",
+      "visible": true,
+      "distance": -0.65,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.86,
+      "rotation_degrees": 0,
+      "intensity": 0.37,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "lens_dirt_speckles-+1.00",
+      "asset_id": "lens_dirt_speckles",
+      "visible": false,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 1.4,
+      "rotation_degrees": 0,
+      "intensity": 0.2,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "lens_dirt_modulation"
+    }
+  ]
+}

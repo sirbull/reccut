@@ -5,6 +5,7 @@ import { CAMERA_LOGS, setLut } from '../shared/grade.js';
 import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOutputFormat, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, WebMOutputFormat, canEncodeVideo } from 'mediabunny';
 import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sealProject, sideBackgroundMedia, sourceTime, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
+import { loadFlareSprites } from '../shared/lensFlareRender.js';
 import { AUDIO_FORMATS, QUALITIES, audioKbps, outputGeometry, videoBitrate, videoFormat } from '../shared/formats.js';
 import { FRAME_FORMATS, frameExportSettings, frameGeometry } from '../shared/frameExport.js';
 import { captionItems, toSrt, toVtt } from '../shared/srt.js';
@@ -670,6 +671,8 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
   }
 
   try {
+    // Lens flare-teksturene lastes før første bilde, så alle bildene i filen får hele lyset.
+    await loadFlareSprites(project);
     for (let i = 0; i < frames; i++) {
       checkCancel(jobId);
       const T = a + i / fps;

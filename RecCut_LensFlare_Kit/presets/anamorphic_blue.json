@@ -1,0 +1,211 @@
+{
+  "schema": "reccut.lensflare.preset.v1",
+  "id": "anamorphic_blue",
+  "title": "Anamorphic Blue",
+  "category": "Anamorphic",
+  "optical_center_uv": [
+    0.5,
+    0.5
+  ],
+  "light_source_uv": [
+    0.38,
+    0.46
+  ],
+  "flare_spread": 1.0,
+  "global_intensity": 1.0,
+  "global_scale": 1.0,
+  "global_tint_linear": [
+    1,
+    1,
+    1
+  ],
+  "global_opacity": 1.0,
+  "coordinate_space": "UV [0..1] frame coordinates; offscreen source can exceed",
+  "width_definition": "display_width_as_fraction_of_video_height = sprite_width_px/video_height_px; preserve original image aspect ratio",
+  "animation": {
+    "enabled": false,
+    "keyframes": []
+  },
+  "elements": [
+    {
+      "id": "glow_blue-+1.00",
+      "asset_id": "glow_blue",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.9,
+      "rotation_degrees": 0,
+      "intensity": 0.78,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "glow_white-+1.00",
+      "asset_id": "glow_white",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.31,
+      "rotation_degrees": 0,
+      "intensity": 0.76,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "glint_blue_cross-+1.00",
+      "asset_id": "glint_blue_cross",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.48,
+      "rotation_degrees": 0,
+      "intensity": 0.8,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "streak_anamorphic_blue-+1.00",
+      "asset_id": "streak_anamorphic_blue",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 3.1,
+      "rotation_degrees": 0,
+      "intensity": 0.92,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "streak_cyan_double-+1.00",
+      "asset_id": "streak_cyan_double",
+      "visible": true,
+      "distance": 1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 2.5,
+      "rotation_degrees": 0,
+      "intensity": 0.3,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ghost_hex_blue--0.40",
+      "asset_id": "ghost_hex_blue",
+      "visible": true,
+      "distance": -0.4,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.28,
+      "rotation_degrees": 0,
+      "intensity": 0.35,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ghost_octagon_green--1.10",
+      "asset_id": "ghost_octagon_green",
+      "visible": true,
+      "distance": -1.1,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.25,
+      "rotation_degrees": 0,
+      "intensity": 0.25,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "ring_blue_thin--1.50",
+      "asset_id": "ring_blue_thin",
+      "visible": true,
+      "distance": -1.5,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.68,
+      "rotation_degrees": 0,
+      "intensity": 0.36,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    },
+    {
+      "id": "arc_blue_right--0.80",
+      "asset_id": "arc_blue_right",
+      "visible": true,
+      "distance": -0.8,
+      "offset_uv": [
+        0,
+        0
+      ],
+      "display_width_as_fraction_of_video_height": 0.9,
+      "rotation_degrees": 0,
+      "intensity": 0.42,
+      "opacity": 1.0,
+      "tint_linear": [
+        1,
+        1,
+        1
+      ],
+      "blend_mode": "add_linear"
+    }
+  ]
+}

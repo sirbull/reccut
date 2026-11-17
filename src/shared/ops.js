@@ -27,6 +27,7 @@ import {
   uid,
   updateDuration,
   valueAt,
+  pruneEffectKeyframes,
 } from './model.js';
 
 const MIN_DUR = 1 / 30;
@@ -100,6 +101,8 @@ export function separateRecordingCamera(project, id) {
   // Effekter som var målrettet mot skjermen skal ikke vises på kameraklippet.
   if (camera.props.vfx) camera.props.vfx = camera.props.vfx.filter((e) => e.target !== 'screen');
   if (c.props.vfx) c.props.vfx = c.props.vfx.filter((e) => e.target !== 'camera');
+  pruneEffectKeyframes(camera);
+  pruneEffectKeyframes(c);
   c.recordingPart = 'screen';
   placeFree(project, camera, c.start, Math.max(1, c.lane + 1));
   if (camera.lane <= c.lane) {

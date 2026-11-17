@@ -3,6 +3,7 @@
 // Redigeringen og eksportfanen har hver sin spiller.
 import { audioWindow, computeAudio, computeFrame, instSpeed, sideBackgroundMedia, sourceTime, transitionWindow, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
+import { onFlareSprites } from '../shared/lensFlareRender.js';
 import { cleanAmount, componentEffects } from '../shared/audiofx.js';
 import { effect } from '@preact/signals';
 import { audioSink, prefs, previewResolutionScale } from './prefs.js';
@@ -103,6 +104,8 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
   let canvas = null;
   let ctx = null;
   let rate = 1;
+  // Lens flare-teksturer lastes i bakgrunnen; tegn bildet på nytt når de er klare.
+  const stopFlares = onFlareSprites(() => (dirty = true));
   let clockStart = 0;
   let clockBase = 0;
   let raf = 0;
@@ -176,6 +179,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
     entry.el.removeAttribute('src');
     entry.el.load();
     entry.gain?.disconnect();
+    entry.fx?.port.postMessage('stop');
     entry.fx?.disconnect();
     entry.srcNode?.disconnect();
     if (entry.frame) entry.frame.width = entry.frame.height = 0;
@@ -635,6 +639,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
 
   function dispose() {
     stopLoop();
+    stopFlares();
     for (const [id, entry] of pool) disposeEntry(id, entry);
     images.clear();
     staging = null;

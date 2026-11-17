@@ -3,6 +3,7 @@
 
 import { current, isDraft } from 'immer';
 import { expressionValue } from './expressions.js';
+import { isHex, mixHex } from './oklab.js';
 import { patternClipProps } from './designPattern.js';
 import { BUILTIN_TEMPLATES, templateDefaults } from './titletemplates.js';
 
@@ -134,6 +135,14 @@ const EASE_FN = {
   easeIn: (t) => t * t * t,
   easeOut: (t) => 1 - Math.pow(1 - t, 3),
   easeInOut: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+  hold: () => 0,
+};
+// Integralet av hver kurve fra 0 til k, for kfIntegral.
+const EASE_AREA = {
+  linear: (k) => (k * k) / 2,
+  easeIn: (k) => k ** 4 / 4,
+  easeOut: (k) => k - (1 - (1 - k) ** 4) / 4,
+  easeInOut: (k) => (k <= 0.5 ? k ** 4 : k - 0.5 + (2 - 2 * k) ** 4 / 16),
   hold: () => 0,
 };
 
@@ -623,13 +632,37 @@ export function valueAt(clip, prop, T) {
   return expression ? expressionValue(base, expression, kfTime(clip, T) / kfRate(clip)) : base;
 }
 
+// Parametere i effektstakken animeres som 'vfx.<effekt-id>.<nøkkel>'. Grunnverdien ligger i effektens p.
+const vfxPath = (prop) => (prop.startsWith('vfx.') ? prop.split('.') : null);
+export const vfxProp = (id, key) => `vfx.${id}.${key}`;
+export function propBase(clip, prop) {
+  const path = vfxPath(prop);
+  return path ? clip.props.vfx?.find((e) => e.id === path[1])?.p?.[path[2]] : clip.props[prop];
+}
+export function setPropBase(clip, prop, value) {
+  const path = vfxPath(prop);
+  if (!path) clip.props[prop] = value;
+  else {
+    const e = clip.props.vfx?.find((x) => x.id === path[1]);
+    if (e) (e.p ||= {})[path[2]] = value;
+  }
+}
+// Nøkkelbilder for effekter som ikke lenger finnes i stakken.
+export function pruneEffectKeyframes(clip) {
+  const ids = new Set((clip.props.vfx || []).map((e) => e.id));
+  for (const prop of Object.keys(clip.kf || {})) if (vfxPath(prop) && !ids.has(vfxPath(prop)[1])) delete clip.kf[prop];
+  for (const prop of Object.keys(clip.expressions || {})) if (vfxPath(prop) && !ids.has(vfxPath(prop)[1])) delete clip.expressions[prop];
+}
+
 export function baseValueAt(clip, prop, T) {
   const list = clip.kf?.[prop];
-  if (!list || !list.length) return clip.props[prop];
+  if (!list || !list.length) return propBase(clip, prop);
   if (prop === 'layout') return stepValue(list, sourceTime(clip, T));
   const s = kfTime(clip, T);
   // Lister med tall (punktene i en fri form) glir punkt for punkt når de er like lange.
   if (Array.isArray(list[0][1])) return arrayValue(list, s);
+  // Effektfarger glir i OKLab. Andre farger (mønster) skifter ved nøkkelbildet, som før.
+  if (vfxPath(prop) && isHex(list[0][1])) return colorValue(list, s);
   if (typeof list[0][1] !== 'number') return stepValue(list, s);
   if (s <= list[0][0]) return list[0][1];
   const last = list[list.length - 1];
@@ -658,6 +691,36 @@ function arrayValue(list, s) {
   if (!Array.isArray(b) || a.length !== b.length) return a;
   const k = (EASE_FN[ease] || EASE_FN.linear)(t1 === t0 ? 0 : (s - t0) / (t1 - t0));
   return a.map((v, j) => v + (b[j] - v) * k);
+}
+
+function colorValue(list, s) {
+  if (s <= list[0][0]) return list[0][1];
+  const last = list[list.length - 1];
+  if (s >= last[0]) return last[1];
+  let i = 0;
+  while (i < list.length - 2 && list[i + 1][0] <= s) i++;
+  const [t0, a, ease] = list[i];
+  const [t1, b] = list[i + 1];
+  if (!isHex(b)) return a;
+  return mixHex(a, b, (EASE_FN[ease] || EASE_FN.linear)(t1 === t0 ? 0 : (s - t0) / (t1 - t0)));
+}
+
+// Verdien summert over kildetid fra 0 (fase for en fart). Uten hopp når farten har nøkkelbilder,
+// og samme svar uansett bildefrekvens og hvor man søker. Uttrykk er ikke med.
+export function kfIntegral(clip, prop, T, base = 0) {
+  const s = kfTime(clip, T), list = clip.kf?.[prop];
+  if (!list?.length || typeof list[0][1] !== 'number') return base * s;
+  if (s <= list[0][0]) return list[0][1] * s;
+  let sum = list[0][1] * list[0][0];
+  for (let i = 0; i < list.length - 1; i++) {
+    const [t0, v0, ease] = list[i], [t1, v1] = list[i + 1];
+    if (!(t1 > t0)) continue;
+    const k = Math.min(1, (s - t0) / (t1 - t0));
+    sum += (t1 - t0) * (v0 * k + (v1 - v0) * (EASE_AREA[ease] || EASE_AREA.linear)(k));
+    if (s <= t1) return sum;
+  }
+  const last = list[list.length - 1];
+  return sum + last[1] * (s - last[0]);
 }
 
 function stepValue(list, s) {

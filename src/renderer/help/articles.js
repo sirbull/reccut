@@ -455,7 +455,7 @@ Interlaced video (from TV and older cameras) is deinterlaced, video with transpa
 
 ![Import options.](import.jpg)
 
-The import window works like the Finder. Pick a place or a drive on the left, open folders, and see the clips as thumbnails. Click a clip to preview it on the right. Check the box on each clip you want, or double click it. Space checks the clip you are previewing, and **Select All** checks every file in the folder. You can check clips from several folders, and drag files in from the Finder. Then choose how they are imported:
+The import window works like the Finder. Pick a place or a drive on the left, double click a folder to open it (or select it and press Enter), and see the clips as a list, as small, medium or large icons, or with details such as duration, size and date. Click a clip to preview it on the right. Check the box on each clip you want, or double click it. Space checks the clip you are previewing, and **Select All** checks every file in the folder. You can check clips from several folders, and drag files in from the Finder. The window then opens the folder the dropped files came from. Then choose how they are imported:
 
 - **Copy to project folder** copies the files into the Media folder of the project. The project keeps working if the originals are moved or a drive is disconnected.
 - **Leave files in place** refers to the files where they are, which saves disk space.
@@ -1555,9 +1555,17 @@ The layer processes the combined picture on every video track below it, only dur
 
 ## Stylize effects
 
-The **Stylize** section includes **Digital noise**, **Film grain**, **Digital glitch**, **VHS / analog tape**, **RGB split**, **Chromatic aberration**, **Scanlines**, and **Glow / bloom**. Click to apply to selected video/image/recording clips or an adjustment layer. With no eligible selection, a click creates an adjustment layer carrying the effect. Drag onto a clip to apply it there, or onto an empty video track for a new adjustment layer. The same effects are available under **Add stack effect…**.
+The **Stylize** section includes **Digital noise**, **Film grain**, **Digital glitch**, **VHS / analog tape**, **RGB split**, **Chromatic aberration**, **Scanlines**, **Glow / bloom**, **Light leaks**, **Blinking Lights** and **Lens Flare**. Click to apply to selected video/image/recording clips or an adjustment layer. With no eligible selection, a click creates an adjustment layer carrying the effect. Drag onto a clip to apply it there, or onto an empty video track for a new adjustment layer. The same effects are available under **Add stack effect…**.
 
-Noise, film grain, glitch and VHS animate from the timeline, so seeking and exporting a frame reproduce the same pattern. **Speed 0** freezes animation and **Seed** changes its random pattern. Parameters in the stack are static; layer strength, color controls and masks support keyframes.
+Noise, film grain, glitch and VHS animate from the timeline, so seeking and exporting a frame reproduce the same pattern. **Speed 0** freezes animation and **Seed** changes its random pattern. Most stack parameters are static; Light leaks, Blinking Lights and Lens Flare settings, layer strength, color controls and masks support keyframes.
+
+**Light leaks** adds soft, procedural light that drifts across the picture or along its edges, like light leaking into a film camera. Pick a preset (Classic Film, Pastel Dream, Golden Hour, Neon Nights, Vintage 8mm, Prism or Custom) and adjust **Intensity**; changing a setting turns the preset into your own variant without altering the preset. **Save as preset** keeps a look for later projects. Colors blends from Start color to End color in OKLab, with Color transition, Saturation and Color variation. Motion & Shape sets Direction, Speed, Size, Softness, Spread, Position, Organic motion and Flicker. Light & Blending chooses Screen, Add or Soft Light, Opacity, Bloom and Edge bias. Click a diamond to keyframe a setting at the playhead, for example a faint orange leak on the left that moves right, turns purple and fades out. The animation follows the clip's own time, so keyframes stay with the clip when you move or trim it, and preview and export match at any frame rate.
+
+**Blinking Lights** simulates flashing or pulsing light sources, from police lights outside the shot to a blinking lamp in it. Pick a preset (Police Lights, Emergency Red, Emergency Amber, Strobe, Flickering Neon, Broken Light, Beacon or Camera Flash) for a ready result, then edit any setting; **Save as preset** keeps your own. **Position & Shape** places the light anywhere, also outside the frame so only the light falling into the picture shows. With the Effects tab open, drag the light in the viewer to move it and drag its round handle to resize it. **Colors & Light Sources** sets the colors, Single, Alternate or Blend color mode, and **Dual light mode** for two lights with their own position, size, color and phase offset, such as red on the left and blue on the right. **Flash Pattern** chooses Single, Double, Triple, Alternating or Random with Frequency, Flash duration, Attack, Decay, Pause, Phase offset, Randomness and Base level. **Intensity & Blending** sets Intensity, Opacity, Glow, Falloff, Exposure influence (lights the picture instead of tinting it) and Screen, Add, Soft Light or Overlay. Turn on **Visible light source** for a bright core when the lamp is in the shot. Click a diamond to keyframe position, size, colors, frequency or intensity, for example to keep a blue light on a moving car's headlight. Flashes follow the clip's own time, so preview, scrubbing and export always match at any frame rate.
+
+**Lens Flare** adds an optical flare: a bright light source plus the chain of reflections a real lens makes. Pick a preset (Cinematic Warm, Anamorphic Blue, Prism Rainbow, Sci-Fi Violet, Golden Sunset, Vintage 35mm, Flashlight White or Concert Cyan). **Flare color** gives the whole flare a new color, for example a blue flare from Cinematic Warm; rainbow and prism reflections keep their own colors, and bright cores stay partly white. **Color amount** blends between the preset's own colors (0 %) and the chosen color (100 %). Changing preset keeps the light where you put it and your Flare color. With the Effects tab open, drag the sun in the viewer to move the light, also outside the frame so only its spill shows. Drag the crosshair to move the optical center. The reflections lie on the line from the light through the optical center and move the opposite way when the light moves. **Intensity**, **Global scale**, **Spread** (stretches the reflections without moving the light), Flare color and Color amount, the light position, the optical center and **Opacity** can all be keyframed, for example to follow the sun as the camera pans. **Add** blends the light in linear light like real light; **Screen** is softer on bright pictures.
+
+**Open Flare Studio** to build your own flare. The large preview shows the flare over the clip, black or a checkerboard; the guides are never exported. Drag the sun and the crosshair, or drag an element's dot along the axis to change its distance. **Elements** lists every layer from top to bottom: hide it, show only that one (solo), move, duplicate (⌘D) or delete it (Delete). **Add element** has glows, starbursts, streaks, ghosts, rings, arcs, glints, diffraction and lens dirt; click one to add it. The element settings are Texture, Distance (1 at the light, 0 at the optical center, −1 mirrored on the other side), Offset, Size (width as a share of the picture height, so shapes stay round in 9:16), Rotation, Intensity, Opacity, Tint and Blend. Lens dirt stays fixed on the lens and only shows where the light falls on it. **Save as Preset** keeps the flare for later projects, with a thumbnail, and **Update** replaces a saved preset with your changes. Hover a saved preset to delete it. **Revert** undoes everything since the studio opened. The project keeps its own copy of the flare, so later changes to a preset never alter a finished edit.
 
 **VHS** treats the whole picture as a soft, low-bandwidth tape image. Color bleeds more than luminance, static changes from frame to frame, and brief tracking faults occasionally bend the picture. Choose an SP, LP or EP-inspired preset, then adjust Picture softness, Color bleed, Static noise and Tracking faults. Advanced includes chroma delay, subtle scanlines, faded color, speed and seed. These are creative tape simulations, not a measured hardware-deck profile.
 
@@ -1605,7 +1613,7 @@ Open **Advanced** for additional controls:
 
 Fine-detail, shadow and edge-colour recovery belong to Color key. Gamma and the other matte controls also work with Background reference key and Luma key. The new recovery controls default to zero, so existing project keys keep their previous settings.
 
-Effects run from top to bottom. Use the arrows to reorder, duplicate a key to remove another color, or switch an instance off to compare. Blur, saturation, contrast and opacity can also be added to the stack. Existing color correction and clip effects follow the stack. Masks can remove unwanted areas afterward. Stack parameters are currently static.
+Effects run from top to bottom. Use the arrows to reorder, duplicate a key to remove another color, or switch an instance off to compare. Blur, saturation, contrast and opacity can also be added to the stack. Existing color correction and clip effects follow the stack. Masks can remove unwanted areas afterward. Controls with a diamond can have keyframes.
 
 On recordings, choose Camera or Screen before adding an effect. Preview and export share the same renderer. Automatic background estimation is designed for a locked camera; it is not person segmentation or AI foreground reconstruction. Complex footage may need an external AI processor.
 `,
@@ -2033,7 +2041,7 @@ The settings are remembered for the next time. Speech is found from the waveform
     section: 'Look',
     title: 'Color Correction',
     summary: 'Light, color and color wheels, calculated in high precision.',
-    keywords: 'color correction grade exposure contrast highlights shadows saturation temperature tint wheels lift gamma gain looks film stock lut emulation kodak fuji black white orthochromatic filter sepia',
+    keywords: 'color correction grade exposure contrast highlights shadows saturation hue selective mixer recolor jacket temperature tint wheels lift gamma gain looks film stock lut emulation kodak fuji black white orthochromatic filter sepia',
     body: `
 Select a clip and show Color ({{key:inspector:color}}).
 
@@ -2048,6 +2056,16 @@ For screen recordings, select the **PiP** clip on V2 to adjust only the camera. 
 - **Color wheels**: drag the dot in Shadows, Midtones or Highlights to tint that part of the picture, and use the slider below to make it lighter or darker. Double click a wheel to reset it.
 
 The correction runs on the graphics card in 16-bit floating point. 10-bit clips keep their smooth gradients, even when you push the shadows. The same calculation is used in the viewer and the export. Every value can have keyframes, and Reset Color sets everything back.
+
+### Adjust individual colors
+
+For more detailed control, add **Advanced Hue / Saturation** from **Effects → Color correction**. Basic Saturation stays in Color; the advanced effect has independent controls for Reds, Oranges, Yellows, Greens, Aquas, Blues, Purples and Magentas. The effect starts neutral.
+
+Select a color swatch, then change **Saturation** (−100% to +100%) or **Hue shift** (−180° to +180°). For example, choose Reds to change a red jacket to another color. Lightness, neutral grays and transparency are preserved. The ranges have soft edges and are measured from the original colors entering this effect, so a red shifted to blue is not adjusted again by the same instance’s Blues controls.
+
+Under **Refine color range**, use **Target hue** to select a particular source shade and **Range width** to narrow or widen the selection. **Strength** blends the whole effect. All numeric controls support keyframes, and **Reset this range** clears that range’s adjustments and animation. Toggle the effect off to compare.
+
+Every matching color is affected, including other red objects. To isolate an object spatially, put the effect on an adjustment layer and add a mask. Preview and export use the same effect stack, before the basic Color correction. Reset Color does not remove the advanced effect; reset or remove it in Effects.
 `,
     see: ['hdr', 'effects'],
   },

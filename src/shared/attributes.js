@@ -8,7 +8,7 @@ import { STAB_DEFAULTS } from './stabilize.js';
 const isMask = (k) => k.startsWith('mask.') || k === 'masks';
 
 export const ATTRIBUTE_GROUPS = [
-  { id: 'effects', kind: 'video', label: 'Effects', desc: 'Blur, vignette, shadow and the other video effects', keys: (k) => k === 'fx' || k === 'vfx' || k in EFFECT_DEFAULTS },
+  { id: 'effects', kind: 'video', label: 'Effects', desc: 'Blur, vignette, shadow and the other video effects', keys: (k) => k === 'fx' || k === 'vfx' || k.startsWith('vfx.') || k in EFFECT_DEFAULTS },
   { id: 'color', kind: 'video', label: 'Color', desc: 'Color correction and looks', keys: (k) => k in GRADE_PROPS || k === 'film' },
   { id: 'cameraColor', kind: 'video', label: 'Camera Color', desc: 'Color correction for the camera in a screen recording', keys: (k) => k in CAMERA_COLOR_PROPS },
   { id: 'transform', kind: 'video', label: 'Transform', desc: 'Position, scale, rotation, anchor point, image fit and Ken Burns', keys: (k) => ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'cameraOffsetX', 'cameraOffsetY', 'imageFit'].includes(k) || k.startsWith('kenBurns') },

@@ -1,5 +1,5 @@
 import { PATTERN_SHAPES, PATTERN_DISTRIBUTIONS, patternClipProps } from '../../shared/designPattern.js';
-import { INPUT_POSITION, SIDE_LAYOUT, baseValueAt } from '../../shared/model.js';
+import { INPUT_POSITION, SIDE_LAYOUT, baseValueAt, setPropBase } from '../../shared/model.js';
 import { SequenceFormatSettings } from './SequenceFormatSettings.jsx';
 import { ExpressionControls } from './ExpressionControls.jsx';
 // Inspektøren viser egenskapene til valgt klipp, med nøkkelbilder og myke overganger.
@@ -250,7 +250,7 @@ addEventListener('blur', () => altHeld(false));
 
 function setValue(c, prop, v, T) {
   if (c.kf?.[prop]?.length) setKeyframe(c, prop, kfTime(c, T), v);
-  else c.props[prop] = v;
+  else setPropBase(c, prop, v);
 }
 
 export function Param({ clip, prop, label, min, max, step = 1, unit = '', precision = 0, scale = 1, slider = true, center, keyframes = true, def }) {
@@ -323,7 +323,7 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
               const c = q.clips[id];
               delete c.kf[prop];
               if(c.expressions) delete c.expressions[prop];
-              c.props[prop] = fallback;
+              setPropBase(c, prop, fallback);
             })
           }
         />
@@ -450,12 +450,13 @@ function VideoTab({ clip }) {
   );
 }
 
-function PatternChoice({ clip, prop, label, options, color = false }) {
+// also(c): en endring til i samme angresteg, for eksempel å slå på det fargen styrer.
+export function PatternChoice({ clip, prop, label, options, color = false, also }) {
   const T = Math.max(clip.start, Math.min(timeSig.value, clip.start + clip.dur)), s = kfTime(clip, T);
   const value = valueAt(clip, prop, T) ?? clip.props[prop], at = keyframeIndexAt(clip, prop, s) >= 0;
   const set = v => commit(q => setValue(q.clips[clip.id], prop, v, T));
   return <Row label={label}>
-    {color ? <ColorField value={value} onLive={v=>updateTransient(q=>setValue(q.clips[clip.id],prop,v,T))}/> : <Select value={value} options={options} onChange={set}/>}
+    {color ? <ColorField value={value} onLive={v=>updateTransient(q=>{setValue(q.clips[clip.id],prop,v,T);also?.(q.clips[clip.id]);})}/> : <Select value={value} options={options} onChange={set}/>}
     <button class={`kf-btn${at?' on':clip.kf?.[prop]?.length?' has':''}`} title={at?'Remove keyframe':`Keyframe ${label} at the playhead`} onClick={()=>commit(q=>{
       const c=q.clips[clip.id];if(at)removeKeyframe(c,prop,s);else setKeyframe(c,prop,s,value);
     })}><Diamond size={11}/></button>
@@ -855,7 +856,7 @@ function StabilizeSection({ clip }) {
   const live = (patch) => updateTransient((q) => Object.assign(q.clips[clip.id].props, patch));
   const slider = (key, label) => (
     <Row label={label}>
-      <Slider value={pr[key]} min={0} max={1} step={0.01} disabled={!pr.stabilize || info?.method === 'tripod'} onStart={beginTransient} onInput={(v) => live({ [key]: v })} onCommit={() => endTransient(true)} />
+      <Slider value={pr[key]} min={0} max={1} step={0.01} onStart={beginTransient} onInput={(v) => live({ [key]: v })} onCommit={() => endTransient(true)} />
       <span class="value narrow">{Math.round(pr[key] * 100)} %</span>
     </Row>
   );
@@ -883,9 +884,15 @@ function StabilizeSection({ clip }) {
             />
           </Row>
           {pr.stabMethod === 'auto' && info && <p class="hint">Automatic uses {info.method === 'tripod' ? 'Tripod, because the camera hardly moves' : 'Smooth, because the camera moves'}.</p>}
-          {slider('stabX', 'Smooth X')}
-          {slider('stabY', 'Smooth Y')}
-          {slider('stabRot', 'Smooth rotation')}
+          {pr.stabMethod === 'smooth' ? (
+            <>
+              {slider('stabX', 'Smooth X')}
+              {slider('stabY', 'Smooth Y')}
+              {slider('stabRot', 'Smooth rotation')}
+            </>
+          ) : (
+            <p class="hint">Choose Smooth to adjust how much each direction is smoothed.</p>
+          )}
           <Row label="Zoom">
             <Segmented
               value={pr.stabZoom > 0 ? 'manual' : 'auto'}
@@ -908,7 +915,7 @@ function StabilizeSection({ clip }) {
               </Row>
             )
           )}
-          <p class="hint">Higher values give smoother movement but need more zoom to hide the edges. Tripod removes all camera movement. Turn a slider to 0 to leave that direction as it is. With manual zoom, black edges can show when the correction is large.</p>
+          <p class="hint">{pr.stabMethod === 'smooth' ? 'Higher values give smoother movement but need more zoom to hide the edges. Turn a slider to 0 to leave that direction as it is. ' : 'Tripod removes all camera movement. '}With manual zoom, black edges can show when the correction is large.</p>
           {path && !job && (
             <Button variant="ghost" class="small" onClick={() => reanalyzeMotion(clip.id)}>
               Analyze Again
@@ -1938,7 +1945,7 @@ function TextTab({ clip }) {
 }
 
 // Fargevelger: oppdateres mens du drar, og blir ett angresteg når du er ferdig.
-function ColorField({ value, onLive }) {
+export function ColorField({ value, onLive }) {
   return (
     <input
       type="color"

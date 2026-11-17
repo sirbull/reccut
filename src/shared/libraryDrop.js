@@ -35,9 +35,15 @@ export function applyMediaDrop(project, item, lane, T, replaceId = null) {
   return added;
 }
 
-export function mediaDropPreview(project, item, lane, T, replaceId = null) {
+// Prosjektet slik det blir etter slippet, så tidslinjen kan vise klippene som flytter seg.
+export function mediaDropProject(project, item, lane, T, replaceId = null) {
   let ids = [];
   const preview = previewProject.produce(project, (draft) => { ids = applyMediaDrop(draft, item, lane, T, replaceId); });
+  return { project: preview, ids };
+}
+
+export function mediaDropPreview(project, item, lane, T, replaceId = null) {
+  const { project: preview, ids } = mediaDropProject(project, item, lane, T, replaceId);
   return ids.map((id) => {
     const clip = preview.clips[id];
     return { a: clip.start, b: clip.start + clip.dur, lane: clip.lane, label: clip.name };

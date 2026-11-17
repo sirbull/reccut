@@ -6,6 +6,8 @@ import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { VIDEO_FORMATS, AUDIO_FORMATS, CONTAINERS, VIDEO_CODECS, AUDIO_CODECS, PRESETS, QUALITIES, FIT_MODES } from '../../shared/formats.js';
 
 const descriptions = {
+  hueSaturation: 'Adjusts hue and saturation independently for eight source color ranges. Refine Target hue and Range width to isolate a shade, and use Strength to blend the result. Soft range edges preserve neutral grays and transparency. Numeric controls support keyframes. To isolate an object spatially, use a masked adjustment layer.',
+  lensFlare: 'Adds a configurable lens flare over the source image. Adjust the flare in the Effects inspector.',
   solid: 'Fills the source with a solid colour. Strength blends with the source; Preserve source alpha keeps its existing transparent areas.',
   gradient: 'Fills the source with a linear, radial or freeform gradient. Add and drag colour stops or points, and adjust each freeform point’s spread. Preserve source alpha keeps existing transparent areas.',
   noise: 'Adds digital monochrome or coloured static. This is independent pixel noise; use Film grain for organic film texture.',
@@ -16,6 +18,9 @@ const descriptions = {
   chromatic: 'Simulates radial lens fringing with subpixel channel separation that increases toward the edges. Amount, Edge falloff and Lens center control the optics; the center stays aligned.',
   scanlines: 'Darkens alternating horizontal bands for a monitor or CRT look. Amount controls darkness; Spacing controls line distance.',
   glow: 'Screens a blurred copy over the picture for soft bloom. Amount controls strength and Radius controls the spread.',
+  lights: 'Procedural blinking or pulsing lights, inside the frame or just outside it so only their spill shows. Presets: Police Lights, Emergency Red, Emergency Amber, Strobe, Flickering Neon, Broken Light, Beacon, Camera Flash and Custom; save your own. Dual light mode, flash patterns with attack and decay, Screen, Add, Soft Light or Overlay blending. Position, size, colors, frequency and intensity can be keyframed.',
+  lightLeak: 'Procedural, organic light leaks that drift across the frame or along its edges. Presets: Classic Film, Pastel Dream, Golden Hour, Neon Nights, Vintage 8mm, Prism and Custom; save your own. Colors blend smoothly in OKLab. Screen, Add or Soft Light blending. Colors, motion, shape and light can all be keyframed.',
+  lensFlare: 'A layered optical lens flare: a light source with glows, starbursts, streaks and reflections (ghosts, rings, arcs) on the axis through the optical center, blended in linear light. Eight presets, and Flare Studio to add, edit, reorder, hide and solo elements and save your own presets. Flare color recolors the flare while rainbow and prism reflections keep their colors. Light position, optical center, intensity, scale, spread, color and opacity can be keyframed.',
   blur: 'Softens fine detail. On a clip it affects that source; an effect clip can affect the picture below it.',
   vignette: 'Darkens the picture towards the corners to draw attention to the centre.',
   sepia: 'Blends a warm brown tint into the image for an aged look.',
@@ -72,7 +77,7 @@ ${EFFECTS.map((e) => `- **${e.label}**: ${descriptions[e.id]} Range: ${e.min * (
 
 ${VIDEO_EFFECTS.map((e) => `- **${e.label}**: ${descriptions[e.type]}`).join('\n')}
 
-Stack effects process from top to bottom, before the existing colour correction and classic clip effects. Reorder, duplicate, disable or remove instances in the inspector. Stack parameters are static in this version. For recordings, choose Camera or Screen first.
+Stack effects process from top to bottom, before the existing colour correction and classic clip effects. Reorder, duplicate, disable or remove instances in the inspector. Parameters with a diamond can have keyframes. For recordings, choose Camera or Screen first.
 
 Click **×** beside an effect name to remove it. Adjusted effects show a warning with **Don’t show this again**. Restore warnings in Settings → General → Projects. Removal is undoable, including all settings and keyframes.
 

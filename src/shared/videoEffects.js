@@ -1,9 +1,14 @@
 import { DEFAULT_GRADIENT } from './gradient.js';
+import { LIGHT_DEFAULTS } from './lights.js';
+import { LEAK_DEFAULTS, LEAK_PRESETS } from './lightLeak.js';
+import { FLARE_DEFAULTS } from './lensFlare.js';
+import { HUE_SATURATION_DEFAULTS } from './hueSaturation.js';
 const TAPE_DEFAULTS = { amount: 0.55, softness: 0.65, bleed: 0.55, noise: 0.18, tracking: 0.28, split: 0.2, scanlines: 0.08, fade: 0.25, speed: 1, seed: 1 };
 const FILM_DEFAULTS = { amount: 0.28, size: 1.3, roughness: 0.65, color: 0.12, tonal: 0.7, dust: 0, scratches: 0, weave: 0, flicker: 0, speed: 1, seed: 1 };
 
 // Ordered source effects, shared by preview and export. Existing clip effects follow this stack.
 export const VIDEO_EFFECTS = [
+  { type: 'hueSaturation', label: 'Advanced Hue / Saturation', category: 'Color correction', defaults: HUE_SATURATION_DEFAULTS },
   { type: 'solid', label: 'Solid color', category: 'Color fills', defaults: { color: '#487cff', amount: 1, preserveAlpha: false } },
   { type: 'gradient', label: 'Gradient ramp', category: 'Color fills', defaults: { ...DEFAULT_GRADIENT, amount: 1, preserveAlpha: false } },
   { type: 'noise', label: 'Digital noise', category: 'Stylize', defaults: { amount: 0.2, size: 1, speed: 1, seed: 1, colored: false }, controls: [
@@ -39,9 +44,14 @@ export const VIDEO_EFFECTS = [
   { type: 'scanlines', label: 'Scanlines', category: 'Stylize', defaults: { amount: 0.3, spacing: 4 }, controls: [
     ['amount', 'Amount', 0, 1], ['spacing', 'Spacing (px)', 2, 24, 1],
   ] },
+  // Controls are grouped in VideoEffects.jsx; most of them can be keyframed.
+  { type: 'lightLeak', label: 'Light leaks', category: 'Stylize', defaults: LEAK_DEFAULTS, presets: LEAK_PRESETS },
   { type: 'glow', label: 'Glow / bloom', category: 'Stylize', defaults: { amount: 0.35, radius: 12 }, controls: [
     ['amount', 'Amount', 0, 1], ['radius', 'Radius (px)', 1, 100, 1],
   ] },
+  { type: 'lights', label: 'Blinking Lights', category: 'Stylize', defaults: LIGHT_DEFAULTS },
+  // Lens Flare: presets and globals in LensFlareControls.jsx, elements in Flare Studio.
+  { type: 'lensFlare', label: 'Lens Flare', category: 'Stylize', defaults: FLARE_DEFAULTS },
   {
     type: 'chroma',
     label: 'Color key',

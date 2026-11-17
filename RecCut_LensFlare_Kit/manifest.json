@@ -1,0 +1,943 @@
+{
+  "schema": "reccut.lensflare.assets.v1",
+  "generator": "scripts/generate_assets.py",
+  "texture_semantics": "RGB is emissive hue, alpha is energy mask. Decode sRGB RGB to linear, multiply by alpha and element intensity. Add in scene linear, tone map once. PNG alpha is straight, not premultiplied.",
+  "assets": [
+    {
+      "id": "glow_warm",
+      "group": "glows",
+      "type": "glow",
+      "file": "assets/glows/glow_warm.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        32,
+        32,
+        992,
+        992
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "glow_blue",
+      "group": "glows",
+      "type": "glow",
+      "file": "assets/glows/glow_blue.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        43,
+        43,
+        981,
+        981
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "glow_white",
+      "group": "glows",
+      "type": "glow",
+      "file": "assets/glows/glow_white.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        32,
+        32,
+        992,
+        992
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "glow_violet",
+      "group": "glows",
+      "type": "glow",
+      "file": "assets/glows/glow_violet.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        32,
+        32,
+        992,
+        992
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "starburst_4_gold",
+      "group": "starbursts",
+      "type": "starburst",
+      "file": "assets/starbursts/starburst_4_gold.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1536,
+      "pixel_height": 1536,
+      "alpha_bbox_xyxy": [
+        51,
+        64,
+        1485,
+        1472
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "starburst_6_blue",
+      "group": "starbursts",
+      "type": "starburst",
+      "file": "assets/starbursts/starburst_6_blue.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1536,
+      "pixel_height": 1536,
+      "alpha_bbox_xyxy": [
+        51,
+        151,
+        1485,
+        1385
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "starburst_8_amber",
+      "group": "starbursts",
+      "type": "starburst",
+      "file": "assets/starbursts/starburst_8_amber.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1536,
+      "pixel_height": 1536,
+      "alpha_bbox_xyxy": [
+        51,
+        55,
+        1485,
+        1481
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "starburst_12_white",
+      "group": "starbursts",
+      "type": "starburst",
+      "file": "assets/starbursts/starburst_12_white.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1536,
+      "pixel_height": 1536,
+      "alpha_bbox_xyxy": [
+        51,
+        64,
+        1485,
+        1472
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "streak_anamorphic_blue",
+      "group": "streaks",
+      "type": "streak",
+      "file": "assets/streaks/streak_anamorphic_blue.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 3072,
+      "pixel_height": 512,
+      "alpha_bbox_xyxy": [
+        62,
+        172,
+        3010,
+        340
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "streak_warm_horizontal",
+      "group": "streaks",
+      "type": "streak",
+      "file": "assets/streaks/streak_warm_horizontal.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 3072,
+      "pixel_height": 512,
+      "alpha_bbox_xyxy": [
+        62,
+        172,
+        3010,
+        340
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "streak_violet",
+      "group": "streaks",
+      "type": "streak",
+      "file": "assets/streaks/streak_violet.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 3072,
+      "pixel_height": 512,
+      "alpha_bbox_xyxy": [
+        62,
+        172,
+        3010,
+        340
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "streak_cyan_double",
+      "group": "streaks",
+      "type": "streak",
+      "file": "assets/streaks/streak_cyan_double.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 3072,
+      "pixel_height": 512,
+      "alpha_bbox_xyxy": [
+        62,
+        153,
+        3010,
+        359
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "streak_white_thin",
+      "group": "streaks",
+      "type": "streak",
+      "file": "assets/streaks/streak_white_thin.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 3072,
+      "pixel_height": 512,
+      "alpha_bbox_xyxy": [
+        62,
+        204,
+        3010,
+        308
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "ghost_round_amber",
+      "group": "ghosts",
+      "type": "ghost",
+      "file": "assets/ghosts/ghost_round_amber.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        141,
+        141,
+        883,
+        883
+      ],
+      "alpha_min": 0,
+      "alpha_max": 148,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "ghost_hex_blue",
+      "group": "ghosts",
+      "type": "ghost",
+      "file": "assets/ghosts/ghost_hex_blue.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        177,
+        126,
+        847,
+        898
+      ],
+      "alpha_min": 0,
+      "alpha_max": 148,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "ghost_hex_purple",
+      "group": "ghosts",
+      "type": "ghost",
+      "file": "assets/ghosts/ghost_hex_purple.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        191,
+        142,
+        833,
+        882
+      ],
+      "alpha_min": 0,
+      "alpha_max": 147,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "ghost_octagon_green",
+      "group": "ghosts",
+      "type": "ghost",
+      "file": "assets/ghosts/ghost_octagon_green.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        155,
+        155,
+        869,
+        869
+      ],
+      "alpha_min": 0,
+      "alpha_max": 142,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "ghost_prism_round",
+      "group": "ghosts",
+      "type": "ghost",
+      "file": "assets/ghosts/ghost_prism_round.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        171,
+        171,
+        853,
+        853
+      ],
+      "alpha_min": 0,
+      "alpha_max": 143,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "ghost_oval_pink",
+      "group": "ghosts",
+      "type": "ghost",
+      "file": "assets/ghosts/ghost_oval_pink.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        195,
+        141,
+        829,
+        883
+      ],
+      "alpha_min": 0,
+      "alpha_max": 147,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "ring_rainbow",
+      "group": "rings",
+      "type": "ring",
+      "file": "assets/rings/ring_rainbow.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        96,
+        99,
+        928,
+        925
+      ],
+      "alpha_min": 0,
+      "alpha_max": 168,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "ring_blue_thin",
+      "group": "rings",
+      "type": "ring",
+      "file": "assets/rings/ring_blue_thin.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        154,
+        156,
+        870,
+        868
+      ],
+      "alpha_min": 0,
+      "alpha_max": 168,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "ring_amber_wide",
+      "group": "rings",
+      "type": "ring",
+      "file": "assets/rings/ring_amber_wide.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        49,
+        51,
+        975,
+        973
+      ],
+      "alpha_min": 0,
+      "alpha_max": 168,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "ring_prism_offset",
+      "group": "rings",
+      "type": "ring",
+      "file": "assets/rings/ring_prism_offset.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        96,
+        99,
+        928,
+        925
+      ],
+      "alpha_min": 0,
+      "alpha_max": 168,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "arc_rainbow_top",
+      "group": "arcs",
+      "type": "arc",
+      "file": "assets/arcs/arc_rainbow_top.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        109,
+        205,
+        915,
+        947
+      ],
+      "alpha_min": 0,
+      "alpha_max": 227,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "arc_blue_right",
+      "group": "arcs",
+      "type": "arc",
+      "file": "assets/arcs/arc_blue_right.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        402,
+        140,
+        947,
+        884
+      ],
+      "alpha_min": 0,
+      "alpha_max": 227,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "arc_gold_bottom",
+      "group": "arcs",
+      "type": "arc",
+      "file": "assets/arcs/arc_gold_bottom.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        147,
+        77,
+        877,
+        622
+      ],
+      "alpha_min": 0,
+      "alpha_max": 227,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "arc_violet_left",
+      "group": "arcs",
+      "type": "arc",
+      "file": "assets/arcs/arc_violet_left.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        77,
+        140,
+        622,
+        884
+      ],
+      "alpha_min": 0,
+      "alpha_max": 227,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "glint_gold_micro",
+      "group": "glints",
+      "type": "glint",
+      "file": "assets/glints/glint_gold_micro.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        47,
+        72,
+        977,
+        952
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "glint_white_hotspot",
+      "group": "glints",
+      "type": "glint",
+      "file": "assets/glints/glint_white_hotspot.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        47,
+        54,
+        977,
+        970
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "glint_blue_cross",
+      "group": "glints",
+      "type": "glint",
+      "file": "assets/glints/glint_blue_cross.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1024,
+      "pixel_height": 1024,
+      "alpha_bbox_xyxy": [
+        47,
+        72,
+        977,
+        952
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "diffraction_warm_8",
+      "group": "diffraction",
+      "type": "diffraction",
+      "file": "assets/diffraction/diffraction_warm_8.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1536,
+      "pixel_height": 1536,
+      "alpha_bbox_xyxy": [
+        59,
+        63,
+        1477,
+        1473
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "diffraction_cool_12",
+      "group": "diffraction",
+      "type": "diffraction",
+      "file": "assets/diffraction/diffraction_cool_12.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "add_linear",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 1536,
+      "pixel_height": 1536,
+      "alpha_bbox_xyxy": [
+        59,
+        74,
+        1477,
+        1462
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "lens_dirt_speckles",
+      "group": "dirt",
+      "type": "dirt",
+      "file": "assets/dirt/lens_dirt_speckles.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "lens_dirt_modulation",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 2048,
+      "pixel_height": 2048,
+      "alpha_bbox_xyxy": [
+        165,
+        166,
+        1887,
+        1886
+      ],
+      "alpha_min": 0,
+      "alpha_max": 119,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "lens_dirt_fine_scratches",
+      "group": "dirt",
+      "type": "dirt",
+      "file": "assets/dirt/lens_dirt_fine_scratches.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "lens_dirt_modulation",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 2048,
+      "pixel_height": 2048,
+      "alpha_bbox_xyxy": [
+        221,
+        222,
+        2025,
+        1871
+      ],
+      "alpha_min": 0,
+      "alpha_max": 59,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "lens_dirt_smudges",
+      "group": "dirt",
+      "type": "dirt",
+      "file": "assets/dirt/lens_dirt_smudges.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "lens_dirt_modulation",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 2048,
+      "pixel_height": 2048,
+      "alpha_bbox_xyxy": [
+        101,
+        129,
+        1841,
+        1901
+      ],
+      "alpha_min": 0,
+      "alpha_max": 51,
+      "edge_alpha_max": 0
+    },
+    {
+      "id": "lens_dirt_dust_bokeh",
+      "group": "dirt",
+      "type": "dirt",
+      "file": "assets/dirt/lens_dirt_dust_bokeh.png",
+      "format": "PNG RGBA8",
+      "alpha_encoding": "straight",
+      "rgb_transfer": "sRGB",
+      "source": "original_procedural",
+      "recommended_blend_mode": "lens_dirt_modulation",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "pixel_width": 2048,
+      "pixel_height": 2048,
+      "alpha_bbox_xyxy": [
+        141,
+        141,
+        1890,
+        1905
+      ],
+      "alpha_min": 0,
+      "alpha_max": 59,
+      "edge_alpha_max": 0
+    }
+  ]
+}
