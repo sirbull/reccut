@@ -2,6 +2,7 @@
 
 <p align="center">
   Video editing and screen recording in one app.<br>
+  Version 0.9.4 · <a href="docs/releases/0.9.4.md">Release notes</a><br>
   Free and open source, for Mac, Windows and Linux.
 </p>
 
@@ -178,7 +179,7 @@ or expressive VoxCPM2 voices on an Apple Silicon Mac. VoxCPM offers Norwegian,
 US English, Swedish, Danish and German, with two voices and ten moods per
 language, including Warm and Sensual. Listen before downloading and choose the
 packages you need; synthesis runs locally. See the [voice guide](docs/AI-VOICES.md)
-and [0.9.3 release notes](docs/releases/0.9.3.md) for setup and known limitations.
+and [0.9.4 release notes](docs/releases/0.9.4.md) for setup and known limitations.
 
 ## AI Agent and model choice
 
@@ -247,7 +248,7 @@ npm run dist:mac # or dist:win / dist:linux, builds an installer
 
 `npm start` runs with its own profile (**Reccut Development**), so it doesn't share settings with an installed copy.
 
-To publish a new version, run `npm version <x.y.z> --no-git-tag-version`, commit the changes, tag the commit (for example `v0.9.3`) and push the tag. The workflow in `.github/workflows/build.yml` builds for Apple Silicon Macs, Windows x64 and Linux x64 and attaches the installers and optional add-ons to a draft release. Verify the assets and checksums before publishing the release.
+To publish a new version, run `npm version <x.y.z> --no-git-tag-version`, commit the changes, tag the commit (for example `v0.9.4`) and push the tag. The workflow in `.github/workflows/build.yml` builds for Apple Silicon Macs, Windows x64 and Linux x64 and attaches the installers and optional add-ons to a draft release. Verify the assets and checksums before publishing the release.
 
 | Folder | Contents |
 | --- | --- |

@@ -5,6 +5,7 @@ import { ARTICLES, SECTIONS } from './articles.js';
 import { excerpt, plainText, queryTerms, searchHelp } from './search.js';
 import { HOME, HOME_ID } from './home.js';
 import wordmark from '../../../assets/reccut-wordmark.svg';
+import { version } from '../../../package.json';
 
 const Runtime = createContext({ commands: [] });
 const headingId = (i) => `heading-${i}`;
@@ -193,7 +194,7 @@ export function Handbook() {
   const searching = !!state.query.trim();
   return <Runtime.Provider value={{ ...runtime, open, run, highlight: state.match || '' }}><div class="handbook">
     <aside class="help-nav">
-      <div class="handbook-brand"><BookOpen size={22} /><div><strong>Reccut</strong><span>User handbook · English</span></div></div>
+      <div class="handbook-brand"><BookOpen size={22} /><div><strong>Reccut</strong><span>Version {version} · User handbook</span></div></div>
       <label class="help-search"><Search size={16} /><input ref={inputRef} aria-label="Search the handbook" placeholder="Search all help…" value={state.query} onInput={(e) => update({ query: e.currentTarget.value })} />{state.query && <button aria-label="Clear search" onClick={() => { update({ query: '' }); inputRef.current?.focus(); }}><X size={14} /></button>}</label>
       <nav aria-label="Handbook chapters"><div class="help-section"><button class={!searching && home ? 'active handbook-home-link' : 'handbook-home-link'} aria-current={!searching && home ? 'page' : undefined} onClick={() => open(HOME_ID)}><HomeIcon size={14} /> Overview</button></div>{SECTIONS.map((section) => <div class="help-section" key={section}><h2>{section}</h2>{ARTICLES.filter((a) => a.section === section).map((a) => <button key={a.id} class={!searching && article?.id === a.id ? 'active' : ''} aria-current={!searching && article?.id === a.id ? 'page' : undefined} onClick={() => open(a.id)}>{a.title}</button>)}</div>)}</nav>
       <footer>{ARTICLES.length} guides · Available offline</footer>

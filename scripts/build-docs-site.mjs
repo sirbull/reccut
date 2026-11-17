@@ -12,6 +12,7 @@ import { HOME, HOME_ID, homeImages } from '../src/renderer/help/home.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'docs/docs');
+const { version } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const check = process.argv.includes('--check');
 
 // Kommandolisten og standard hurtigtaster hentes fra appens register, for macOS og Windows.
@@ -243,7 +244,7 @@ dialog img { max-width:96vw; max-height:94vh; border-radius:10px; cursor:zoom-ou
 <aside id="sidebar">
   <label class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs"></label>
   <nav aria-label="Handbook chapters"><div class="sec"><a class="overview" href="#${HOME_ID}" data-id="${HOME_ID}">Overview</a></div>${nav}</nav>
-  <footer>${ARTICLES.length} guides. The same handbook is built into Reccut under Help.</footer>
+  <footer>Reccut ${esc(version)} · ${ARTICLES.length} guides. The same handbook is built into Reccut under Help.</footer>
 </aside>
 <main>
 <div id="results" aria-live="polite"></div>
