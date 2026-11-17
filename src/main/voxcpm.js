@@ -1,5 +1,5 @@
 // Optional VoxCPM2 engine and models. No network access occurs during synthesis.
-// Synthetic references are separate release assets, downloaded only on request.
+// Engine and references are independent ZIP packages, downloaded only on request.
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -7,6 +7,8 @@ const { spawn } = require('node:child_process');
 const { createVoxcpmProcess, verifyVoxcpmProtocol, PROTOCOL } = require('./voxcpmProcess');
 const { downloadFile, hashFile } = require('./downloadFile');
 const CATALOG = require('./ttsCatalog.json');
+const ADDONS = require('./addonCatalog.json');
+const { stagePackage } = require('./addonPackages');
 
 const fingerprint = (value) => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const missing = () => new Error('MODEL_MISSING:voices Download the VoxCPM2 model and voice package first.');
@@ -43,12 +45,13 @@ function readWav(buf) {
   return { samples, rate };
 }
 
-function createVoxcpm({ dir, version, repo = { owner: 'sirbull', name: 'reccut' }, catalog = CATALOG.voxcpm,
+function createVoxcpm({ dir, catalog = CATALOG.voxcpm, addonCatalog = ADDONS,
   platform = process.platform, arch = process.arch, fetchImpl = globalThis.fetch, spawnImpl = spawn, onChange = () => {}, idleTimeoutMs, startupTimeoutMs, requestTimeoutMs }) {
   const asset = assetName(platform, arch);
-  const engineDir = path.join(dir, 'engine', version);
+  const enginePackage = addonCatalog.packages['voxcpm-mac'];
+  const engineSpec = enginePackage.files.find(f => f.path === asset);
+  const engineDir = path.join(dir, 'engine', enginePackage.sha256);
   const modelDir = path.join(dir, 'models', fingerprint(catalog.model));
-  const releaseBase = `https://github.com/${repo.owner}/${repo.name}/releases/download/v${version}/`;
   const language = (lang) => catalog.languages.find((l) => l.lang === lang);
   const languagePack = (l) => l.source === 'release'
     ? { source: 'release', files: l.voices.map((v) => v.reference) }
@@ -73,8 +76,8 @@ function createVoxcpm({ dir, version, repo = { owner: 'sirbull', name: 'reccut' 
     try {
       const info = JSON.parse(await fs.readFile(path.join(engineDir, 'verified.json'), 'utf8'));
       const file = path.join(engineDir, asset);
-      if (info.version !== version || info.revision !== catalog.engine.revision || info.asset !== asset || info.protocol !== PROTOCOL ||
-          !/^[a-f0-9]{64}$/.test(info.sha256) || (await fs.stat(file)).size !== info.size) return null;
+      if (info.packageSha256 !== enginePackage.sha256 || info.sha256 !== engineSpec.sha256 || info.revision !== catalog.engine.revision || info.asset !== asset || info.protocol !== PROTOCOL ||
+          info.size !== engineSpec.size || (await fs.stat(file)).size !== info.size) return null;
       if (verify && await hashFile(file) !== info.sha256) return null;
       return { ...info, file };
     } catch { return null; }
@@ -89,14 +92,30 @@ function createVoxcpm({ dir, version, repo = { owner: 'sirbull', name: 'reccut' 
       sizeBytes: catalog.model.files.reduce((n, f) => n + f.size, 0), license: catalog.license,
       running: processor.running(), downloading: Boolean(active), target: active?.target || null, progress: active?.progress || 0, languages };
   }
-  async function installPack(pack, dest, signal, progress, verify = false) {
+  async function installPack(pack, dest, signal, progress, verify = false, archive = null) {
     if (await installed(pack, dest, verify)) { progress(pack.files.reduce((n, f) => n + f.size, 0)); return; }
+    if (archive) {
+      for (const spec of pack.files) {
+        if (!archive.files.some(f => f.path === spec.path && f.size === spec.size && f.sha256 === spec.sha256)) throw new Error('The voice package does not match the voice catalogue.');
+      }
+      const staged = await stagePackage({ pack: archive, cacheDir: path.join(dir, '.downloads'), signal, fetchImpl,
+        onProgress: bytes => progress(bytes / archive.size * pack.files.reduce((n, f) => n + f.size, 0)) });
+      try {
+        signal.throwIfAborted();
+        await fs.writeFile(path.join(staged.dir, 'verified.json'), JSON.stringify({ fingerprint: fingerprint(pack) }));
+        await fs.mkdir(path.dirname(dest), { recursive: true });
+        await fs.rm(dest, { recursive: true, force: true });
+        await fs.rename(staged.dir, dest);
+      } finally { await staged.dispose(); }
+      return;
+    }
+    if (pack.source === 'release') throw new Error('This voice language has no ZIP package.');
     const staging = path.join(dir, '.downloads', fingerprint(pack));
     await fs.mkdir(staging, { recursive: true });
     let done = 0;
     for (const f of pack.files) {
       signal.throwIfAborted();
-      const url = pack.source === 'release' ? releaseBase + encodeURIComponent(f.path) : resolveUrl(pack, f);
+      const url = resolveUrl(pack, f);
       await downloadFile({ url, file: localFile(staging, f.path), size: f.size, sha256: f.sha256, signal, fetchImpl,
         onProgress: (bytes) => progress(done + bytes) });
       done += f.size;
@@ -109,30 +128,19 @@ function createVoxcpm({ dir, version, repo = { owner: 'sirbull', name: 'reccut' 
   }
   async function installEngine(signal) {
     if (await engineInfo(true)) return;
-    const base = releaseBase;
-    const res = await fetchImpl(base + asset + '.sha256', { signal });
-    if (!res.ok) throw new Error(res.status === 404 ? `The VoxCPM2 engine is not published for Reccut ${version} yet.` : `Download failed (${res.status}).`);
-    // Release checksums are tiny. Bound the response just like the executable.
-    let text = '';
-    if (!res.body) throw new Error('The engine checksum is missing.');
-    for await (const chunk of res.body) {
-      text += Buffer.from(chunk).toString('utf8');
-      if (text.length > 512) throw new Error('The engine checksum is invalid.');
-    }
-    const match = /^([a-f0-9]{64})[ \t]+\*?([^\r\n]+)\s*$/i.exec(text);
-    if (!match || match[2] !== asset) throw new Error('The engine checksum is invalid.');
-    const sha256 = match[1].toLowerCase();
-    const staging = path.join(dir, '.downloads', `engine-${version}`);
-    const file = path.join(staging, asset);
-    const size = await downloadFile({ url: base + asset, file, sha256, maxBytes: 64 * 1024 * 1024, signal, fetchImpl });
-    signal.throwIfAborted();
-    await fs.chmod(file, 0o755);
-    await verifyVoxcpmProtocol(file, { spawnImpl, signal });
-    await fs.writeFile(path.join(staging, 'verified.json'), JSON.stringify({ version, revision: catalog.engine.revision, asset, sha256, size, protocol: PROTOCOL }));
-    await fs.mkdir(path.dirname(engineDir), { recursive: true });
-    await fs.rm(engineDir, { recursive: true, force: true });
-    await fs.rename(staging, engineDir);
+    const staged = await stagePackage({ pack: enginePackage, cacheDir: path.join(dir, '.downloads'), signal, fetchImpl });
+    try {
+      const file = path.join(staged.dir, asset);
+      await verifyVoxcpmProtocol(file, { spawnImpl, signal });
+      signal.throwIfAborted();
+      await fs.writeFile(path.join(staged.dir, 'verified.json'), JSON.stringify({ version: enginePackage.version, packageSha256: enginePackage.sha256,
+        revision: catalog.engine.revision, asset, sha256: engineSpec.sha256, size: engineSpec.size, protocol: PROTOCOL }));
+      await fs.mkdir(path.dirname(engineDir), { recursive: true });
+      await fs.rm(engineDir, { recursive: true, force: true });
+      await fs.rename(staged.dir, engineDir);
+    } finally { await staged.dispose(); }
   }
+
   function install(lang, onProgress = () => {}) {
     if (!asset) return Promise.reject(new Error('VoxCPM2 currently requires an Apple Silicon Mac.'));
     const l = lang === null ? null : language(lang);
@@ -154,7 +162,8 @@ function createVoxcpm({ dir, version, repo = { owner: 'sirbull', name: 'reccut' 
       await installPack(catalog.model, modelDir, ctrl.signal, progress);
       if (l) {
         const modelBytes = catalog.model.files.reduce((n, f) => n + f.size, 0);
-        await installPack(languagePack(l), languageDir(l), ctrl.signal, (n) => progress(modelBytes + n), true);
+        await installPack(languagePack(l), languageDir(l), ctrl.signal, (n) => progress(modelBytes + n), true,
+          l.source === 'release' ? addonCatalog.packages[`voxcpm-${l.lang}`] : null);
       }
       ctrl.signal.throwIfAborted();
       progress(total);
@@ -178,6 +187,13 @@ function createVoxcpm({ dir, version, repo = { owner: 'sirbull', name: 'reccut' 
     await removeFiles(async () => {
       await fs.rm(path.join(dir, 'languages', l.lang), { recursive: true, force: true });
       await fs.rm(path.join(dir, '.downloads', fingerprint(languagePack(l))), { recursive: true, force: true });
+      const archive = l.source === 'release' && addonCatalog.packages[`voxcpm-${l.lang}`];
+      if (archive) {
+        const cache = path.join(dir, '.downloads');
+        for (const name of await fs.readdir(cache).catch(e => { if (e.code === 'ENOENT') return []; throw e; })) {
+          if (name === `${archive.sha256}.zip` || name === `${archive.sha256}.zip.${archive.sha256}.part`) await fs.rm(path.join(cache, name), { force: true });
+        }
+      }
     });
   }
   async function removeModel() {

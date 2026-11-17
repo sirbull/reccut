@@ -14,7 +14,8 @@ Når vi lager en ny versjon av Reccut, må About-vinduet også vise det nye vers
 - About-vinduet ([src/main/about.js](src/main/about.js)) henter versjonen fra `package.json` via `app.getVersion()`. Ikke skriv versjonsnummeret direkte i koden.
 - Start appen (`npm start`), åpne Reccut › About Reccut og sjekk at riktig versjon vises.
 - Oppdateringssjekken ([src/main/updates.js](src/main/updates.js)) sammenligner med samme versjon, så den må stemme med GitHub-utgivelsen.
-- Keystroke-tillegget lastes ned fra utgivelsen med samme versjon (`v<x.y.z>`). Byggeflyten legger det ved automatisk når taggen pushes. Sjekk at utgivelsen har `reccut-keystrokes-*` med tilhørende `.sha256`, ellers får brukerne beskjed om at tillegget ikke er publisert ennå.
+- Tillegg lastes ned som ZIP-pakker fra en egen, uavhengig versjonert utgivelse (`addons-v<x.y.z>`). Faste adresser, størrelser og SHA-256 for både arkiv og innhold ligger i `src/main/addonCatalog.json`. Apputgivelser skal bare ha installasjonsfiler. Bygg nye tillegg med `.github/workflows/addons.yml`, kontroller pakkene og oppdater katalogen før en ny apputgivelse. Ikke overskriv publiserte pakker.
+- Reccut 0.9.4 og eldre bruker enkeltfiler fra utgivelsen med samme appversjon. Disse filene og kontrollsummene må beholdes for bakoverkompatibilitet.
 
 ## Keystroke-tillegget
 

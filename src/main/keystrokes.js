@@ -1,13 +1,14 @@
 // Keystroke Add-on: a separate helper program that reads keyboard shortcuts while recording.
-// It is not part of the installer. It is downloaded from the GitHub release for this version
+// It is not part of the installer. Its independently versioned ZIP is downloaded
 // only when the user asks for it, checked with SHA-256, and started only during a recording
 // with "Show keystrokes" on. See native/keystrokes/README.md.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
+const { stagePackage } = require('./addonPackages');
+const ADDONS = require('./addonCatalog.json');
 
-const MAX_SIZE = 8 * 1024 * 1024;
 const MODS = { ctrl: 1, alt: 2, shift: 4, meta: 8 };
 
 // One file per platform. Windows on ARM runs the x64 helper; the macOS helper is universal.
@@ -90,8 +91,10 @@ function sha256(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
-function createKeystrokes({ dir, version, repo, fetchImpl, platform = process.platform, arch = process.arch, spawnImpl = spawn, spawnSyncImpl = spawnSync }) {
+function createKeystrokes({ dir, addonCatalog = ADDONS, fetchImpl, platform = process.platform, arch = process.arch, spawnImpl = spawn, spawnSyncImpl = spawnSync }) {
   const asset = assetName(platform, arch);
+  const pack = asset && addonCatalog.packages[asset.replace(/^reccut-/, '').replace(/\.exe$/, '')];
+  const spec = pack?.files.find(f => f.path === asset);
   const exe = asset ? path.join(dir, asset) : null;
   const infoFile = path.join(dir, 'addon.json');
   let child = null;
@@ -132,7 +135,7 @@ function createKeystrokes({ dir, version, repo, fetchImpl, platform = process.pl
       damaged: installed && !ok,
       version: i?.version || null,
       installedAt: i?.installedAt || null,
-      outdated: Boolean(ok && i.version !== version),
+      outdated: Boolean(ok && i.sha256 !== spec?.sha256),
       permission: ok ? permission() : null,
       running: Boolean(child),
       game: Boolean(i?.gameConsentAt || i?.fullConsentAt),
@@ -140,30 +143,25 @@ function createKeystrokes({ dir, version, repo, fetchImpl, platform = process.pl
     };
   }
 
-  async function download(url) {
-    const res = await fetchImpl(url);
-    if (!res.ok) throw new Error(res.status === 404 ? `The Keystroke Add-on is not published for Reccut ${version} yet.` : `GitHub answered ${res.status}.`);
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length > MAX_SIZE) throw new Error('The download is larger than expected.');
-    return buf;
-  }
-
   async function install({ consent } = {}) {
     if (consent !== true) throw new Error('The add-on is only installed after you accept what it does.');
     if (!asset) throw new Error('The Keystroke Add-on is not available for this computer.');
-    const base = `https://github.com/${repo.owner}/${repo.name}/releases/download/v${version}/`;
-    const sum = String(await download(base + asset + '.sha256')).trim().match(/^[0-9a-f]{64}/i)?.[0]?.toLowerCase();
-    if (!sum) throw new Error('The checksum file is missing or invalid.');
-    const buf = await download(base + asset);
-    if (sha256(buf) !== sum) throw new Error('The download does not match its checksum and was not installed.');
-    stop();
-    await fs.promises.mkdir(dir, { recursive: true });
-    const tmp = `${exe}.download`;
-    await fs.promises.writeFile(tmp, buf, { mode: 0o755 });
-    await fs.promises.rename(tmp, exe);
-    if (platform !== 'win32') await fs.promises.chmod(exe, 0o755);
-    const { gameConsentAt, fullConsentAt } = info() || {};
-    await fs.promises.writeFile(infoFile, JSON.stringify({ version, sha256: sum, asset, installedAt: new Date().toISOString(), consentAt: new Date().toISOString(), gameConsentAt, fullConsentAt }, null, 1));
+    if (!pack || !spec) throw new Error('The Keystroke Add-on has no package for this computer.');
+    const staged = await stagePackage({ pack, cacheDir: path.join(dir, '.downloads'), fetchImpl });
+    try {
+      stop();
+      const tmp = `${exe}.download`;
+      await fs.promises.copyFile(path.join(staged.dir, asset), tmp);
+      if (platform !== 'win32') await fs.promises.chmod(tmp, 0o755);
+      await fs.promises.rename(tmp, exe);
+      for (const f of pack.files.filter(f => f.path !== asset)) {
+        await fs.promises.rename(path.join(staged.dir, f.path), path.join(dir, f.path));
+      }
+      const { gameConsentAt, fullConsentAt } = info() || {};
+      const now = new Date().toISOString();
+      await fs.promises.writeFile(infoFile, JSON.stringify({ version: pack.version, packageSha256: pack.sha256, sha256: spec.sha256, asset,
+        installedAt: now, consentAt: now, gameConsentAt, fullConsentAt }, null, 1));
+    } finally { await staged.dispose(); }
     return status();
   }
 
@@ -197,9 +195,9 @@ function createKeystrokes({ dir, version, repo, fetchImpl, platform = process.pl
     if (child) return true;
     if (!intact()) return false;
     const i = info();
-    // A helper from an older release ignores these flags and would send shortcuts anyway.
+    // Only the pinned helper is trusted to understand the current flags.
     const letters = keyboard === 'full' ? i.fullConsentAt && '--full-keyboard' : keyboard === 'half' && (i.gameConsentAt || i.fullConsentAt) && '--game';
-    const sources = i.version === version ? [letters, mouse && '--mouse'].filter(Boolean) : [];
+    const sources = i.sha256 === spec?.sha256 ? [letters, mouse && '--mouse'].filter(Boolean) : [];
     if (!shortcuts && !sources.length) return false;
     const proc = spawnImpl(exe, [...(shortcuts ? [] : ['--no-shortcuts']), ...sources], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
     child = proc;

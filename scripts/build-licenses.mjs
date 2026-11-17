@@ -33,6 +33,8 @@ export function buildLicenses({ root = projectRoot, out = path.join(root, 'build
   dependency('preact', 'Preact', 'MIT', 'https://github.com/preactjs/preact', 'User interface.');
   dependency('@preact/signals', 'Preact Signals', 'MIT', 'https://github.com/preactjs/signals', 'Reactive interface state.');
   dependency('@preact/signals-core', 'Preact Signals Core', 'MIT', 'https://github.com/preactjs/signals', 'Reactive state primitives.');
+  dependency('yauzl', 'yauzl', 'MIT', 'https://github.com/thejoshwolfe/yauzl', 'Reads verified optional add-on ZIP packages.');
+  dependency('pend', 'Pend', 'MIT', 'https://github.com/andrewrk/node-pend', 'Asynchronous file access used by the ZIP reader.');
   dependency('immer', 'Immer', 'MIT', 'https://github.com/immerjs/immer', 'Project state updates.');
   dependency('lucide-preact', 'Lucide and Feather icons', 'ISC and MIT', 'https://github.com/lucide-icons/lucide', 'Interface icons; the license text includes the Feather attribution.');
   dependency('mediabunny', 'Mediabunny', 'MPL-2.0', 'https://github.com/Vanilagy/mediabunny',
@@ -74,7 +76,7 @@ export function buildLicenses({ root = projectRoot, out = path.join(root, 'build
     ['assets/licenses/VoxCPM2-Apache-2.0.txt'], voxcpm.model.revision);
   add('voxcpm-engine', 'llama.cpp-omni / VoxCPM2 CLI (optional)', voxcpm.engine.license,
     `https://github.com/${voxcpm.engine.repository}/tree/${voxcpm.engine.revision}`,
-    'Separate local speech engine with Reccut’s stdin/stdout adapter and nlohmann JSON parser. Keeps weights in memory between speech jobs; downloaded from the matching Reccut release after checksum verification. Not included in the installer.',
+    'Separate local speech engine with Reccut’s stdin/stdout adapter and nlohmann JSON parser. Keeps weights in memory between speech jobs; downloaded as an independently versioned add-on ZIP after checksum verification. Not included in the installer.',
     ['assets/licenses/llama-cpp-omni-MIT.txt', 'assets/licenses/nlohmann-json-MIT.txt'], voxcpm.engine.revision);
   add('voxcpm-voices', 'Reccut synthetic voice references (optional)', 'MIT', 'https://github.com/sirbull/reccut',
     'Synthetic reference recordings generated with VoxCPM2, without recordings or clones of real people. Downloaded only when a voice package is requested.',

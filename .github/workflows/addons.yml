@@ -1,0 +1,128 @@
+name: Build optional add-on packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: New independent add-on version (never overwrite a published version)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  # Optional Apple Silicon TTS engine. No model weights or installer changes.
+  voxcpm:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - run: npm ci --ignore-scripts
+      - uses: actions/checkout@v7
+        with:
+          repository: tc-mb/llama.cpp-omni
+          ref: d30f00feadb7ebce95bacd55b0d104e3ef501481
+          path: .voxcpm-source
+          persist-credentials: false
+      - name: Bygg VoxCPM2 (Apple Silicon / Metal)
+        run: bash native/voxcpm/build-mac.sh .voxcpm-source voxcpm-artifacts
+      - name: Klargjør syntetiske stemmereferanser
+        run: node scripts/prepare-voxcpm-voices.mjs voxcpm-artifacts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Reccut-VoxCPM-mac
+          path: voxcpm-artifacts/reccut-voxcpm-*
+          if-no-files-found: error
+  # Keystroke Add-on: a separate helper that Reccut downloads only when the user asks for it.
+  # It is distributed as a separate ZIP, never put inside installers.
+  keystrokes:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            file: reccut-keystrokes-mac
+          - os: windows-latest
+            file: reccut-keystrokes-win-x64.exe
+          - os: ubuntu-latest
+            file: reccut-keystrokes-linux-x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: native/keystrokes
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Bygg for Mac
+        if: runner.os == 'macOS'
+        run: |
+          clang -O2 -Wall -arch arm64 -arch x86_64 -mmacosx-version-min=11.0 -o ${{ matrix.file }} keystrokes-mac.c -framework ApplicationServices
+          codesign --force -s - ${{ matrix.file }}
+
+      - name: Bygg for Windows
+        if: runner.os == 'Windows'
+        run: gcc -O2 -Wall -s -o ${{ matrix.file }} keystrokes-win.c -luser32
+
+      - name: Bygg for Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxtst-dev
+          gcc -O2 -Wall -s -o ${{ matrix.file }} keystrokes-linux.c -lX11 -lXtst -lpthread
+
+      - name: Kontrollsum
+        run: |
+          if command -v sha256sum >/dev/null; then sha256sum ${{ matrix.file }} > ${{ matrix.file }}.sha256
+          else shasum -a 256 ${{ matrix.file }} > ${{ matrix.file }}.sha256; fi
+          cat ${{ matrix.file }}.sha256
+          ./${{ matrix.file }} --check || true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Reccut-Keystrokes-${{ runner.os }}
+          path: |
+            native/keystrokes/${{ matrix.file }}
+            native/keystrokes/${{ matrix.file }}.sha256
+          if-no-files-found: error
+
+
+  package:
+    needs: [voxcpm, keystrokes]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: Reccut-*
+          merge-multiple: true
+          path: addon-input
+      - name: Package and verify ZIP files
+        env:
+          ADDON_VERSION: ${{ inputs.version }}
+        run: |
+          node scripts/package-addons.mjs addon-input addon-packages "$ADDON_VERSION"
+          node scripts/verify-addon-packages.mjs addon-packages addon-packages/addonCatalog.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Reccut-Addons
+          path: addon-packages/*
+          if-no-files-found: error
+      - name: Create a separate draft for review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ADDON_VERSION: ${{ inputs.version }}
+        run: |
+          if gh release view "addons-v$ADDON_VERSION" >/dev/null 2>&1; then
+            echo "This add-on release already exists; choose a new version."
+            exit 1
+          fi
+          gh release create "addons-v$ADDON_VERSION" addon-packages/*.zip addon-packages/addonCatalog.json --target "$GITHUB_SHA" --draft --prerelease --title "Reccut add-ons $ADDON_VERSION" --notes "Optional ZIP packages downloaded by Reccut when requested. These are not app installers. Review and pin addonCatalog.json in the app before using a new package version."

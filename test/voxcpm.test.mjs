@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { packageFixture } from './helpers/addon-package.mjs';
 import { fakeVoxcpmProcess } from './helpers/voxcpm-process.mjs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
@@ -32,6 +33,12 @@ async function fixture(t, extra = {}) {
   const bodies = new Map([['base.gguf', model], ['acoustic.gguf', acoustic], ['nb.wav', reference], ['sv.wav', reference],
     ['en-us.wav', reference], ['de.wav', reference],
     ['reccut-voxcpm-mac', engine], ['reccut-voxcpm-mac.sha256', Buffer.from(`${sha(engine)}  reccut-voxcpm-mac\n`)]]);
+  const engineFixture = await packageFixture([{ path: 'reccut-voxcpm-mac', data: engine, executable: true }], { id: 'voxcpm-mac' });
+  const languageFixture = await packageFixture([{ path: 'en-us.wav', data: reference }], { id: 'voxcpm-en-us' });
+  const addonCatalog = { packages: { 'voxcpm-mac': engineFixture.pack, 'voxcpm-en-us': languageFixture.pack } };
+  const engineZip = new URL(engineFixture.pack.url).pathname.split('/').at(-1);
+  bodies.set(engineZip, engineFixture.data);
+  bodies.set('voxcpm-en-us-1.0.0.zip', languageFixture.data);
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url, options });
     const body = bodies.get(url.split('/').at(-1));
@@ -39,10 +46,10 @@ async function fixture(t, extra = {}) {
   };
   const fake = fakeVoxcpmProcess({ handle: async (request) => fs.writeFile(request.output, wav()) });
   const spawnImpl = fake.spawn;
-  const options = { dir, version: '0.9.2', platform: 'darwin', arch: 'arm64', catalog, fetchImpl, spawnImpl, ...extra };
+  const options = { dir, version: '0.9.2', platform: 'darwin', arch: 'arm64', catalog, addonCatalog, fetchImpl, spawnImpl, ...extra };
   const manager = createVoxcpm(options);
   t.after(async () => { await manager.stop(); await fs.rm(dir, { recursive: true, force: true }); });
-  return { ...options, bodies, calls, get spawned() { return fake.children.filter((p) => p.args[0] === '--serve'); }, requests: fake.requests, options, manager };
+  return { ...options, engineZip, engineFixture, bodies, calls, get spawned() { return fake.children.filter((p) => p.args[0] === '--serve'); }, requests: fake.requests, options, manager };
 }
 function context() {
   const updates = [];
@@ -68,7 +75,7 @@ test('languages share one verified model and engine, survive restart, and can be
   const f = await fixture(t), progress = [];
   await f.manager.installLanguage('nb', (p) => progress.push(p));
   assert.equal(progress.at(-1), 1);
-  assert.ok(f.calls.every((c) => /\/releases\/download\/v0\.9\.2\/|\/resolve\/[0-9a-f]{40}\//.test(c.url)));
+  assert.ok(f.calls.every((c) => /\/releases\/download\/addons-v1\.0\.0\/|\/resolve\/[0-9a-f]{40}\//.test(c.url)));
   const n = f.calls.length;
   const restarted = createVoxcpm(f.options);
   t.after(() => restarted.stop());
@@ -112,24 +119,24 @@ test('release reference assets are pinned, installed on request and retained acr
   const l = f.catalog.languages.find((l) => l.lang === 'en-us');
   l.source = 'release'; delete l.repository; delete l.revision;
   await f.manager.installLanguage(l.lang);
-  assert.ok(f.calls.some((c) => c.url === 'https://github.com/sirbull/reccut/releases/download/v0.9.2/en-us.wav'));
+  assert.ok(f.calls.some((c) => c.url === 'https://github.com/sirbull/reccut/releases/download/addons-v1.0.0/voxcpm-en-us-1.0.0.zip'));
   assert.ok(!f.calls.some((c) => c.url.includes('huggingface.co/undefined')));
   const updated = createVoxcpm({ ...f.options, version: '0.9.3' });
   t.after(() => updated.stop());
   assert.ok((await updated.status()).languages['en-us'].installed, 'references are pinned by contents across releases');
-  assert.equal((await updated.status()).engine, false, 'each app version still needs its own engine');
+  assert.equal((await updated.status()).engine, true, 'the pinned engine is shared across app versions');
   const downloads = f.calls.length;
   await updated.installLanguage(l.lang);
   assert.ok((await updated.status()).engine);
-  assert.ok(f.calls.slice(downloads).every((c) => c.url.includes('/v0.9.3/') && !c.url.endsWith('en-us.wav')), 'upgrade fetches the new engine without re-fetching references or models');
+  assert.equal(f.calls.length, downloads, 'app upgrades reuse the same engine, models and references without downloads');
 });
 
 test('an unpublished or corrupt engine stops installation before any model request', async (t) => {
   const f = await fixture(t);
-  f.bodies.delete('reccut-voxcpm-mac.sha256');
-  await assert.rejects(f.manager.installModel(), /not published.*0.9.2/);
+  f.bodies.delete(f.engineZip);
+  await assert.rejects(f.manager.installModel(), /404/);
   assert.equal(f.calls.length, 1);
-  f.bodies.set('reccut-voxcpm-mac.sha256', Buffer.from(`${'a'.repeat(64)}  reccut-voxcpm-mac\n`));
+  f.bodies.set(f.engineZip, Buffer.alloc(f.engineFixture.data.length, 42));
   await assert.rejects(f.manager.installModel(), /checksum/);
   assert.equal((await f.manager.status()).engine, false);
   assert.ok(!f.calls.some((c) => c.url.endsWith('.gguf')));

@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "packages": {
+    "keystrokes-mac": {
+      "version": "1.0.0",
+      "url": "https://github.com/sirbull/reccut/releases/download/addons-v1.0.0/reccut-keystrokes-mac-1.0.0.zip",
+      "size": 140616,
+      "sha256": "64bc9c251cb5808cd6a6f37d7564cda5226dd1fd4d55faf69fc8765aa5121d83",
+      "files": [
+        {
+          "path": "reccut-keystrokes-mac",
+          "size": 134928,
+          "sha256": "7c553106596d7c4803a180a8c5718ac228abe8cd6522ff91390b0e5dd40720ad",
+          "executable": true
+        },
+        {
+          "path": "LICENSE.txt",
+          "size": 1071,
+          "sha256": "296a3ec1849c1eb0923d009d41f7cfbaba58267d178a8956d0b3621b89008484"
+        },
+        {
+          "path": "README.md",
+          "size": 4285,
+          "sha256": "7424c99894e61bfaec11d468e13cd9765b4028d0fd1204d61d07348e6863cc51"
+        }
+      ]
+    },
+    "keystrokes-win-x64": {
+      "version": "1.0.0",
+      "url": "https://github.com/sirbull/reccut/releases/download/addons-v1.0.0/reccut-keystrokes-win-x64-1.0.0.zip",
+      "size": 26696,
+      "sha256": "376b1da1bac9f2d8d3dad73b02504fa633aba5812b9645b71e8b379e518dfc4a",
+      "files": [
+        {
+          "path": "reccut-keystrokes-win-x64.exe",
+          "size": 20992,
+          "sha256": "e24a0a71013072fac7deb9cce46d409309e59fd8bef90e857070d83783520128",
+          "executable": true
+        },
+        {
+          "path": "LICENSE.txt",
+          "size": 1071,
+          "sha256": "296a3ec1849c1eb0923d009d41f7cfbaba58267d178a8956d0b3621b89008484"
+        },
+        {
+          "path": "README.md",
+          "size": 4285,
+          "sha256": "7424c99894e61bfaec11d468e13cd9765b4028d0fd1204d61d07348e6863cc51"
+        }
+      ]
+    },
+    "keystrokes-linux-x64": {
+      "version": "1.0.0",
+      "url": "https://github.com/sirbull/reccut/releases/download/addons-v1.0.0/reccut-keystrokes-linux-x64-1.0.0.zip",
+      "size": 28444,
+      "sha256": "3f64f7819e756774becf3ab2bd9f1d5bd3ea1600d560e6fa6858dd97c285df54",
+      "files": [
+        {
+          "path": "reccut-keystrokes-linux-x64",
+          "size": 22744,
+          "sha256": "d2b0b75077baf268f8c582be5f2d1a4c9e5eb611ca121df5ce83ebc355afa518",
+          "executable": true
+        },
+        {
+          "path": "LICENSE.txt",
+          "size": 1071,
+          "sha256": "296a3ec1849c1eb0923d009d41f7cfbaba58267d178a8956d0b3621b89008484"
+        },
+        {
+          "path": "README.md",
+          "size": 4285,
+          "sha256": "7424c99894e61bfaec11d468e13cd9765b4028d0fd1204d61d07348e6863cc51"
+        }
+      ]
+    },
+    "voxcpm-mac": {
+      "version": "1.0.0",
+      "url": "https://github.com/sirbull/reccut/releases/download/addons-v1.0.0/reccut-voxcpm-mac-1.0.0.zip",
+      "size": 5408713,
+      "sha256": "9828488c2eb74dfc2e2dec0b2e387cab0cd562565f4f6e438539b9854dbbc7d8",
+      "files": [
+        {
+          "path": "reccut-voxcpm-mac",
+          "size": 5406304,
+          "sha256": "84043abc46432b623827dcb71fd46491835486e3e03933cd3f4b3c149cbacf6e",
+          "executable": true
+        },
+        {
+          "path": "LICENSE.txt",
+          "size": 2179,
+          "sha256": "f9752a5eeda761cd20a1d668dea2a4e0ec5439f3a77b676e9675dd8c0e04dd7e"
+        }
+      ]
+    },
+    "voxcpm-nb": {
+      "version": "1.0.0",
+      "url": "https://github.com/sirbull/reccut/releases/download/addons-v1.0.0/reccut-voxcpm-nb-1.0.0.zip",
+      "size": 721851,
+      "sha256": "dfe1f71c29ed7654e6940cb75b5987c872f9c7b54c2a652ec6282081947d2cbe",
+      "files": [
+        {
+          "path": "reccut-voxcpm-nb-female-1.wav",
+          "size": 384078,
+          "sha256": "fe6dac6bc6e3077fc88aefadde2e6ea55e2244deee5490cffa741c9470c951f6"
+        },
+        {
+          "path": "reccut-voxcpm-nb-male-1.wav",
+          "size": 336078,
+          "sha256": "76ec08d59edf961cef0e20e662a372b3304426d533ee46fa566d3e99612cf828"
+        },
+        {
+          "path": "LICENSE.txt",
+          "size": 1311,
+          "sha256": "85a999acbe2a193bec5667f43a5f62aa05ad96c3d0eec6a474b25d5061b67227"
+        }
+      ]
+    },
+    "voxcpm-en-us": {
+      "version": "1.0.0",
+      "url": "https://github.com/sirbull/reccut/releases/download/addons-v1.0.0/reccut-voxcpm-en-us-1.0.0.zip",
+      "size": 831235,
+      "sha256": "e71433414b763ab35558dbbee39d76969022611cc42eb26f7e6501a308100e55",
+      "files": [
+        {
+          "path": "reccut-voxcpm-en-us-female-1.wav",
+          "size": 384044,
+          "sha256": "7f3cd64090fdf5b11944c22cc5158fe5ea456bc93ef2f6f316a42c669a46e8c5"
+        },
+        {
+          "path": "reccut-voxcpm-en-us-male-1.wav",
+          "size": 445484,
+          "sha256": "fca787a50234aaa4192c4fe828ab7abc3a54bd00cf27c7fb43ee06ffe8a296ce"
+        },
+        {
+          "path": "LICENSE.txt",
+          "size": 1311,
+          "sha256": "85a999acbe2a193bec5667f43a5f62aa05ad96c3d0eec6a474b25d5061b67227"
+        }
+      ]
+    },
+    "voxcpm-sv": {
+      "version": "1.0.0",
+      "url": "https://github.com/sirbull/reccut/releases/download/addons-v1.0.0/reccut-voxcpm-sv-1.0.0.zip",
+      "size": 600823,
+      "sha256": "61e2ba5930cc5f6c4e43c45fc58ec180df57473a4503b8eba1f2013f4e955d7c",
+      "files": [
+        {
+          "path": "reccut-voxcpm-sv-female-1.wav",
+          "size": 291884,
+          "sha256": "d9e16a00dceaad71b93d00bbbb0635bdfa8772220d161a5df71eefdb903858a6"
+        },
+        {
+          "path": "reccut-voxcpm-sv-male-1.wav",
+          "size": 307244,
+          "sha256": "4eec47865ec0d334f288b6585df8ece576751a68c271bf947a15586c5323b1ca"
+        },
+        {
+          "path": "LICENSE.txt",
+          "size": 1311,
+          "sha256": "85a999acbe2a193bec5667f43a5f62aa05ad96c3d0eec6a474b25d5061b67227"
+        }
+      ]
+    },
+    "voxcpm-da": {
+      "version": "1.0.0",
+      "url": "https://github.com/sirbull/reccut/releases/download/addons-v1.0.0/reccut-voxcpm-da-1.0.0.zip",
+      "size": 616183,
+      "sha256": "b17d8c181752c05ccd47d155f2de64af5c0d4b1b4420c7511c2c32e51644bc99",
+      "files": [
+        {
+          "path": "reccut-voxcpm-da-female-1.wav",
+          "size": 276524,
+          "sha256": "48a77508c4b0764fbed718d9082a331db8fc3e0d57482dc7ec90771ed9791ea0"
+        },
+        {
+          "path": "reccut-voxcpm-da-male-1.wav",
+          "size": 337964,
+          "sha256": "06fca392b68476f0c9bf71939c3949ade6ad35953d7aafb047cd98d126fcf171"
+        },
+        {
+          "path": "LICENSE.txt",
+          "size": 1311,
+          "sha256": "85a999acbe2a193bec5667f43a5f62aa05ad96c3d0eec6a474b25d5061b67227"
+        }
+      ]
+    },
+    "voxcpm-de": {
+      "version": "1.0.0",
+      "url": "https://github.com/sirbull/reccut/releases/download/addons-v1.0.0/reccut-voxcpm-de-1.0.0.zip",
+      "size": 662263,
+      "sha256": "1b1bd0080e04092e397ad5bb5b5b1e04612ef31d365e4ae6f1ef9a4fcc995288",
+      "files": [
+        {
+          "path": "reccut-voxcpm-de-female-1.wav",
+          "size": 322604,
+          "sha256": "14fd3bda6e28a7b52f3559d3855fcaf51f62171fed37878be43543c5cb80fcdd"
+        },
+        {
+          "path": "reccut-voxcpm-de-male-1.wav",
+          "size": 337964,
+          "sha256": "fe8f8a186152dc6271a00f0853e400d111db2389452addf760659fd187c86211"
+        },
+        {
+          "path": "LICENSE.txt",
+          "size": 1311,
+          "sha256": "85a999acbe2a193bec5667f43a5f62aa05ad96c3d0eec6a474b25d5061b67227"
+        }
+      ]
+    }
+  }
+}

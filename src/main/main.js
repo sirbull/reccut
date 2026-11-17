@@ -434,9 +434,7 @@ ipcMain.handle('shortcuts:scope', (e, scope) => {
 // Keystroke Add-on: downloaded only on request, and running only while recording.
 const keystrokes = createKeystrokes({
   dir: path.join(app.getPath('userData'), 'addons', 'keystrokes'),
-  version: app.getVersion(),
-  repo: updates.repo(),
-  fetchImpl: (url) => net.fetch(url, { headers: { 'User-Agent': `Reccut/${app.getVersion()}` } }),
+  fetchImpl: (url, opts) => net.fetch(url, { ...opts, headers: { ...opts?.headers, 'User-Agent': `Reccut/${app.getVersion()}` } }),
 });
 let keySession = null;
 const sessionTime = () => Math.round(Date.now() - keySession.t0) / 1000;
@@ -1340,7 +1338,6 @@ function extensionHandler(channel, handler) {
 // AI-stemmer til Voice Over Studio. Ingenting lastes ned før brukeren ber om det.
 const voxcpm = require('./voxcpm').createVoxcpm({
   dir: path.join(app.getPath('userData'), 'tts', 'voxcpm'),
-  version: app.getVersion(),
   fetchImpl: (url, opts) => net.fetch(url, { ...opts, headers: { ...opts?.headers, 'User-Agent': `Reccut/${app.getVersion()}` } }),
   onChange: () => ttsStatus().then((state) => send('tts:changed', state)).catch(() => {}),
 });

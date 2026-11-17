@@ -248,7 +248,7 @@ npm run dist:mac # or dist:win / dist:linux, builds an installer
 
 `npm start` runs with its own profile (**Reccut Development**), so it doesn't share settings with an installed copy.
 
-To publish a new version, run `npm version <x.y.z> --no-git-tag-version`, commit the changes, tag the commit (for example `v0.9.4`) and push the tag. The workflow in `.github/workflows/build.yml` builds for Apple Silicon Macs, Windows x64 and Linux x64 and attaches the installers and optional add-ons to a draft release. Verify the assets and checksums before publishing the release.
+To publish a new version, run `npm version <x.y.z> --no-git-tag-version`, commit the changes, tag the commit (for example `v0.9.4`) and push the tag. The workflow in `.github/workflows/build.yml` builds for Apple Silicon Macs, Windows x64 and Linux x64 and attaches only the installers to a draft release. Verify the installers before publishing. Optional add-ons use independently versioned ZIP packages; see [add-on distribution](docs/ADDON-PACKAGES.md).
 
 | Folder | Contents |
 | --- | --- |

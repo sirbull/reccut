@@ -74,6 +74,12 @@ clang -O2 -arch arm64 -arch x86_64 -mmacosx-version-min=11.0 -o reccut-keystroke
 gcc -O2 -s -o reccut-keystrokes-linux-x64 keystrokes-linux.c -lX11 -lXtst -lpthread
 ```
 
-The release workflow (`.github/workflows/build.yml`) builds all three and
-attaches each file with a `.sha256` file to the release. Reccut checks the
-checksum before it uses the file, and again every time it starts it.
+The add-on workflow (`.github/workflows/addons.yml`) builds separate ZIP packages
+for macOS (universal), Windows x64 and Linux x64. Each contains the helper,
+this documentation and its MIT license. Packages live in an independently
+versioned add-on release, separate from Reccut installers. The app pins each
+ZIP and every extracted file by SHA-256 in `src/main/addonCatalog.json`.
+Reccut checks the helper again every time it starts it.
+
+Reccut 0.9.4 and earlier use loose files in their matching app releases;
+those compatibility downloads must remain available.

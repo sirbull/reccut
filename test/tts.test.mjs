@@ -182,7 +182,7 @@ test('VoxCPM2 models, references, moods and engine source are pinned independent
   assert.ok(!/\.gguf|reccut-voxcpm-(mac|win|linux)/i.test(JSON.stringify([pkg.build.files, pkg.build.extraResources])));
   assert.ok(!/voxcpm/i.test(JSON.stringify([pkg.dependencies, pkg.devDependencies, pkg.scripts.postinstall, pkg.scripts.dist])));
   assert.ok(pkg.build.files.includes('src/shared/tts.js'), 'the native engine can import the same sentence splitter in a packaged app');
-  const ci = fs.readFileSync(new URL('../.github/workflows/build.yml', import.meta.url), 'utf8');
+  const ci = fs.readFileSync(new URL('../.github/workflows/addons.yml', import.meta.url), 'utf8');
   assert.ok(ci.includes(`ref: ${c.engine.revision}`));
   assert.ok(ci.includes('voxcpm-artifacts/reccut-voxcpm-*'));
   assert.ok(ci.includes('scripts/prepare-voxcpm-voices.mjs'));

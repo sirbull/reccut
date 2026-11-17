@@ -6,6 +6,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { packageFixture } from './helpers/addon-package.mjs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -38,12 +39,19 @@ function fakeSpawn() {
   return { spawnImpl, spawnSyncImpl, started };
 }
 
-function setup(files, platform = 'linux', arch = 'x64') {
+async function setup(files, platform = 'linux', arch = 'x64') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reccut-keys-'));
-  const rel = release(files);
+  const asset = assetName(platform, arch);
+  const fixture = await packageFixture([{ path: asset, data: files[asset] || helper, executable: true }], { id: 'keystrokes', version: '1.2.3' });
+  // Keep the trusted contents unchanged when testing corrupt payloads.
+  fixture.pack.files[0].sha256 = sha(helper);
+  fixture.pack.files[0].size = helper.length;
+  const addonCatalog = { packages: { [asset.replace(/^reccut-/, '').replace(/\.exe$/, '')]: fixture.pack } };
+  const name = new URL(fixture.pack.url).pathname.split('/').at(-1);
+  const rel = release(asset in files ? { [name]: fixture.data } : {});
   const sp = fakeSpawn();
-  const ks = createKeystrokes({ dir: path.join(dir, 'keystrokes'), version: '1.2.3', repo: { owner: 'sirbull', name: 'reccut' }, fetchImpl: rel.fetchImpl, platform, arch, ...sp });
-  return { ks, dir: path.join(dir, 'keystrokes'), ...rel, ...sp };
+  const ks = createKeystrokes({ dir: path.join(dir, 'keystrokes'), addonCatalog, version: '1.2.3', repo: { owner: 'sirbull', name: 'reccut' }, fetchImpl: rel.fetchImpl, platform, arch, ...sp });
+  return { ks, addonCatalog, dir: path.join(dir, 'keystrokes'), ...rel, ...sp };
 }
 
 const helper = Buffer.from('#!/bin/sh\necho fake helper\n');
@@ -59,7 +67,7 @@ test('the add-on has one helper file per platform', () => {
 });
 
 test('nothing is downloaded or started before the user consents', async () => {
-  const s = setup(files);
+  const s = await setup(files);
   assert.deepEqual({ ...s.ks.status(), permission: undefined }, { supported: true, installed: false, damaged: false, version: null, installedAt: null, outdated: false, permission: undefined, running: false, game: false, full: false });
   await assert.rejects(s.ks.install(), /accept/);
   await assert.rejects(s.ks.install({ consent: 'yes' }), /accept/);
@@ -68,13 +76,10 @@ test('nothing is downloaded or started before the user consents', async () => {
   assert.equal(s.started.length, 0);
 });
 
-test('install downloads from the release for this version and checks the checksum', async () => {
-  const s = setup(files);
+test('install downloads one pinned ZIP from the independent add-on release', async () => {
+  const s = await setup(files);
   const status = await s.ks.install({ consent: true });
-  assert.deepEqual(s.urls, [
-    'https://github.com/sirbull/reccut/releases/download/v1.2.3/reccut-keystrokes-linux-x64.sha256',
-    'https://github.com/sirbull/reccut/releases/download/v1.2.3/reccut-keystrokes-linux-x64',
-  ]);
+  assert.deepEqual(s.urls, ['https://github.com/sirbull/reccut/releases/download/addons-v1.2.3/keystrokes-1.2.3.zip']);
   assert.equal(status.installed, true);
   assert.equal(status.damaged, false);
   assert.equal(status.version, '1.2.3');
@@ -87,16 +92,16 @@ test('install downloads from the release for this version and checks the checksu
 });
 
 test('a download that does not match its checksum is never written', async () => {
-  const s = setup({ ...files, 'reccut-keystrokes-linux-x64': Buffer.from('something else') });
+  const s = await setup({ ...files, 'reccut-keystrokes-linux-x64': Buffer.alloc(helper.length, 42) });
   await assert.rejects(s.ks.install({ consent: true }), /checksum/);
   assert.equal(fs.existsSync(path.join(s.dir, 'reccut-keystrokes-linux-x64')), false);
   assert.equal(s.ks.status().installed, false);
-  const missing = setup({});
-  await assert.rejects(missing.ks.install({ consent: true }), /not published for Reccut 1\.2\.3/);
+  const missing = await setup({});
+  await assert.rejects(missing.ks.install({ consent: true }), /404/);
 });
 
 test('a helper changed after install is reported as damaged and not started', async () => {
-  const s = setup(files);
+  const s = await setup(files);
   await s.ks.install({ consent: true });
   fs.writeFileSync(path.join(s.dir, 'reccut-keystrokes-linux-x64'), 'tampered');
   const status = s.ks.status();
@@ -107,7 +112,7 @@ test('a helper changed after install is reported as damaged and not started', as
 });
 
 test('the helper runs only between start and stop, and its lines are parsed', async () => {
-  const s = setup(files);
+  const s = await setup(files);
   await s.ks.install({ consent: true });
   const events = [];
   assert.equal(s.ks.start((e) => events.push(e)), true);
@@ -130,7 +135,7 @@ test('the helper runs only between start and stop, and its lines are parsed', as
 });
 
 test('the helper gets only the sources that were chosen, and letters need their own consent', async () => {
-  const s = setup(files);
+  const s = await setup(files);
   await s.ks.install({ consent: true });
   const args = (opts) => {
     s.ks.stop();
@@ -162,11 +167,13 @@ test('the helper gets only the sources that were chosen, and letters need their 
 });
 
 test('a helper from an older release is never trusted with the new flags', async () => {
-  const s = setup(files);
+  const s = await setup(files);
   await s.ks.install({ consent: true });
   await s.ks.allowKeyboard({ consent: true, mode: 'full' });
   const file = path.join(s.dir, 'addon.json');
-  fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), version: '1.2.2' }));
+  const old = Buffer.from('older helper');
+  fs.writeFileSync(path.join(s.dir, 'reccut-keystrokes-linux-x64'), old);
+  fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), version: '1.2.2', sha256: sha(old) }));
   assert.equal(s.ks.start(() => {}, { shortcuts: false, keyboard: 'full' }), false, 'it would send shortcuts that were turned off');
   assert.equal(s.ks.start(() => {}, { keyboard: 'full', mouse: true }), true);
   assert.deepEqual(s.started[0].args, []);
@@ -244,7 +251,7 @@ test('key presses are never handed to the AI tools', () => {
 });
 
 test('remove deletes the add-on', async () => {
-  const s = setup(files);
+  const s = await setup(files);
   await s.ks.install({ consent: true });
   s.ks.start(() => {});
   const status = await s.ks.remove();

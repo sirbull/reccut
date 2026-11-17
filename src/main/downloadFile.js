@@ -73,7 +73,7 @@ async function downloadFile({ url, file, size, sha256, maxBytes = size, signal, 
     },
   });
   try {
-    await pipeline(Readable.from(res.body), meter, createWriteStream(part, { flags: offset ? 'a' : 'w' }), { signal });
+    await pipeline(Readable.fromWeb(res.body), meter, createWriteStream(part, { flags: offset ? 'a' : 'w' }), { signal });
     signal?.throwIfAborted();
     if (size !== undefined && bytes !== size) throw new Error('The download ended before the file was complete.');
     if (hash.digest('hex') !== sha256) {
