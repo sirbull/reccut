@@ -1,6 +1,6 @@
-import {StockPanel,MoreTemplates} from './Online.jsx';
+import {StockPanel,StockSearchSection,MoreTemplates} from './Online.jsx';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { Plus, Type, ZoomIn, ZoomOut, Palette, Crop, Eye, Scan, Frame, MoveUpRight, LayoutTemplate, Clapperboard, SquareArrowUp, BadgeCheck, Minimize2, Maximize2, X, Scaling, ScanText, Search, Shapes } from 'lucide-preact';
+import { Plus, Type, ZoomIn, ZoomOut, Palette, Crop, Eye, Scan, Frame, MoveUpRight, LayoutTemplate, Clapperboard, SquareArrowUp, BadgeCheck, Minimize2, Maximize2, X, Scaling, ScanText, Search, Shapes, Images } from 'lucide-preact';
 import { DESIGN_SIZES, DESIGN_SHAPES, designList } from '../../shared/design.js';
 import { project, projectEpoch } from '../editor/store.js';
 import { Button, IconButton, Modal, toast } from '../ui.jsx';
@@ -75,16 +75,17 @@ export function DesignRoom({ active }) {
   useEffect(() => { setQuery(''); endLibraryDrag(); }, [panel]);
   useEffect(() => { if (!active) { endDesignTransient(); endLibraryDrag(); } }, [active]);
   const importPaths=(paths,alternate)=>importDesignFiles(paths,alternate).catch(err=>toast(err.message,{kind:'error'}));
-  const panels=[{id:'search',label:'Search',icon:Search},{id:'templates',label:'Templates',icon:LayoutTemplate},{id:'video',label:'Video',icon:Clapperboard},{id:'text',label:'Text',icon:Type},{id:'content',label:'Add Content',icon:SquareArrowUp},{id:'elements',label:'Elements',icon:Shapes},{id:'styles',label:'Styles',icon:Palette},{id:'brand',label:'Brand',icon:BadgeCheck}];
+  const panels=[{id:'search',label:'Search',icon:Search},{id:'stock',label:'Stock',icon:Images},{id:'templates',label:'Templates',icon:LayoutTemplate},{id:'video',label:'Video',icon:Clapperboard},{id:'text',label:'Text',icon:Type},{id:'content',label:'Add Content',icon:SquareArrowUp},{id:'elements',label:'Elements',icon:Shapes},{id:'styles',label:'Styles',icon:Palette},{id:'brand',label:'Brand',icon:BadgeCheck}];
   const view=libraryPreview.value||d;
   return <div class={`dz-room dz-redesign${panel?'':' dz-panel-closed'}${wide?' dz-panel-wide':''}`} style={{'--dz-panel-w':`${designPanelWidth.value}px`,'--dz-sidebar-w':`${designSidebarWidth.value}px`}} onDragOver={(e) => { if (hasFiles(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} onDrop={(e) => { if (!hasFiles(e.dataTransfer)) return; e.preventDefault(); e.stopPropagation(); importPaths(droppedPaths(e.dataTransfer, window.api.pathForFile), e.altKey); }}>
     <nav class="dz-rail" aria-label="Design panels">{panels.map(({id,label,icon:Icon})=><button key={id} title={label} aria-label={label} aria-pressed={panel===id} onClick={()=>toggleDesignPanel(id)}><Icon size={21}/><span>{label}</span></button>)}</nav>
     {panel&&<aside class="dz-library-panel panel" aria-label={`${panels.find(p=>p.id===panel)?.label} library`}>
       <PanelResizer edge="right" prefKey="designPanelWidth" width={designPanelWidth.value} min={220} label="Resize library panel"/>
       <header class="dz-library-panel-head"><b>{panels.find(p=>p.id===panel)?.label}</b><span class="spacer"/><IconButton icon={wide?Minimize2:Maximize2} title={wide?'Narrow panel':'Expand panel'} onClick={expandDesignPanel}/><IconButton icon={X} title="Close panel" onClick={()=>openDesignPanel(null)}/></header>
-      {panel!=='video'&&<div class="dz-panel-search"><input type="search" class="text-input" placeholder={panel==='search'?'Search all content':`Search ${panels.find(p=>p.id===panel)?.label.toLowerCase()}`} aria-label={panel==='search'?'Search all content':'Search current library'} value={query} onInput={e=>setQuery(e.currentTarget.value)}/></div>}
+      {panel!=='video'&&panel!=='stock'&&<div class="dz-panel-search"><input type="search" class="text-input" placeholder={panel==='search'?'Search all content':panel==='stock'?'Search stock services':`Search ${panels.find(p=>p.id===panel)?.label.toLowerCase()}`} aria-label={panel==='search'?'Search all content':'Search current library'} value={query} onInput={e=>setQuery(e.currentTarget.value)}/></div>}
       <div class="dz-library-panel-body">
-        {panel==='search'&&<><SearchPanel query={query}/><StockPanel query={query}/></>}
+        {panel==='search'&&<><SearchPanel query={query}/><StockSearchSection query={query}/></>}
+        {panel==='stock'&&<StockPanel/>}
         {panel==='elements'&&<ElementsPanel query={query}/>}
         {panel==='styles'&&<DesignStylesPanel query={query}/>}
         {panel==='templates'&&<><TemplatesPanel query={query}/><MoreTemplates/></>}

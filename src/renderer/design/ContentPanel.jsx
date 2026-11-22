@@ -1,4 +1,3 @@
-import {StockPanel} from './Online.jsx';
 import { useState } from 'preact/hooks';
 import { ChevronDown, Upload } from 'lucide-preact';
 import { project } from '../editor/store.js';
@@ -15,6 +14,7 @@ import { DESIGN_FONT_PAIRS } from '../../shared/designTemplates.js';
 import { addTextPreset } from './content.js';
 import { AppearanceCard, fontPairs } from './OfflinePanels.jsx';
 import { currentDesign } from './store.js';
+import { openDesignPanel } from './panels.js';
 import { LibraryCard, StylesPanel } from './LibraryPanel.jsx';
 import { LibrarySections } from './LibrarySection.jsx';
 import { chooseImage, chooseOpenImage, openImageFiles, requestPlace } from './assets.js';
@@ -46,7 +46,7 @@ export function ContentPanel({ query = '' }) {
   return <><ImportImageButton/><div class="dz-content-drop" onDragOver={e => { if (hasFiles(e.dataTransfer)) { e.preventDefault(); e.stopPropagation(); } }} onDrop={e => { if (!hasFiles(e.dataTransfer)) return; e.preventDefault(); e.stopPropagation(); importDesignFiles(droppedPaths(e.dataTransfer, window.api.pathForFile), e.altKey).catch(err => toast(err.message, { kind: 'error' })); }}>Drop images here</div><LibrarySections query={query} sections={[
     { id: 'recent', title: 'Recent', items: recent, render: a => <ImageCard key={a.id} item={a} source={{ asset: a }} prefix="asset"/>, empty: 'Images imported into this project appear here.' },
     { id: 'project', title: 'From Project', items: media, render: m => <ImageCard key={m.id} item={m} source={{ media: m }} prefix="media"/>, empty: 'Images from Edit appear here.' },
-  ]}/><StockPanel query={query}/></>;
+  ]}/><Button onClick={() => openDesignPanel('stock')}>Search Stock…</Button></>;
 }
 export function TextPanel({ query = '' }) {
   return <><div class="dz-text-presets">{['title','subtitle','badge'].map(kind=><Button key={kind} onClick={()=>addTextPreset(kind)}>Add {kind[0].toUpperCase()+kind.slice(1)}</Button>)}</div><StylesPanel query={query} extraSections={[{id:'font-pairs',title:'Font Pairs',items:filterLibraryItems(fontPairs(),query),render:pair=><AppearanceCard key={pair.id} pair={pair} user={!DESIGN_FONT_PAIRS.some(p=>p.id===pair.id)}/>}]} /></>;

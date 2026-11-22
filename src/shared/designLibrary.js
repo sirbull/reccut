@@ -1,6 +1,6 @@
 import { hitTest } from './design.js';
 
-export const DESIGN_PANELS = ['search', 'templates', 'video', 'text', 'content', 'elements', 'styles', 'brand'];
+export const DESIGN_PANELS = ['search', 'stock', 'templates', 'video', 'text', 'content', 'elements', 'styles', 'brand'];
 export function designPanel(value) {
   if (value === null) return null;
   return DESIGN_PANELS.includes(value) ? value : ({ project: 'content' }[value] || 'templates');

@@ -1,5 +1,7 @@
 import { AIChat, aiChatOpen } from './Extensions.jsx';
 import { PluginWindows, PluginsButton } from './Plugins.jsx';
+import { DesignStockWindow, stockPopout } from './design/Online.jsx';
+import { EditStockWindow } from './editor/Browser.jsx';
 import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import {
@@ -477,6 +479,8 @@ function App() {
       {commands.historyOpen.value && <HistoryDialog />}
       {aiChatOpen.value && <AIChat key={project.value.id} />}
       <PluginWindows />
+      {r === 'design' && stockPopout.value.includes('design') && <DesignStockWindow />}
+      {r === 'edit' && stockPopout.value.includes('edit') && <EditStockWindow />}
       {boothOpen.value && r === 'edit' && <VoiceoverBooth />}
       {quickOpen.value && r === 'edit' && <QuickRecord />}
       {aiModelsOpen.value && !needsProject.value && <AiModelsDialog key={String(aiModelsOpen.value.focus)} />}

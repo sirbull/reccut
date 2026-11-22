@@ -1,0 +1,154 @@
+// Real renderer and Electron window, with stock IPC fixtures and a disposable profile.
+// Run after npm run build. No service credentials, downloads or user projects are used.
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const electron = require('electron');
+if (!electron.app) {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'reccut-stock-ui-'));
+  const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
+  const child = require('node:child_process').spawn(electron, [__filename, profile], { env, stdio: 'inherit' });
+  child.on('exit', code => { if(code===0)fs.rmSync(profile,{recursive:true,force:true});process.exitCode = code ?? 1; });
+} else {
+  const { app, BrowserWindow, ipcMain } = electron;
+  const profile = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'reccut-stock-ui-'));
+  fs.mkdirSync(path.join(profile, 'videos'));
+  app.setPath('appData', profile); app.setPath('userData', path.join(profile, 'profile')); app.setPath('videos', path.join(profile, 'videos'));
+  const config = { enabled: true, availablePlugins: [], providers: [
+    { id: 'openverse', name: 'Openverse', enabled: true, kinds: ['photo', 'music', 'sfx'] },
+    { id: 'pixabay-personal', name: 'Pixabay', enabled: true, kinds: ['photo', 'illustration', 'vector', 'video'], requiresKey: true, hasKey: true },
+  ] };
+  const searches = [];
+  let late;
+  const handle = ipcMain.handle.bind(ipcMain);
+  ipcMain.handle = (channel, handler) => {
+    if (channel === 'stock:settings') handler = () => structuredClone(config);
+    if (channel === 'stock:preview') handler = () => path.join(__dirname, '../assets/icon.png');
+    if (channel === 'stock:search') handler = async (_event, req) => {
+      searches.push(req);
+      const response = { items: [{ token: `${req.provider || 'all'}:${req.query}:${req.page}`, title: `${req.provider || 'all'} ${req.query} ${req.page}`, providerName: 'Fixture', media: 'audio', kind: req.kind, license: 'CC0', author: 'Test' }], more: req.page === 1 };
+      if (req.query === 'slow') return new Promise(resolve => { late = () => resolve(response); });
+      return response;
+    };
+    return handle(channel, handler);
+  };
+  let started = false;
+  const timeout = setTimeout(() => { console.error('Stock UI test timed out'); app.exit(1); }, 90000);
+  app.on('browser-window-created', (_event, win) => {
+    win.webContents.on('did-finish-load', async () => {
+      if (started || !win.webContents.getURL().endsWith('/build/index.html')) return;
+      started = true;
+      win.webContents.setBackgroundThrottling(false);
+      win.webContents.on('console-message', event=>{if(event.level==='error')console.error('Renderer:',event.message);});
+      const js = code => win.webContents.executeJavaScript(`{${code}}`).catch(error=>{throw Error(`${code}: ${error.message}`);});
+      const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const wait = async code => { for (let n = 0; n < 150; n++) { if (await js(code)) return; await pause(50); } throw Error(`UI condition failed: ${code}`); };
+      const click = (text, scope = 'document') => js(`[...${scope}.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(text)})?.click()`);
+      const input = (selector, text) => js(`const el=document.querySelector(${JSON.stringify(selector)});el.value=${JSON.stringify(text)};el.dispatchEvent(new Event('input',{bubbles:true}));`);
+      const bounds = () => js(`(()=>{const r=document.querySelector('.stock-window').getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,vw:innerWidth,vh:innerHeight}})()`);
+      const pointer = async (selector, dx, dy) => {
+        await js(`const target=document.querySelector(${JSON.stringify(selector)}),r=target.getBoundingClientRect();target.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerId:1,clientX:r.x+10,clientY:r.y+10}));window.dispatchEvent(new PointerEvent('pointermove',{pointerId:1,clientX:r.x+10+${dx},clientY:r.y+10+${dy}}));window.dispatchEvent(new PointerEvent('pointerup',{pointerId:1}));`);
+        await pause(80);
+      };
+      try {
+        await wait(`!!document.querySelector('[aria-label="Welcome to Reccut"]')`);
+        await js(`localStorage.setItem('prefs',JSON.stringify({aiModelsAsked:true}));navigator.mediaDevices.getUserMedia=async()=>{throw Error('No microphone in UI test')};void 0`);
+        await click('Create Project');
+        await wait(`!document.querySelector('[aria-label="Welcome to Reccut"]')`);
+        await wait(`!!document.querySelector('[aria-label="AI Models (Optional)"]')`);
+        await click('Not Now', `document.querySelector('[aria-label="AI Models (Optional)"]')`);
+        await wait(`!document.querySelector('[aria-label="AI Models (Optional)"]')`);
+        await js(`document.querySelector('button[title^="Edit ("]').click()`);
+        await js(`document.querySelector('[data-tab="stock"]').click()`);
+        await wait(`!!document.querySelector('.stock-browser [aria-label="Search stock"]')`);
+        await click('Photos', `document.querySelector('.stock-browser')`);
+        await input('.stock-browser input', 'ocean');
+        await wait(`document.querySelector('.stock-grid')?.textContent.includes('all ocean 1')`);
+        await click('Pixabay', `document.querySelector('.stock-browser')`);
+        await wait(`document.querySelector('.stock-grid')?.textContent.includes('pixabay-personal ocean 1')`);
+        assert.equal(searches.at(-1).provider, 'pixabay-personal');
+        await click('More Photos', `document.querySelector('.stock-browser')`);
+        await wait(`document.querySelectorAll('.stock-card').length===2`);
+        await click('All services', `document.querySelector('.stock-browser')`);
+        await wait(`document.querySelector('.stock-grid')?.textContent.includes('all ocean 1')`);
+        await click('Pixabay', `document.querySelector('.stock-browser')`);
+        await wait(`document.querySelector('.stock-grid')?.textContent.includes('pixabay-personal ocean 1')`);
+        assert.equal(searches.at(-1).page, 1, 'filter changes restart pagination');
+        await input('.stock-browser input', 'slow');
+        await wait(`document.querySelector('.stock-browser').textContent.includes('Searching')`);
+        for (let i = 0; i < 30 && !late; i++) await pause(50);
+        assert.ok(late);
+        await input('.stock-browser input', 'fast');
+        await wait(`document.querySelector('.stock-grid')?.textContent.includes('fast')`);
+        late(); await pause(150);
+        assert.ok(!(await js(`document.querySelector('.stock-grid').textContent.includes('slow')`)), 'late results cannot replace a newer query');
+        await js(`document.querySelector('[aria-label="Open Stock in its own window"]').click()`);
+        await wait(`!!document.querySelector('.stock-window')`);
+        const initial = await bounds();
+        assert.ok(Math.abs(initial.x - (initial.vw - initial.w) / 2) <= 1 && Math.abs(initial.y - (initial.vh - initial.h) / 2) <= 1, 'window opens centered');
+        assert.ok(initial.w > 700 && initial.h > 450, 'window opens larger than the panel');
+        assert.equal(await js(`document.querySelector('.stock-window input').value`), 'fast');
+        await pointer('.stock-window-resize', -150, -100);
+        const resized = await bounds();
+        assert.equal(resized.w, initial.w - 150); assert.equal(resized.h, initial.h - 100);
+        await pointer('.stock-window > header', 30, 25);
+        const moved = await bounds();
+        assert.equal(moved.x, resized.x + 30); assert.equal(moved.y, resized.y + 25);
+        assert.equal(moved.w, resized.w); assert.equal(moved.h, resized.h);
+        await input('.stock-window input', 'forest');
+        await click('Services…', `document.querySelector('.stock-window')`);
+        await wait(`!!document.querySelector('[aria-label="Stock Services"]')`);
+        await wait(`(()=>{const d=document.querySelector('[aria-label="Stock Services"]'),r=d.getBoundingClientRect();return d.contains(document.elementFromPoint(r.x+30,r.y+25))})()`);
+        await click('Done', `document.querySelector('[aria-label="Stock Services"]')`);
+        await js(`document.querySelector('.stock-window [aria-label="Put Back in Panel"]').click()`);
+        await wait(`!document.querySelector('.stock-window')`);
+        assert.equal(await js(`document.querySelector('.stock-browser input').value`), 'forest');
+        assert.equal(await js(`document.querySelector('.services [aria-selected="true"]').textContent`), 'Pixabay');
+        // Unsupported types keep the selected service and do not broadcast the query.
+        const before = searches.length;
+        await click('Music', `document.querySelector('.stock-browser')`); await pause(600);
+        assert.equal(searches.length, before);
+        assert.ok(await js(`document.querySelector('.stock-browser').textContent.includes('unavailable')`));
+        await click('All services', `document.querySelector('.stock-browser')`);
+        await wait(`document.querySelector('.stock-grid')?.textContent.includes('all forest 1')`);
+        // Design panel, including the shared global search entry point.
+        await js(`document.querySelector('button[title="Design"]').click()`);
+        await js(`document.querySelector('.dz-rail [aria-label="Stock"]').click()`);
+        await wait(`!!document.querySelector('.dz-library-panel .stock-browser input')`);
+        await input('.dz-library-panel .stock-browser input', 'mountain');
+        await click('Pixabay', `document.querySelector('.dz-library-panel .stock-browser')`);
+        await js(`document.querySelector('.dz-library-panel [aria-label="Open Stock in its own window"]').click()`);
+        await wait(`!!document.querySelector('.stock-window')`);
+        assert.equal(await js(`document.querySelector('.stock-window input').value`), 'mountain');
+        await input('.stock-window input', 'desert');
+        await click('Vectors', `document.querySelector('.stock-window')`);
+        await js(`document.querySelector('.stock-window [aria-label="Close"]').click()`);
+        await wait(`!document.querySelector('.stock-window')`);
+        assert.equal(await js(`document.querySelector('.dz-library-panel .stock-browser input').value`), 'desert');
+        assert.equal(await js(`document.querySelector('.dz-library-panel [aria-label="Media type"] [aria-selected="true"]').textContent`), 'Vectors');
+        await js(`document.querySelector('.dz-rail [aria-label="Search"]').click()`);
+        await pause(200);
+        await input('.dz-panel-search input', 'sunset');
+        await wait(`!!document.querySelector('.dz-library-panel [aria-label="Open Stock in its own window"]')`);
+        await click('Pixabay', `document.querySelector('.dz-library-panel .stock-browser')`);
+        await js(`document.querySelector('.dz-library-panel [aria-label="Open Stock in its own window"]').click()`);
+        await wait(`!!document.querySelector('.stock-window')`);
+        assert.equal(await js(`document.querySelector('.stock-window input').value`), 'sunset');
+        assert.equal(await js(`document.querySelector('.stock-window .services [aria-selected="true"]').textContent`), 'Pixabay');
+        await wait(`!!document.querySelector('.stock-window .dz-library-card')`);
+        await pause(200);
+        const image = path.join(os.tmpdir(), 'reccut-stock-window.png');
+        fs.writeFileSync(image, (await win.webContents.capturePage()).toPNG());
+        win.setContentSize(680, 500);
+        await pause(200);
+        const small = await bounds();
+        assert.ok(small.x >= 0 && small.y >= 0 && small.x + small.w <= small.vw && small.y + small.h <= small.vh, 'window stays reachable when app shrinks');
+        console.log(`PASS: Edit and Design filters, pagination, request races, pop-out, docking, shared search, moving, resizing and service dialog. Screenshot: ${image}`);
+        clearTimeout(timeout); win.destroy(); app.exit(0);
+      } catch (error) { console.error(error); console.error('Test profile:', profile);fs.writeFileSync(path.join(os.tmpdir(),'reccut-stock-failed.png'),(await win.webContents.capturePage()).toPNG());console.error(await js(`document.elementFromPoint(300,100)?.outerHTML.slice(0,500)`)); clearTimeout(timeout); app.exit(1); }
+    });
+  });
+  require('../src/main/input').InputTracker.prototype.start = function () {};
+  require('../src/main/main');
+}

@@ -98,3 +98,26 @@ test('personal keys survive restart through encrypted storage and disappear on p
 test('a paid REST image plugin waits for explicit session credit consent before search or testing',async()=>{
  const dir=temp(),calls=[];try{const h=createStockHost({dir,cacheDir:path.join(dir,'cache'),safeStorage:{isEncryptionAvailable:()=>false},lookup:async()=>[{address:'8.8.8.8'}],fetchImpl:async(url)=>{calls.push(url);return new Response(JSON.stringify({items:[row]}))}});h.install({...manifest,costsCredits:true});h.saveKey(manifest.id,'personal-key');assert.equal((await h.search({provider:manifest.id,query:'nature'})).items.length,0);await assert.rejects(h.testConnection(manifest.id),/Confirm account credit/);assert.equal(calls.length,0);h.acceptCosts(manifest.id);assert.equal((await h.search({provider:manifest.id,query:'nature'})).items.length,1);assert.equal(calls.length,1);}finally{fs.rmSync(dir,{recursive:true,force:true})}
 });
+
+test('stock kinds: Pixabay video, keyless Openverse audio, Magnific field guesses, consent after restart and file types',async()=>{
+ const dir=temp(),calls=[];try{
+  const {mediaType}=require('../src/main/stock');
+  const mp4=Buffer.concat([Buffer.from([0,0,0,24]),Buffer.from('ftypisom'),Buffer.alloc(16)]),mp3=Buffer.concat([Buffer.from('ID3'),Buffer.alloc(20)]);
+  assert.deepEqual(mediaType(mp4),{ext:'mp4',media:'video'});assert.deepEqual(mediaType(mp3),{ext:'mp3',media:'audio'});assert.equal(mediaType(Buffer.from('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"></svg>')).ext,'svg');assert.throws(()=>mediaType(Buffer.concat([Buffer.from('PK'),Buffer.alloc(20)])),/ZIP/);
+  const fetchImpl=async url=>{calls.push(url);const u=new URL(url);
+   if(u.pathname==='/api/videos/')return new Response(JSON.stringify({hits:[{id:7,pageURL:'https://pixabay.com/videos/7',user:'Filmer',tags:'sea',videos:{tiny:{thumbnail:row.preview},medium:{url:'https://cdn.pixabay.com/v.mp4',width:1280,height:720}}}]}));
+   if(u.pathname==='/v1/audio/')return new Response(JSON.stringify({results:[{id:'a1',title:'Rain',url:'https://cdn.freesound.org/rain.mp3',creator:'Rec',foreign_landing_url:'https://freesound.org/s/1',license:'by',duration:65000}]}));
+   if(url==='https://cdn.pixabay.com/v.mp4')return new Response(mp4);if(url==='https://cdn.freesound.org/rain.mp3')return new Response(mp3);return new Response('{}');};
+  const create=()=>createStockHost({dir,cacheDir:path.join(dir,'cache'),safeStorage:{isEncryptionAvailable:()=>false},lookup:async()=>[{address:'8.8.8.8'}],fetchImpl});
+  let h=create();h.addPlugin('pixabay-personal');h.saveKey('pixabay-personal','k');
+  assert.deepEqual(h.providers().find(p=>p.id==='pixabay-personal').kinds,['photo','illustration','vector','video']);
+  const videos=await h.search({query:'sea',kind:'video',provider:'pixabay-personal'});assert.equal(new URL(calls.at(-1)).pathname,'/api/videos/');assert.equal(videos.items[0].media,'video');
+  const clip=await h.download(videos.items[0].token,path.join(dir,'out'));assert.match(clip.path,/\.mp4$/);
+  assert.equal((await h.search({query:'sea',kind:'music',provider:'pixabay-personal'})).items.length,0);
+  const sounds=await h.search({query:'rain',kind:'sfx',provider:'openverse'});assert.match(calls.at(-1),/source=freesound/);assert.equal(sounds.items[0].durationMs,'65000');
+  const heard=await h.listen(sounds.items[0].token),before=calls.length,sound=await h.download(sounds.items[0].token,path.join(dir,'out'));assert.equal(calls.length,before);assert.match(sound.path,/\.mp3$/);assert.ok(fs.existsSync(heard));
+  h.acceptCosts('magnific');h=create();assert.equal(h.providers().find(p=>p.id==='magnific').costAccepted,true);h.signOut('magnific');assert.equal(create().providers().find(p=>p.id==='magnific').costAccepted,false);
+  const magnific=require('../src/main/stock/builtins').find(p=>p.id==='magnific');const mapped=mapResults(magnific,{data:[{id:5,title:'Cat',preview:{url:'https://img.example.org/p.jpg'},url:'https://www.magnific.com/cat',author:{name:'Ann'}}]},{kind:'vector'});assert.equal(mapped[0].preview,'https://img.example.org/p.jpg');assert.equal(mapped[0].author,'Ann');assert.equal(mapped[0].kind,'vector');
+  assert.match(fs.readFileSync('src/main/main.js','utf8'),/^fetchImpl:\(\.\.\.args\)=>globalThis\.fetch\(/m,'net.fetch cancels manual redirects');
+ }finally{fs.rmSync(dir,{recursive:true,force:true})}
+});

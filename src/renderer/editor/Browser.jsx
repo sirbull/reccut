@@ -25,14 +25,16 @@ import {
   Video,
   Wand2,
   ChevronRight,
+  Globe,
 } from 'lucide-preact';
+import { StockBrowser, StockCard, StockPoppedOut, StockWindow, stockPopout } from '../design/Online.jsx';
 import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
 import { AudioFxIcon } from './audioIcons.jsx';
 import { renameSequence, sequenceList, timelines, CAPTION_LANE, EFFECTS, FRAME_FX, REDACT_MODES, HIGHLIGHT_DEFAULTS, TITLE_TEMPLATES, TRANSITIONS, defaultProps, formatDuration, formatTimecode, makeClip, newProject, vfxProp } from '../../shared/model.js';
 import { drawFrame } from '../../shared/render.js';
 import { onFlareSprites } from '../../shared/lensFlareRender.js';
 import { parseSrt, speechSources, toSrt, toVtt } from '../../shared/srt.js';
-import { addMediaRecords, switchSequence, usedMedia, projectFolders, audioSkimming, commit, endPreview, getWave, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
+import { addMediaRecords, importPaths, switchSequence, usedMedia, projectFolders, audioSkimming, commit, endPreview, getWave, makeCaptionClip, playing, project, selection, skim, skimming, tasks, timeSig, waveVersion } from './store.js';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
 import { fileUrl, mediaPreviewProject, openSource, scrubAudio, seek } from './playback.js';
 import * as commands from './commands.js';
@@ -55,6 +57,7 @@ const TABS = [
   { id: 'effects', label: 'Effects', icon: Wand2 },
   { id: 'audio', label: 'Audio Effects', icon: AudioLines },
   { id: 'captions', label: 'Captions', icon: Captions },
+  { id: 'stock', label: 'Stock', icon: Globe },
 ];
 
 export function Browser() {
@@ -77,6 +80,7 @@ export function Browser() {
         {tab === 'effects' && <EffectsTab />}
         {tab === 'audio' && <AudioFxTab />}
         {tab === 'captions' && <CaptionsTab />}
+        {tab === 'stock' && <StockTab />}
       </div>
     </div>
   );
@@ -89,6 +93,33 @@ export function dragData(e, item) {
     item = { ...item, label: media?.name, mediaKind: media?.kind, clips: ids.map((id) => ({ id, opts: commands.browserClipOpts(project.value.media[id], ids.length === 1) })) };
   }
   startLibraryDrag(e, item);
+}
+
+/* Stock */
+
+// Stock files are saved in the project's media folder, or Reccut's own folder for unsaved projects,
+// and imported where they are. The credit stays on the media for attribution.
+const sep = api.platform === 'win32' ? '\\' : '/';
+async function useStock(item, placement) {
+  const folders = projectFolders.value;
+  const dir = folders?.own ? folders.media : `${await api.baseDir()}${sep}Stock`;
+  const result = await api.stockDownload(item.token, dir);
+  const [media] = await importPaths([result.path], placement, { copy: false });
+  if (!media) return;
+  commit((p) => { if (p.media[media.id]) p.media[media.id].stock = result.source; });
+  toast(`${result.name} was added to ${placement ? 'the timeline' : 'Media'}.`);
+}
+const STOCK_ACTIONS = [
+  { label: 'Add to Media', run: (item) => useStock(item, null) },
+  { label: 'Add to Timeline', run: (item) => useStock(item, { mode: 'append' }) },
+];
+const EDIT_STOCK_KINDS = ['video', 'music', 'sfx', 'photo', 'illustration', 'vector'];
+const editStock = () => <StockBrowser room="edit" kinds={EDIT_STOCK_KINDS} grid="stock-grid" renderCard={(item) => <StockCard key={item.token} item={item} actions={STOCK_ACTIONS} />} />;
+function StockTab() {
+  return <div class="stock-tab">{stockPopout.value.includes('edit') ? <StockPoppedOut room="edit" /> : editStock()}</div>;
+}
+export function EditStockWindow() {
+  return <StockWindow room="edit">{editStock()}</StockWindow>;
 }
 
 /* Media */
