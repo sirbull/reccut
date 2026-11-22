@@ -195,6 +195,12 @@ function createKeystrokes({ dir, addonCatalog = ADDONS, fetchImpl, platform = pr
     if (child) return true;
     if (!intact()) return false;
     const i = info();
+    // An older helper can still show shortcuts, but cannot be trusted with the
+    // press/release modes. Report this instead of showing an inert keyboard.
+    if ((keyboard !== 'off' || mouse) && i.sha256 !== spec?.sha256) {
+      onEvent({ type: 'error', reason: 'outdated' });
+      return false;
+    }
     // Only the pinned helper is trusted to understand the current flags.
     const letters = keyboard === 'full' ? i.fullConsentAt && '--full-keyboard' : keyboard === 'half' && (i.gameConsentAt || i.fullConsentAt) && '--game';
     const sources = i.sha256 === spec?.sha256 ? [letters, mouse && '--mouse'].filter(Boolean) : [];

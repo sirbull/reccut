@@ -174,9 +174,36 @@ test('a helper from an older release is never trusted with the new flags', async
   const old = Buffer.from('older helper');
   fs.writeFileSync(path.join(s.dir, 'reccut-keystrokes-linux-x64'), old);
   fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), version: '1.2.2', sha256: sha(old) }));
-  assert.equal(s.ks.start(() => {}, { shortcuts: false, keyboard: 'full' }), false, 'it would send shortcuts that were turned off');
-  assert.equal(s.ks.start(() => {}, { keyboard: 'full', mouse: true }), true);
+  const events = [];
+  assert.equal(s.ks.start((e) => events.push(e), { shortcuts: false, keyboard: 'full' }), false);
+  assert.equal(s.ks.start((e) => events.push(e), { keyboard: 'full', mouse: true }), false);
+  assert.deepEqual(events, [{ type: 'error', reason: 'outdated' }, { type: 'error', reason: 'outdated' }]);
+  assert.equal(s.started.length, 0, 'an obsolete helper must not silently produce an unresponsive overlay');
+  assert.equal(s.ks.start(() => {}), true, 'shortcut-only recordings still work with an older helper');
   assert.deepEqual(s.started[0].args, []);
+});
+
+test('updating an old helper preserves keyboard consent and restores press/release events', async () => {
+  const s = await setup(files);
+  await s.ks.install({ consent: true });
+  await s.ks.allowKeyboard({ consent: true, mode: 'half' });
+  const file = path.join(s.dir, 'addon.json');
+  const old = Buffer.from('older helper');
+  fs.writeFileSync(path.join(s.dir, 'reccut-keystrokes-linux-x64'), old);
+  fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), version: '1.2.2', sha256: sha(old) }));
+  assert.equal(s.ks.status().outdated, true);
+  const status = await s.ks.install({ consent: true });
+  assert.equal(status.outdated, false);
+  assert.equal(status.game, true);
+  const events = [];
+  assert.equal(s.ks.start((e) => events.push(e), { keyboard: 'half' }), true);
+  assert.deepEqual(s.started[0].args, ['--game']);
+  s.started[0].proc.stdout.emit('data', 'READY\nD W\nD D\nU W\nU D\n');
+  const inputs = events.filter((e) => e.type === 'press').map((e, i) => [i, e.name, Number(e.down)]);
+  assert.deepEqual([...heldAt(inputs, 1)], ['W', 'D']);
+  assert.deepEqual([...heldAt(inputs, 2)], ['D']);
+  assert.equal(heldAt(inputs, 3).size, 0);
+  s.ks.stop();
 });
 
 test('presses are parsed, and repeats from X11 do not count as new presses', () => {
@@ -292,7 +319,7 @@ test('the release check never mistakes the add-on for an installer', () => {
   assert.equal(module.exports.pickAsset(assets.slice(0, 2), 'win32', 'x64'), undefined);
 });
 
-test('the add-on is listed in Record and only the warning dialog can install it', () => {
+test('the add-on is listed in Record and installation stays in the consent/update component', () => {
   const plugins = fs.readFileSync('src/renderer/Plugins.jsx', 'utf8');
   assert.match(plugins, /id: 'keystrokes',\s+addon: true,\s+room: 'record'/);
   assert.match(plugins, /\[\.\.\.BUILTIN, KEYSTROKES, /);

@@ -71,7 +71,7 @@ const extensions = createExtensionHost({ dir: path.join(app.getPath('userData'),
 const stock=require('./stock').createStockHost({dir:path.join(app.getPath('userData'),'stock'),cacheDir:path.join(app.getPath('userData'),'Cache','Stock'),// Node's fetch, not net.fetch: net.fetch aborts every redirect in 'manual' mode, which the stock
 // network layer needs to check each hop. Stock requests therefore ignore the system proxy.
 fetchImpl:(...args)=>globalThis.fetch(...args),safeStorage,openExternal:url=>shell.openExternal(url)});
-for(const [channel,method]of Object.entries({providers:'providers',addPlugin:'addPlugin',testConnection:'testConnection',settings:'settings',search:'search',preview:'preview',listen:'listen',download:'download',install:'install',remove:'remove',manifest:'manifest',saveKey:'saveKey',signIn:'signIn',signOut:'signOut',acceptCosts:'acceptCosts',catalog:'catalog',catalogFile:'catalogFile',catalogPreview:'catalogPreview'}))ipcMain.handle('stock:'+channel,(_event,...args)=>stock[method](...args));
+for(const [channel,method]of Object.entries({providers:'providers',addPlugin:'addPlugin',testConnection:'testConnection',settings:'settings',search:'search',preview:'preview',videoPreview:'videoPreview',listen:'listen',download:'download',install:'install',remove:'remove',manifest:'manifest',saveKey:'saveKey',signIn:'signIn',signOut:'signOut',acceptCosts:'acceptCosts',catalog:'catalog',catalogFile:'catalogFile',catalogPreview:'catalogPreview'}))ipcMain.handle('stock:'+channel,(_event,...args)=>stock[method](...args));
 const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
 

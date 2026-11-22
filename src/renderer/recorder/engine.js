@@ -741,6 +741,8 @@ api.onKeystrokesError((reason) => {
   notice.value = {
     text: reason === 'permission'
       ? 'Keystrokes are not shown: macOS has not allowed Input Monitoring for Reccut. Open Record › Overlays to allow it.'
+      : reason === 'outdated'
+      ? 'Keys cannot light up with the installed Keystroke Add-on. Open Record › Overlays and choose Update Add-on before recording again.'
       : 'Keystrokes are not shown: the Keystroke Add-on could not read the keyboard on this computer.',
   };
 });

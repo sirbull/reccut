@@ -1,8 +1,9 @@
 import {useEffect,useRef,useState} from 'preact/hooks';
 import {signal} from '@preact/signals';
-import {AudioLines,Play,Square,Video,ExternalLink,PanelLeftClose,X} from 'lucide-preact';
+import {AudioLines,Play,Square,ExternalLink,PanelLeftClose,X} from 'lucide-preact';
 import {Button,IconButton,Row,Section,Toggle,Modal,toast} from '../ui.jsx';
 import {fileUrl} from '../player.js';
+import {StockVideoPreview} from './StockVideoPreview.jsx';
 import {projectEpoch} from '../editor/store.js';
 import {currentDesign,designCommit,openDesign,selection} from './store.js';
 import {newDesign,newLayer,fitBox} from '../../shared/design.js';
@@ -50,7 +51,7 @@ export function StockCard({item,actions}){
  const [busy,setBusy]=useState(false),playing=playingToken.value===item.token;
  const run=async fn=>{setBusy(true);try{await fn(item);}catch(e){fail(e);}finally{setBusy(false);}};
  return <div class="stock-card" title={`${item.title||STOCK_KINDS[item.kind]} · ${stockCredit(item)}`} onContextMenu={async e=>{e.preventDefault();const id=await window.api.popupMenu([...actions.map(a=>({id:a.label,label:a.label})),{separator:true},{id:'source',label:'View Source and License'}]);if(id==='source')window.api.openExternal(item.pageUrl||item.licenseUrl);else{const a=actions.find(a=>a.label===id);if(a)run(a.run);}}}>
-  <div class="stock-thumb">{item.preview?<StockImage item={item}/>:<AudioLines size={28}/>}{item.media==='video'&&<span class="stock-badge"><Video size={12}/></span>}{item.media==='audio'&&<button type="button" class="stock-play" title={playing?'Stop':'Listen'} aria-label={playing?'Stop':'Listen'} onClick={()=>play(item).catch(e=>{playingToken.value='';fail(e);})}>{playing?<Square size={14}/>:<Play size={14}/>}</button>}</div>
+  <>{item.media==='video'?<StockVideoPreview item={item}>{item.preview&&<StockImage item={item}/>}</StockVideoPreview>:<div class="stock-thumb">{item.preview?<StockImage item={item}/>:<AudioLines size={28}/>}{item.media==='audio'&&<button type="button" class="stock-play" title={playing?'Stop':'Listen'} aria-label={playing?'Stop':'Listen'} onClick={()=>play(item).catch(e=>{playingToken.value='';fail(e);})}>{playing?<Square size={14}/>:<Play size={14}/>}</button>}</div>}</>
   <b>{item.title||STOCK_KINDS[item.kind]}</b><small>{stockCredit(item)}{item.media==='audio'?seconds(item.durationMs):''}</small>
   <div class="stock-card-actions">{actions.map((a,i)=><Button key={a.label} class="small" variant={i?undefined:'primary'} disabled={busy} onClick={()=>run(a.run)}>{busy&&!i?'Downloading…':a.label}</Button>)}</div>
  </div>;

@@ -10,6 +10,12 @@ const api = window.api;
 const isMac = api.platform === 'darwin';
 const recordingNow = () => engine.recording.value || engine.countdown.value > 0 || engine.finishing.value;
 
+async function installAddon() {
+  const status = await api.installKeystrokes({ consent: true });
+  engine.keystrokes.value = status;
+  return status;
+}
+
 // One warning for the whole app, so the Overlays row and the plugin list open the same dialog.
 export const keystrokesConsent = signal(false);
 const keyboardConsent = signal(null);
@@ -44,8 +50,7 @@ function ConsentDialog({ onClose, onInstalled }) {
     setBusy(true);
     setError('');
     try {
-      const status = await api.installKeystrokes({ consent: true });
-      engine.keystrokes.value = status;
+      const status = await installAddon();
       onInstalled?.(status);
       onClose();
     } catch (err) {
@@ -123,7 +128,7 @@ function KeyboardConsentDialog({ mode, onClose }) {
 }
 
 // What the add-on reads, and how it is shown.
-function InputOptions({ status, recording }) {
+function InputOptions({ status, recording, busy, onUpdate }) {
   const s = settings.value;
   const set = (key) => (v) => saveSettings({ [key]: v });
   const anySource = s.inputKeyboard !== 'off' || s.inputMouse || s.inputPad;
@@ -143,7 +148,7 @@ function InputOptions({ status, recording }) {
       <Row label="Mouse buttons"><Toggle checked={s.inputMouse} disabled={recording || status.outdated} onChange={set('inputMouse')} /></Row>
       <Row label="Controller"><Toggle checked={s.inputPad} disabled={recording} onChange={set('inputPad')} /></Row>
       {s.inputPad && <p class="hint">{engine.padName.value || 'No controller found. Connect one and press a button on it.'}</p>}
-      {status.outdated && <p class="hint warn">Update the add-on to use the keyboard modes and mouse buttons.</p>}
+      {status.outdated && <p class="hint warn">The installed add-on cannot highlight pressed keys. <button type="button" class="link-btn" disabled={recording || busy} onClick={onUpdate}>{busy ? 'Updating…' : 'Update Add-on'}</button></p>}
       <Row label="Keys as you press them"><Toggle checked={s.inputPills} onChange={set('inputPills')} /></Row>
       <Row label="Live overlay"><Toggle checked={s.inputOverlay} disabled={!anySource} onChange={set('inputOverlay')} /></Row>
       {s.inputOverlay && anySource && <>
@@ -189,6 +194,17 @@ export function KeystrokesRows() {
       setBusy(false);
     }
   };
+  const update = async () => {
+    setBusy(true);
+    try {
+      await installAddon();
+      toast('The Keystroke Add-on is updated. Selected keys will light up while you record.', { kind: 'success' });
+    } catch (err) {
+      toast(String(err?.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), { kind: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <>
@@ -207,13 +223,13 @@ export function KeystrokesRows() {
       {ready && s.showKeys && status.permission === 'unavailable' && (
         <p class="hint warn">{api.platform === 'linux' ? 'The add-on cannot read the keyboard in this session. It needs X11.' : 'The add-on cannot read the keyboard on this computer.'}</p>
       )}
-      {ready && s.showKeys && <InputOptions status={status} recording={recording} />}
+      {ready && s.showKeys && <InputOptions status={status} recording={recording} busy={busy} onUpdate={update} />}
       <p class="hint">
         {ready
           ? <>The Keystroke Add-on reads the keyboard only while you record, and saves shortcuts with {isMac ? 'Cmd or Ctrl' : 'Ctrl, Alt or Win'} in the recording. {s.showKeys && s.inputKeyboard !== 'off' ? 'Keyboard is on, so those keys are saved too, also when you type. ' : 'Normal typing never leaves the add-on. '}Reccut's own shortcuts are never shown. {status.outdated && 'A newer add-on comes with this version of Reccut. '}</>
           : <>Keystrokes need an optional add-on that reads the keyboard while you record. Reccut does not include it, so the app itself never reads your keyboard. </>}
         {status.installed && <button type="button" class="link-btn" disabled={recording || busy} onClick={remove}>Remove add-on</button>}
-        {ready && status.outdated && <> <button type="button" class="link-btn" disabled={recording || busy} onClick={() => (keystrokesConsent.value = true)}>Update add-on</button></>}
+        {ready && status.outdated && !s.showKeys && <> <button type="button" class="link-btn" disabled={recording || busy} onClick={update}>{busy ? 'Updating…' : 'Update Add-on'}</button></>}
       </p>
     </>
   );

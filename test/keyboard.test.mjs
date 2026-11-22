@@ -45,3 +45,15 @@ test('focused fields and composed event paths block shortcuts even when the targ
     delete globalThis.document;
   }
 });
+
+
+test('a focused stock preview reserves playback keys without blocking the rest of the editor', () => {
+  const card = { tagName: 'DIV', closest: selector => selector.includes('.stock-video') ? card : null };
+  globalThis.document = { activeElement: card, hasFocus: () => true, querySelector: () => null };
+  try {
+    assert.equal(commandsBlocked(), true, 'native playback accelerators belong to the preview');
+    document.activeElement = { tagName: 'BODY' };
+    assert.equal(commandsBlocked({ target: card }), true, 'pointer-focused preview events also reserve playback');
+    assert.equal(commandsBlocked(), false, 'the timeline works again after focus leaves the preview');
+  } finally { delete globalThis.document; }
+});

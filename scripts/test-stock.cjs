@@ -19,15 +19,20 @@ if (!electron.app) {
     { id: 'openverse', name: 'Openverse', enabled: true, kinds: ['photo', 'music', 'sfx'] },
     { id: 'pixabay-personal', name: 'Pixabay', enabled: true, kinds: ['photo', 'illustration', 'vector', 'video'], requiresKey: true, hasKey: true },
   ] };
-  const searches = [];
+  const clip = path.join(profile, 'preview.mp4');
+  const ffmpeg = require('node:child_process').spawnSync(require('../src/main/ffmpeg').getFfmpegPath(), ['-hide_banner','-loglevel','error','-f','lavfi','-i','testsrc2=size=160x90:rate=12','-t','4','-c:v','libx264','-pix_fmt','yuv420p','-g','12','-movflags','+faststart','-an',clip]);
+  if(ffmpeg.status!==0)throw Error(ffmpeg.stderr?.toString()||'Could not generate preview fixture');
+  const searches = [], videoRequests = [];
+  let releasePreview;
   let late;
   const handle = ipcMain.handle.bind(ipcMain);
   ipcMain.handle = (channel, handler) => {
     if (channel === 'stock:settings') handler = () => structuredClone(config);
     if (channel === 'stock:preview') handler = () => path.join(__dirname, '../assets/icon.png');
+    if (channel === 'stock:videoPreview') handler = (_event,token) => {videoRequests.push(token);return videoRequests.length===1?new Promise(resolve=>{releasePreview=()=>resolve(clip);}):clip;};
     if (channel === 'stock:search') handler = async (_event, req) => {
       searches.push(req);
-      const response = { items: [{ token: `${req.provider || 'all'}:${req.query}:${req.page}`, title: `${req.provider || 'all'} ${req.query} ${req.page}`, providerName: 'Fixture', media: 'audio', kind: req.kind, license: 'CC0', author: 'Test' }], more: req.page === 1 };
+      const response = { items: [{ token: `${req.provider || 'all'}:${req.query}:${req.page}`, title: `${req.provider || 'all'} ${req.query} ${req.page}`, providerName: 'Fixture', media: req.kind==='video'?'video':'audio', preview:req.kind==='video', kind: req.kind, license: 'CC0', author: 'Test' }], more: req.page === 1 };
       if (req.query === 'slow') return new Promise(resolve => { late = () => resolve(response); });
       return response;
     };
@@ -62,6 +67,37 @@ if (!electron.app) {
         await js(`document.querySelector('button[title^="Edit ("]').click()`);
         await js(`document.querySelector('[data-tab="stock"]').click()`);
         await wait(`!!document.querySelector('.stock-browser [aria-label="Search stock"]')`);
+        await input('.stock-browser input', 'motion');
+        await wait(`!!document.querySelector('.stock-video')`);
+        await js(`const el=document.querySelector('.stock-video');const r=el.getBoundingClientRect();el.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:r.x+r.width*.8}));`);
+        await pause(100);
+        assert.equal(videoRequests.length,0,'search and hover never download a video');
+        await js(`document.querySelector('.stock-video').click();document.querySelector('.stock-video').click()`);
+        await wait(`document.querySelector('.stock-video')?.getAttribute('aria-busy')==='true'`);
+        assert.equal(videoRequests.length,1,'repeated clicks share the pending download');
+        releasePreview();
+        await wait(`document.querySelector('.stock-video video')?.readyState>=2`);
+        assert.equal(await js(`document.querySelector('.stock-video video').muted`),true,'preview never plays sound');
+        const skimVideo=ratio=>js(`const el=document.querySelector('.stock-video'),r=el.getBoundingClientRect();el.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:r.x+r.width*${ratio}}));`);
+        const nearTime=time=>wait(`(()=>{const v=document.querySelector('.stock-video video');return v.paused&&!v.seeking&&Math.abs(v.currentTime-${time})<.08})()`);
+        const pixels=()=>js(`(()=>{const v=document.querySelector('.stock-video video'),c=document.createElement('canvas');c.width=32;c.height=18;const g=c.getContext('2d');g.drawImage(v,0,0,32,18);return [...g.getImageData(0,0,32,18).data].reduce((s,v,i)=>s+v*(i%7),0)})()`);
+        await skimVideo(.8); await nearTime(3.2); await pause(100);
+        const rightFrame=await pixels();
+        await skimVideo(.2); await nearTime(.8); await pause(100);
+        assert.notEqual(await pixels(),rightFrame,'skimming changes the decoded frame in both directions');
+        await skimVideo(.9); await skimVideo(.1); await skimVideo(.7); await nearTime(2.8);
+        assert.equal(videoRequests.length,1,'skimming reads only the cached local video');
+        await js(`document.querySelector('.stock-video').dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}))`);
+        await nearTime(0);
+        await js(`window.stockTestKeyUps=0;window.addEventListener('keyup',()=>window.stockTestKeyUps++,true);document.querySelector('.stock-video').focus()`);
+        win.webContents.sendInputEvent({type:'keyDown',keyCode:'Space'});
+        win.webContents.sendInputEvent({type:'keyUp',keyCode:'Space'});
+        await wait(`!document.querySelector('.stock-video video').paused && window.stockTestKeyUps===1`);
+        win.webContents.sendInputEvent({type:'keyDown',keyCode:'Space'});
+        win.webContents.sendInputEvent({type:'keyUp',keyCode:'Space'});
+        await wait(`document.querySelector('.stock-video video').paused && window.stockTestKeyUps===2`);
+        await pause(100);
+        assert.equal(await js(`!!document.querySelector('.vo-booth')`),false,'preview keys must not activate unrelated controls');
         await click('Photos', `document.querySelector('.stock-browser')`);
         await input('.stock-browser input', 'ocean');
         await wait(`document.querySelector('.stock-grid')?.textContent.includes('all ocean 1')`);
@@ -144,7 +180,7 @@ if (!electron.app) {
         await pause(200);
         const small = await bounds();
         assert.ok(small.x >= 0 && small.y >= 0 && small.x + small.w <= small.vw && small.y + small.h <= small.vh, 'window stays reachable when app shrinks');
-        console.log(`PASS: Edit and Design filters, pagination, request races, pop-out, docking, shared search, moving, resizing and service dialog. Screenshot: ${image}`);
+        console.log(`PASS: click-to-load muted video preview, decoded-frame skimming in both directions, queued seeks, keyboard navigation; Edit and Design filters, pagination, request races, pop-out, docking, shared search, moving, resizing and service dialog. Screenshot: ${image}`);
         clearTimeout(timeout); win.destroy(); app.exit(0);
       } catch (error) { console.error(error); console.error('Test profile:', profile);fs.writeFileSync(path.join(os.tmpdir(),'reccut-stock-failed.png'),(await win.webContents.capturePage()).toPNG());console.error(await js(`document.elementFromPoint(300,100)?.outerHTML.slice(0,500)`)); clearTimeout(timeout); app.exit(1); }
     });

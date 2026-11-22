@@ -23,11 +23,11 @@ export function isSpaceInput(event) {
     (event?.composedPath?.() || [event?.target]).some(acceptsSpace);
 }
 
-// Modal windows own all keys. Floating plugin windows own keys while focused.
+// Modal windows own all keys. Floating windows and stock previews own keys while focused.
 export function dialogOwnsKeyboard(event) {
   const doc = globalThis.document;
   if (doc?.querySelector('.modal-backdrop, .help-window, .palette, .dz-crop-mode, .dz-refine-mode, .dz-canvas-crop-mode, .vo-booth, .mc-window, dialog[open]')) return true;
-  const inDialog = (el) => Boolean(el?.closest?.('[role="dialog"], .plugin-window'));
+  const inDialog = (el) => Boolean(el?.closest?.('[role="dialog"], .plugin-window, .stock-video'));
   return inDialog(doc?.activeElement) ||
     (event?.composedPath?.() || [event?.target]).some(inDialog);
 }

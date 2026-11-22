@@ -1,7 +1,7 @@
 const key=/^[a-z][a-z0-9-]{1,70}$/;
 // Media kinds a source can offer. Images go to Design and Edit, video and audio only to Edit.
 const KINDS=['photo','illustration','vector','icon','video','music','sfx'];
-const FIELDS=['id','title','preview','full','width','height','author','authorUrl','pageUrl','license','licenseVersion','licenseUrl','kind','durationMs'];
+const FIELDS=['id','title','preview','videoPreview','full','width','height','author','authorUrl','pageUrl','license','licenseVersion','licenseUrl','kind','durationMs'];
 const mediaOf=kind=>kind==='video'?'video':kind==='music'||kind==='sfx'?'audio':'image';
 function https(value,hosts){const u=new URL(value);if(u.protocol!=='https:'||u.username||u.password||u.port&&u.port!=='443'||!u.hostname.includes('.')||/^(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname)||u.hostname.endsWith('.local')||u.hostname.startsWith('['))throw Error('Only public HTTPS URLs are supported.');if(hosts&&!hosts.includes(u.hostname))throw Error('Source URL is outside its declared hosts.');return u;}
 // A mapping path is a dotted path or a list of them; the first non-empty value wins.
@@ -33,8 +33,13 @@ function pick(value,list){for(const path of [].concat(list)){const v=at(value,pa
 function mapResults(p,data,{results=p.results,kind='photo'}={}){
  const media=mediaOf(kind),list=Array.isArray(data)?data:pick(data,results.items);if(!Array.isArray(list))return[];
  return list.slice(0,60).flatMap(row=>{const item={provider:p.id,providerName:p.name,kind,media};for(const [key,path]of Object.entries(results.fields)){const v=pick(row,path);item[key]=Array.isArray(v)?'':String(v??'').slice(0,3000);}
+  if(media==='video'&&p.hosts?.includes('api.pexels.com')&&Array.isArray(row.video_files)){
+   const files=row.video_files.filter(f=>f.file_type==='video/mp4'&&f.link&&Number(f.width)>0&&Number(f.height)>0).sort((a,b)=>a.width*a.height-b.width*b.height);
+   if(files.length)item.videoPreview=files[0].link;
+  }
   item.kind=kind;if(!item.id||!item.full||!item.preview&&media!=='audio')return[];try{if(item.preview)https(item.preview);https(item.full);if(item.pageUrl)https(item.pageUrl);if(item.authorUrl)https(item.authorUrl);}catch{return[];}
+  if(item.videoPreview){try{https(item.videoPreview);}catch{delete item.videoPreview;}}
   item.license=item.license||p.license||'';item.licenseUrl=item.licenseUrl||p.licenseUrl||'';if(p.id==='openverse'&&!['cc0','pdm','by','by-sa'].includes(item.license.toLowerCase()))return[];return[item];});
 }
 function credits(items){return[...new Set(items.filter(Boolean).map(s=>`${s.title||'Image'}: ${s.author||'Unknown author'} / ${s.providerName||s.provider}${s.license?' · '+s.license+(s.licenseVersion?' '+s.licenseVersion:''):''}${s.pageUrl?'\n'+s.pageUrl:''}${s.licenseUrl?'\nLicense: '+s.licenseUrl:''}`))].join('\n\n');}
-module.exports={https,validateSource,mapResults,at,credits,KINDS,mediaOf};
+module.exports={https,validateSource,mapResults,at,pick,credits,KINDS,mediaOf};
