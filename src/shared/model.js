@@ -639,25 +639,44 @@ export function valueAt(clip, prop, T) {
 }
 
 // Parametere i effektstakken animeres som 'vfx.<effekt-id>.<nøkkel>'. Grunnverdien ligger i effektens p.
-const vfxPath = (prop) => (prop.startsWith('vfx.') ? prop.split('.') : null);
+// Et element i en lens flare: 'vfx.<effekt-id>.el:<element-id>:<nøkkel>'. Element-id-en kan inneholde punktum
+// (kit-presetene), så nøkkelen er resten etter effekt-id-en, og elementets nøkkel står etter siste kolon.
+const vfxPath = (prop) => {
+  if (!prop.startsWith('vfx.')) return null;
+  const [, id, ...rest] = prop.split('.');
+  return ['vfx', id, rest.join('.')];
+};
 export const vfxProp = (id, key) => `vfx.${id}.${key}`;
+export const vfxElementProp = (id, elementId, key) => `vfx.${id}.el:${elementId}:${key}`;
+// Objektet verdien ligger i og nøkkelen der: effektens p, eller elementet i p.elements.
+function vfxTarget(clip, path, create = false) {
+  const e = clip.props.vfx?.find((x) => x.id === path[1]);
+  if (!e || !path[2].startsWith('el:')) return [e && (create ? (e.p ||= {}) : e.p), path[2]];
+  const i = path[2].lastIndexOf(':');
+  return [e.p?.elements?.find((x) => x.id === path[2].slice(3, i)), path[2].slice(i + 1)];
+}
 export function propBase(clip, prop) {
   const path = vfxPath(prop);
-  return path ? clip.props.vfx?.find((e) => e.id === path[1])?.p?.[path[2]] : clip.props[prop];
+  if (!path) return clip.props[prop];
+  const [o, key] = vfxTarget(clip, path);
+  return o?.[key];
 }
 export function setPropBase(clip, prop, value) {
   const path = vfxPath(prop);
   if (!path) clip.props[prop] = value;
   else {
-    const e = clip.props.vfx?.find((x) => x.id === path[1]);
-    if (e) (e.p ||= {})[path[2]] = value;
+    const [o, key] = vfxTarget(clip, path, true);
+    if (o) o[key] = value;
   }
 }
-// Nøkkelbilder for effekter som ikke lenger finnes i stakken.
+// Nøkkelbilder for effekter (og lens flare-elementer) som ikke lenger finnes i stakken.
 export function pruneEffectKeyframes(clip) {
-  const ids = new Set((clip.props.vfx || []).map((e) => e.id));
-  for (const prop of Object.keys(clip.kf || {})) if (vfxPath(prop) && !ids.has(vfxPath(prop)[1])) delete clip.kf[prop];
-  for (const prop of Object.keys(clip.expressions || {})) if (vfxPath(prop) && !ids.has(vfxPath(prop)[1])) delete clip.expressions[prop];
+  const gone = (prop) => {
+    const path = vfxPath(prop);
+    return path && (!clip.props.vfx?.some((e) => e.id === path[1]) || (path[2].startsWith('el:') && !vfxTarget(clip, path)[0]));
+  };
+  for (const prop of Object.keys(clip.kf || {})) if (gone(prop)) delete clip.kf[prop];
+  for (const prop of Object.keys(clip.expressions || {})) if (gone(prop)) delete clip.expressions[prop];
 }
 
 export function baseValueAt(clip, prop, T) {

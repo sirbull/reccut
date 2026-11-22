@@ -1,6 +1,8 @@
-// Demo media for the website feature cards (Beat Grid and Transcript Search).
-// A synthesized 100 BPM drum and bass loop, and three English takes spoken by Kokoro (Apache 2.0),
-// using the Kokoro model and eSpeak NG add-on already downloaded in the app. No system voices.
+// Demo media for the website: the feature cards (Beat Grid and Transcript Search) and Voice Over Studio.
+// A synthesized 100 BPM drum and bass loop, three English takes and a four-line narration spoken by
+// Kokoro (Apache 2.0), using the Kokoro model and eSpeak NG add-on already downloaded in the app. No system voices.
+// The narration is placed in a simulated room (noise floor, breaths, room sound before and after),
+// so it looks like a microphone recording in the studio, with a separate room tone recording.
 //   node scripts/feature-demo-media.mjs [output-directory] [user-data-with-tts]
 import fs from 'node:fs';
 import os from 'node:os';
@@ -67,7 +69,10 @@ const TAKES = [
     'The colors were completely different each time.' ] },
 ];
 
-async function speech() {
+// Kokoro voice for a list of sentences, with a pause between them, at 24 kHz.
+let synth;
+async function kokoro() {
+  if (synth) return synth;
   const tts = path.join(userData, 'tts');
   if (!fs.existsSync(path.join(tts, 'kokoro/config.json'))) throw new Error(`Kokoro is not downloaded in ${tts}. Download it in the app first.`);
   env.allowRemoteModels = false;
@@ -80,26 +85,93 @@ async function speech() {
   const model = await StyleTextToSpeech2Model.from_pretrained('kokoro', { dtype: 'q8', local_files_only: true });
   const tokenizer = await AutoTokenizer.from_pretrained('kokoro', { local_files_only: true });
   const lang = languageById('en-us');
-  for (const take of TAKES) {
-    const bin = fs.readFileSync(path.join(tts, 'kokoro/voices', `${take.voice}.bin`));
+  synth = async (voice, sentence) => {
+    const bin = fs.readFileSync(path.join(tts, 'kokoro/voices', `${voice}.bin`));
     const style = new Float32Array(bin.buffer, bin.byteOffset, bin.byteLength / 4);
+    const phon = splitPunctuation(normalizeEnglish(sentence)).map((p) => (p.match ? p.text : ipa(p.text))).join('');
+    const { input_ids } = tokenizer(fixPhonemesFor(phon, lang.id), { truncation: true });
+    const n = Math.min(Math.max(input_ids.dims.at(-1) - 2, 0), 509);
+    const { waveform } = await model({ input_ids, style: new Tensor('float32', style.slice(n * 256, n * 256 + 256), [1, 256]), speed: new Tensor('float32', [1], [1]) });
+    return waveform.data;
+  };
+  return synth;
+}
+
+const join = (parts) => {
+  const all = new Float32Array(parts.reduce((s, p) => s + p.length, 0));
+  parts.reduce((o, p) => (all.set(p, o), o + p.length), 0);
+  return all;
+};
+
+async function speech() {
+  const say = await kokoro();
+  for (const take of TAKES) {
     const parts = [new Float32Array(24000 * 0.6)];
-    for (const line of take.lines) {
-      const text = normalizeEnglish(line);
-      const phon = splitPunctuation(text).map((p) => (p.match ? p.text : ipa(p.text))).join('');
-      const { input_ids } = tokenizer(fixPhonemesFor(phon, lang.id), { truncation: true });
-      const n = Math.min(Math.max(input_ids.dims.at(-1) - 2, 0), 509);
-      const { waveform } = await model({ input_ids, style: new Tensor('float32', style.slice(n * 256, n * 256 + 256), [1, 256]), speed: new Tensor('float32', [1], [1]) });
-      parts.push(waveform.data, new Float32Array(24000 * 0.45));
-    }
-    const all = new Float32Array(parts.reduce((s, p) => s + p.length, 0));
-    parts.reduce((o, p) => (all.set(p, o), o + p.length), 0);
-    fs.writeFileSync(path.join(out, take.file), wav(all, 24000));
+    for (const line of take.lines) parts.push(await say(take.voice, line), new Float32Array(24000 * 0.45));
+    fs.writeFileSync(path.join(out, take.file), wav(join(parts), 24000));
     console.log('speech', take.file);
   }
+}
+
+// Voice Over Studio: the same four-line script as before, recorded in a simulated room at 48 kHz.
+const SCRIPT = [
+  ['Every good story starts with a voice.', 'This is where ours begins.'],
+  ['Read one line at a time.', 'Try another take, and keep the one you like.'],
+  ['Shape the sound, adjust the pauses, and bring the story together.'],
+  ['Send the voice and subtitles straight to your edit.', 'You are ready to share.'],
+];
+
+function room(seconds, rate, seed) {
+  // Pink hiss around -56 dBFS and a low rumble, as in a quiet home studio.
+  const n = Math.round(seconds * rate), x = new Float32Array(n);
+  let s = seed, b0 = 0, b1 = 0, b2 = 0, lp = 0;
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647) * 2 - 1;
+  for (let i = 0; i < n; i++) {
+    const w = rnd();
+    b0 = 0.99765 * b0 + w * 0.099; b1 = 0.963 * b1 + w * 0.2965; b2 = 0.57 * b2 + w * 1.0527;
+    lp = 0.995 * lp + 0.005 * rnd();
+    x[i] = 0.0011 * (b0 + b1 + b2 + w * 0.1848) + 0.03 * lp;
+  }
+  return x;
+}
+
+function breath(rate, seed, level) {
+  const n = Math.round(0.38 * rate), x = new Float32Array(n);
+  let s = seed, prev = 0;
+  const rnd = () => ((s = (s * 48271) % 2147483647) / 2147483647) * 2 - 1;
+  for (let i = 0; i < n; i++) {
+    const r = rnd(), u = i / n;
+    x[i] = level * Math.sin(Math.PI * u) ** 2 * (r - 0.6 * prev);
+    prev = r;
+  }
+  return x;
+}
+
+const upsample = (x) => Float32Array.from({ length: x.length * 2 }, (_, i) => (i % 2 ? (x[(i - 1) / 2] + (x[(i + 1) / 2] ?? 0)) / 2 : x[i / 2]));
+
+async function voiceover() {
+  const dir = path.join(path.dirname(out), '..', 'Voice Over');
+  fs.mkdirSync(dir, { recursive: true });
+  const say = await kokoro(), rate = 48000;
+  fs.writeFileSync(path.join(dir, 'script.txt'), SCRIPT.map((l) => l.join(' ')).join('\n\n') + '\n');
+  fs.writeFileSync(path.join(dir, 'roomtone.wav'), wav(room(5, rate, 11), rate));
+  for (const [i, line] of SCRIPT.entries()) {
+    const gain = [0.82, 0.9, 0.78, 0.86][i];
+    const parts = [new Float32Array(Math.round(rate * (0.7 + 0.15 * i)))];
+    for (const [k, sentence] of line.entries()) {
+      parts.push(breath(rate, 101 + i * 7 + k, k ? 0.018 : 0.03), new Float32Array(Math.round(rate * 0.18)));
+      parts.push(upsample(await say('af_heart', sentence)).map((v) => v * gain), new Float32Array(Math.round(rate * 0.32)));
+    }
+    parts.push(new Float32Array(Math.round(rate * 0.9)));
+    const voice = join(parts), noise = room(voice.length / rate, rate, 29 + i);
+    fs.writeFileSync(path.join(dir, `line-${i}.wav`), wav(voice.map((v, j) => v + noise[j]), rate));
+    console.log('voice over', `line-${i}.wav`);
+  }
+  console.log('voice over demo', dir);
 }
 
 const b = beat();
 fs.writeFileSync(path.join(out, 'Demo beat - 100 BPM.wav'), wav(b.pcm, b.rate));
 console.log('beat', path.join(out, 'Demo beat - 100 BPM.wav'));
 await speech();
+await voiceover();

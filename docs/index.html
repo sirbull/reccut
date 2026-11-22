@@ -161,8 +161,10 @@ html[data-keyboard-focus] .compare:focus-within { outline: 2px solid #c3c5cc; ou
 .compare .tag.l { left: 18px; }
 .compare .tag.r { right: 18px; }
 
-.tools { display: grid; gap: 22px; margin-top: 56px; }
-.tools .card .shot { height: auto; }
+.looks.tools { grid-template-columns: 1.6fr 1.2fr 1.2fr; margin-top: 56px; }
+.tools .look { margin: 0; }
+.tools .look img { aspect-ratio: auto; height: 320px; }
+.tools .look.fit img { object-fit: contain; object-position: center 30%; background: #1c1c1e; }
 .looks { display: grid; grid-template-columns: repeat(6, 1fr); margin-top: 22px; border-radius: var(--radius); overflow: hidden; }
 .look { position: relative; overflow: hidden; cursor: zoom-in; }
 .look img { width: 100%; aspect-ratio: 3/4; object-fit: cover; transition: transform 1s cubic-bezier(.2,.7,.2,1); }
@@ -265,6 +267,8 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   section { padding: 40px 0; }
   .rooms, .stills, .oss, .record-details, .import-formats { grid-template-columns: 1fr; }
   .looks { grid-template-columns: repeat(3, 1fr); }
+  .looks.tools { grid-template-columns: 1fr; }
+  .tools .look img { height: auto; aspect-ratio: 4/3; }
   .feature, .feature.flip { grid-template-columns: 1fr; gap: 32px; }
   .feature.flip .copy { order: 0; }
   .grid, .cards { grid-template-columns: repeat(2, 1fr); }
@@ -512,15 +516,10 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <h2>Color correction and <span class="serif">film looks</span></h2>
       <p class="sub">Exposure, white balance and color wheels, more than 40 film looks, LOG conversion and your own LUTs.</p>
     </div>
-    <div class="tools reveal">
-      <figure class="card">
-        <div class="shot ui"><img src="media/color-wheels.jpg" width="1440" height="477" alt="A mountain lake graded with teal shadows and warm highlights, with the Light, Color and Color Wheels settings in the Color tab" loading="lazy"></div>
-        <figcaption><h3>Light, color and color wheels</h3><p>Exposure, contrast, highlights, shadows and white balance, plus wheels for shadows, midtones and highlights. Calculated in 16-bit floating point, so 10-bit footage keeps smooth gradients.</p></figcaption>
-      </figure>
-      <figure class="card">
-        <div class="shot ui"><img src="media/color-scopes.jpg" width="1139" height="250" alt="Four video scopes side by side: luma waveform, RGB parade, RGB and luma histogram, and vectorscope with 75 percent targets" loading="lazy"></div>
-        <figcaption><h3>Video scopes</h3><p>Luma waveform, RGB parade, histogram and vectorscope, side by side or one at a time. They measure the finished picture, after color correction, LUTs and effects.</p></figcaption>
-      </figure>
+    <div class="looks tools reveal">
+      <figure class="look"><img src="media/color-tile-grade.jpg" width="1348" height="756" alt="A mountain lake graded with teal shadows and warm highlights" loading="lazy"><figcaption>Light &amp; color<small>Exposure, contrast, highlights, shadows and white balance</small></figcaption></figure>
+      <figure class="look fit"><img src="media/color-tile-wheels.jpg" width="570" height="320" alt="The Color and Color Wheels settings, with wheels for shadows, midtones and highlights" loading="lazy"><figcaption>Color wheels<small>Shadows, midtones and highlights, in 16-bit</small></figcaption></figure>
+      <figure class="look"><img src="media/color-tile-vectorscope.jpg" width="420" height="330" alt="The vectorscope with 75 percent targets, showing the teal and orange of the graded lake" loading="lazy"><figcaption>Video scopes<small>Vectorscope, waveform, RGB parade and histogram</small></figcaption></figure>
     </div>
     <div class="looks">
       <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-velvia50-before.jpg" aria-label="Compare Fujifilm Velvia 50 with original footage"><img src="media/look-velvia50.jpg" width="1280" height="720" alt="Waterfall with the Fujifilm Velvia 50 look" loading="lazy"></button><figcaption>Fujifilm Velvia 50<small>Color film</small></figcaption></figure>
@@ -678,11 +677,11 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
         <figcaption><h3>Lens flares</h3><p>Drag the sun in the viewer and the reflections follow. Start from a preset, or build your own flare piece by piece in Flare Studio.</p></figcaption>
       </figure>
       <figure class="card wide">
-        <div class="shot"><img src="media/feature-beat-grid.jpg" width="1000" height="356" alt="The timeline with a 100 BPM music track marked as music. Solid blue lines mark each bar and dashed lines each beat, and the video cuts fall on the bar lines" loading="lazy"></div>
+        <div class="shot"><img src="media/feature-beat-grid.jpg" width="2000" height="712" alt="The timeline with a 100 BPM music track marked as music. Solid blue lines mark each bar and dashed lines each beat, and the video cuts fall on the bar lines" loading="lazy"></div>
         <figcaption><h3>Cut to the beat</h3><p>Mark a track as music and Reccut finds the beats and bars. Edits snap to the grid, so your cuts land on the beat.</p></figcaption>
       </figure>
       <figure class="card wide">
-        <div class="shot ui"><img src="media/feature-transcript-search.jpg" width="720" height="203" alt="Transcript Search with the word sunrise typed in, listing two takes where it is said, each with its timecode" loading="lazy"></div>
+        <div class="shot ui"><img src="media/feature-transcript-search.jpg" width="1440" height="406" alt="Transcript Search with the word sunrise typed in, listing two takes where it is said, each with its timecode" loading="lazy"></div>
         <figcaption><h3>Search what is said</h3><p>Press <kbd>Option</kbd> <kbd>Space</kbd> (Alt Space on Windows) and type a word. Your footage is transcribed on your computer, and you jump straight to the moment it is said.</p></figcaption>
       </figure>
       <figure class="card">
@@ -799,7 +798,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   const lookSlider = lookCompare.querySelector('input');
   const lookTitle = box.querySelector('#lightbox-look-title');
   const lookLabel = lookCompare.querySelector('[data-look-label]');
-  document.querySelectorAll('.frame img, .still img, .card img').forEach((img) => img.addEventListener('click', () => {
+  document.querySelectorAll('.frame img, .still img, .card img, .tools img').forEach((img) => img.addEventListener('click', () => {
     lookView.hidden = true;
     big.hidden = false;
     big.src = img.src;

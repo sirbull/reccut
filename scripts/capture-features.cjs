@@ -74,6 +74,7 @@ if (!electron.app) {
     return load.call(this, file === path.join(root, 'build/index.html') ? path.join(temporary, 'capture.html') : file, options);
   };
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const ZOOM = 2;
   const timeout = setTimeout(() => { console.error('Feature photography timed out'); app.exit(1); }, 600000);
   let started = false;
   app.on('browser-window-created', (_event, win) => {
@@ -87,7 +88,8 @@ if (!electron.app) {
       const idle = async () => {
         for (let i = 0; i < 3000 && jobs.snapshot().some(t => t.state === 'running' || t.state === 'queued'); i++) await wait(100);
       };
-      const photo = async (name, selector) => {
+      // trim: optional { left, top, width, height } in CSS pixels inside the element.
+      const photo = async (name, selector, trim) => {
         await js('q.toasts.value=[];q.notice.value=null;document.activeElement?.blur?.()');
         win.webContents.invalidate();
         await js('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
@@ -96,13 +98,16 @@ if (!electron.app) {
         await wait(150);
         const rect = await js(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});if(!el)throw Error('Screenshot area missing: '+${JSON.stringify(selector)});const r=el.getBoundingClientRect();return {x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height)}})()`);
         let image = await win.webContents.capturePage();
-        const scale = image.getSize().width / win.getContentSize()[0];
+        // Pictures are taken at 2x (see ZOOM), sharp on high-density screens.
+        const scale = image.getSize().width / (win.getContentSize()[0] / ZOOM);
+        if (trim) Object.assign(rect, { x: rect.x + (trim.left || 0), y: rect.y + (trim.top || 0), width: trim.width || rect.width, height: trim.height || rect.height });
         image = image.crop({ x: Math.round(rect.x * scale), y: Math.round(rect.y * scale), width: Math.round(rect.width * scale), height: Math.round(rect.height * scale) });
         fs.writeFileSync(path.join(output, name + '.jpg'), image.toJPEG(92));
         console.log(`Captured ${name}: ${JSON.stringify(image.getSize())}`);
       };
       try {
-        win.setContentSize(1440, 1000);
+        win.setContentSize(1440 * ZOOM, 1000 * ZOOM);
+        win.webContents.setZoomFactor(ZOOM);
         await wait(4000);
         await js(`(async()=>{
           q.store.setProject(q.model.newProject('Feature cards'));
@@ -128,7 +133,7 @@ if (!electron.app) {
         assert.ok(Math.abs(bpm - 100) < 1, `The demo beat was detected at ${bpm} BPM`);
         await js(`q.commands.zoomFit();q.store.pps.value=62;q.playback.seek(9.6);document.querySelector('.tl-scroll, .timeline [class*="scroll"]')?.scrollTo?.({left:0})`);
         await wait(1500);
-        await photo('feature-beat-grid', '.timeline');
+        await photo('feature-beat-grid', '.timeline', { top: 36, width: 1000, height: 356 });
 
         // Color: Mountain lake with teal shadows and warm highlights, the Color tab, then the four video scopes.
         await js(`(()=>{const c=Object.values(q.store.project.value.clips).find(c=>c.lane===0&&q.store.project.value.media[c.mediaId].name.startsWith('Mountain lake'));
@@ -138,10 +143,14 @@ if (!electron.app) {
         await wait(800);
         await js(`document.querySelector('.inspector [data-section="wheels"]').scrollIntoView({block:'end'})`);
         await wait(300);
-        await photo('color-wheels', '.editor-top');
+        await photo('color-tile-grade', '.editor-top', { left: 233, top: 44, width: 674, height: 378 });
+        // The color wheels with room below them, for the website tile.
+        await js(`document.querySelector('.inspector [data-section="wheels"]').scrollIntoView({block:'center'})`);
+        await wait(300);
+        await photo('color-tile-wheels', '.inspector', { left: 5, top: 190, width: 285, height: 160 });
         await js(`q.setPrefs({videoScopesVisible:true,videoScopesMode:'all',videoScopesGain:2})`);
         await wait(2500);
-        await photo('color-scopes', '.video-scopes');
+        await photo('color-tile-vectorscope', '.video-scopes', { left: 892, top: 62, width: 210, height: 165 });
         await js(`q.setPrefs({videoScopesVisible:false})`);
 
         // Transcript Search: three English takes transcribed by the local speech model, searched for "sunrise".

@@ -2,7 +2,7 @@ import { activeVideoEffects, effectParams, keyPixels, rgb } from './videoEffects
 import { renderGradient } from './gradientRender.js';
 import { isStylizeEffect, renderStylize } from './stylizeRender.js';
 import { drawLights } from './lights.js';
-import { kfIntegral, kfTime, valueAt, vfxProp } from './model.js';
+import { kfIntegral, kfTime, valueAt, vfxElementProp, vfxProp } from './model.js';
 import { LEAK_COMPOSITE, leakFieldSize, lightLeakField } from './lightLeak.js';
 import { drawLensFlare } from './lensFlareRender.js';
 import { renderHueSaturation } from './hueSaturationRender.js';
@@ -239,6 +239,17 @@ export function animatedEffect(clip, effect, T) {
     const prop = vfxProp(effect.id, key);
     if (clip.kf?.[prop]?.length || clip.expressions?.[prop]) p[key] = valueAt(clip, prop, T);
   }
+  // Lens flare-elementer har egne nøkkelbilder: 'vfx.<effekt>.el:<element>:<nøkkel>'.
+  const el = vfxProp(effect.id, 'el:');
+  if (Array.isArray(p.elements) && [...Object.keys(clip.kf || {}), ...Object.keys(clip.expressions || {})].some((k) => k.startsWith(el)))
+    p.elements = p.elements.map((e) => {
+      const o = { ...e };
+      for (const key of Object.keys(e)) {
+        const prop = vfxElementProp(effect.id, e.id, key);
+        if (clip.kf?.[prop]?.length || clip.expressions?.[prop]) o[key] = valueAt(clip, prop, T);
+      }
+      return o;
+    });
   return { ...effect, p };
 }
 

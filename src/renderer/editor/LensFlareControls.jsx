@@ -16,9 +16,14 @@ export const flarePresets = () => [...FLARE_PRESETS, ...(prefs.value.lensFlarePr
 // Det brukeren har valgt for bildet følger med til et nytt preset: lyskilden, sentrum og Flare color
 // (fargen bare når presetet ikke har en egen farge, slik et lagret preset kan ha).
 const kept = (preset) => ['x', 'y', 'cx', 'cy', ...(preset?.p.colorize > 0 ? [] : ['color', 'colorize'])];
-export function applyFlarePreset(effect, preset) {
+// Elementenes nøkkelbilder hører til det gamle utseendet og fjernes; de globale beholdes.
+export function applyFlarePreset(clip, effectId, preset) {
+  const effect = clip?.props.vfx?.find((x) => x.id === effectId);
+  if (!effect) return;
   const keep = Object.fromEntries(kept(preset).map((k) => [k, effect.p[k]]));
   effect.p = { ...structuredClone(preset.p), ...keep, preset: preset.id };
+  const el = vfxProp(effectId, 'el:');
+  for (const map of [clip.kf, clip.expressions]) if (map) for (const key of Object.keys(map)) if (key.startsWith(el)) delete map[key];
 }
 export const flareLookModified = (p) => {
   const preset = flarePresets().find((x) => x.id === p.preset);
@@ -44,6 +49,8 @@ export function FlareGlobals({ clip, effect }) {
     {num('spread', 'Spread', 0, 300, { center: 100 })}
     <Row label="Blend mode"><Select value={p.blend} options={FLARE_BLENDS}
       onChange={(v) => commit((q) => (q.clips[clip.id].props.vfx.find((x) => x.id === effect.id).p.blend = v))} /></Row>
+    {num('occlusion', 'Occlusion', 0, 100)}
+    {(p.occlusion > 0 || clip.kf?.[k('occlusion')]?.length > 0) && num('threshold', 'Threshold', 0, 100)}
     <details class="vfx-advanced"><summary>Optical center & opacity</summary>
       {num('cx', 'Center X', -100, 200)}
       {num('cy', 'Center Y', -100, 200)}
@@ -63,13 +70,13 @@ export function LensFlareControls({ clip, effect }) {
         ...presets.map((x) => ({ value: x.id, label: (x.id.startsWith('user-') ? '★ ' : '') + x.label + (x.id === p.preset && modified ? ' (modified)' : '') })),
       ]} onChange={(id) => {
         const preset = presets.find((x) => x.id === id);
-        if (preset) commit((q) => applyFlarePreset(q.clips[clip.id].props.vfx.find((x) => x.id === effect.id), preset));
+        if (preset) commit((q) => applyFlarePreset(q.clips[clip.id], effect.id, preset));
       }} />
     </Row>
     <Button variant="primary" icon={Sparkles} class="flare-studio-open" onClick={() => (flareStudio.value = { clipId: clip.id, effectId: effect.id })}>
       Open Flare Studio
     </Button>
     <FlareGlobals clip={clip} effect={effect} />
-    <p class="hint">With the Effects tab open, drag the sun in the viewer to move the light; reflections follow on the other side of the optical center (+). Click a diamond to animate the light. Open Flare Studio to add, edit and remove elements, and to save your own presets.</p>
+    <p class="hint">With the Effects tab open, drag the sun in the viewer to move the light; reflections follow on the other side of the optical center (+). Click a diamond to animate the light. Occlusion dims the flare when the picture is dark at the light, for example when something passes in front of the sun; Threshold is how bright the picture must be there to count as light. Open Flare Studio to add, edit, group and animate elements, use your own textures and save your own presets.</p>
   </>;
 }

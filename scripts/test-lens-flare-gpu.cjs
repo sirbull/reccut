@@ -15,9 +15,13 @@ if (!electron.app) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reccut-flare-gpu-'));
   const out = process.argv[2] ? path.resolve(process.argv[2]) : null;
   app.setPath('userData', path.join(dir, 'profile'));
+  // The kit PNGs, as data URLs: drawn as custom textures they go through the texture path.
+  const kitPngs = Object.fromEntries(require(path.join(root, 'assets/lensflare/manifest.json')).assets
+    .map((a) => [a.id, 'data:image/png;base64,' + fs.readFileSync(path.join(root, 'assets/lensflare', a.file)).toString('base64')]));
   const entry = `
-    import { drawLensFlare } from ${JSON.stringify(path.join(root, 'src/shared/lensFlareRender.js'))};
-    import { FLARE_DEFAULTS, makeElement } from ${JSON.stringify(path.join(root, 'src/shared/lensFlare.js'))};
+    import { drawLensFlare, loadFlareSprites } from ${JSON.stringify(path.join(root, 'src/shared/lensFlareRender.js'))};
+    import { FLARE_ASSETS, FLARE_DEFAULTS, makeElement } from ${JSON.stringify(path.join(root, 'src/shared/lensFlare.js'))};
+    const KIT_PNGS = ${JSON.stringify(kitPngs)};
     // Light and optical center in the middle, so every element is centered at distance 1.
     const scene = (elements) => ({ ...structuredClone(FLARE_DEFAULTS), x: 0.5, y: 0.5, cx: 0.5, cy: 0.5, scale: 1, spread: 1, intensity: 1, opacity: 1, colorize: 0, blend: 'add',
       elements: elements.map((e) => ({ ...makeElement(e.asset), distance: 1, intensity: 2.5, ...e })) });
@@ -31,7 +35,7 @@ if (!electron.app) {
     }
     const at = (r, x, y) => { const i = (Math.round(y) * r.w + Math.round(x)) * 4; return [r.px[i], r.px[i + 1], r.px[i + 2]]; };
     const diff = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
-    window.run = () => {
+    window.run = async () => {
       const report = {}, fail = [];
       const W = 3840, H = 2160, cx = W / 2, cy = H / 2;
       // 1. Spectral ring and spectral 7-blade iris: walk a circle in 0.05° steps. The step across ±180° may not
@@ -76,6 +80,25 @@ if (!electron.app) {
       for (let i = 0; i < hp.length; i += 4) for (let k = 0; k < 3; k++) { const d = Math.abs(hp[i + k] - small.px[i + k]); sum += d; worst = Math.max(worst, d); }
       report.downscaled4KvsHD = { meanAbs: +(sum / (hp.length * 0.75)).toFixed(3), max: worst };
       if (sum / (hp.length * 0.75) > 1) fail.push('4K and 1080p differ');
+      // 5. Kit elements drawn with their formulas match the PNG at 1:1 (texture pixel = screen pixel), within the
+      //    rounding of an 8-bit PNG.
+      report.kitVsPng = {};
+      for (const a of FLARE_ASSETS.filter((x) => x.kit)) {
+        const size = a.w / H, textures = { [a.id]: { name: a.id, url: KIT_PNGS[a.id], w: a.w, h: a.h } };
+        const el = { distance: 1, intensity: 1, size, tint: '#ffffff', blend: 'add' };
+        const formula = scene([{ ...el, asset: a.id }]), png = { ...structuredClone(formula), textures };
+        png.elements[0].asset = 'custom:' + a.id;
+        await loadFlareSprites({ clips: { c: { props: { vfx: [{ type: 'lensFlare', p: png }] } } } });
+        const A = render(png, W, H), B = render(formula, W, H);
+        let sum = 0, n = 0, max = 0;
+        const x0 = Math.round(cx - a.w / 2), y0 = Math.round(cy - a.h / 2);
+        for (let y = y0; y < y0 + a.h; y++) for (let x = x0; x < x0 + a.w; x++) {
+          const i = (y * W + x) * 4;
+          for (let k = 0; k < 3; k++) { const d = Math.abs(A.px[i + k] - B.px[i + k]); sum += d; n++; max = Math.max(max, d); }
+        }
+        report.kitVsPng[a.id] = { meanAbs: +(sum / n).toFixed(3), max };
+        if (sum / n > 1.5 || max > 12) fail.push(a.id + ': formula differs from the PNG ' + JSON.stringify(report.kitVsPng[a.id]));
+      }
       const all = scene([...mix, { asset: 'iris_spectral', size: 0.35, distance: 1, blades: 7, chroma: 0.06 }]);
       return { report, fail, png: render(all, W, H).canvas.toDataURL('image/png') };
     };`;
@@ -96,7 +119,7 @@ if (!electron.app) {
         console.log('Wrote ' + path.join(out, 'procedural-4k.png'));
       }
       if (fail.length) throw new Error(fail.join('\n'));
-      console.log('Procedural lens flare: no seams, clean center, ~1 px edges, resolution independent.');
+      console.log('Procedural lens flare: no seams, clean center, ~1 px edges, resolution independent, kit formulas match the PNGs.');
       app.exit(0);
     } catch (error) {
       console.error(error.message || error); app.exit(1);

@@ -190,3 +190,46 @@ test('preset files: round trip, kit JSON, and untrusted values are cleaned', asy
   assert.equal(bad.p.elements[0].on, true);
   assert.ok(bad.p.elements[0].size > 0);
 });
+
+test('flare elements have their own keyframes, also with dots in the element id', async () => {
+  const { vfxElementProp, propBase, pruneEffectKeyframes } = await import('../src/shared/model.js');
+  const { animatedEffect } = await import('../src/shared/videoEffectsRender.js');
+  const effect = makeVideoEffect('lensFlare');
+  const el = effect.p.elements[0];
+  assert.match(el.id, /\./, 'kit element ids contain dots');
+  const clip = { id: 'c', start: 0, in: 0, dur: 10, props: { vfx: [effect] }, kf: {} };
+  const prop = vfxElementProp(effect.id, el.id, 'intensity');
+  assert.equal(propBase(clip, prop), el.intensity);
+  setPropBase(clip, prop, 0.9);
+  assert.equal(el.intensity, 0.9);
+  clip.kf[prop] = [[0, 0], [10, 2]];
+  const at5 = animatedEffect(clip, effect, 5);
+  assert.equal(at5.p.elements[0].intensity, 1);
+  assert.equal(effect.p.elements[0].intensity, 0.9, 'the stored element is not changed');
+  assert.equal(at5.p.elements[1].intensity, effect.p.elements[1].intensity);
+  pruneEffectKeyframes(clip);
+  assert.ok(clip.kf[prop], 'kept while the element exists');
+  effect.p.elements.shift();
+  pruneEffectKeyframes(clip);
+  assert.equal(clip.kf[prop], undefined, 'removed with the element');
+});
+
+test('custom textures live in the effect and survive a preset file, invalid ones are dropped', async () => {
+  const { assetOf, importFlarePreset, FLARE_FILE_FORMAT } = await import('../src/shared/lensFlare.js');
+  const url = 'data:image/png;base64,iVBORw0KGgo=';
+  const p = { ...structuredClone(FLARE_DEFAULTS), textures: { t1: { name: 'Mine', url, w: 64, h: 32 } } };
+  p.elements = [{ ...makeElement('custom:t1', p), group: 'Core' }];
+  assert.equal(assetOf(p, 'custom:t1').h, 32);
+  assert.equal(assetOf(p, 'custom:missing'), undefined);
+  const [d] = flareDraws({ ...p, x: 0.5, y: 0.5 }, 1920, 1080);
+  assert.equal(d.asset.url, url);
+  assert.ok(Math.abs(d.h / d.w - 0.5) < 1e-9, 'keeps the aspect ratio of the texture');
+  const back = importFlarePreset({ format: FLARE_FILE_FORMAT, p: JSON.parse(JSON.stringify(p)) });
+  assert.deepEqual(back.p.textures, p.textures);
+  assert.equal(back.p.elements[0].asset, 'custom:t1');
+  assert.equal(back.p.elements[0].group, 'Core');
+  const bad = importFlarePreset({ format: FLARE_FILE_FORMAT, p: { ...p, textures: { t1: { url: 'javascript:alert(1)', w: 1, h: 1 }, '../x': { url, w: 1, h: 1 } } } });
+  assert.deepEqual(bad.p.textures, {});
+  assert.deepEqual(bad.p.elements, [], 'elements that use a dropped texture are dropped too');
+  assert.ok(flareDraws({ ...p, occlusion: 1 }, 1920, 1080, null, 0.25)[0].gain.every((v, i) => Math.abs(v - d.gain[i] * 0.25) < 1e-9), 'visibility scales the light');
+});

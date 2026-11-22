@@ -31,13 +31,45 @@ const PROC_ASSETS = [
   { id: 'ring_spectral', group: 'rings', label: 'Ring spectral', proc: 'ring', defaults: { spectrum: 0.85, thickness: 0.06 } },
   { id: 'halo_soft', group: 'halos', label: 'Halo', proc: 'halo', defaults: { spectrum: 0, thickness: 0.35, softness: 0.08, chroma: 0.03 } },
 ];
+// Kit-teksturene for lys, stjerner, striper, buer, glints og diffraksjon er laget med formler
+// (RecCut_LensFlare_Kit/scripts/generate_assets.py). Skjermkortet regner ut de samme formlene per piksel
+// (KIT_FS i lensFlareRender.js), så de er skarpe i 4K uansett hvor mye de forstørres. PNG-en brukes til
+// miniatyrer og når skjermkortet mangler.
+// ponytail: tabellen speiler ASSETS i generate_assets.py; endres skriptet, må den endres her også.
+export const KIT_KINDS = ['glow', 'starburst', 'diffraction', 'glint', 'streak', 'arc'];
+const KIT_COL = {
+  warm: [1, 0.44, 0.13], amber: [1, 0.62, 0.2], gold: [1, 0.78, 0.4], blue: [0.2, 0.53, 1], cyan: [0.16, 0.86, 1],
+  purple: [0.64, 0.26, 1], white: [1, 0.98, 0.92],
+};
+const KIT_ANALYTIC = {
+  glow_warm: ['glow', 0, 'warm'], glow_blue: ['glow', 1, 'blue'], glow_white: ['glow', 2, 'white'], glow_violet: ['glow', 3, 'purple'],
+  starburst_4_gold: ['starburst', 4, 'gold'], starburst_6_blue: ['starburst', 6, 'blue'], starburst_8_amber: ['starburst', 8, 'amber'], starburst_12_white: ['starburst', 12, 'white'],
+  streak_anamorphic_blue: ['streak', 0, 'blue'], streak_warm_horizontal: ['streak', 1, 'amber'], streak_violet: ['streak', 2, 'purple'], streak_cyan_double: ['streak', 3, 'cyan'], streak_white_thin: ['streak', 4, 'white'],
+  arc_rainbow_top: ['arc', 0, 'white'], arc_blue_right: ['arc', 1, 'blue'], arc_gold_bottom: ['arc', 2, 'gold'], arc_violet_left: ['arc', 3, 'purple'],
+  glint_gold_micro: ['glint', 0, 'gold'], glint_white_hotspot: ['glint', 1, 'white'], glint_blue_cross: ['glint', 2, 'blue'],
+  diffraction_warm_8: ['diffraction', 0, 'warm'], diffraction_cool_12: ['diffraction', 1, 'blue'],
+};
 export const FLARE_ASSETS = [
   ...PROC_ASSETS.map((a) => ({ ...a, w: 1, h: 1, dirt: false })),
-  ...manifest.assets.map((a) => ({
-    id: a.id, group: a.group, label: words(a.id), file: a.file, w: a.pixel_width, h: a.pixel_height, dirt: a.type === 'dirt',
-  })),
+  ...manifest.assets.map((a) => {
+    const k = KIT_ANALYTIC[a.id];
+    return {
+      id: a.id, group: a.group, label: words(a.id), file: a.file, w: a.pixel_width, h: a.pixel_height, dirt: a.type === 'dirt',
+      ...(k ? { kit: { kind: KIT_KINDS.indexOf(k[0]), variant: k[1], color: KIT_COL[k[2]] } } : {}),
+    };
+  }),
 ];
 export const flareAsset = (id) => FLARE_ASSETS.find((a) => a.id === id);
+
+// Egne teksturer ligger i effekten (p.textures[id] = { name, url, w, h }, url er en data-URL), så prosjektet
+// og presetene tar dem med seg til en annen maskin. Elementet viser til dem som 'custom:<id>'.
+export const CUSTOM_PREFIX = 'custom:';
+export const MAX_CUSTOM_TEXTURE = 1024; // lengste side ved import
+export function assetOf(p, id) {
+  if (!id?.startsWith?.(CUSTOM_PREFIX)) return flareAsset(id);
+  const t = p?.textures?.[id.slice(CUSTOM_PREFIX.length)];
+  return t && { id, group: 'custom', label: t.name || 'Custom texture', url: t.url, w: t.w, h: t.h, dirt: false };
+}
 export const FLARE_BLENDS = [{ value: 'add', label: 'Add (linear light)' }, { value: 'screen', label: 'Screen' }];
 
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
@@ -96,7 +128,7 @@ export function kitPreset(k) {
     preset: k.id,
     x: k.light_source_uv[0], y: k.light_source_uv[1], cx: k.optical_center_uv[0], cy: k.optical_center_uv[1],
     intensity: k.global_intensity, scale: k.global_scale, spread: k.flare_spread, opacity: k.global_opacity,
-    color: '#ff9a3c', colorize: 0, blend: 'add',
+    color: '#ff9a3c', colorize: 0, blend: 'add', occlusion: 0, threshold: 0.6, textures: {},
     elements: k.elements.map((e) => kitElement(e, {
       id: e.id, asset: e.asset_id, on: e.visible !== false, distance: e.distance, ox: e.offset_uv[0], oy: e.offset_uv[1],
       size: e.display_width_as_fraction_of_video_height, rotation: e.rotation_degrees || 0, intensity: e.intensity,
@@ -117,7 +149,9 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 // Er innstillingene endret siden presetet ble valgt?
 export function flareModified(p, presets = FLARE_PRESETS) {
   const preset = presets.find((x) => x.id === p.preset);
-  return !preset || Object.keys(FLARE_DEFAULTS).some((k) => k !== 'preset' && !same(p[k], preset.p[k]));
+  // Presets lagret før en innstilling fantes, har standardverdien for den.
+  const q = preset && { ...FLARE_DEFAULTS, ...preset.p };
+  return !preset || Object.keys(FLARE_DEFAULTS).some((k) => k !== 'preset' && !same(p[k] ?? FLARE_DEFAULTS[k], q[k]));
 }
 
 // Hold kilden (d=1) og optisk sentrum (d=0) i ro når spredningen endres.
@@ -137,10 +171,10 @@ export function elementSize(p, e, asset, height) {
 
 export const newElementId = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
 // Nytt element fra biblioteket: kilden for lys og striper, refleksjonsaksen for ghosts, ringer og buer.
-export function makeElement(assetId) {
-  const a = flareAsset(assetId);
-  const atSource = ['glows', 'starbursts', 'streaks', 'halos', 'glints', 'diffraction', 'dirt'].includes(a.group);
-  const size = { glows: 0.8, starbursts: 0.7, streaks: 2.5, ghosts: 0.25, rings: 0.6, halos: 1.2, arcs: 0.8, glints: 0.35, diffraction: 0.8, dirt: 1.4 }[a.group];
+export function makeElement(assetId, p = null) {
+  const a = assetOf(p, assetId);
+  const atSource = ['glows', 'starbursts', 'streaks', 'halos', 'glints', 'diffraction', 'dirt', 'custom'].includes(a.group);
+  const size = { glows: 0.8, starbursts: 0.7, streaks: 2.5, ghosts: 0.25, rings: 0.6, halos: 1.2, arcs: 0.8, glints: 0.35, diffraction: 0.8, dirt: 1.4, custom: 0.6 }[a.group];
   return {
     id: newElementId(), asset: assetId, on: true, distance: atSource ? 1 : -0.6, ox: 0, oy: 0, size, rotation: 0,
     intensity: a.dirt ? 0.25 : 0.5, opacity: 1, tint: '#ffffff', blend: a.dirt ? 'dirt' : 'add',
@@ -151,6 +185,7 @@ export function makeElement(assetId) {
 // Preset-fil (eksport fra Flare Studio) eller kit-preset (reccut.lensflare.preset.v1) til { label, p }.
 // Filen kommer utenfra: bare kjente nøkler og gyldige verdier slipper gjennom; ukjente teksturer droppes.
 export const FLARE_FILE_FORMAT = 'reccut-lensflare-preset';
+const DATA_IMAGE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
 export function importFlarePreset(data) {
   const kit = data?.schema === 'reccut.lensflare.preset.v1';
   if (!kit && data?.format !== FLARE_FILE_FORMAT) throw new Error('Not a Reccut lens flare preset.');
@@ -158,12 +193,19 @@ export function importFlarePreset(data) {
   const pick = (v, d) => (typeof d === 'number' ? num(v, d) : typeof d === 'string' ? (typeof v === 'string' ? v : d) : d);
   const p = Object.fromEntries(Object.entries(FLARE_DEFAULTS).map(([k, d]) => [k, k === 'elements' ? [] : pick(src[k], d)]));
   p.blend = p.blend === 'screen' ? 'screen' : 'add';
+  p.textures = {};
+  for (const [id, t] of Object.entries(src.textures && typeof src.textures === 'object' ? src.textures : {})) {
+    const size = (v) => Number.isInteger(v) && v > 0 && v <= 4096;
+    if (/^[\w-]{1,64}$/.test(id) && typeof t?.url === 'string' && t.url.length < 16e6 && DATA_IMAGE.test(t.url) && size(t.w) && size(t.h))
+      p.textures[id] = { name: String(t.name || 'Custom texture').slice(0, 80), url: t.url, w: t.w, h: t.h };
+  }
   for (const e of Array.isArray(src.elements) ? src.elements : []) {
-    const a = flareAsset(e?.asset);
+    const a = assetOf(p, e?.asset);
     if (!a) continue;
-    const base = makeElement(a.id), el = { ...base };
+    const base = makeElement(a.id, p), el = { ...base };
     for (const [k, d] of Object.entries(base)) if (k !== 'id') el[k] = typeof d === 'boolean' ? e[k] !== false : pick(e[k], d);
     el.blend = a.dirt ? 'dirt' : e.blend === 'screen' ? 'screen' : 'add';
+    if (typeof e.group === 'string' && e.group.trim()) el.group = e.group.trim().slice(0, 40);
     p.elements.push(el);
   }
   const label = String((kit ? data.title : data.label) || 'Imported flare').slice(0, 80);
@@ -172,13 +214,15 @@ export function importFlarePreset(data) {
 
 // Det som skal tegnes, i piksler: midtpunkt, størrelse, vinkel og lysstyrke (lineært lys) for hvert element.
 // Global styrke og opasitet er bakt inn i hvert element. hue er Flare color i lineært lys med største kanal = 1,
-// colorize hvor mye av den elementet får. only: vis bare dette elementet (solo i Flare Studio).
-export function flareDraws(p, w, h, only = null) {
-  const k = Math.max(0, p.intensity) * clamp(p.opacity), c = hexLinear(p.color), top = Math.max(...c, 1e-6);
+// colorize hvor mye av den elementet får. only: vis bare disse element-id-ene (solo i Flare Studio).
+// visible: hvor mye av lyskilden som synes i bildet (okklusjon, se flareVisibility i lensFlareRender.js).
+export function flareDraws(p, w, h, only = null, visible = 1) {
+  const ids = only == null ? null : [].concat(only);
+  const k = Math.max(0, p.intensity) * clamp(p.opacity) * visible, c = hexLinear(p.color), top = Math.max(...c, 1e-6);
   const hue = c.map((v) => v / top);
   return (p.elements || []).flatMap((e) => {
-    const a = flareAsset(e.asset);
-    if (!a || (only ? e.id !== only : e.on === false)) return [];
+    const a = assetOf(p, e.asset);
+    if (!a || (ids ? !ids.includes(e.id) : e.on === false)) return [];
     const [u, v] = elementCenter(p, e), t = hexLinear(e.tint);
     // Et prosedyrisk element tegnes på en flate som er litt større enn omrisset (extent radier).
     const shape = a.proc ? procParams(e, a) : null, extent = shape ? procExtent(shape) : 1;

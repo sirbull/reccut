@@ -1,7 +1,8 @@
 // Photograph the actual studio in an isolated profile, using demo audio only.
 // Usage: node scripts/capture-voiceover.cjs <demo-directory>
 // The directory contains script.txt (four English paragraphs) and matching English
-// narration in line-0.wav to line-3.wav. Use Reccut's openly licensed voices, never Lingit.
+// narration in line-0.wav to line-3.wav, and roomtone.wav. scripts/feature-demo-media.mjs makes them
+// as microphone recordings in a simulated room. Use Reccut's openly licensed voices, never Lingit.
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -10,9 +11,9 @@ const electron = process.versions.electron ? require('electron') : require(path.
 
 if (!electron.app) {
   (async () => {
-    if (!process.argv[2]) throw new Error('Supply a demo directory with script.txt and line-0.wav to line-3.wav.');
+    if (!process.argv[2]) throw new Error('Supply a demo directory with script.txt, line-0.wav to line-3.wav and roomtone.wav.');
     const demo = path.resolve(process.argv[2]);
-    for (const name of ['script.txt', ...Array.from({ length: 4 }, (_, i) => `line-${i}.wav`)]) {
+    for (const name of ['script.txt', 'roomtone.wav', ...Array.from({ length: 4 }, (_, i) => `line-${i}.wav`)]) {
       if (!fs.existsSync(path.join(demo, name))) throw new Error(`Missing demo input: ${name}`);
     }
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'reccut-voiceover-photography-'));
@@ -25,9 +26,9 @@ if (!electron.app) {
         import * as preview from ${file('src/renderer/voiceover/preview.js')};
         import * as timeline from ${file('src/renderer/voiceover/VoTimeline.jsx')};
         import { newProject } from ${file('src/shared/model.js')};
-        import { parseScript, detectSpeech, levelEnvelope, trimFor, peakInfo } from ${file('src/shared/voiceover.js')};
+        import { parseScript, detectSpeech, levelEnvelope, trimFor, peakInfo, roomToneLevel } from ${file('src/shared/voiceover.js')};
         import { toasts } from ${file('src/renderer/ui.jsx')};
-        window.voicePhotography = {store, booth, preview, timeline, newProject, parseScript, detectSpeech, levelEnvelope, trimFor, peakInfo, toasts};
+        window.voicePhotography = {store, booth, preview, timeline, newProject, parseScript, detectSpeech, levelEnvelope, trimFor, peakInfo, roomToneLevel, toasts};
       `, resolveDir: root, loader: 'jsx' },
       banner: { js: `localStorage.setItem('prefs',JSON.stringify({checkUpdates:false,reopenLast:false,aiModelsAsked:true,voSubtitles:true,voRoomFill:false,voTimelineH:180,voFont:22,voMic:'',voCam:''}));navigator.mediaDevices.getUserMedia=()=>Promise.reject(new DOMException('Demo capture does not use input devices','NotAllowedError'));navigator.mediaDevices.enumerateDevices=async()=>[];` },
       outfile: path.join(temporary, 'capture.js'), bundle: true, format: 'iife', platform: 'browser',
@@ -72,20 +73,30 @@ if (!electron.app) {
           const lines = q.parseScript(script).filter(b => b.kind === 'line');
           if (lines.length !== 4) throw Error('Demo script must contain four paragraphs.');
           const files = ${JSON.stringify(files)};
+          // The room tone is recorded first, as in the studio, and sets the noise floor for trimming.
+          const toneFile = ${JSON.stringify(path.join(demo, 'roomtone.wav'))};
+          const toneAudio = await q.preview.load(toneFile);
+          const { floor, quiet } = q.roomToneLevel(q.levelEnvelope(toneAudio.getChannelData(0), toneAudio.sampleRate));
+          p.media['room-tone-1'] = { id: 'room-tone-1', name: 'Room tone 1', kind: 'audio', duration: toneAudio.duration, voiceover: true,
+            path: toneFile, streams: {main: {path: toneFile, hasAudio: true, hasVideo: false, duration: toneAudio.duration}} };
+          const tone = { id: 'room-tone-1', n: 1, name: 'Room tone 1', at: Date.now(), mediaId: 'room-tone-1', file: toneFile,
+            duration: toneAudio.duration, floor: Math.max(-100, floor), quiet };
           const takes = [];
           for (let i = 0; i < files.length; i++) {
             const audio = await q.preview.load(files[i]);
             const samples = audio.getChannelData(0);
-            const trim = q.trimFor(q.detectSpeech(q.levelEnvelope(samples, audio.sampleRate)), audio.duration, {preRoll: 0.05, postRoll: 0.08});
+            // Trimmed like a microphone take (micTrim in booth.js): speech above the room's noise floor.
+            const t = q.trimFor(q.detectSpeech(q.levelEnvelope(samples, audio.sampleRate), {floorDb: tone.floor, skipStart: 0.3, skipEnd: 0.4}), audio.duration, {preRoll: 0.05, postRoll: 0.08});
+            const trim = {...t, in: Math.max(t.in, 0.1), out: Math.min(t.out, audio.duration - 0.15)};
             const id = 'narration-' + i;
-            p.media[id] = { id, name: 'Narration ' + (i + 1), kind: 'audio', duration: audio.duration,
+            p.media[id] = { id, name: 'Line ' + (i + 1) + ' take 1', kind: 'audio', duration: audio.duration, voiceover: true,
               path: files[i], streams: {main: {path: files[i], hasAudio: true, hasVideo: false, duration: audio.duration}} };
             takes.push({id: 'take-' + i, key: lines[i].key, person: 'p1', mediaId: id, file: files[i],
               ...trim, ...q.peakInfo(samples), n: 1, duration: audio.duration, star: i === 0});
           }
           p.voiceover = { script: {name: 'A story starts with a voice', text: script}, pos: lines[0].index,
-            people: [{id: 'p1', name: 'Narrator', color: '#5ac8fa', gain: 0, fx: q.booth.DEFAULT_FX()}],
-            person: 'p1', takes, selected: {}, skip: {}, roomToneSkipped: true };
+            people: [{id: 'p1', name: 'Narrator', color: '#2f7a4d', gain: 0, fx: q.booth.DEFAULT_FX()}], // the app's color for the first person
+            person: 'p1', takes, selected: {}, skip: {}, roomTone: tone, roomTones: [tone], roomToneSkipped: false };
           q.store.setProject(p);
           q.store.needsProject.value = false;
           q.store.room.value = 'edit';
@@ -98,7 +109,7 @@ if (!electron.app) {
         const text = await js(`document.querySelector('.vo-booth')?.innerText || document.body.innerText`);
         if (!text.includes('AI Clean Voice') || !text.includes('Send to Edit')) throw new Error('Studio did not finish rendering');
         const shot = await win.webContents.capturePage();
-        const image = shot.resize({ width: 2000 });
+        const image = shot.resize({ width: Math.min(2400, shot.getSize().width) });
         const output = path.join(root, 'docs/media/voice-over-studio.jpg');
         fs.writeFileSync(output, image.toJPEG(90));
         console.log(`Captured ${output}: ${JSON.stringify(image.getSize())}`);

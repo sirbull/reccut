@@ -1537,7 +1537,7 @@ function Keyframes({ clip, z }) {
   const times = new Map();
   for (const [prop, list] of Object.entries(clip.kf || {})) {
     if (['volume', 'micVolume', 'sysVolume', 'layout'].includes(prop)) continue;
-    for (const [t, , e] of list) if (t >= clip.in - 1e-4 && t <= clip.in + clip.dur * kfRate(clip) + 1e-4) times.set(t, [...(times.get(t) || []), prop.replace(/^vfx\.[^.]+\./, '') + (e && e !== 'linear' ? ` (${e})` : '')]);
+    for (const [t, , e] of list) if (t >= clip.in - 1e-4 && t <= clip.in + clip.dur * kfRate(clip) + 1e-4) times.set(t, [...(times.get(t) || []), prop.replace(/^vfx\.[^.]+\.(el:.*:)?/, '') + (e && e !== 'linear' ? ` (${e})` : '')]);
   }
   return (
     <div class="kf-row">

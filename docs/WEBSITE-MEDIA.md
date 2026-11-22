@@ -49,7 +49,7 @@ After capture, check the image dimensions against the HTML attributes and inspec
 | Main editor | `overview.jpg`, `timeline.jpg` |
 | Quick Search | `quick-search.jpg`, with the query `color` |
 | Titles | `still-title.jpg`, `still-lowerthird.jpg` |
-| Color tools | `color-wheels.jpg` (Color tab with Light, Color and Color Wheels) and `color-scopes.jpg` (four video scopes), from `scripts/capture-features.cjs`. `ba-before.jpg` and `ba-after.jpg` are no longer shown on the page |
+| Color tools | `color-tile-grade.jpg`, `color-tile-wheels.jpg` and `color-tile-vectorscope.jpg`, from `scripts/capture-features.cjs`. `ba-before.jpg` and `ba-after.jpg` are no longer shown on the page |
 | Film looks | All six `look-*.jpg` examples, shown as one strip of portrait crops |
 | Film look comparisons | Six matching `look-*-before.jpg` originals, shown with a draggable before/after slider when a film look is opened |
 | Output formats | `fmt-169.jpg`, `fmt-916.jpg`, `fmt-11.jpg`, rendered from the same shot |
@@ -95,8 +95,10 @@ The Highlights section has seven cards with a small picture and a short text. Tw
 
 The demo media is in `~/Movies/Reccut/Website Demos - 2026-11-22/Feature Cards/Media` and is made by `node scripts/feature-demo-media.mjs`: a synthesized 100 BPM drum and bass loop (24 bars of 4/4) and three English takes spoken by Kokoro (`af_heart` and `am_fenrir`), using the Kokoro model and eSpeak NG add-on downloaded in the app. No system voices are used.
 
-Run `npm run build`, then `node scripts/capture-features.cjs`. The script uses a temporary, isolated app profile with a copy of the installed Whisper model from `~/Library/Application Support/Reccut Development`, and downloads nothing. The beat grid is the real beat detection of the demo loop (the script checks that it finds 100 BPM), with six nature clips cut every second bar on V1. Transcript Search shows the real Whisper Base transcription of the three takes, searched for “sunrise”. Afterwards the beat grid picture was cropped to 1000 × 356 to leave out the empty area below the tracks.
+Run `npm run build`, then `node scripts/capture-features.cjs`. The script uses a temporary, isolated app profile with a copy of the installed Whisper model from `~/Library/Application Support/Reccut Development`, and downloads nothing. The beat grid is the real beat detection of the demo loop (the script checks that it finds 100 BPM), with six nature clips cut every second bar on V1. Transcript Search shows the real Whisper Base transcription of the three takes, searched for “sunrise”. The beat grid picture is cropped by the script to leave out the empty area below the tracks.
 
 ## Color tools — 22 November 2026
 
-`scripts/capture-features.cjs` also photographs the color tools: the Mountain lake clip with a light teal and orange grade (contrast 14, highlights −15, shadows 6, saturation 6, temperature 4, shadows wheel toward teal, highlights wheel toward orange), the Color tab scrolled to the color wheels, and the four video scopes of the same frame. The media browser is hidden for the picture. The large before/after slider was removed from the page; each film look in the strip still opens a before/after comparison.
+`scripts/capture-features.cjs` photographs the color tools at 2x as three tiles: `color-tile-grade.jpg` (the Mountain lake clip with a light teal and orange grade: contrast 14, highlights −15, shadows 6, saturation 6, temperature 4, shadows wheel toward teal, highlights wheel toward orange), `color-tile-wheels.jpg` (the Color Wheels section of the Color tab) and `color-tile-vectorscope.jpg` (the vectorscope of the same frame, from the four-scope view). The media browser is hidden for the pictures. The tiles sit in one row above the film look strip, with the title on the picture like the looks. The large before/after slider was removed from the page; each film look in the strip still opens a before/after comparison.
+
+All pictures from `capture-features.cjs` are taken at 2x (the window is twice the size with zoom 2), so they stay sharp on high-density screens.

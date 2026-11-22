@@ -2,18 +2,19 @@
 // elementliste, inspektør, elementbibliotek og presets. Alt redigeres direkte i effekten på klippet
 // (vanlige angresteg); Revert setter effekten tilbake slik den var da studioet ble åpnet.
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Focus, Trash2 } from 'lucide-preact';
-import { FLARE_ASSETS, FLARE_BLENDS, FLARE_DEFAULTS, FLARE_GRADIENTS, FLARE_GROUPS, FLARE_FILE_FORMAT, FLARE_PRESETS, PROC_DEFAULTS, PROC_KEYS, elementCenter, flareAsset, importFlarePreset, keepsOwnColors, makeElement, newElementId, procParams } from '../../shared/lensFlare.js';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, Eye, EyeOff, Focus, ImagePlus, Trash2 } from 'lucide-preact';
+import { CUSTOM_PREFIX, FLARE_ASSETS, FLARE_BLENDS, FLARE_DEFAULTS, FLARE_GRADIENTS, FLARE_GROUPS, FLARE_FILE_FORMAT, FLARE_PRESETS, MAX_CUSTOM_TEXTURE, PROC_DEFAULTS, PROC_KEYS, assetOf, elementCenter, flareAsset, importFlarePreset, keepsOwnColors, makeElement, newElementId, procParams } from '../../shared/lensFlare.js';
 import { drawLensFlare, onFlareSprites } from '../../shared/lensFlareRender.js';
 import { animatedEffect } from '../../shared/videoEffectsRender.js';
 import { effectParams } from '../../shared/videoEffects.js';
-import { formatTimecode, kfTime, setPropBase, uid, vfxProp } from '../../shared/model.js';
-import { Button, IconButton, Modal, NumberField, Row, Segmented, Select, Slider, Toggle, toast } from '../ui.jsx';
+import { formatTimecode, kfTime, pruneEffectKeyframes, setPropBase, uid, vfxElementProp, vfxProp } from '../../shared/model.js';
+import { Button, IconButton, Modal, Row, Segmented, Select, Slider, Toggle, toast } from '../ui.jsx';
 import { beginTransient, commit, endTransient, project, redo, setTime, timeSig, undo, updateTransient } from './store.js';
+import { fileUrl } from '../player.js';
 import { setKeyframe } from './keyframes.js';
 import { readClipFrame } from './sourceFrame.js';
 import { prefs, setPrefs } from '../prefs.js';
-import { ColorField } from './Inspector.jsx';
+import { Param, PatternChoice } from './Inspector.jsx';
 import { FlareGlobals, applyFlarePreset, flareLookModified, flarePresets, flareStudio } from './LensFlareControls.jsx';
 
 // Miniatyrene av presets og prosedyriske elementer tegnes med samme renderer som bildet, så de stemmer med eksporten.
@@ -26,8 +27,9 @@ function flareThumb(p, w, h) {
   return t.toDataURL('image/jpeg', 0.85);
 }
 const procThumbs = new Map();
-function elementThumb(id) {
-  const a = flareAsset(id);
+function elementThumb(id, p) {
+  const a = assetOf(p, id);
+  if (a?.url) return a.url;
   if (!a?.proc) return `lensflare/thumbs/elements/${id}.png`;
   if (!procThumbs.has(id)) {
     const el = { ...makeElement(id), distance: 1, size: a.proc === 'halo' ? 0.62 : 0.78, intensity: 1 };
@@ -60,7 +62,9 @@ function Studio({ clip, effect }) {
     kf: structuredClone(Object.fromEntries(Object.entries(clip.kf || {}).filter(([k]) => k.startsWith(prefix)))),
   }));
   const [selected, setSelected] = useState(() => effect.p.elements?.find((e) => e.on !== false)?.id || null);
+  // Solo: ett element (id) eller en gruppe ('group:<navn>').
   const [solo, setSolo] = useState(null);
+  const [collapsed, setCollapsed] = useState(() => new Set());
   const [group, setGroup] = useState('ghosts');
   const media = project.value.media[clip.mediaId];
   const canVideo = ['video', 'image', 'recording'].includes(clip.type) && Boolean(media);
@@ -74,6 +78,7 @@ function Studio({ clip, effect }) {
   const [fit, setFit] = useState(null);
   const [thumbs, setThumbs] = useState(kitThumbs);
   const presetThumb = (x) => x.thumb || thumbs[x.id];
+  const assetIn = (id) => assetOf(base, id);
 
   const T = timeSig.value, fps = project.value.fps;
   const Tc = Math.min(Math.max(T, clip.start), clip.start + clip.dur - 1e-3);
@@ -81,6 +86,8 @@ function Studio({ clip, effect }) {
   const p = effectParams(animatedEffect(clip, effect, Tc));
   const els = base.elements || [];
   const sel = els.find((e) => e.id === selected) || null;
+  const soloIds = solo?.startsWith('group:') ? els.filter((e) => e.group === solo.slice(6)).map((e) => e.id) : solo;
+  const groups = [...new Set(els.map((e) => e.group).filter(Boolean))];
   const close = () => (flareStudio.value = null);
 
   // Forhåndsvisningen har bildets sideforhold, innenfor 960 × 540.
@@ -139,23 +146,33 @@ function Studio({ clip, effect }) {
       g.fillStyle = '#2a2a2d';
       for (let y = 0; y < H; y += 16) for (let x = (y / 16) % 2 ? 16 : 0; x < W; x += 32) g.fillRect(x, y, 16, 16);
     } else if (bg === 'video' && frame) g.drawImage(frame, 0, 0, W, H);
-    drawLensFlare(cv.getContext('2d'), b, W, H, p, solo);
-  }, [pKey, bg, frame, solo, tick, W, H]);
+    drawLensFlare(cv.getContext('2d'), b, W, H, p, soloIds);
+  }, [pKey, bg, frame, String(soloIds), tick, W, H]);
 
   /* Redigering */
   const effectOf = (q) => q.clips[clipId]?.props.vfx?.find((x) => x.id === effectId);
   const elementOf = (q, id) => effectOf(q)?.p.elements?.find((x) => x.id === id);
   const setEl = (id, values) => commit((q) => Object.assign(elementOf(q, id) || {}, values));
-  const liveEl = (id, values) => updateTransient((q) => Object.assign(elementOf(q, id) || {}, values));
-  const editList = (fn) => commit((q) => { const e = effectOf(q); if (e) fn((e.p.elements ||= [])); });
+  // Endrer elementlisten; nøkkelbilder for elementer som er borte, ryddes bort.
+  const editList = (fn) => commit((q) => {
+    const c = q.clips[clipId], e = effectOf(q);
+    if (!e) return;
+    fn((e.p.elements ||= []), c, e);
+    pruneEffectKeyframes(c);
+  });
   const add = (assetId) => {
-    const el = makeElement(assetId);
+    const el = makeElement(assetId, base);
     editList((list) => list.push(el));
     setSelected(el.id);
   };
   const duplicate = (id) => {
     const copy = { ...structuredClone(els.find((e) => e.id === id)), id: newElementId() };
-    editList((list) => list.splice(list.findIndex((e) => e.id === id) + 1, 0, copy));
+    editList((list, c) => {
+      list.splice(list.findIndex((e) => e.id === id) + 1, 0, copy);
+      // Kopien får også elementets nøkkelbilder og uttrykk.
+      const from = vfxElementProp(effectId, id, ''), to = vfxElementProp(effectId, copy.id, '');
+      for (const map of [c.kf, c.expressions]) if (map) for (const key of Object.keys(map)) if (key.startsWith(from)) map[to + key.slice(from.length)] = structuredClone(map[key]);
+    });
     setSelected(copy.id);
   };
   const remove = (id) => {
@@ -163,6 +180,50 @@ function Studio({ clip, effect }) {
     editList((list) => list.splice(list.findIndex((e) => e.id === id), 1));
     if (solo === id) setSolo(null);
     setSelected(els[i + 1]?.id || els[i - 1]?.id || null);
+  };
+  // En gruppe holdes samlet i listen: elementet flyttes bak gruppens siste element.
+  const groupElement = (id, name) => editList((list) => {
+    const i = list.findIndex((e) => e.id === id), group = name.trim().slice(0, 40);
+    if (i < 0) return;
+    const [el] = list.splice(i, 1);
+    if (group) el.group = group;
+    else delete el.group;
+    const last = group ? list.findLastIndex((e) => e.group === group) : -1;
+    list.splice(last >= 0 ? last + 1 : i, 0, el);
+  });
+  const groupOn = (name, on) => editList((list) => { for (const e of list) if (e.group === name) e.on = on; });
+  const ungroup = (name) => editList((list) => { for (const e of list) if (e.group === name) delete e.group; });
+  // Egen tekstur: bildet skaleres ned til høyst MAX_CUSTOM_TEXTURE og lagres i effekten, så prosjektet tar det med seg.
+  const importTexture = async () => {
+    const file = await window.api.openFileDialog({ title: 'Import Flare Texture', filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }] });
+    if (!file) return;
+    try {
+      const r = await fetch(fileUrl(file));
+      if (!r.ok) throw new Error(`Could not read ${file.split(/[\\/]/).pop()}.`);
+      const img = await createImageBitmap(await r.blob(), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+      const k = Math.min(1, MAX_CUSTOM_TEXTURE / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(img.width * k));
+      cv.height = Math.max(1, Math.round(img.height * k));
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      img.close();
+      const jpeg = /\.jpe?g$/i.test(file), id = uid();
+      const t = { name: file.split(/[\\/]/).pop().replace(/\.\w+$/, '').slice(0, 80), url: cv.toDataURL(jpeg ? 'image/jpeg' : 'image/png', 0.92), w: cv.width, h: cv.height };
+      const textures = { ...base.textures, [id]: t }, el = makeElement(CUSTOM_PREFIX + id, { textures });
+      editList((list, c, e) => { e.p.textures = { ...e.p.textures, [id]: t }; list.push(el); });
+      setSelected(el.id);
+    } catch (err) {
+      toast(err.message, { kind: 'error' });
+    }
+  };
+  const removeTexture = (id) => {
+    const used = els.filter((e) => e.asset === CUSTOM_PREFIX + id).length;
+    if (used && !confirm(`Remove this texture and the ${used === 1 ? 'element' : `${used} elements`} that use it?`)) return;
+    editList((list, c, e) => {
+      const { [id]: _, ...rest } = e.p.textures || {};
+      e.p.textures = rest;
+      for (let i = list.length - 1; i >= 0; i--) if (list[i].asset === CUSTOM_PREFIX + id) list.splice(i, 1);
+    });
   };
   const move = (id, d) => editList((list) => {
     const i = list.findIndex((e) => e.id === id), j = i + d;
@@ -205,7 +266,7 @@ function Studio({ clip, effect }) {
       x.p.preset = x.id;
       x.thumb = flareThumb(x.p, 320, 180);
       setPrefs({ lensFlarePresets: [...(prefs.value.lensFlarePresets || []), x] });
-      commit((d) => { const e = effectOf(d); if (e) applyFlarePreset(e, x); });
+      commit((d) => applyFlarePreset(d.clips[clipId], effectId, x));
       toast(`Imported the preset “${label}”.`, { kind: 'success' });
     } catch (err) {
       toast(err.message, { kind: 'error' });
@@ -221,11 +282,11 @@ function Studio({ clip, effect }) {
     return [(ev.clientX - r.left) / r.width, (ev.clientY - r.top) / r.height];
   };
   // Har verdien nøkkelbilder, settes et nøkkelbilde ved spillhodet; ellers endres grunnverdien.
-  const putGlobal = (c, key, v) => {
-    const prop = vfxProp(effectId, key);
+  const put = (c, prop, v) => {
     if (c.kf?.[prop]?.length) setKeyframe(c, prop, kfTime(c, Tc), v);
     else setPropBase(c, prop, v);
   };
+  const putGlobal = (c, key, v) => put(c, vfxProp(effectId, key), v);
   const drag = (ev, apply) => {
     if (ev.button !== 0) return;
     ev.preventDefault();
@@ -256,10 +317,9 @@ function Studio({ clip, effect }) {
     setSelected(el.id);
     drag(ev, (c, q) => {
       const sx = (p.x - p.cx) * W, sy = (p.y - p.cy) * H, len = sx * sx + sy * sy;
-      const target = c.props.vfx.find((x) => x.id === effectId)?.p.elements.find((x) => x.id === el.id);
-      if (!target || len < 1 || !(p.spread > 0.001)) return;
+      if (len < 1 || !(p.spread > 0.001)) return;
       const d = (((q[0] - el.ox - p.cx) * W) * sx + ((q[1] - el.oy - p.cy) * H) * sy) / len;
-      target.distance = Math.round(unspread(d, p.spread) * 100) / 100;
+      put(c, vfxElementProp(effectId, el.id, 'distance'), Math.round(unspread(d, p.spread) * 100) / 100);
     });
   };
   const at = (d) => [(p.cx + (p.x - p.cx) * d) * W, (p.cy + (p.y - p.cy) * d) * H];
@@ -298,7 +358,7 @@ function Studio({ clip, effect }) {
             const user = x.id.startsWith('user-'), on = x.id === base.preset;
             return (
               <div key={x.id} role="listitem" tabIndex={0} class={`fs-preset${on ? ' sel' : ''}`} title={`${x.label}${x.category ? ` · ${x.category}` : ''}. Keeps the light position.`}
-                onClick={() => commit((q) => { const e = effectOf(q); if (e) applyFlarePreset(e, x); })}
+                onClick={() => commit((q) => applyFlarePreset(q.clips[clipId], effectId, x))}
                 onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.click()}>
                 <img src={presetThumb(x)} alt="" draggable={false} />
                 <span>{user ? '★ ' : ''}{x.label}{on && modified ? ' · modified' : ''}</span>
@@ -327,11 +387,11 @@ function Studio({ clip, effect }) {
                 <svg ref={svgRef} class="fs-overlay" viewBox={`0 0 ${W} ${H}`}>
                   {guides && <>
                     <line class="fs-axis" x1={a0[0]} y1={a0[1]} x2={a1[0]} y2={a1[1]} vector-effect="non-scaling-stroke" />
-                    {els.filter((el) => el.blend !== 'dirt').map((el) => {
+                    {(p.elements || []).filter((el) => el.blend !== 'dirt').map((el) => {
                       const [u, v] = elementCenter(p, el);
                       return <circle key={el.id} cx={u * W} cy={v * H} r={el.id === selected ? 7 : 5}
                         class={`fs-el${el.id === selected ? ' sel' : ''}${el.on === false ? ' off' : ''}`} onPointerDown={slideElement(el)}>
-                        <title>{flareAsset(el.asset)?.label} · {where(el)}. Drag along the axis to change its distance.</title>
+                        <title>{assetIn(el.asset)?.label} · {where(el)}. Drag along the axis to change its distance.</title>
                       </circle>;
                     })}
                     <g class="fs-center" transform={`translate(${p.cx * W} ${p.cy * H})`} onPointerDown={movePoint('cx', 'cy')}>
@@ -353,23 +413,35 @@ function Studio({ clip, effect }) {
                 <div class="fs-panel-head"><b>Elements</b><span>{els.length} · drawn top to bottom</span></div>
                 <div class="fs-stack" role="listbox" aria-label="Flare elements" tabIndex={0}>
                   {els.map((el, i) => {
-                    const asset = flareAsset(el.asset);
-                    return (
+                    const asset = assetIn(el.asset), g = el.group, first = g && els[i - 1]?.group !== g;
+                    const members = g ? els.filter((e) => e.group === g) : [], allOff = members.every((e) => e.on === false);
+                    const header = first && (
+                      <div key={`group:${g}:${i}`} class={`fs-group-row${allOff ? ' off' : ''}`}>
+                        <IconButton icon={collapsed.has(g) ? ChevronRight : ChevronDown} size={13} title={collapsed.has(g) ? 'Expand group' : 'Collapse group'}
+                          onClick={() => setCollapsed((c) => { const n = new Set(c); n.has(g) ? n.delete(g) : n.add(g); return n; })} />
+                        <IconButton icon={allOff ? EyeOff : Eye} size={13} title={allOff ? 'Show the group' : 'Hide the group'} onClick={() => groupOn(g, allOff)} />
+                        <IconButton icon={Focus} size={13} active={solo === `group:${g}`} title={solo === `group:${g}` ? 'Show all elements' : 'Solo: show only this group'}
+                          onClick={() => setSolo(solo === `group:${g}` ? null : `group:${g}`)} />
+                        <span class="fs-row-name">{g}<small>{members.length} {members.length === 1 ? 'element' : 'elements'}</small></span>
+                        <button class="link small-link" title="Keep the elements, remove the group" onClick={() => ungroup(g)}>Ungroup</button>
+                      </div>
+                    );
+                    if (g && collapsed.has(g)) return header;
+                    return [header,
                       <div key={el.id} role="option" aria-selected={el.id === selected}
-                        class={`fs-row${el.id === selected ? ' sel' : ''}${el.on === false ? ' off' : ''}${solo === el.id ? ' solo' : ''}`}
+                        class={`fs-row${g ? ' grouped' : ''}${el.id === selected ? ' sel' : ''}${el.on === false ? ' off' : ''}${solo === el.id ? ' solo' : ''}`}
                         onClick={() => setSelected(el.id)}>
                         <IconButton icon={el.on === false ? EyeOff : Eye} size={13} title={el.on === false ? 'Show element' : 'Hide element'}
                           onClick={(e) => { e.stopPropagation(); setEl(el.id, { on: el.on === false }); }} />
                         <IconButton icon={Focus} size={13} active={solo === el.id} title={solo === el.id ? 'Show all elements' : 'Solo: show only this element'}
                           onClick={(e) => { e.stopPropagation(); setSolo(solo === el.id ? null : el.id); }} />
-                        <img src={elementThumb(el.asset)} alt="" draggable={false} />
+                        <img src={elementThumb(el.asset, base)} alt="" draggable={false} />
                         <span class="fs-row-name">{asset?.label || el.asset}<small>{where(el)}</small></span>
                         <IconButton icon={ArrowUp} size={12} title="Move up" disabled={i === 0} onClick={(e) => { e.stopPropagation(); move(el.id, -1); }} />
                         <IconButton icon={ArrowDown} size={12} title="Move down" disabled={i === els.length - 1} onClick={(e) => { e.stopPropagation(); move(el.id, 1); }} />
                         <IconButton icon={Copy} size={12} title="Duplicate (⌘D)" onClick={(e) => { e.stopPropagation(); duplicate(el.id); }} />
                         <IconButton icon={Trash2} size={12} title="Delete (Delete key)" onClick={(e) => { e.stopPropagation(); remove(el.id); }} />
-                      </div>
-                    );
+                      </div>];
                   })}
                   {!els.length && <p class="hint">No elements. Add one from the library.</p>}
                 </div>
@@ -380,7 +452,18 @@ function Studio({ clip, effect }) {
                   {FLARE_GROUPS.map((g) => <button key={g.id} class={`chip${group === g.id ? ' active' : ''}`} onClick={() => setGroup(g.id)}>{g.label}</button>)}
                 </div>
                 <div class="fs-assets">
-                  {FLARE_ASSETS.filter((a) => a.group === group).map((a) => (
+                  {group === 'custom' ? <>
+                    {Object.entries(base.textures || {}).map(([id, t]) => (
+                      <button key={id} class="fs-asset" title={`Add ${t.name}`} onClick={() => add(CUSTOM_PREFIX + id)}>
+                        <img src={t.url} alt="" draggable={false} /><span>{t.name}</span>
+                        <span class="fs-preset-delete" role="button" tabIndex={0} title={`Remove the texture ${t.name}`} aria-label={`Remove ${t.name}`}
+                          onClick={(e) => { e.stopPropagation(); removeTexture(id); }}>×</span>
+                      </button>
+                    ))}
+                    <button class="fs-asset fs-import" title="Use your own image (PNG with transparency, or a flare on black)" onClick={importTexture}>
+                      <ImagePlus size={28} /><span>Import texture…</span>
+                    </button>
+                  </> : FLARE_ASSETS.filter((a) => a.group === group).map((a) => (
                     <button key={a.id} class="fs-asset" title={`Add ${a.label}`} onClick={() => add(a.id)}>
                       <img src={elementThumb(a.id)} alt="" draggable={false} /><span>{a.label}</span>
                     </button>
@@ -392,26 +475,14 @@ function Studio({ clip, effect }) {
           <div class="fs-inspector">
             <h4>Flare</h4>
             <FlareGlobals clip={clip} effect={effect} />
-            <h4>{sel ? flareAsset(sel.asset)?.label || 'Element' : 'Element'}</h4>
-            {sel ? <ElementInspector key={sel.id} el={sel} set={(v) => setEl(sel.id, v)} live={(v) => liveEl(sel.id, v)} />
+            <h4>{sel ? assetIn(sel.asset)?.label || 'Element' : 'Element'}</h4>
+            {sel ? <ElementInspector key={sel.id} clip={clip} effectId={effectId} el={sel} p={base} groups={groups} set={(v) => setEl(sel.id, v)} group={(name) => groupElement(sel.id, name)} />
               : <p class="hint">Select an element in the list or in the preview.</p>}
-            <p class="hint">Distance places an element on the line from the light source (1) through the optical center (0) to the other side (−1). Spread stretches the reflections without moving the light. Hidden elements are not rendered. Diamonds on the flare settings keyframe them at the playhead.</p>
+            <p class="hint">Distance places an element on the line from the light source (1) through the optical center (0) to the other side (−1). Spread stretches the reflections without moving the light. Hidden elements are not rendered. Diamonds keyframe a setting at the playhead, for the flare and for each element.</p>
           </div>
         </div>
       </div>
     </Modal>
-  );
-}
-
-function ElNum({ value, label, min, max, step = 0.01, scale = 1, unit = '', precision = 2, center, onLive }) {
-  const v = value * scale;
-  return (
-    <div class="param">
-      <span class="param-label" title={label}>{label}</span>
-      <Slider value={v} min={min} max={max} step={step} center={center} onStart={beginTransient} onInput={(x) => onLive(x / scale)} onCommit={() => endTransient(true)} />
-      <NumberField value={v} min={min} max={max} step={step} precision={precision} unit={unit} onStart={beginTransient} onChange={(x) => onLive(x / scale)} onCommit={() => endTransient(true)} />
-      <span class="kf-ctl" /><span />
-    </div>
   );
 }
 
@@ -423,14 +494,28 @@ function textureChange(el, id) {
   return { asset: id, ...Object.fromEntries(PROC_KEYS.filter((k) => el[k] === undefined).map((k) => [k, PROC_DEFAULTS[k]])), ...a.defaults };
 }
 
-function ElementInspector({ el, set, live }) {
-  const dirt = el.blend === 'dirt', asset = flareAsset(el.asset), q = asset?.proc ? procParams(el, asset) : null;
-  const n = (key, label, min, max, o = {}) => <ElNum value={(q && PROC_KEYS.includes(key) ? q[key] : el[key]) ?? 0} label={label} min={min} max={max} onLive={(v) => live({ [key]: v })} {...o} />;
+// Tallene har nøkkelbilder som de globale innstillingene: 'vfx.<effekt>.el:<element>:<nøkkel>'.
+function ElementInspector({ clip, effectId, el, p, groups, set, group }) {
+  const dirt = el.blend === 'dirt', asset = assetOf(p, el.asset), q = asset?.proc ? procParams(el, asset) : null;
+  const prop = (key) => vfxElementProp(effectId, el.id, key);
+  const n = (key, label, min, max, o = {}) => (
+    <Param clip={clip} prop={prop(key)} label={label} min={min} max={max} def={q && PROC_KEYS.includes(key) ? q[key] : makeElement(el.asset, p)[key]}
+      step={o.step ?? 0.01} scale={o.scale ?? 1} unit={o.unit ?? ''} precision={o.precision ?? 2} center={o.center} />
+  );
   const pct = (key, label, max, o = {}) => n(key, label, o.min ?? 0, max, { step: 1, scale: 100, unit: '%', precision: 0, ...o });
+  const textures = [...FLARE_ASSETS, ...Object.keys(p.textures || {}).map((id) => assetOf(p, CUSTOM_PREFIX + id))];
+  const [name, setName] = useState(el.group || '');
+  useEffect(() => setName(el.group || ''), [el.group]);
   return <>
     <Row label="Texture">
       <Select value={el.asset} onChange={(v) => set(textureChange(el, v))}
-        options={FLARE_ASSETS.filter((a) => a.dirt === dirt).map((a) => ({ value: a.id, label: `${groupLabel(a.group)} · ${a.label}` }))} />
+        options={textures.filter((a) => a.dirt === dirt).map((a) => ({ value: a.id, label: `${groupLabel(a.group)} · ${a.label}` }))} />
+    </Row>
+    <Row label="Group">
+      <input class="text-input" list="fs-group-names" placeholder="None" aria-label="Group" value={name}
+        onInput={(e) => setName(e.currentTarget.value)} onBlur={() => name.trim() !== (el.group || '') && group(name)}
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') e.currentTarget.blur(); }} />
+      <datalist id="fs-group-names">{groups.map((g) => <option key={g} value={g} />)}</datalist>
     </Row>
     {n('distance', 'Distance', -3, 3, { center: 0 })}
     {n('ox', 'Offset X', -100, 100, { step: 0.1, scale: 100, unit: '%', precision: 1, center: 0 })}
@@ -439,7 +524,7 @@ function ElementInspector({ el, set, live }) {
     {!dirt && n('rotation', 'Rotation', -180, 180, { step: 1, unit: '°', precision: 0, center: 0 })}
     {n('intensity', 'Intensity', 0, 400, { step: 1, scale: 100, unit: '%', precision: 0 })}
     {n('opacity', 'Opacity', 0, 100, { step: 1, scale: 100, unit: '%', precision: 0 })}
-    <Row label="Tint"><ColorField value={el.tint || '#ffffff'} onLive={(v) => live({ tint: v })} /></Row>
+    <PatternChoice clip={clip} prop={prop('tint')} label="Tint" color />
     {!dirt && <Row label="Blend"><Select value={el.blend} options={FLARE_BLENDS} onChange={(v) => set({ blend: v })} /></Row>}
     {q && <>
       {n('blades', 'Blades', 0, 16, { step: 1, precision: 0 })}
@@ -458,6 +543,9 @@ function ElementInspector({ el, set, live }) {
     <p class="hint">{dirt
       ? 'Lens dirt stays fixed on the lens and only shows where the light falls on it. Distance and Size move and widen the light that reveals it.'
       : q ? 'Procedural: the shape is calculated for every pixel, so it stays sharp at any resolution. Size is the diameter of the outline as a share of the picture height. Blades is the number of aperture blades; 0 gives a circle. Edge brightens the rim, and Aberration splits the outline into red and blue.'
+      : asset?.kit ? 'Calculated for every pixel from the same formula as the texture, so it stays sharp at 4K and above. Size is the element’s width as a share of the picture height.'
+      : asset?.url ? 'Your own texture, stored in the project. It is added as light, so a flare photographed on black works too. Size is its width as a share of the picture height.'
       : 'Size is the element’s width as a share of the picture height, so it keeps its shape in any aspect ratio.'}</p>
+    <p class="hint">A group keeps elements together in the list, so they can be hidden, soloed or collapsed at once.</p>
   </>;
 }
