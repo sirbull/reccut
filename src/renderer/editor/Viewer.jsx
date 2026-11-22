@@ -8,7 +8,7 @@ import { clipBox, clipMatrix, clipPivot, highlightOutline, maskList, shapeAt } f
 import { containRect, followMatrix } from '../../shared/follow.js';
 import { sourceMediaId } from './store.js';
 import { dragData } from './Browser.jsx';
-import { beginTransient, browserPlayhead, commit, endTransient, getTime, playing, project, selectedClips, room, selectedTransition, selection, skim, timeSig, updateTransient } from './store.js';
+import { beginTransient, browserPlayhead, commit, endTransient, getTime, playing, project, selectedClips, room, selectedTransition, selection, skim, timeSig, trimView, twoUp as twoUpActive, updateTransient } from './store.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
 import { IconButton } from '../ui.jsx';
@@ -30,11 +30,18 @@ export function Viewer() {
   const wrapRef = useRef(null);
   const [fullscreen, setFullscreen] = useState(false);
   const toggleFullscreen = () => toggleViewerFullscreen(wrapRef.current);
+  const twoUp = twoUpActive.value && !source;
   const resize = () => {
     const box = boxRef.current;
     const r = box.getBoundingClientRect();
     const style = getComputedStyle(box);
-    playback.resizeCanvas(r.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), r.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom));
+    const w = r.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const h = r.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    // Leses ved kallet, så ResizeObserver-kallet også får med den to-delte visningen.
+    if (!trimView.value || playback.sourceProject.value) return playback.resizeCanvas(w, h);
+    const half = (w - TWO_UP_GAP) / 2;
+    playback.resizeCanvas(half, h);
+    playback.trimLeftPlayer().resizeCanvas(half, h);
   };
 
   useEffect(() => {
@@ -124,7 +131,7 @@ export function Viewer() {
 
   useEffect(() => {
     resize();
-  }, [p.width, p.height, source, prefs.value.viewerQuality]);
+  }, [p.width, p.height, source, prefs.value.viewerQuality, twoUp]);
 
   return (
     <div class="viewer" ref={wrapRef}>
@@ -142,7 +149,8 @@ export function Viewer() {
           <Settings2 size={13} />
         </button>
       </div>
-      <div class="viewer-box" ref={boxRef} onDblClick={toggleFullscreen}>
+      <div class={twoUp ? 'viewer-box two-up' : 'viewer-box'} ref={boxRef} onDblClick={toggleFullscreen}>
+        {twoUp && <TrimLeft />}
         <canvas
           ref={canvasRef}
           class={draggable ? (sel.type === 'redact' ? 'drawable' : 'movable') : source ? 'source-drag' : ''}
@@ -155,13 +163,13 @@ export function Viewer() {
             dragData(e, { kind: 'media', id, ids: [id] });
           }}
         />
-        {!source && !playing.value && <EditPointMarks canvasRef={canvasRef} />}
-        {pen && sel?.id === pen.clipId && <PenOverlay clip={sel} canvasRef={canvasRef} />}
-        {sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} corner={sel.props.mode === 'highlight' && sel.props.shape !== 'ellipse' ? valueAt(sel, 'corner', clipTime(sel)) ?? 0 : null} label={sel.props.mode === 'highlight' ? 'Highlight area. Drag to move, drag the handles to resize, and the round handle to rotate.' : 'Redaction. Drag to move, drag the handles to resize.'} />}
-        {sel && sel.type !== 'redact' && trackArea.value === sel.id && !pen && <ShapeEditor clip={sel} prefix="track." shape="rect" smooth={false} canvasRef={canvasRef} label="Tracking area. Put it over what the clip should follow." />}
-        {draggable && sel.type !== 'redact' && sel.type !== 'caption' && (commands.shownInspectorTab.value === 'video' || (commands.shownInspectorTab.value === 'recording' && sel.recordingPart === 'camera')) && !pen && !editMask && trackArea.value !== sel.id && <TransformBox clip={sel} canvasRef={canvasRef} />}
-        {sel && !pen && !editMask && commands.shownInspectorTab.value === 'effects' && <LightHandles clip={sel} canvasRef={canvasRef} />}
-        {editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
+        {!source && !playing.value && !twoUp && <EditPointMarks canvasRef={canvasRef} />}
+        {!twoUp && pen && sel?.id === pen.clipId && <PenOverlay clip={sel} canvasRef={canvasRef} />}
+        {!twoUp && sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} corner={sel.props.mode === 'highlight' && sel.props.shape !== 'ellipse' ? valueAt(sel, 'corner', clipTime(sel)) ?? 0 : null} label={sel.props.mode === 'highlight' ? 'Highlight area. Drag to move, drag the handles to resize, and the round handle to rotate.' : 'Redaction. Drag to move, drag the handles to resize.'} />}
+        {!twoUp && sel && sel.type !== 'redact' && trackArea.value === sel.id && !pen && <ShapeEditor clip={sel} prefix="track." shape="rect" smooth={false} canvasRef={canvasRef} label="Tracking area. Put it over what the clip should follow." />}
+        {!twoUp && draggable && sel.type !== 'redact' && sel.type !== 'caption' && (commands.shownInspectorTab.value === 'video' || (commands.shownInspectorTab.value === 'recording' && sel.recordingPart === 'camera')) && !pen && !editMask && trackArea.value !== sel.id && <TransformBox clip={sel} canvasRef={canvasRef} />}
+        {!twoUp && sel && !pen && !editMask && commands.shownInspectorTab.value === 'effects' && <LightHandles clip={sel} canvasRef={canvasRef} />}
+        {!twoUp && editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
       </div>
       {source && !fullscreen && <SourceBar mediaId={sourceMediaId.value} duration={source.duration} fps={p.fps} />}
       {prefs.value.videoScopesVisible && !fullscreen && <VideoScopes sourceRef={canvasRef} onClose={() => setPrefs({ videoScopesVisible: false })} />}
@@ -337,6 +345,23 @@ function drawRedactBox(e, clip, canvas, p) {
   };
   canvas.addEventListener('pointermove', move);
   canvas.addEventListener('pointerup', up);
+}
+
+const TWO_UP_GAP = 2;
+
+// Venstre halvdel av den to-delte visningen. Spilleren gjenbrukes, bare lerretet kobles av og på.
+function TrimLeft() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const left = playback.trimLeftPlayer();
+    left.attachCanvas(ref.current);
+    left.start();
+    return () => {
+      left.stopLoop();
+      left.attachCanvas(null);
+    };
+  }, []);
+  return <canvas ref={ref} />;
 }
 
 /* Kantmarkører som i Final Cut Pro: └ nede til venstre på første frame i et klipp, ┘ nede til høyre på siste.

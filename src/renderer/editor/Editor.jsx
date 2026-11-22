@@ -11,7 +11,7 @@ import { SlideshowDialog } from './SlideshowDialog.jsx';
 import { LensFlareStudio } from './LensFlareStudio.jsx';
 import { flareStudio } from './LensFlareControls.jsx';
 import { MulticamEditor } from './Multicam.jsx';
-import { audioSkimming, commit, makeCaptionClip, needsProject, project, skimming, snapping } from './store.js';
+import { audioSkimming, commit, makeCaptionClip, needsProject, project, skimming, snapping, twoUp } from './store.js';
 import { droppedPaths, hasFiles } from '../fileDrop.js';
 import * as playback from './playback.js';
 import * as commands from './commands.js';
@@ -62,8 +62,9 @@ export function Editor({ active }) {
   const [split, setSplit] = useState(() => Number(localStorage.getItem('editorSplit')) || 0.56);
   const [sides, setSides] = useState(() => ({ browser: Number(localStorage.getItem('editorBrowserW')) || 300, inspector: Number(localStorage.getItem('editorInspectorW')) || 320 }));
   const ref = useRef(null);
-  const browserVisible = prefs.value.editorBrowserVisible;
-  const inspectorVisible = prefs.value.editorInspectorVisible;
+  // Under rull, slip og slide får visningen hele bredden til de to bildene.
+  const browserVisible = prefs.value.editorBrowserVisible && !twoUp.value;
+  const inspectorVisible = prefs.value.editorInspectorVisible && !twoUp.value;
 
   useEffect(() => {
     if (!active) {

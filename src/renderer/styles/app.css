@@ -2670,6 +2670,7 @@ input[type='color'].color::-webkit-color-swatch {
 .viewer-box canvas.movable { cursor: move; }
 .viewer-box canvas.drawable { cursor: crosshair; }
 .viewer-box { position: relative; }
+.viewer-box.two-up { gap: 2px; } /* = TWO_UP_GAP i Viewer.jsx */
 
 
 /* Nøkkelbilder, animasjon og effekter i inspektøren */

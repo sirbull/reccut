@@ -71,6 +71,7 @@ import {
   audioSkimming,
   skim,
   skimming,
+  trimView,
   onTime,
   playing,
   pps,
@@ -675,17 +676,22 @@ export function Timeline() {
       const ids = new Set([d.a, d.b, recordingEditId(project.value, d.a), recordingEditId(project.value, d.b)]);
       for (const c of Object.values(project.value.clips)) if (ids.has(c.linkedTo || c.slideshowParent)) ids.add(c.id);
       updateTransient((p) => rollEdit(p, d.a, d.b, s1.t - d.cut), [...ids]);
-      showEdgeFrame(d.b, 'start');
+      showTwoUp(d.a, d.b);
       const cut = project.value.clips[d.b].start;
       setSnapLine(s1.snapped && Math.abs(cut - s1.t) < 1 / project.value.fps ? cut : null);
       return;
     }
     if (d.kind === 'slip') {
       updateTransient((p) => slipClip(p, c.id, -dt));
+      showTwoUp(c.id, c.id);
       return;
     }
     if (d.kind === 'slide') {
       updateTransient((p) => slideClip(p, c.id, dt));
+      // Naboene viser hvor klippet havner: slutten av forrige og starten av neste.
+      const order = project.value.primary;
+      const i = order.indexOf(c.id);
+      showTwoUp(order[i - 1] || c.id, order[i + 1] || c.id);
       return;
     }
     if (d.kind === 'aedge') {
@@ -815,6 +821,18 @@ export function Timeline() {
     const fps = project.value.fps;
     if (c) skim.value = { T: edge === 'start' ? c.start : (Math.round((c.start + c.dur) * fps) - 1) / fps };
   };
+  // Rull, slip og slide: siste frame i klipp a til venstre, første frame i klipp b til høyre (som i Final Cut Pro).
+  // Slip (a === b) viser klippets første frame til venstre og siste til høyre.
+  const showTwoUp = (a, b) => {
+    const ca = project.value.clips[a];
+    const cb = project.value.clips[b];
+    if (!ca || !cb) return;
+    const fps = project.value.fps;
+    const last = (c) => (Math.round((c.start + c.dur) * fps) - 1) / fps;
+    const [left, right] = a === b ? [ca.start, last(ca)] : [last(ca), cb.start];
+    trimView.value = { left, right };
+    skim.value = { T: right };
+  };
   const onPointerMove = (e) => {
     lastMoveRef.current = e;
     withConnectionsOverridden(overrideRef.current, () => dragMove(e));
@@ -839,7 +857,8 @@ export function Timeline() {
     setGhost(null);
     setSnapLine(null);
     if (d?.moved) endTransient(e.type !== 'pointercancel');
-    if (d?.kind === 'trim' || d?.kind === 'ptrim' || d?.kind === 'roll') skim.value = null;
+    if (['trim', 'ptrim', 'roll', 'slip', 'slide'].includes(d?.kind)) skim.value = null;
+    trimView.value = null;
   };
 
   const onContextMenu = async (e) => {

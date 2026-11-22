@@ -265,7 +265,8 @@ function ImportPane() {
         <p class="hint">Used when you drag files in, and the first choice in the Import window.</p>
       </Section>
       <Section title="Transcoding and Analysis" collapsible={false}>
-        {toggle('importOptimize', 'Create optimized media')}
+        {toggle('importOptimize', 'Create optimized media in the background')}
+        <p class="hint">Saves a high quality copy of every imported clip in the Optimized Media folder of the project, which can make the project much larger. Leave it off to keep the project small. Files the preview can't play still get a smaller playable copy, kept in the app's cache outside the project.</p>
         {toggle('importAnalyzeStab', 'Analyze video for stabilization')}
         <p class="hint">Runs in the background after import, so Stabilize Clip works right away.</p>
       </Section>

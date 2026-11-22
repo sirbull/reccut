@@ -18,8 +18,12 @@ import {
   detachRecordingCamera,
   recordingChildren,
   separateRecordingCamera,
+  connectedClipIds,
   groupClips,
+  groupLead,
   groupMembers,
+  moveClipLane,
+  moveClipPast,
   ungroupClips,
   detachAudio,
   freezeFrame,
@@ -1117,6 +1121,34 @@ export function overwriteSelectedToPrimary() {
 
 export function insertGapAtPlayhead() {
   commit((q) => insertGap(q, getTime(), 3));
+}
+
+// Klippet Option piltastene flytter: det valgte, eller klippet i hovedsporet når en hel gruppe er valgt.
+// Flyttingen prøves på en kopi først, så et forsøk som ikke går ikke blir et tomt angresteg.
+function selectedLead() {
+  const ids = selection.value.filter((id) => project.value.clips[id]);
+  return ids.length === 1 ? ids[0] : groupLead(project.value, ids);
+}
+
+export function moveSelectedPast(dir) {
+  const id = selectedLead();
+  if (!id) return toast('Select one clip to move it.');
+  if (moveClipPast(structuredClone(project.value), id, dir)) commit((p) => moveClipPast(p, id, dir));
+  else toast(`There is no clip to the ${dir < 0 ? 'left' : 'right'} in the same track.`, { timeout: 2000 });
+}
+
+export function moveSelectedLane(up) {
+  const id = selectedLead();
+  if (!id) return toast('Select one clip to move it.');
+  if (moveClipLane(structuredClone(project.value), id, up)) commit((p) => moveClipLane(p, id, up));
+  else toast(`The clip can't move further ${up ? 'up' : 'down'}.`, { timeout: 2000 });
+}
+
+export function selectConnected() {
+  if (!selection.value.length) selectClipAtPlayhead();
+  const ids = new Set();
+  for (const id of selection.value) for (const x of connectedClipIds(project.value, id)) ids.add(x);
+  selection.value = [...ids].filter((id) => inEditingGroup(project.value.clips[id]));
 }
 
 export function selectClipAtPlayhead() {

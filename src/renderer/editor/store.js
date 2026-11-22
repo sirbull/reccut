@@ -111,6 +111,9 @@ export const skimming = signal(prefs.value.skimming);
 export const audioSkimming = signal(prefs.value.audioSkimming);
 // Når pekeren skummer, viser visningen dette i stedet for spillhodet: { project, T, mediaId? }.
 export const skim = signal(null);
+// To-delt visning under rull, slip og slide: { left, right } i tidslinjetid. Høyre side vises via skim.
+export const trimView = signal(null);
+export const twoUp = computed(() => Boolean(trimView.value));
 // Kildevisningen beholdes til brukeren aktiverer tidslinjen.
 export const sourceMediaId = signal(null);
 export const browserPlayhead = signal(null); // { mediaId, t }

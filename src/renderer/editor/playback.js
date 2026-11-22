@@ -1,9 +1,9 @@
 // Spilleren i redigeringen, koblet til prosjektet og spillhodet i tilstanden.
 // Mens du skummer (tidslinjen eller biblioteket), viser den det pekeren står over.
-import { computed, effect } from '@preact/signals';
+import { computed, effect, signal } from '@preact/signals';
 import { makeClip, mediaClipType, newProject } from '../../shared/model.js';
 import { createPlayer, fileUrl } from '../player.js';
-import { browserPlayhead, getSourceTime, getTime, loadLut, loadMotion, motionVersion, playing, project, setSourceTime, setTime, skim, skimming, sourceMediaId } from './store.js';
+import { browserPlayhead, getSourceTime, getTime, loadLut, loadMotion, motionVersion, playing, project, setSourceTime, setTime, skim, skimming, sourceMediaId, trimView } from './store.js';
 import { prefs } from '../prefs.js';
 
 export { fileUrl };
@@ -44,6 +44,13 @@ const player = createPlayer({
 });
 
 export const { attachCanvas, resizeCanvas, start, stopLoop, getRate, invalidate, scrubAudio, snapshot } = player;
+
+// Venstre bilde i den to-delte visningen under rull, slip og slide. Egen spiller, uten lyd.
+let leftPlayer = null;
+export function trimLeftPlayer() {
+  leftPlayer ||= createPlayer({ getProject: () => project.value, playing: signal(false), getTime: () => trimView.value?.left ?? 0, setTime: () => {} });
+  return leftPlayer;
+}
 
 function preparePlayback() {
   const preview = activeSkim();
@@ -107,7 +114,9 @@ effect(() => {
   sourceProject.value;
   skim.value;
   motionVersion.value;
+  trimView.value;
   player.invalidate();
+  leftPlayer?.invalidate();
 });
 
 // Analysene for stabiliserte klipp lastes når de trengs.

@@ -159,6 +159,7 @@ export const COMMANDS = [
   { id: 'deleteGap', label: 'Delete and Leave Gap', menu: 'Edit', group: 'clip', keys: 'Shift+Backspace', also: ['Shift+Delete'], run: () => commands.deleteFocusedSelection(false), help: 'timeline' },
   { id: 'selectAll', label: 'Select All', menu: 'Edit', help: 'selection-clipboard', group: 'select', keys: 'CmdOrCtrl+A', register: true, text: 'selectAll', rooms: EDIT_DESIGN, run: () => room.value === 'design' ? design.selectAll() : commands.selectAll(), desc: 'Select all clips, or all media when the browser is in use.' },
   { id: 'deselectAll', label: 'Deselect All', menu: 'Edit', help: 'selection-clipboard', group: 'select', keys: 'Shift+CmdOrCtrl+A', run: deselectAll },
+  { id: 'selectConnected', label: 'Select Clip and Connected Clips', menu: 'Edit', help: 'selection-clipboard', group: 'select', mac: 'Ctrl+CmdOrCtrl+A', win: 'Shift+Alt+A', run: commands.selectConnected, keywords: 'connected attached linked titles audio above below storyline', desc: 'Select the clip and everything connected to it: the storyline clip it sits on and all clips above and below that clip.' },
   { id: 'selectClip', label: 'Select Clip at Playhead', menu: 'Edit', help: 'selection-clipboard', group: 'select', keys: 'C', run: commands.selectClipAtPlayhead },
   { id: 'append', label: 'Append to Storyline', menu: 'Edit', group: 'add', keys: 'E', run: () => commands.addBrowserSelection('append'), help: 'adding', desc: 'Add the browser selection to the end of the storyline.' },
   { id: 'insert', label: 'Insert', menu: 'Edit', group: 'add', keys: 'W', run: () => commands.addBrowserSelection('insert'), help: 'adding', desc: 'Insert the browser selection at the playhead and push the rest to the right.' },
@@ -307,6 +308,10 @@ export const COMMANDS = [
   { id: 'freeze', label: 'Add Freeze Frame', menu: 'Clip', submenu: 'Retime', keys: 'Alt+F', run: commands.addFreezeFrame, help: 'speed' },
   { id: 'lift', label: 'Lift from Storyline', menu: 'Clip', group: 'story', keys: 'Alt+CmdOrCtrl+Up', run: commands.liftSelected, help: 'timeline' },
   { id: 'overwriteDown', label: 'Overwrite to Storyline', menu: 'Clip', group: 'story', keys: 'Alt+CmdOrCtrl+Down', run: commands.overwriteSelectedToPrimary, help: 'timeline' },
+  { id: 'moveClipLeft', label: 'Move Clip Left Past Next Clip', menu: 'Clip', group: 'reorder', keys: 'Alt+Left', run: () => commands.moveSelectedPast(-1), help: 'timeline', keywords: 'swap reorder rearrange order switch place', desc: 'The selected clip swaps places with the clip to its left in the same track.' },
+  { id: 'moveClipRight', label: 'Move Clip Right Past Next Clip', menu: 'Clip', group: 'reorder', keys: 'Alt+Right', run: () => commands.moveSelectedPast(1), help: 'timeline', keywords: 'swap reorder rearrange order switch place', desc: 'The selected clip swaps places with the clip to its right in the same track.' },
+  { id: 'moveClipUp', label: 'Move Clip Up a Track', menu: 'Clip', group: 'reorder', keys: 'Alt+Up', run: () => commands.moveSelectedLane(true), help: 'timeline', keywords: 'swap layer order above stack track lane', desc: 'The selected clip swaps tracks with the clips it overlaps above it.' },
+  { id: 'moveClipDown', label: 'Move Clip Down a Track', menu: 'Clip', group: 'reorder', keys: 'Alt+Down', run: () => commands.moveSelectedLane(false), help: 'timeline', keywords: 'swap layer order below stack track lane', desc: 'The selected clip swaps tracks with the clips it overlaps below it.' },
   { id: 'insertGap', label: 'Insert Gap', menu: 'Clip', group: 'story', keys: 'Alt+W', run: commands.insertGapAtPlayhead, help: 'timeline' },
 
   /* Tools */

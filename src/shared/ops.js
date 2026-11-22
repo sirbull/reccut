@@ -227,27 +227,55 @@ export function withConnectionsOverridden(override, fn) {
 
 // Frie klipp følger klippet i hovedsporet de ligger over, som tilkoblede klipp i Final Cut Pro.
 // Grupperte klipp følger klippet i hovedsporet i samme gruppe, også utenfor kantene.
-export function withSync(project, fn) {
-  const before = new Map(project.primary.map((id) => [id, { start: project.clips[id].start, in: project.clips[id].in }]));
-  const order = [...project.primary];
+// Klippet i hovedsporet som et tilkoblet klipp følger med, eller null.
+function anchorParent(project, c, groupParent) {
+  // PiP har en eksplisitt kobling. Frakoblet PiP beholder sin egen plassering.
+  if (c.recordingPart === 'camera' || c.recordingPart === 'keys' || c.slideshowParent) return null;
+  if (c.lane === 0 || project.lanes?.[c.lane]?.locked) return null;
+  // Undertekster har egne tider. Bare eksplisitt gruppering kobler dem til hovedsporet.
+  if (c.type === 'caption' && !(c.group && groupParent.has(c.group))) return null;
+  return (
+    (c.group && groupParent.get(c.group)) ||
+    project.primary.find((id) => {
+      const p = project.clips[id];
+      return c.start >= p.start - 1e-6 && c.start < p.start + p.dur - 1e-6;
+    }) ||
+    null
+  );
+}
+
+function primaryGroupParents(project) {
   const groupParent = new Map();
-  for (const id of order) {
+  for (const id of project.primary) {
     const g = project.clips[id].group;
     if (g && !groupParent.has(g)) groupParent.set(g, id);
   }
+  return groupParent;
+}
+
+// Klippet, klippet i hovedsporet det henger på, og alt som er koblet til det (Ctrl Cmd A).
+export function connectedClipIds(project, id) {
+  const c = project.clips[id];
+  if (!c) return [];
+  const groupParent = primaryGroupParents(project);
+  const parent = c.lane === 0 ? id : anchorParent(project, c, groupParent);
+  const ids = new Set([id]);
+  if (parent) {
+    ids.add(parent);
+    for (const o of Object.values(project.clips)) if (anchorParent(project, o, groupParent) === parent) ids.add(o.id);
+  }
+  // Kamera, tastetrykk og lysbilder følger klippet de hører til.
+  for (const o of Object.values(project.clips)) if (ids.has(o.linkedTo) || ids.has(o.slideshowParent)) ids.add(o.id);
+  return [...ids];
+}
+
+export function withSync(project, fn) {
+  const before = new Map(project.primary.map((id) => [id, { start: project.clips[id].start, in: project.clips[id].in }]));
+  const order = [...project.primary];
+  const groupParent = primaryGroupParents(project);
   const anchors = [];
   for (const c of overrideConnections ? [] : Object.values(project.clips)) {
-    // PiP har en eksplisitt kobling. Frakoblet PiP beholder sin egen plassering.
-    if (c.recordingPart === 'camera' || c.recordingPart === 'keys' || c.slideshowParent) continue;
-    if (c.lane === 0 || project.lanes?.[c.lane]?.locked) continue;
-    // Undertekster har egne tider. Bare eksplisitt gruppering kobler dem til hovedsporet.
-    if (c.type === 'caption' && !(c.group && groupParent.has(c.group))) continue;
-    const parentId =
-      (c.group && groupParent.get(c.group)) ||
-      order.find((id) => {
-        const p = project.clips[id];
-        return c.start >= p.start - 1e-6 && c.start < p.start + p.dur - 1e-6;
-      });
+    const parentId = anchorParent(project, c, groupParent);
     if (parentId) {
       const p = project.clips[parentId];
       anchors.push({ c, parentId, src: kfTime(p, c.start), offset: c.start - p.start });
@@ -702,6 +730,55 @@ export function moveClip(project, id, { start, lane, primaryIndex }) {
   syncRecordingTracks(project);
   updateDuration(project);
   storylineIfAlone(project, c);
+}
+
+// Option venstre/høyre: klippet bytter plass med nærmeste klipp i samme spor. Mellomrommet mellom dem beholdes.
+export function moveClipPast(project, id, dir) {
+  id = recordingEditId(project, id);
+  const c = project.clips[id];
+  if (!c || recordingTimingLocked(project, id) || project.lanes?.[c.lane]?.locked) return false;
+  if (c.lane === 0) {
+    const idx = project.primary.indexOf(id) + dir;
+    if (idx < 0 || idx >= project.primary.length) return false;
+    moveClip(project, id, { lane: 0, primaryIndex: idx });
+    return true;
+  }
+  const end = (o) => o.start + o.dur;
+  const others = Object.values(project.clips).filter((o) => o.id !== id && o.lane === c.lane);
+  const n = dir > 0
+    ? others.filter((o) => o.start >= end(c) - 1e-6).sort((a, b) => a.start - b.start)[0]
+    : others.filter((o) => end(o) <= c.start + 1e-6).sort((a, b) => end(b) - end(a))[0];
+  if (!n) return false;
+  const [first, second] = dir > 0 ? [c, n] : [n, c];
+  const gap = second.start - end(first);
+  const start = first.start;
+  second.start = round(start);
+  first.start = round(start + second.dur + gap);
+  syncRecordingTracks(project);
+  updateDuration(project);
+  return true;
+}
+
+// Option opp/ned: klippet bytter spor med klippene det overlapper i sporet over eller under.
+// Over hovedsporet faller klipp alltid ned til laveste ledige spor, så der hoppes tomme spor over.
+export function moveClipLane(project, id, up) {
+  const c = project.clips[id];
+  if (!c || c.lane === 0 || c.lane === CAPTION_LANE || project.lanes?.[c.lane]?.locked) return false;
+  const step = up ? 1 : -1;
+  const visual = c.lane > 0;
+  const top = Math.max(0, ...Object.values(project.clips).map((o) => (o.lane === CAPTION_LANE ? 0 : o.lane)));
+  const hits = (lane) => Object.values(project.clips).filter((o) => o.id !== id && o.lane === lane && o.start < c.start + c.dur - 1e-6 && c.start < o.start + o.dur - 1e-6);
+  let lane = c.lane + step;
+  while (visual && lane >= 1 && lane <= top && !hits(lane).length) lane += step;
+  if (visual ? lane < 1 || lane > top : lane > -1) return false;
+  if (project.lanes?.[lane]?.locked) return false;
+  const swapped = hits(lane);
+  const from = c.lane;
+  c.lane = lane;
+  for (const o of swapped) o.lane = from;
+  for (const o of swapped) if (lanesOverlap(project, o, o.lane)) resolveLane(project, o);
+  syncRecordingTracks(project);
+  return true;
 }
 
 export function setTransition(project, id, type, dur = 1, edge = 'start', audio) {

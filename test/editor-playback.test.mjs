@@ -16,6 +16,7 @@ const bundle = (await build({
         for (const key of ['playing', 'project', 'skim', 'skimming', 'sourceMediaId', 'browserPlayhead']) state[key] = signal(state[key].value);
         export const { playing, project, skim, skimming, sourceMediaId, browserPlayhead } = state;
         export const motionVersion = {value: 0};
+        export const trimView = signal(null);
         export const getTime = () => state.time;
         export const setTime = t => state.time = t;
         export const getSourceTime = () => state.sourceTime;

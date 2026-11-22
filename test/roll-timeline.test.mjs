@@ -40,7 +40,7 @@ function setup(type, lane, grouped = false) {
     },
     endTransient: keep => { if (keep) completed++; else store.project.value = base; },
   };
-  for (const name of ['selectedTransition', 'selectedComponent', 'skim', 'waveVersion', 'timeSig', 'playing', 'snapping', 'skimming', 'audioSkimming']) store[name] = signal(name === 'timeSig' ? 0 : null);
+  for (const name of ['selectedTransition', 'selectedComponent', 'skim', 'trimView', 'waveVersion', 'timeSig', 'playing', 'snapping', 'skimming', 'audioSkimming']) store[name] = signal(name === 'timeSig' ? 0 : null);
   const hooks = [];
   const useRef = current => { const ref = { current }; hooks.push(ref); return ref; };
   const module = { exports: {} };
@@ -74,7 +74,12 @@ test('the real Trim pointer handlers roll either side of a cut on V1, video, aud
       const id = edge === 'start' ? s.b.id : s.a.id;
       s.handlers.onPointerDown(s.event(id, edge, 216));
       s.handlers.onPointerMove(s.event(id, edge, 256));
+      // To-delt visning: siste frame før kuttet til venstre, første etter til høyre.
+      const fps = s.store.project.value.fps;
+      const { left, right } = s.store.trimView.value;
+      assert.deepEqual([Math.round(left * fps), Math.round(right * fps)], [6 * fps - 1, 6 * fps], `${type}, ${edge}`);
       s.handlers.onPointerUp({ type: 'pointerup' });
+      assert.equal(s.store.trimView.value, null);
       const a = s.store.project.value.clips[s.a.id], b = s.store.project.value.clips[s.b.id];
       assert.deepEqual([a.start, a.dur, b.start, b.dur], [0, 6, 6, 4], `${type}, ${edge}`);
       assert.equal(s.completed(), 1);
