@@ -6,6 +6,8 @@ import { kfIntegral, kfTime, valueAt, vfxElementProp, vfxProp } from './model.js
 import { LEAK_COMPOSITE, leakFieldSize, lightLeakField } from './lightLeak.js';
 import { drawLensFlare } from './lensFlareRender.js';
 import { renderHueSaturation } from './hueSaturationRender.js';
+import { renderMotionBlur, renderNaturalMotionBlur, naturalMotionSupported } from './motionBlurRender.js';
+import { isMotionEffect } from './motionBlur.js';
 const makeCanvas = () =>
   typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
 const surfaces = [];
@@ -289,14 +291,39 @@ export function applyVideoEffects(src, clip, target = 'main', time = 0, T = null
   const w = Math.max(1, Math.round(src.w)),
     h = Math.max(1, Math.round(src.h));
   let img = src.img;
-  for (const original of effects) {
+  for (const [effectIndex, original] of effects.entries()) {
     const effect = scaledEffect(animatedEffect(clip, original, T), src.pixelScale ?? 1);
     const p = effectParams(effect),
       ref = effect.type === 'difference' ? referenceCanvas(p.reference) : null;
     if (effect.type === 'difference' && !ref) continue;
     const cv = surface(0, w, h),
       ctx = cv.getContext('2d', { willReadFrequently: true });
-    if (effect.type === 'hueSaturation') {
+    if (isMotionEffect(effect.type)) {
+      if (!(p.amount > 0)) continue;
+      if(effect.type==='naturalMotionBlur'&&!naturalMotionSupported(w,h)){
+        if(src.strictMotion)throw new Error('Natural Motion Blur requires WebGL2 with floating-point render targets. Enable hardware acceleration and restart Reccut.');
+        continue;
+      }
+      const copy = surface(7,w,h), cc=copy.getContext('2d');
+      cc.clearRect(0,0,w,h);cc.drawImage(img,0,0,w,h);
+      const mask=src.effectMask?.(effect) || null;
+      let temporal=src.temporal;
+      const preceding=effects.slice(0,effectIndex).filter(e=>e.type!=='naturalMotionBlur');
+      if(effect.type==='naturalMotionBlur'&&temporal&&preceding.length){
+        // Reconstruct through preceding effects as well. Own the snapshots:
+        // recursive stack calls reuse the normal working surfaces.
+        const current=makeCanvas();current.width=w;current.height=h;current.getContext('2d').drawImage(copy,0,0);
+        const prefix={...clip,props:{...clip.props,vfx:preceding}};
+        const process=(frame)=>{
+          const result=applyVideoEffects({...src,img:frame.img,temporal:null},prefix,target,frame.time,T);
+          const c=makeCanvas();c.width=w;c.height=h;c.getContext('2d').drawImage(result.img,0,0,w,h);return c;
+        };
+        temporal={...temporal,processedPrevious:process(temporal.previous),processedNext:process(temporal.next)};
+        img=current;
+      }else img=copy;
+      const result=effect.type==='motionBlur'?renderMotionBlur(img,w,h,p,mask,src.pixelScale??1):renderNaturalMotionBlur(img,w,h,p,temporal,mask);
+      ctx.clearRect(0,0,w,h);ctx.drawImage(result,0,0,w,h);
+    } else if (effect.type === 'hueSaturation') {
       const result = renderHueSaturation(img, w, h, p);
       if (result === img) continue;
       ctx.clearRect(0, 0, w, h);

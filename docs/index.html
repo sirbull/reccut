@@ -684,8 +684,9 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
     </div>
     <div class="cards reveal">
       <figure class="card">
-        <div class="shot"><img src="media/feature-lens-flare.jpg" width="960" height="540" alt="A lens flare over a mountain lake, with the sun handle in the viewer and the reflections along a dashed line through the center of the picture" loading="lazy"></div>
-        <figcaption><h3>Lens flares</h3><p>Drag the sun in the viewer and the reflections follow. Start from a preset, or build your own flare piece by piece in Flare Studio.</p></figcaption>
+        <div class="shot"><img src="media/feature-lens-flare.jpg" width="1600" height="900" alt="A blue anamorphic lens flare on black: a bright star with a long horizontal streak, and blue rings and polygon reflections on a line towards the lower left" loading="lazy"
+          data-full="media/feature-lens-flare-studio.jpg" data-full-alt="The same blue flare in Flare Studio, on black, with the light source handle, the reflection axis, the list of elements and the settings for the selected spectral ghost"></div>
+        <figcaption><h3>Lens flares</h3><p>Drag the sun in the viewer and the reflections follow. Start from a preset, or build your own flare piece by piece in Flare Studio. Click the picture to see this flare there.</p></figcaption>
       </figure>
       <figure class="card wide">
         <div class="shot"><img src="media/feature-beat-grid.jpg" width="2000" height="712" alt="The timeline with a 100 BPM music track marked as music. Solid blue lines mark each bar and dashed lines each beat, and the video cuts fall on the bar lines" loading="lazy"></div>
@@ -812,8 +813,9 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   document.querySelectorAll('.frame img, .still img, .card img, .tools img').forEach((img) => img.addEventListener('click', () => {
     lookView.hidden = true;
     big.hidden = false;
-    big.src = img.src;
-    big.alt = img.alt;
+    // A card picture can open a different picture, such as the tool that made it.
+    big.src = img.dataset.full || img.src;
+    big.alt = img.dataset.fullAlt || img.alt;
     box.setAttribute('aria-label', 'Image preview');
     box.showModal();
   }));

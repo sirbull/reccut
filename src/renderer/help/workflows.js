@@ -440,7 +440,7 @@ Use a video or still image with enough resolution for a small zoom. Select it an
 
 ## Control the motion
 
-Right-click a keyframe on the selected clip to choose Linear, Ease In, Ease Out, Ease In and Out, or Hold. Linear moves at a constant rate. Easing makes the speed change gradually. Hold keeps a value until the next keyframe, producing a step rather than a smooth change.
+Right-click a keyframe on the selected clip to choose Linear, Ease In, Ease Out, Ease Both, or Hold. Linear moves at a constant rate. Easing makes the speed change gradually. Hold keeps a value until the next keyframe, producing a step rather than a smooth change.
 
 Drag a keyframe to change when it happens. Use the inspector's keyframe arrows to visit the exact times. New keyframes use the default in **Settings → Editing → Default keyframe interpolation**; changing the default does not rewrite existing keyframes.
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { Activity, Maximize2, Minimize2, Settings2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from 'lucide-preact';
-import { deepClone, formatTimecode, isVisual, kfTime, setPropBase, valueAt, vfxProp } from '../../shared/model.js';
+import { deepClone, formatTimecode, isVisual, keyframeIndexAt, kfTime, kfToTimeline, setPropBase, valueAt, vfxProp } from '../../shared/model.js';
 import { LIGHT_DEFAULTS } from '../../shared/lights.js';
 import { imageRectAt } from '../../shared/imageMotion.js';
 import { captionLayout, wrapText } from '../../shared/render.js';
@@ -13,35 +13,61 @@ import * as playback from './playback.js';
 import * as commands from './commands.js';
 import { IconButton } from '../ui.jsx';
 import { PREVIEW_RESOLUTIONS, prefs, setPrefs } from '../prefs.js';
-import { setKeyframe } from './keyframes.js';
+import { keyframed, setKeyframe } from './keyframes.js';
+import { keyframeMenu } from './keyframeMenu.js';
 import { toggleViewerFullscreen } from './fullscreen.js';
 import { trackArea } from './track.js';
 import { VideoScopes } from './VideoScopes.jsx';
-import { commandsBlocked } from '../keyboard.js';
+import { commandsBlocked, isTyping } from '../keyboard.js';
+import { attachViewerNavigation } from './viewerNavigation.js';
+import { bindPreviewCanvas, externalPreviewOnly, previewDisplays } from './externalPreview.js';
+import { PreviewDisplayControl } from './PreviewDisplayControl.jsx';
 
 // Spill bakover: avspillingsikonet speilet.
 const PlayBackward = ({ size }) => <Play size={size} fill="currentColor" style={{ transform: 'scaleX(-1)' }} />;
 
+// offsetLeft rounds away half pixels; those become visible gaps at high zoom.
+// Measure in screen space, then convert back to the stage's local coordinates.
+function canvasBox(canvas) {
+  const r = canvas.getBoundingClientRect();
+  const parent = canvas.parentElement.getBoundingClientRect();
+  const width = parseFloat(canvas.style.width) || canvas.offsetWidth;
+  const height = parseFloat(canvas.style.height) || canvas.offsetHeight;
+  const zoom = r.width / width || 1;
+  return { left: (r.left - parent.left) / zoom, top: (r.top - parent.top) / zoom, width, height };
+}
+
 export function Viewer() {
   const p = project.value;
   const source = playback.sourceProject.value;
+  const externalOnly = externalPreviewOnly.value;
+  const external = previewDisplays.value.active;
   const boxRef = useRef(null);
+  const stageRef = useRef(null);
+  const navigationRef = useRef(null);
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
+  const [viewZoom, setViewZoom] = useState(1);
+  const viewZoomRef = useRef(viewZoom);
+  viewZoomRef.current = viewZoom;
   const [fullscreen, setFullscreen] = useState(false);
   const toggleFullscreen = () => toggleViewerFullscreen(wrapRef.current);
   const twoUp = twoUpActive.value && !source;
   const resize = () => {
+    const output = previewDisplays.value.active;
+    // Render to the output's physical size, independently of the hidden editor box.
+    if (externalPreviewOnly.value && output) return playback.resizeCanvas(output.width / (window.devicePixelRatio || 1), output.height / (window.devicePixelRatio || 1));
     const box = boxRef.current;
     const r = box.getBoundingClientRect();
     const style = getComputedStyle(box);
     const w = r.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const h = r.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
     // Leses ved kallet, så ResizeObserver-kallet også får med den to-delte visningen.
-    if (!trimView.value || playback.sourceProject.value) return playback.resizeCanvas(w, h);
+    const displayZoom = output ? Math.min(output.width / w, output.height / h) / (window.devicePixelRatio || 1) : 1;
+    if (!trimView.value || playback.sourceProject.value) return playback.resizeCanvas(w, h, 1, Math.max(viewZoomRef.current, displayZoom));
     const half = (w - TWO_UP_GAP) / 2;
-    playback.resizeCanvas(half, h);
-    playback.trimLeftPlayer().resizeCanvas(half, h);
+    playback.resizeCanvas(half, h, 1, viewZoomRef.current);
+    playback.trimLeftPlayer().resizeCanvas(half, h, 1, viewZoomRef.current);
   };
 
   useEffect(() => {
@@ -94,7 +120,7 @@ export function Viewer() {
           c.props.pos = { x: Math.round(Math.min(100, Math.max(0, origin.x + (dx / p.width) * 100)) * 10) / 10, y: Math.round(Math.min(100, Math.max(0, origin.y + (dy / p.height) * 100)) * 10) / 10 };
         } else {
           for (const [prop, v] of [['x', origin.x + dx], ['y', origin.y + dy]]) {
-            if (c.kf?.[prop]?.length) setKeyframe(c, prop, kfTime(c, T), Math.round(v));
+            if (keyframed(c, prop)) setKeyframe(c, prop, kfTime(c, T), Math.round(v));
             else c.props[prop] = Math.round(v);
           }
         }
@@ -119,6 +145,7 @@ export function Viewer() {
 
   useEffect(() => {
     playback.attachCanvas(canvasRef.current);
+    bindPreviewCanvas(canvasRef.current);
     playback.start();
     const ro = new ResizeObserver(resize);
     ro.observe(boxRef.current);
@@ -126,17 +153,28 @@ export function Viewer() {
       ro.disconnect();
       playback.stopLoop();
       playback.attachCanvas(null);
+      bindPreviewCanvas(null);
     };
   }, []);
 
   useEffect(() => {
     resize();
-  }, [p.width, p.height, source, prefs.value.viewerQuality, twoUp]);
+  }, [p.width, p.height, source, prefs.value.viewerQuality, twoUp, viewZoom, externalOnly, external?.width, external?.height]);
+
+  useEffect(() => {
+    const navigation = attachViewerNavigation(boxRef.current, stageRef.current, setViewZoom);
+    navigationRef.current = navigation;
+    return () => {
+      navigation.dispose();
+      navigationRef.current = null;
+    };
+  }, []);
 
   return (
-    <div class="viewer" ref={wrapRef}>
+    <div class={`viewer${externalOnly ? ' external-preview-only' : ''}`} ref={wrapRef}>
       <div class="viewer-head">
         <span class="title">{source ? source.name : p.name}</span>
+        <PreviewDisplayControl />
         <button
           class="fmt-btn"
           title="Project settings"
@@ -150,29 +188,34 @@ export function Viewer() {
         </button>
       </div>
       <div class={twoUp ? 'viewer-box two-up' : 'viewer-box'} ref={boxRef} onDblClick={toggleFullscreen}>
-        {twoUp && <TrimLeft />}
-        <canvas
-          ref={canvasRef}
-          class={draggable ? (sel.type === 'redact' ? 'drawable' : 'movable') : source ? 'source-drag' : ''}
-          onPointerDown={onCanvasDown}
-          draggable={Boolean(source)}
-          title={source ? 'Drag the picture to the timeline to add the marked part' : undefined}
-          onDragStart={(e) => {
-            const id = sourceMediaId.value;
-            if (!source || !id) return e.preventDefault();
-            dragData(e, { kind: 'media', id, ids: [id] });
-          }}
-        />
-        {!source && !playing.value && !twoUp && <EditPointMarks canvasRef={canvasRef} />}
-        {!twoUp && pen && sel?.id === pen.clipId && <PenOverlay clip={sel} canvasRef={canvasRef} />}
-        {!twoUp && sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} corner={sel.props.mode === 'highlight' && sel.props.shape !== 'ellipse' ? valueAt(sel, 'corner', clipTime(sel)) ?? 0 : null} label={sel.props.mode === 'highlight' ? 'Highlight area. Drag to move, drag the handles to resize, and the round handle to rotate.' : 'Redaction. Drag to move, drag the handles to resize.'} />}
-        {!twoUp && sel && sel.type !== 'redact' && trackArea.value === sel.id && !pen && <ShapeEditor clip={sel} prefix="track." shape="rect" smooth={false} canvasRef={canvasRef} label="Tracking area. Put it over what the clip should follow." />}
-        {!twoUp && draggable && sel.type !== 'redact' && sel.type !== 'caption' && (commands.shownInspectorTab.value === 'video' || (commands.shownInspectorTab.value === 'recording' && sel.recordingPart === 'camera')) && !pen && !editMask && trackArea.value !== sel.id && <TransformBox clip={sel} canvasRef={canvasRef} />}
-        {!twoUp && sel && !pen && !editMask && commands.shownInspectorTab.value === 'effects' && <LightHandles clip={sel} canvasRef={canvasRef} />}
-        {!twoUp && editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} label={`${editMask.name}. Drag to move.`} />}
+        <div class="viewer-stage" ref={stageRef}>
+          {twoUp && <TrimLeft />}
+          <canvas
+            ref={canvasRef}
+            class={draggable ? (sel.type === 'redact' ? 'drawable' : 'movable') : source ? 'source-drag' : ''}
+            onPointerDown={onCanvasDown}
+            draggable={Boolean(source)}
+            title={source ? 'Drag the picture to the timeline to add the marked part' : undefined}
+            onDragStart={(e) => {
+              const id = sourceMediaId.value;
+              if (!source || !id) return e.preventDefault();
+              dragData(e, { kind: 'media', id, ids: [id] });
+            }}
+          />
+          {!externalOnly && <>
+          {!source && !playing.value && !twoUp && <EditPointMarks canvasRef={canvasRef} />}
+          {!twoUp && pen && sel?.id === pen.clipId && <PenOverlay clip={sel} canvasRef={canvasRef} viewZoom={viewZoom} />}
+          {!twoUp && sel?.type === 'redact' && sel.props.shape !== 'full' && !pen && <ShapeEditor clip={sel} prefix="" shape={sel.props.shape || 'rect'} smooth={sel.props.smooth === true} canvasRef={canvasRef} viewZoom={viewZoom} corner={sel.props.mode === 'highlight' && sel.props.shape !== 'ellipse' ? valueAt(sel, 'corner', clipTime(sel)) ?? 0 : null} label={sel.props.mode === 'highlight' ? 'Highlight area. Drag to move, drag the handles to resize, and the round handle to rotate.' : 'Redaction. Drag to move, drag the handles to resize.'} />}
+          {!twoUp && sel && sel.type !== 'redact' && trackArea.value === sel.id && !pen && <ShapeEditor clip={sel} prefix="track." shape="rect" smooth={false} canvasRef={canvasRef} viewZoom={viewZoom} label="Tracking area. Put it over what the clip should follow." />}
+          {!twoUp && draggable && sel.type !== 'redact' && sel.type !== 'caption' && commands.shownInspectorTab.value === 'video' && !pen && !editMask && trackArea.value !== sel.id && <MotionPath clip={sel} canvasRef={canvasRef} viewZoom={viewZoom} />}
+          {!twoUp && draggable && sel.type !== 'redact' && sel.type !== 'caption' && (commands.shownInspectorTab.value === 'video' || (commands.shownInspectorTab.value === 'recording' && sel.recordingPart === 'camera')) && !pen && !editMask && trackArea.value !== sel.id && <TransformBox clip={sel} canvasRef={canvasRef} viewZoom={viewZoom} />}
+          {!twoUp && sel && !pen && !editMask && commands.shownInspectorTab.value === 'effects' && <LightHandles clip={sel} canvasRef={canvasRef} viewZoom={viewZoom} />}
+          {!twoUp && editMask && !pen && <ShapeEditor clip={sel} prefix={`mask.${editMask.id}.`} shape={editMask.shape} smooth={Boolean(editMask.smooth)} canvasRef={canvasRef} viewZoom={viewZoom} label={`${editMask.name}. Drag to move.`} />}
+          </>}
+        </div>
       </div>
       {source && !fullscreen && <SourceBar mediaId={sourceMediaId.value} duration={source.duration} fps={p.fps} />}
-      {prefs.value.videoScopesVisible && !fullscreen && <VideoScopes sourceRef={canvasRef} onClose={() => setPrefs({ videoScopesVisible: false })} />}
+      {prefs.value.videoScopesVisible && !fullscreen && !externalOnly && <VideoScopes sourceRef={canvasRef} onClose={() => setPrefs({ videoScopesVisible: false })} />}
       <div class="transport">
         <div class="tc big">{formatTimecode(source ? (skim.value?.mediaId === browserPlayhead.value?.mediaId ? skim.value.T : browserPlayhead.value?.t || 0) : timeSig.value, p.fps)}</div>
         <div class="controls">
@@ -186,7 +229,8 @@ export function Viewer() {
           <IconButton icon={SkipForward} title="Go to end (End)" onClick={commands.goEnd} />
         </div>
         <div class="right">
-          <IconButton icon={Activity} title={`${prefs.value.videoScopesVisible ? 'Hide' : 'Show'} video scopes`} active={prefs.value.videoScopesVisible} aria-pressed={Boolean(prefs.value.videoScopesVisible)} onClick={() => setPrefs({ videoScopesVisible: !prefs.value.videoScopesVisible })} />
+          {!externalOnly && <button class="fmt-btn viewer-zoom" aria-label="Fit preview" title="Pinch or Ctrl/Cmd-scroll to zoom. Scroll with two fingers to pan. Click to fit the picture." onClick={() => navigationRef.current?.reset()}>{viewZoom === 1 ? 'Fit' : `${Math.round(viewZoom * 100)}%`}</button>}
+          <IconButton icon={Activity} title={`${prefs.value.videoScopesVisible ? 'Hide' : 'Show'} video scopes`} active={prefs.value.videoScopesVisible} aria-pressed={Boolean(prefs.value.videoScopesVisible)} onClick={() => setPrefs({ videoScopesVisible: !prefs.value.videoScopesVisible, ...(externalOnly ? { externalPreviewShowLocal: true } : {}) })} />
           <select
             class="select preview-resolution"
             aria-label="Preview resolution"
@@ -199,7 +243,7 @@ export function Viewer() {
           >
             {PREVIEW_RESOLUTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
-          <IconButton icon={fullscreen ? Minimize2 : Maximize2} title={fullscreen ? 'Exit full screen (Esc)' : 'Full screen'} aria-pressed={fullscreen} onClick={toggleFullscreen} />
+          {!externalOnly && <IconButton icon={fullscreen ? Minimize2 : Maximize2} title={fullscreen ? 'Exit full screen (Esc)' : 'Full screen'} aria-pressed={fullscreen} onClick={toggleFullscreen} />}
         </div>
       </div>
     </div>
@@ -289,7 +333,7 @@ function SourceBar({ mediaId, duration, fps }) {
 
 // Skriver en verdi på klippet; har egenskapen nøkkelbilder, settes et nøkkelbilde ved spillhodet.
 function putValue(c, prop, v, T) {
-  if (c.kf?.[prop]?.length) setKeyframe(c, prop, kfTime(c, T), v);
+  if (keyframed(c, prop)) setKeyframe(c, prop, kfTime(c, T), v);
   else setPropBase(c, prop, v);
 }
 
@@ -373,10 +417,11 @@ function EditPointMarks({ canvasRef }) {
   const [box, setBox] = useState(null);
   useEffect(() => {
     const cv = canvasRef.current;
-    const measure = () => setBox({ left: cv.offsetLeft, top: cv.offsetTop, width: cv.offsetWidth, height: cv.offsetHeight });
+    const measure = () => setBox(canvasBox(cv));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(cv);
+    ro.observe(cv.parentElement);
     return () => ro.disconnect();
   }, []);
   if (!box) return null;
@@ -403,22 +448,23 @@ function EditPointMarks({ canvasRef }) {
 /* Transform i bildet: hjørnene skalerer, det runde håndtaket roterer, og krysset flytter ankerpunktet.
    Krysset flytter ikke bildet: posisjonen justeres, så klippet blir stående der det er. */
 
-export function TransformBox({ clip, canvasRef }) {
+export function TransformBox({ clip, canvasRef, viewZoom = 1 }) {
   const p = project.value;
   const T = timeSig.value;
   const [box, setBox] = useState(null);
   useEffect(() => {
     const cv = canvasRef.current;
-    const measure = () => setBox({ left: cv.offsetLeft, top: cv.offsetTop, width: cv.offsetWidth, height: cv.offsetHeight });
+    const measure = () => setBox(canvasBox(cv));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(cv);
+    ro.observe(cv.parentElement);
     return () => ro.disconnect();
   }, []);
   if (!box || T < clip.start || T > clip.start + clip.dur) return null;
   const W = p.width;
   const H = p.height;
-  const k = box.width / W;
+  const k = (box.width * viewZoom) / W;
   const Tc = clipTime(clip);
   const M = viewMatrix(p, clip, Tc);
   const F = followMatrix(p, clip, Tc);
@@ -514,6 +560,123 @@ export function TransformBox({ clip, canvasRef }) {
   );
 }
 
+/* Bevegelsesbanen som i Final Cut Pro: linjen ankerpunktet følger mellom nøkkelbildene for posisjon.
+   Dra et punkt for å flytte posisjonen der, og håndtakene for å bøye banen (Option drar ett håndtak alene).
+   Klikk et punkt for å gå dit, høyreklikk for Path og Speed. */
+function MotionPath({ clip, canvasRef, viewZoom = 1 }) {
+  const p = project.value;
+  timeSig.value;
+  const [box, setBox] = useState(null);
+  useEffect(() => {
+    const cv = canvasRef.current;
+    const measure = () => setBox(canvasBox(cv));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(cv);
+    ro.observe(cv.parentElement);
+    return () => ro.disconnect();
+  }, []);
+  const xs = clip.kf?.x || [];
+  if (!box || xs.length < 2 || !clip.kf?.y?.length) return null;
+  const W = p.width;
+  const H = p.height;
+  const k = (box.width * viewZoom) / W;
+  // Ankerpunktet i bildet ved en nøkkelbildetid, med skala, rotasjon og levende kobling.
+  const at = (s) => {
+    const T = kfToTimeline(clip, s);
+    const q = viewMatrix(p, clip, T).transformPoint(clipPivot(clip, T, W, H, p));
+    return [q.x, q.y];
+  };
+  const t0 = xs[0][0];
+  const t1 = xs[xs.length - 1][0];
+  const N = Math.min(400, 40 * xs.length);
+  const line = Array.from({ length: N + 1 }, (_, i) => at(t0 + ((t1 - t0) * i) / N));
+  const now = kfTime(clip, clipTime(clip));
+  const r = 5 / k;
+
+  const drag = (e, i, part) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget;
+    const svg = el.ownerSVGElement;
+    el.setPointerCapture(e.pointerId);
+    const s = xs[i][0];
+    const toFrame = (ev) => {
+      const b = svg.getBoundingClientRect();
+      return [((ev.clientX - b.left) / b.width) * W, ((ev.clientY - b.top) / b.height) * H];
+    };
+    const start = toFrame(e);
+    const x0 = xs[i][1];
+    const y0 = clip.kf.y[keyframeIndexAt(clip, 'y', s, 1e-4)]?.[1] ?? 0;
+    const [px, py] = at(s);
+    let moved = false;
+    const move = (ev) => {
+      const q = toFrame(ev);
+      if (!moved && Math.hypot(q[0] - start[0], q[1] - start[1]) < 2 / k) return;
+      if (!moved) beginTransient();
+      moved = true;
+      updateTransient((d) => {
+        const c = d.clips[clip.id];
+        const kx = c.kf.x[keyframeIndexAt(c, 'x', s, 1e-4)];
+        const ky = c.kf.y[keyframeIndexAt(c, 'y', s, 1e-4)];
+        if (!kx || !ky) return;
+        if (part === 'point') {
+          // ponytail: punktet flyttes i bildepiksler; med levende kobling eller rotert forelder blir det litt skjevt.
+          kx[1] = Math.round(x0 + q[0] - start[0]);
+          ky[1] = Math.round(y0 + q[1] - start[1]);
+          return;
+        }
+        const v = [Math.round(q[0] - px), Math.round(q[1] - py)];
+        const h = (kx[3] = { ...kx[3] });
+        kx[2] ??= null;
+        h[part] = v;
+        if (!ev.altKey) h[part === 'out' ? 'in' : 'out'] = [-v[0], -v[1]];
+      });
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      if (moved) endTransient(true);
+      else if (part === 'point') playback.seek(kfToTimeline(clip, s));
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
+  const menu = (e, s) => {
+    e.preventDefault();
+    e.stopPropagation();
+    keyframeMenu(clip.id, s, ['x', 'y']);
+  };
+
+  return (
+    <svg class="shape-editor motion-path" style={{ left: box.left, top: box.top, width: box.width, height: box.height }} viewBox={`0 0 ${W} ${H}`}>
+      <polyline points={line.map((q) => q.join(',')).join(' ')} class="motion-line" style={{ strokeWidth: 2 / k }} />
+      {xs.map((kx, i) => {
+        const [x, y] = at(kx[0]);
+        const h = kx[3];
+        return (
+          <g key={i}>
+            {h && ['in', 'out'].map((side) => h[side] && (
+              <g key={side}>
+                <line x1={x} y1={y} x2={x + h[side][0]} y2={y + h[side][1]} class="motion-handle-line" style={{ strokeWidth: 1.25 / k }} />
+                <circle cx={x + h[side][0]} cy={y + h[side][1]} r={r} class="motion-handle" style={{ strokeWidth: 1 / k }} onPointerDown={(e) => drag(e, i, side)}>
+                  <title>Drag to bend the path. Hold Option to move this handle alone.</title>
+                </circle>
+              </g>
+            ))}
+            <rect x={x - r} y={y - r} width={r * 2} height={r * 2} transform={`rotate(45 ${x} ${y})`} class={`motion-kf${Math.abs(kx[0] - now) < 1e-3 ? ' on' : ''}`} style={{ strokeWidth: 1 / k }} onPointerDown={(e) => drag(e, i, 'point')} onContextMenu={(e) => menu(e, kx[0])}>
+              <title>Position keyframe. Drag to move it, click to go to it, right click for path and speed.</title>
+            </rect>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 /* Formredigering i bildet, felles for sladding og masker. Tegnes som SVG i bildets koordinater.
    Rektangel og ellipse: dra for å flytte, dra håndtakene for å endre størrelse (Alt fra midten).
    Fri form: dra punktene, dobbeltklikk på kanten for et nytt punkt, Alt klikk for å fjerne et. */
@@ -548,22 +711,23 @@ function outlinePoints(g) {
   return out;
 }
 
-export function ShapeEditor({ clip, prefix, shape, smooth, canvasRef, label, corner = null }) {
+export function ShapeEditor({ clip, prefix, shape, smooth, canvasRef, label, corner = null, viewZoom = 1 }) {
   const p = project.value;
   const T = timeSig.value;
   const [box, setBox] = useState(null);
   useEffect(() => {
     const cv = canvasRef.current;
-    const measure = () => setBox({ left: cv.offsetLeft, top: cv.offsetTop, width: cv.offsetWidth, height: cv.offsetHeight });
+    const measure = () => setBox(canvasBox(cv));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(cv);
+    ro.observe(cv.parentElement);
     return () => ro.disconnect();
   }, []);
   if (!box || T < clip.start || T > clip.start + clip.dur) return null;
   const W = p.width;
   const H = p.height;
-  const k = box.width / W;
+  const k = (box.width * viewZoom) / W;
   const Tc = clipTime(clip);
   const M = viewMatrix(p, clip, Tc);
   const inv = M.inverse();
@@ -743,7 +907,7 @@ function smoothD(pts) {
 
 /* Pennen: klikk for punkter, dra mens du klikker for myke kurver. Lukk ved å klikke på det
    første punktet, dobbeltklikke eller trykke Retur. Rettetasten fjerner siste punkt, Escape avbryter. */
-function PenOverlay({ clip, canvasRef }) {
+function PenOverlay({ clip, canvasRef, viewZoom = 1 }) {
   const p = project.value;
   const W = p.width;
   const H = p.height;
@@ -758,10 +922,11 @@ function PenOverlay({ clip, canvasRef }) {
   smoothRef.current = smooth;
   useEffect(() => {
     const cv = canvasRef.current;
-    const measure = () => setBox({ left: cv.offsetLeft, top: cv.offsetTop, width: cv.offsetWidth, height: cv.offsetHeight });
+    const measure = () => setBox(canvasBox(cv));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(cv);
+    ro.observe(cv.parentElement);
     // Tastene fanges før hurtigtastene, så Retur, Escape og rettetasten bare virker på pennen.
     const onKey = (e) => {
       if (room.value !== 'edit' || commandsBlocked(e)) return;
@@ -779,7 +944,7 @@ function PenOverlay({ clip, canvasRef }) {
     };
   }, []);
   if (!box) return null;
-  const k = box.width / W;
+  const k = (box.width * viewZoom) / W;
   const M = viewMatrix(p, clip, clipTime(clip));
   const inv = M.inverse();
   const toClip = (ev, svg) => {
@@ -857,16 +1022,17 @@ function pictureRect(p, clip, T) {
   return clip.type === 'image' ? imageRectAt(clip, T, sw, sh, p.width, p.height) : containRect(sw, sh, p.width, p.height);
 }
 
-function LightHandles({ clip, canvasRef }) {
+function LightHandles({ clip, canvasRef, viewZoom = 1 }) {
   const p = project.value;
   const T = timeSig.value;
   const [box, setBox] = useState(null);
   useEffect(() => {
     const cv = canvasRef.current;
-    const measure = () => setBox({ left: cv.offsetLeft, top: cv.offsetTop, width: cv.offsetWidth, height: cv.offsetHeight });
+    const measure = () => setBox(canvasBox(cv));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(cv);
+    ro.observe(cv.parentElement);
     return () => ro.disconnect();
   }, []);
   const effects = (clip.props.vfx || []).filter((e) => e.type === 'lights' && e.on !== false);
@@ -875,7 +1041,7 @@ function LightHandles({ clip, canvasRef }) {
   const Tc = clipTime(clip);
   const r = pictureRect(p, clip, Tc);
   if (!r) return null;
-  const W = p.width, H = p.height, k = box.width / W;
+  const W = p.width, H = p.height, k = (box.width * viewZoom) / W;
   const M = viewMatrix(p, clip, Tc), inv = M.inverse();
   const value = (e, key) => valueAt(clip, vfxProp(e.id, key), Tc) ?? LIGHT_DEFAULTS[key];
   const toClip = (ev, svg) => {

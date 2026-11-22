@@ -3,11 +3,14 @@ import { LIGHT_DEFAULTS } from './lights.js';
 import { LEAK_DEFAULTS, LEAK_PRESETS } from './lightLeak.js';
 import { FLARE_DEFAULTS } from './lensFlare.js';
 import { HUE_SATURATION_DEFAULTS } from './hueSaturation.js';
+import { MOTION_BLUR_DEFAULTS, NATURAL_MOTION_BLUR_DEFAULTS } from './motionBlur.js';
 const TAPE_DEFAULTS = { amount: 0.55, softness: 0.65, bleed: 0.55, noise: 0.18, tracking: 0.28, split: 0.2, scanlines: 0.08, fade: 0.25, speed: 1, seed: 1 };
 const FILM_DEFAULTS = { amount: 0.28, size: 1.3, roughness: 0.65, color: 0.12, tonal: 0.7, dust: 0, scratches: 0, weave: 0, flicker: 0, speed: 1, seed: 1 };
 
 // Ordered source effects, shared by preview and export. Existing clip effects follow this stack.
 export const VIDEO_EFFECTS = [
+  { type: 'motionBlur', label: 'Motion Blur', category: 'Blur', defaults: MOTION_BLUR_DEFAULTS },
+  { type: 'naturalMotionBlur', label: 'Natural Motion Blur', category: 'Blur', adjustment: false, defaults: NATURAL_MOTION_BLUR_DEFAULTS },
   { type: 'hueSaturation', label: 'Advanced Hue / Saturation', category: 'Color correction', defaults: HUE_SATURATION_DEFAULTS },
   { type: 'solid', label: 'Solid color', category: 'Color fills', defaults: { color: '#487cff', amount: 1, preserveAlpha: false } },
   { type: 'gradient', label: 'Gradient ramp', category: 'Color fills', defaults: { ...DEFAULT_GRADIENT, amount: 1, preserveAlpha: false } },

@@ -2,6 +2,8 @@ import { EFFECTS } from './model.js';
 import { VIDEO_EFFECTS } from './videoEffects.js';
 
 export function effectWarning(clip, id, kind = 'effect') {
+  if (id === 'naturalMotionBlur' && !['video','recording','adjustment'].includes(clip?.type))
+    return 'Natural Motion Blur needs neighbouring video frames. Apply it to a video or recording clip.';
   if (clip?.type !== 'adjustment') return null;
   if (kind === 'afx' || kind === 'apreset')
     return 'Audio effects do not work on adjustment layers. Apply them to a clip with sound.';

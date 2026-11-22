@@ -63,7 +63,7 @@ import { editMulticam } from './multicam.js';
 import { beginTransient, commit, endPreview, projectPath, renameProject, endTransient, enterGroup, getWave, importPaths, mirror, previewEdit, motionVersion, project, selectedClips, selectedGroup, selectedTransition, selection, tasks, timeSig, updateTransient, waveVersion } from './store.js';
 import { groupPositionClips, groupVisuals, setGroupOpacity, setGroupPosition } from '../../shared/groupSettings.js';
 import { seek } from './playback.js';
-import { setKeyframe } from './keyframes.js';
+import { removeKeyframePair, setKeyframe } from './keyframes.js';
 import { addEffect, addMaskToSelected, applyFilm, previewFilm, attachPip, detachPip, separatePipTrack, browserTab, browserFocus, browserPicked, browserSelection, browserRange, captionEditRequest, deleteMask, penMode, startPen, inspectorTab, shownInspectorTab, newProjectOpen, selectedMask, reanalyzeMotion, stabilizeSelected, setCleanVoice, setComponentMono, toggleComponent, duckSelectedMusic } from './commands.js';
 import { prefs, setPrefs } from '../prefs.js';
 import { DUCK_DEFAULTS } from '../../shared/ducking.js';
@@ -306,7 +306,7 @@ export function Param({ clip, prop, label, min, max, step = 1, unit = '', precis
                 if(e.altKey && canExpress){e.preventDefault();setExpressionOpen(v=>!v);return;}
                 commit((q) => {
                   const c = q.clips[id];
-                  if (atKf) removeKeyframe(c, prop, s);
+                  if (atKf) removeKeyframePair(c, prop, s);
                   else setKeyframe(c, prop, s, raw);
                 });
               }}
@@ -823,6 +823,11 @@ function MasksTab({ clip }) {
               <IconButton icon={Trash2} title="Delete mask" onClick={() => deleteMask(clip.id, m.id)} />
             </div>
             <Segmented value={m.shape} onChange={(v) => commit((q) => setMaskShape(q.clips[clip.id], m.id, v, T, p.width, p.height))} options={MASK_SHAPES.map((s) => ({ value: s.id, label: s.label }))} />
+            <Row label="Applies to"><Select value={m.effect || ''} onChange={effect => setMask(m.id,{effect})} options={[
+              {value:'',label:'Clip visibility'},
+              ...(clip.props.vfx||[]).filter(e=>['motionBlur','naturalMotionBlur'].includes(e.type)).map((e,i)=>({value:e.id,label:`${e.type==='motionBlur'?'Motion Blur':'Natural Motion Blur'} · ${i+1}`})),
+              ...(m.effect&&!(clip.props.vfx||[]).some(e=>e.id===m.effect)?[{value:m.effect,label:'Removed effect'}]:[]),
+            ]}/></Row>
             <Row label="Mode">
               <Select value={i === 0 && m.mode === 'intersect' ? 'add' : m.mode} onChange={(v) => setMask(m.id, { mode: v })} options={MASK_MODES.filter((x) => i > 0 || x.id !== 'intersect').map((x) => ({ value: x.id, label: x.label, title: x.desc }))} />
             </Row>

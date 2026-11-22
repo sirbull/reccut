@@ -12,6 +12,19 @@ function setup(platform = 'darwin') {
   vm.runInNewContext(bundle, {module,exports:module.exports,require:()=>services,window:{api:{platform,onTasks(){},onFlush(){},onAnalyzed(){},listTasks:async()=>[],hideFromCapture(){}},addEventListener(){}},localStorage:{getItem:()=>null,setItem(){}},setTimeout:()=>0,clearTimeout(){},performance:{now:()=>0},structuredClone});
   return {...module.exports,calls};
 }
+test('Ctrl R renders timeline selections on every platform, with Cmd R also on Mac', () => {
+  for (const platform of ['darwin', 'win32', 'linux']) {
+    const { registry: r } = setup(platform);
+    const event = { code: 'KeyR', key: 'r', ctrlKey: true, metaKey: false, altKey: false, shiftKey: false };
+    assert.equal(r.commandForEvent(event, 'edit')?.id, 'preRender');
+    assert.equal(r.conflictsFor('Ctrl+R', 'preRender').length, 0);
+    if (platform === 'darwin') {
+      assert.equal(r.commandForEvent({ ...event, ctrlKey: false, metaKey: true }, 'edit')?.id, 'preRender');
+      assert.equal(r.conflictsFor('Cmd+R', 'preRender').length, 0);
+    }
+    assert.equal(r.keysFor(r.byId.get('retime')).length, 0);
+  }
+});
 test('Design refuses Edit commands and menu accelerators without switching rooms', () => {
   const {registry:r,editor:e,calls}=setup();e.room.value='design';
   for(const id of ['tool:blade','copyEffects','export','exportFrame','import','sequenceSettings','newSequence']) {

@@ -95,7 +95,7 @@ The Highlights section has seven cards with a small picture and a short text. Tw
 
 | Card | Asset | Source |
 | --- | --- | --- |
-| Lens flares | `feature-lens-flare.jpg` | `assets/help/lensflare-viewer.jpg` |
+| Lens flares | `feature-lens-flare.jpg`, `feature-lens-flare-studio.jpg` | `scripts/capture-lensflare.cjs --website` |
 | Cut to the beat | `feature-beat-grid.jpg` | `scripts/capture-features.cjs` |
 | Search what is said | `feature-transcript-search.jpg` | `scripts/capture-features.cjs` |
 | Light leaks | `feature-light-leaks.jpg` | `assets/help/effects-light-leaks.jpg` |
@@ -116,3 +116,7 @@ All pictures from `capture-features.cjs` are taken at 2x (the window is twice th
 ## Voice Over Studio picture — 22 November 2026
 
 `media/voice-over-studio.jpg` was photographed again so it looks like a microphone session: four green takes on the Narrator track (the app's color for the first person), a recorded room tone set in the header, and room tone filling the pauses between the takes on the Room tone track. The narration is still Kokoro `af_heart` with the same four-line English script, but `scripts/feature-demo-media.mjs` now places it in a simulated room at 48 kHz: a pink noise floor around −56 dBFS with a low rumble, a breath before each sentence, and room sound before and after the speech. `roomtone.wav` is five seconds of the same room. The demo folder is `~/Movies/Reccut/Website Demos - 2026-11-22/Voice Over`; photograph it with `node scripts/capture-voiceover.cjs "<that folder>"`. The takes are trimmed like microphone takes, against the room tone's noise floor. The capture profile marks the voice package list as shown, so it does not cover the studio. The picture is 2400 × 1368.
+
+## Lens flare card (22 November 2026)
+
+The Lens flares card shows a blue flare alone on black (`feature-lens-flare.jpg`, 1600 × 900), rendered by the same renderer as the export. Clicking it opens `feature-lens-flare-studio.jpg` instead of a larger copy (the card image's `data-full` attribute): the same flare in Flare Studio on the Black background, with the spectral ghost selected, photographed at 2x (2400 px wide). The flare is defined as `WEBSITE_FLARE` in `scripts/capture-lensflare.cjs`: Anamorphic-style streaks, a 12-ray starburst, diffraction, light lens dust and a row of blue procedural ghosts and rings. Run `npm run build`, then `node scripts/capture-lensflare.cjs --website`; it writes both pictures to `docs/media`. The Mountain lake clip from the Help Demo project is only used to host the effect; it is not visible.

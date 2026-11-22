@@ -17,6 +17,8 @@ const bundle = (await build({
         export const { playing, project, skim, skimming, sourceMediaId, browserPlayhead } = state;
         export const motionVersion = {value: 0};
         export const trimView = signal(null);
+        export const projectEpoch = signal(0);
+        export const selection = signal([]);
         export const getTime = () => state.time;
         export const setTime = t => state.time = t;
         export const getSourceTime = () => state.sourceTime;

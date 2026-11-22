@@ -1264,8 +1264,8 @@ Add a marker at the playhead with {{key:addMarker}}. Markers are shown above the
     id: 'playback',
     section: 'Editing',
     title: 'Playback and Navigation',
-    summary: 'Space, J K L, arrows and full screen.',
-    keywords: 'play pause reverse jkl frame step full screen home end',
+    summary: 'Space, J K L, arrows, preview zoom and full screen.',
+    keywords: 'play pause reverse jkl frame step full screen home end preview zoom pinch pan trackpad fit',
     body: `
 ![The viewer with the transport controls.](viewer.jpg)
 
@@ -1277,6 +1277,21 @@ Add a marker at the playhead with {{key:addMarker}}. Markers are shown above the
 - {{key:viewerFullscreen}} plays full screen.
 
 Reversed clips and backwards playback use a reversed copy made in the background, so they play smoothly with sound.
+
+### Preview on another screen
+When an extended display is connected, Edit offers to put a large, clean preview on it. Choose **Use This Screen**, or **Not Now** to keep your current layout. With several displays, select the one you want. The **Preview screen** menu above the preview is always available for changing screens or choosing **Preview: Editor**.
+
+With preview on another screen, the media browser and Properties use the space in the editor, and the timeline and playback controls stay here. **Show Preview Here** also shows the picture in the editor for dragging, drawing masks and adjusting handles. Two-up trimming shows its comparison in the editor automatically. Sound continues through your selected audio output.
+
+On the preview screen, Space plays or pauses, Left and Right step frames, and Esc or **Return Preview to Editor** brings the picture back. Disconnecting that display or leaving Edit returns preview to the editor automatically. To stop automatic offers, select **Don’t ask automatically**; enable them again in **Settings → General → External Preview**. Mirrored screens need to be changed to an extended desktop in your system display settings first.
+
+### Zoom and pan in the viewer
+Pinch on your trackpad over the picture to zoom smoothly around the pointer, up to 16×. You can also hold Ctrl or Command while scrolling. When zoomed in, scroll with two fingers to move around the picture horizontally and vertically. The button beside the preview resolution shows the zoom percentage; click it to return to **Fit**. This changes only your view, leaving clip transforms and exports unchanged.
+
+### Pre-render for smoother playback
+Select one or more timeline clips and press {{key:preRender}}, or choose **Playback → Pre-render Selected Clips**. Control R works on every platform; Command R also works on Mac. To pre-render everything, click the timeline, choose {{key:selectAll}} and then {{key:preRender}}.
+
+Reccut renders the selected areas locally, including overlapping layers, effects, captions and transitions, into temporary preview videos at up to 1080p and the sequence frame rate. Follow progress or cancel in **Background tasks**. Green bars under the timeline ruler show areas ready for playback. Audio continues from the timeline. Editing the sequence clears its rendered previews; render again when ready. Final exports use the project and source media at the export settings you choose.
 `,
     see: ['skimming', 'speed'],
   },
@@ -1627,13 +1642,25 @@ Redactions work the same in the viewer and in the exported file.
     section: 'Editing',
     title: 'Effects',
     summary: 'Adjustment layers, color fills, grain, glitch, VHS, glow and other video effects.',
-    keywords: 'effects adjustment layer justeringslag noise grain glitch VHS analog tape RGB split scanlines glow bloom blur vignette sepia shadow border rounded solid color gradient ramp linear radial freeform points spread',
+    keywords: 'effects motion blur natural optical flow directional zoom spin shutter adjustment layer justeringslag noise grain glitch VHS analog tape RGB split scanlines glow bloom blur vignette sepia shadow border rounded solid color gradient ramp linear radial freeform points spread',
     body: `
 The Effects browser ({{key:browser:effects}}) shows every effect with a live preview. At the top are the redactions for hiding passwords and faces, see Redacting Passwords and Faces. Drag an effect onto a clip, or select clips and click it. Adjust or remove effects in the Effects tab of the inspector ({{key:inspector:effects}}). The classic clip effect amounts can have keyframes. Keying and stack effects have their own controls above them.
 
 Click the **×** beside an effect name to remove it. Adjusted effects show a warning before removal. **Don’t show this again** disables the warning for future removals; restore it in **Settings → General → Projects → Warn before removing adjusted effects**. Removing an effect and all its settings or keyframes is one Undo step.
 
 **Drop Shadow** follows the visible pixels after keying, cropping and masks. **Amount** reaches 500% for large shadows. Choose a **Color**, adjust **Softness** (0% gives a sharp edge), set **Opacity**, and move the shadow with **Position X/Y** in project pixels. Amount, softness, opacity and position support keyframes. Transparent areas continue to show the clips underneath. Vignette and colour adjustments also preserve the source transparency.
+
+## Motion blur
+
+In **Effects → Blur**, **Motion Blur** provides Directional, Zoom and Spin variants. Adjust Amount, Angle (Directional), Center X/Y (Zoom and Spin) and Shutter bias. Numeric controls support keyframes. It also works on images and adjustment layers.
+
+**Natural Motion Blur** has one Amount slider. It estimates movement from the source frames before and after the current frame and reconstructs a simulated exposure locally. Start at **50%** for a 180° shutter (about 1/48 s at 24 fps), or raise toward **100%** for 360°. It is useful for fast-shutter footage and sharp rendered animation. Apply it directly to a video or recording clip; it needs video frames and does not work on adjustment layers or still images. It requires hardware acceleration. Lower preview resolution or pre-render a selected area for smoother editing on demanding clips.
+
+**Rolling shutter** is off by default. Enable it to simulate a top-to-bottom sensor scan: upper rows are sampled earlier and lower rows later, producing motion-dependent skew as well as blur. The readout spans half the selected exposure duration, so Amount controls both the exposure and the added scan offset. The center row keeps its original timing. This adds a rolling-shutter look; switching it off restores the global-shutter simulation and does not correct rolling shutter already present in the source.
+
+To protect a character, open **Masks**, draw a mask around the character, set **Applies to** to the blur effect, and enable **Invert**. Feather the edge as needed and animate the mask with keyframes. Effect masks limit that blur and keep the rest of the clip visible; **Clip visibility** retains the usual cutout behavior. Protected pixels are excluded from spatial blur sampling to avoid dragging the character’s color into the background.
+
+Natural Motion Blur keeps stationary areas sharp and rejects uncertain matches and obvious scene cuts. Fine hair, fast crossings, repeated patterns, flashes and large changes in shape can still produce artifacts or less blur. It adds blur to the footage; it cannot remove blur already recorded by the camera or recover detail hidden in every source frame.
 
 ## Adjustment layers
 
@@ -2015,7 +2042,7 @@ The Info tab shows the clip on the timeline (name, start, duration, source in an
 
 ## Keyframes
 
-Click the diamond next to a value to add a keyframe at the playhead, and change the value at another time to animate it. Keyframes are shown on the selected clip; drag them to move them, and right click one to choose easing (Linear, Ease In, Ease Out, Ease In and Out or Hold). Number fields can be dragged sideways, clicked to type a value, or reached with Tab.
+Click the diamond next to a value to add a keyframe at the playhead, and change the value at another time to animate it. Keyframes are shown on the selected clip; drag them to move them, and right click one to choose easing (Linear, Ease In, Ease Out, Ease Both or Hold). Number fields can be dragged sideways, clicked to type a value, or reached with Tab.
 `,
     see: ['color', 'audio', 'lower-thirds'],
   },
@@ -2024,15 +2051,19 @@ Click the diamond next to a value to add a keyframe at the playhead, and change 
     section: 'Editing',
     title: 'Keyframes',
     summary: 'Animate any value over time.',
-    keywords: 'keyframe animate easing',
+    keywords: 'keyframe animate easing motion path bezier curve arc anchor point pivot ease both hold smooth',
     body: `
 Most values in the inspector, including position, scale, opacity, color, effects and volume, can have keyframes. Click the diamond to add one, use the arrows to jump between them, and right click a keyframe on the clip to change its easing.
+
+**Motion path:** when the Video tab is open and the clip has position keyframes, the viewer shows the path between them as a red line, with a diamond for each keyframe. Turn on the diamond for Position X or Y at one time, move the playhead, and drag the clip in the viewer: a new keyframe is added for both X and Y, and the path appears. Drag a diamond to move that position, or click it to go to it. Right click a diamond to choose **Path** (Linear for a straight line, Smooth for a curve with handles) and **Speed** (Linear, Ease In, Ease Out, Ease Both or Hold). Drag the handles to bend the path into an arc; hold Option to move one handle alone. The same menu opens when you right click a keyframe on the timeline.
+
+**Anchor point:** scale and rotation pivot around the anchor point. Set it with Anchor X and Anchor Y under Transform in the Video tab, or drag the crosshair in the viewer.
 
 **Pattern backgrounds:** in Editing, open **Titles → Backgrounds** and add Shape Background or Grid Background. The Video inspector has the same pattern controls as Design, with diamonds for animation. Size, spacing, variation, distribution strength, seed, symbol rotation and X/Y offsets interpolate between keyframes. Symbol, pattern type, colors and distribution direction switch at the next keyframe.
 
 **Expressions:** hold Alt/Option over a property name or its diamond. When the pointer shows **ƒx**, click to add automatic motion such as Wiggle or Oscillate. See [[article:expressions|Expressions]].
 
-New keyframes use **Ease In and Out** by default. Change this to **Linear** in Settings → Editing → Default keyframe interpolation, or use the curve button in the timeline toolbar. The default applies to all properties; existing keyframes keep their easing.
+New keyframes use **Ease Both** by default. Change this to **Linear** in Settings → Editing → Default keyframe interpolation, or use the curve button in the timeline toolbar. The default applies to all properties; existing keyframes keep their easing.
 `,
     see: ['inspector', 'expressions'],
   },
@@ -2325,7 +2356,7 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
 
 - Drag the yellow volume line on a clip, or use {{key:volumeUp}} and {{key:volumeDown}}. The waveform grows or shrinks with the level. Option (Alt) click the line once to add a volume keyframe.
 - Clip volume starts at **0 dB**. The clip shows its level, and hovering or dragging the volume line or a volume point shows the exact dB value next to the pointer. Positive values boost the level; negative values reduce it.
-- Drag a volume point to adjust it, or drag the line between two points to move both levels together. With four points, lower the middle segment to create a quiet section with smooth transitions and unchanged levels outside it. Right click a point to choose Linear, Ease In, Ease Out, Ease In and Out or Hold, or to delete it.
+- Drag a volume point to adjust it, or drag the line between two points to move both levels together. With four points, lower the middle segment to create a quiet section with smooth transitions and unchanged levels outside it. Right click a point to choose Linear, Ease In, Ease Out, Ease Both or Hold, or to delete it.
 - Drag the fade handles at the top corners of the audio to fade in and out.
 - **Expand Audio** ({{key:expandAudio}}) shows the audio below the video. Drag its edges past the video for J and L cuts.
 - The **Levels** at the top of the Audio tab show the waveform of the clip with its peak and average level. Red means the audio clips (goes over 0 dBFS). Audio Format shows the codec, sample rate and channels of the file.

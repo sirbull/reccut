@@ -17,6 +17,8 @@ import { LightLeakControls } from './LightLeakControls.jsx';
 import { BlinkingLights } from './BlinkingLights.jsx';
 import { LensFlareControls } from './LensFlareControls.jsx';
 import { HueSaturationControls } from './HueSaturationControls.jsx';
+import { MotionBlurControls } from './MotionBlurControls.jsx';
+import { isMotionEffect } from '../../shared/motionBlur.js';
 import { pruneEffectKeyframes } from '../../shared/model.js';
 
 export function VideoEffects({ clip }) {
@@ -241,7 +243,7 @@ export function VideoEffects({ clip }) {
                 </p>
               </>
             )}
-            {e.type === 'hueSaturation' ? <HueSaturationControls clip={clip} effect={e} /> : e.type === 'lightLeak' ? <LightLeakControls clip={clip} effect={e} /> : e.type === 'lights' ? <BlinkingLights clip={clip} effect={e} /> : e.type === 'lensFlare' ? <LensFlareControls clip={clip} effect={e} /> : def.controls ? <>
+            {isMotionEffect(e.type) ? <MotionBlurControls clip={clip} effect={e} /> : e.type === 'hueSaturation' ? <HueSaturationControls clip={clip} effect={e} /> : e.type === 'lightLeak' ? <LightLeakControls clip={clip} effect={e} /> : e.type === 'lights' ? <BlinkingLights clip={clip} effect={e} /> : e.type === 'lensFlare' ? <LensFlareControls clip={clip} effect={e} /> : def.controls ? <>
               {def.presets && <Row label="Preset"><Select value="" options={[
                 { value: '', label: 'Choose a look…' }, ...def.presets.map((preset) => ({ value: preset.id, label: preset.label })),
               ]} onChange={(id) => { const preset = def.presets.find((x) => x.id === id); if (preset) patch(e.id, structuredClone(preset.p)); }} /></Row>}
@@ -314,7 +316,7 @@ export function VideoEffects({ clip }) {
         value=""
         options={[
           { value: '', label: 'Add stack effect…' },
-          ...VIDEO_EFFECTS.filter((d) => !adjustment || d.type !== 'difference').map((d) => ({ value: d.type, label: d.label })),
+          ...VIDEO_EFFECTS.filter((d) => !effectWarning(clip,d.type)).map((d) => ({ value: d.type, label: d.label })),
         ]}
         onChange={(v) => v && add(v)}
       />

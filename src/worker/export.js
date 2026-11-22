@@ -3,6 +3,8 @@
 import { setMotion } from '../shared/stabilize.js';
 import { CAMERA_LOGS, setLut } from '../shared/grade.js';
 import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOutputFormat, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, WebMOutputFormat, canEncodeVideo } from 'mediabunny';
+import { motionFramePlan, needsNaturalMotion } from '../shared/motionBlur.js';
+import { TemporalFrames, snapshotSample } from '../shared/temporalFrames.js';
 import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sealProject, sideBackgroundMedia, sourceTime, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 import { loadFlareSprites } from '../shared/lensFlareRender.js';
@@ -568,6 +570,7 @@ function neededFrames(project, frame, copies) {
     const m = project.media[clip.mediaId];
     if (!m || m.offline) return;
     const s = sourceTime(clip, T);
+    const begin=out.length;
     for (const [key, st] of visualStreams(clip, m)) {
       if (!st.hasVideo) continue;
       const t = s - (st.offset || 0);
@@ -582,6 +585,7 @@ function neededFrames(project, frame, copies) {
     }
     const bg = sideBackgroundMedia(project, clip);
     if (bg) out.push({ clip, key: 'background', path: bg.streams?.main?.proxy || bg.path, image: true, t: 0 });
+    for(let i=begin;i<out.length;i++)out[i].T=T;
   };
   const addSide = (side) => { if (!side) return; add(side.clip, side.T); for (const clip of side.companions || []) add(clip, side.T); };
   for (const l of frame.layers) {
@@ -696,6 +700,19 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
             readers.set(rid, r);
           }
           r.lastUsed = T;
+          if(needsNaturalMotion(n.clip,n.key,n.T)){
+            r.motion ||= new TemporalFrames(async t=>{const sample=await r.frameAt(t);return sample?snapshotSample(sample):null;});
+            const st=project.media[n.clip.mediaId]?.streams?.[n.key];
+            let plan=motionFramePlan(n.clip,st,n.T,project.fps);
+            if(n.rev)plan={...plan,times:plan.times.map(t=>st.duration-t),direction:-plan.direction};
+            const temporal=await r.motion.get(plan);
+            if(temporal){
+              if(n.rev){[temporal.previous,temporal.next]=[temporal.next,temporal.previous];}
+              const f=temporal.current;
+              ready.set(id,{img:f.img,w:f.w,h:f.h,temporal,strictMotion:true,pixelScale:st.height?f.h/st.height:1});
+            }
+            return;
+          }
           const sample = await r.frameAt(n.t);
           if (sample) ready.set(id, { sample });
         })
@@ -724,6 +741,7 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
       await encoder.add(i);
       for (const [id, r] of readers) {
         if (T - r.lastUsed > 2) {
+          r.motion?.close();
           r.close();
           readers.delete(id);
         }
@@ -736,7 +754,7 @@ async function renderVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, 
     encoder.abort();
     throw err;
   } finally {
-    for (const r of readers.values()) r.close();
+    for (const r of readers.values()) { r.motion?.close(); r.close(); }
     for (const img of images.values()) img.close?.();
   }
 }
@@ -834,7 +852,7 @@ async function runExport(jobId, payload) {
     const fmt = videoFormat(settings.format);
     const { w, h, matrix } = outputGeometry(project, settings);
     const fps = settings.fps || project.fps;
-    const hasAudio = Boolean(fmt.audio);
+    const hasAudio = !settings.preview && Boolean(fmt.audio);
     if (hasAudio) {
       progress(jobId, 0, 'Mixing audio');
       await mixAudio(jobId, ctx, a, b, wavPath, (p) => progress(jobId, p * 0.15, 'Mixing audio'));

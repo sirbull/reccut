@@ -127,7 +127,7 @@ function TasksIndicator() {
         ) : (
           <ListChecks size={16} />
         )}
-        {main && <span>{main.kind === 'export' ? `Exporting ${pct} %` : main.kind === 'transcribe' ? `Transcribing ${pct} %` : 'Analyzing media'}</span>}
+        {main && <span>{main.kind === 'preview' ? `Pre-rendering ${pct} %` : main.kind === 'export' ? `Exporting ${pct} %` : main.kind === 'transcribe' ? `Transcribing ${pct} %` : 'Analyzing media'}</span>}
       </button>
       {open && (
         <div class="popover tasks-pop">

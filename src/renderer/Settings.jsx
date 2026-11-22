@@ -110,6 +110,10 @@ function GeneralPane() {
         </Row>
         <p class="hint">On by default. Reccut appears in screenshots and screen recordings. Turn this off to hide Reccut; supported capture tools will show the windows behind it instead.</p>
       </Section>
+      <Section title="External Preview" collapsible={false}>
+        {toggle('askExternalPreview', 'Offer a separate preview screen when another display is connected')}
+        <p class="hint">Available in Edit. Choose a screen from the Preview screen menu above the preview. If the screen disconnects, preview returns to the editor.</p>
+      </Section>
       <Section title="Projects" collapsible={false}>
         <FolderRow
           label="Default location for new projects"

@@ -21,6 +21,7 @@ const common = {
 };
 
 const builds = [
+  { ...common, entryPoints: [path.join(root, 'src/renderer/external-preview.js')], outfile: path.join(out, 'external-preview.js'), format: 'esm', platform: 'browser' },
   { ...common, entryPoints: [path.join(root, 'src/shared/subtitleAudio.mjs')], outfile: path.join(out, 'subtitleAudio.cjs'), format: 'cjs', platform: 'node', target: 'node24' },
   { ...common, entryPoints: [path.join(root, 'src/shared/designTemplates.js')], outfile: path.join(out, 'designTemplates.cjs'), format: 'cjs', platform: 'node', target: 'node24' },
   { ...common, entryPoints: [path.join(root, 'src/renderer/help/Handbook.jsx')], outfile: path.join(out, 'help.js'), format: 'esm', platform: 'browser' },
@@ -46,7 +47,7 @@ const builds = [
 ];
 
 function copyStatic() {
-  for (const f of ['index.html', 'help.html', 'export.html', 'transcribe.html', 'segment.html', 'tts.html', 'denoise.html']) {
+  for (const f of ['index.html', 'help.html', 'external-preview.html', 'export.html', 'transcribe.html', 'segment.html', 'tts.html', 'denoise.html']) {
     const src = fs.existsSync(path.join(root, 'src/renderer', f)) ? path.join(root, 'src/renderer', f) : path.join(root, 'src/worker', f);
     fs.copyFileSync(src, path.join(out, f));
   }

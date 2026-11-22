@@ -126,11 +126,11 @@ export const EASINGS = [
   { id: 'linear', label: 'Linear' },
   { id: 'easeIn', label: 'Ease In' },
   { id: 'easeOut', label: 'Ease Out' },
-  { id: 'easeInOut', label: 'Ease In and Out' },
+  { id: 'easeInOut', label: 'Ease Both' },
   { id: 'hold', label: 'Hold' },
 ];
 
-const EASE_FN = {
+export const EASE_FN = {
   linear: (t) => t,
   easeIn: (t) => t * t * t,
   easeOut: (t) => 1 - Math.pow(1 - t, 3),
@@ -689,6 +689,10 @@ export function baseValueAt(clip, prop, T) {
   // Effektfarger glir i OKLab. Andre farger (mønster) skifter ved nøkkelbildet, som før.
   if (vfxPath(prop) && isHex(list[0][1])) return colorValue(list, s);
   if (typeof list[0][1] !== 'number') return stepValue(list, s);
+  if (prop === 'x' || prop === 'y') {
+    const q = pathValue(clip, s);
+    if (q) return prop === 'x' ? q[0] : q[1];
+  }
   if (s <= list[0][0]) return list[0][1];
   const last = list[list.length - 1];
   if (s >= last[0]) return last[1];
@@ -703,6 +707,75 @@ export function baseValueAt(clip, prop, T) {
   const [t1, v1] = list[hi];
   const k = t1 === t0 ? 0 : (s - t0) / (t1 - t0);
   return v0 + (v1 - v0) * (EASE_FN[ease] || EASE_FN.linear)(k);
+}
+
+/* Bevegelsesbane som i Final Cut Pro. Håndtakene ligger på x-nøkkelbildet: k[3] = { in: [dx, dy], out: [dx, dy] },
+   i bildepiksler fra posisjonen. Med håndtak blir veien til neste posisjon en bezierkurve, ellers en rett linje.
+   Easingen gjelder farten langs kurven, målt i lengde, så bevegelsen ikke rykker der kurven er tett. */
+const near = (list, t) => list?.find((k) => Math.abs(k[0] - t) < 1e-4);
+
+export function bezierPoint([a, b, c, d], t) {
+  const u = 1 - t;
+  return [0, 1].map((i) => u * u * u * a[i] + 3 * u * u * t * b[i] + 3 * u * t * t * c[i] + t * t * t * d[i]);
+}
+
+// Kontrollpunktene for strekningen fra x-nøkkelbilde i til i + 1, eller null når den er rett.
+export function pathSegment(clip, i) {
+  const xs = clip.kf?.x;
+  const a = xs?.[i];
+  const b = xs?.[i + 1];
+  if (!a || !b || (!a[3]?.out && !b[3]?.in)) return null;
+  const ya = near(clip.kf.y, a[0]);
+  const yb = near(clip.kf.y, b[0]);
+  if (!ya || !yb) return null;
+  const P0 = [a[1], ya[1]];
+  const P3 = [b[1], yb[1]];
+  const out = a[3]?.out || [0, 0];
+  const inn = b[3]?.in || [0, 0];
+  return [P0, [P0[0] + out[0], P0[1] + out[1]], [P3[0] + inn[0], P3[1] + inn[1]], P3];
+}
+
+function pathValue(clip, s) {
+  const xs = clip.kf?.x;
+  if (!xs?.some((k) => k[3]) || s <= xs[0][0] || s >= xs[xs.length - 1][0]) return null;
+  let i = 0;
+  while (xs[i + 1][0] <= s) i++;
+  const seg = pathSegment(clip, i);
+  if (!seg) return null;
+  const [t0, , ease] = xs[i];
+  const u = Math.max(0, Math.min(1, (EASE_FN[ease] || EASE_FN.linear)((s - t0) / (xs[i + 1][0] - t0))));
+  // ponytail: 32 biter av buen holder for jevn fart; flere hvis lange baner rykker.
+  const N = 32;
+  const len = [0];
+  let prev = seg[0];
+  for (let j = 1; j <= N; j++) {
+    const q = bezierPoint(seg, j / N);
+    len.push(len[j - 1] + Math.hypot(q[0] - prev[0], q[1] - prev[1]));
+    prev = q;
+  }
+  const want = u * len[N];
+  let j = 1;
+  while (j < N && len[j] < want) j++;
+  const part = len[j] - len[j - 1];
+  return bezierPoint(seg, (j - 1 + (part > 0 ? (want - len[j - 1]) / part : 0)) / N);
+}
+
+// Path › Smooth: håndtak i retningen fra forrige til neste posisjon (Catmull-Rom). Path › Linear fjerner dem.
+export function setPathSmooth(clip, s, smooth) {
+  const xs = clip.kf?.x;
+  const i = keyframeIndexAt(clip, 'x', s, 1e-4);
+  if (i < 0) return;
+  if (!smooth) {
+    xs[i].length = Math.min(xs[i].length, 3);
+    return;
+  }
+  const pt = (k) => [k[1], near(clip.kf.y, k[0])?.[1] ?? propBase(clip, 'y') ?? 0];
+  const prev = pt(xs[i - 1] || xs[i]);
+  const next = pt(xs[i + 1] || xs[i]);
+  const div = xs[i - 1] && xs[i + 1] ? 6 : 3;
+  const d = [(next[0] - prev[0]) / div, (next[1] - prev[1]) / div];
+  xs[i][2] ??= null;
+  xs[i][3] = { in: [-d[0], -d[1]], out: d };
 }
 
 function arrayValue(list, s) {
@@ -778,7 +851,10 @@ export function setKeyframeEase(clip, prop, s, ease) {
   const i = keyframeIndexAt(clip, prop, s);
   if (i < 0) return;
   const k = clip.kf[prop][i];
-  clip.kf[prop][i] = ease && ease !== 'linear' ? [k[0], k[1], ease] : [k[0], k[1]];
+  const next = ease && ease !== 'linear' ? [k[0], k[1], ease] : [k[0], k[1]];
+  // Håndtakene i bevegelsesbanen beholdes.
+  if (k[3]) next.push(...(next.length < 3 ? [null] : []), k[3]);
+  clip.kf[prop][i] = next;
 }
 
 // Flytter alle nøkkelbilder i et klipp fra ett tidspunkt til et annet (dra i tidslinjen).

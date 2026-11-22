@@ -137,6 +137,7 @@ let win = null;
 let splash = null;
 let startupComplete = false;
 const helpWindow = require('./help').createHelpWindow({ BrowserWindow, ipcMain, getMainWindow: () => win, buildDir: path.join(__dirname, '..', '..', 'build') });
+const externalPreview = require('./externalPreview').createExternalPreview({ BrowserWindow, ipcMain, screen, getMainWindow: () => win, buildDir: path.join(__dirname, '..', '..', 'build') });
 let saveFlushed = false;
 let selectedScreenId = null;
 let wantSystemAudio = false;
@@ -239,12 +240,15 @@ function createWindow() {
   win.loadFile(path.join(__dirname, '..', '..', 'build', 'index.html')).catch((err) => failStartup(err.message));
   win.on('focus', () => { pipPreview.hide(); registerShortcuts(); });
   win.on('blur', registerShortcuts);
-  win.on('move', () => send('screens:changed'));
+  win.on('move', () => { send('screens:changed'); externalPreview.displaysChanged(); });
+  win.on('resize', () => externalPreview.displaysChanged());
   const resetKeyboardScope = () => {
     pipPreview.hide(); shortcutsBlocked = true; backgroundShortcuts = false; recordingKeys = false; registerShortcuts();
   };
   win.webContents.on('render-process-gone', resetKeyboardScope);
   win.webContents.on('did-start-loading', resetKeyboardScope);
+  win.webContents.on('render-process-gone', () => externalPreview.destroy());
+  win.webContents.on('did-start-loading', () => externalPreview.destroy());
   win.on('close', (e) => {
     if (recordingDir) {
       const choice = dialog.showMessageBoxSync(win, {
@@ -271,6 +275,7 @@ function createWindow() {
   win.on('closed', () => {
     ipcMain.removeHandler('startup:stage');
     helpWindow.destroy();
+    externalPreview.destroy();
     win = null;
     pipPreview.destroy();
     area.closeFrame();
@@ -1009,13 +1014,21 @@ ipcMain.handle('menu:popup', (e, items) => {
     let chosen = null;
     // Doble skillelinjer og skillelinjer i kantene fjernes.
     const tidy = (list) => list.filter((it, i) => !it.separator || (i > 0 && i < list.length - 1 && !list[i + 1].separator));
+    // Ikonene kommer som PNG i dobbel oppløsning. På Mac blir de malbilder som følger lys og mørk meny.
+    const icon = (url) => {
+      const img = nativeImage.createFromBuffer(Buffer.from(url.split(',')[1], 'base64'), { scaleFactor: 2 });
+      if (process.platform === 'darwin') img.setTemplateImage(true);
+      return img;
+    };
     const build = (list) =>
       tidy(list).map((it) =>
         it.separator
           ? { type: 'separator' }
+          : it.header
+          ? process.platform === 'darwin' ? { type: 'header', label: it.header } : { label: it.header.toUpperCase(), enabled: false }
           : it.submenu
           ? { label: it.label, submenu: build(it.submenu) }
-          : { label: it.label, accelerator: it.accelerator, enabled: it.enabled !== false, type: it.checked !== undefined ? 'checkbox' : 'normal', checked: it.checked, registerAccelerator: false, click: () => (chosen = it.id) }
+          : { label: it.label, accelerator: it.accelerator, enabled: it.enabled !== false, type: it.checked !== undefined ? 'checkbox' : 'normal', checked: it.checked, icon: it.icon ? icon(it.icon) : undefined, registerAccelerator: false, click: () => (chosen = it.id) }
       );
     const menu = Menu.buildFromTemplate(build(items));
     menu.popup({ window: BrowserWindow.fromWebContents(e.sender), callback: () => setTimeout(() => resolve(chosen), 0) });
@@ -1118,45 +1131,51 @@ function uniqueOutput(file) {
   return out;
 }
 
+async function renderProject(payload, ctx) {
+  // Baklengs klipp trenger en baklengs kopi av kilden for å eksporteres raskt.
+  const p = payload.project;
+  // Media som mangler, eksporteres som testkortet Media Offline.
+  for (const m of Object.values(p.media)) m.offline = media.isOffline(m);
+  // Originaler WebCodecs ikke kan lese (ProRes, DNxHD ...) dekodes av FFmpeg i eksporten, med samme filtre som kopien.
+  for (const m of Object.values(p.media)) {
+    if (m.kind === 'image') continue;
+    for (const st of Object.values(m.streams)) if (st.hasVideo && st.needsProxy) st.decodeFilters = ff.decodeFilters(st);
+  }
+  for (const c of payload.settings.frame ? [] : Object.values(p.clips)) {
+    const m = c.reverse && !p.media[c.mediaId]?.offline && p.media[c.mediaId];
+    if (!m) continue;
+    for (const [key, st] of Object.entries(m.streams)) {
+      if (st.reversed && fs.existsSync(st.reversed)) continue;
+      ctx.progress(0, 'Creating reversed media');
+      st.reversed = await media.reverseStream(st, ctx);
+      if (!payload.settings.preview) notifyAnalyzed({ mediaId: m.id, stream: key, patch: { reversed: st.reversed } });
+    }
+  }
+  // Clean Voice: den rensede kopien lages nå hvis den ikke er klar.
+  for (const c of payload.settings.frame || payload.settings.preview ? [] : Object.values(p.clips)) {
+    const m = !p.media[c.mediaId]?.offline && p.media[c.mediaId];
+    for (const [key, amount] of Object.entries((m && c.props?.cleanVoice) || {})) {
+      const st = m.streams[key];
+      if (!(amount > 0) || !st?.hasAudio || (st.cleaned && fs.existsSync(st.cleaned))) continue;
+      ctx.progress(0, 'Removing background noise');
+      st.cleaned = await media.cleanAudio(st.path, ctx);
+      notifyAnalyzed({ mediaId: m.id, stream: key, patch: { cleaned: st.cleaned } });
+    }
+  }
+  return jobs.runInWorker('export', { ...payload, ffmpeg: ff.getFfmpegPath(), tmpDir: path.join(os.tmpdir(), 'reccut-export') }, ctx);
+}
+
+const previewRenderer = require('./previews').createPreviewRenderer({ root: path.join(media.cacheRoot(), 'previews'), jobs, render: renderProject });
+ipcMain.handle('preview:start', (_e, { project, ranges }) => previewRenderer.start(project, ranges));
+ipcMain.handle('preview:release', (_e, files) => previewRenderer.release(files));
+
 ipcMain.handle('export:start', (_e, payload) => {
   payload = { ...payload, settings: { ...payload.settings, output: uniqueOutput(payload.settings.output) } };
   const { id, done } = jobs.add({
     kind: 'export',
     title: `Exporting ${path.basename(payload.settings.output)}`,
     queue: 'heavy',
-    run: async (ctx) => {
-      // Baklengs klipp trenger en baklengs kopi av kilden for å eksporteres raskt.
-      const p = payload.project;
-      // Media som mangler, eksporteres som testkortet Media Offline.
-      for (const m of Object.values(p.media)) m.offline = media.isOffline(m);
-      // Originaler WebCodecs ikke kan lese (ProRes, DNxHD ...) dekodes av FFmpeg i eksporten, med samme filtre som kopien.
-      for (const m of Object.values(p.media)) {
-        if (m.kind === 'image') continue;
-        for (const st of Object.values(m.streams)) if (st.hasVideo && st.needsProxy) st.decodeFilters = ff.decodeFilters(st);
-      }
-      for (const c of payload.settings.frame ? [] : Object.values(p.clips)) {
-        const m = c.reverse && !p.media[c.mediaId]?.offline && p.media[c.mediaId];
-        if (!m) continue;
-        for (const [key, st] of Object.entries(m.streams)) {
-          if (st.reversed && fs.existsSync(st.reversed)) continue;
-          ctx.progress(0, 'Creating reversed media');
-          st.reversed = await media.reverseStream(st, ctx);
-          notifyAnalyzed({ mediaId: m.id, stream: key, patch: { reversed: st.reversed } });
-        }
-      }
-      // Clean Voice: den rensede kopien lages nå hvis den ikke er klar.
-      for (const c of payload.settings.frame ? [] : Object.values(p.clips)) {
-        const m = !p.media[c.mediaId]?.offline && p.media[c.mediaId];
-        for (const [key, amount] of Object.entries((m && c.props?.cleanVoice) || {})) {
-          const st = m.streams[key];
-          if (!(amount > 0) || !st?.hasAudio || (st.cleaned && fs.existsSync(st.cleaned))) continue;
-          ctx.progress(0, 'Removing background noise');
-          st.cleaned = await media.cleanAudio(st.path, ctx);
-          notifyAnalyzed({ mediaId: m.id, stream: key, patch: { cleaned: st.cleaned } });
-        }
-      }
-      return jobs.runInWorker('export', { ...payload, ffmpeg: ff.getFfmpegPath(), tmpDir: path.join(os.tmpdir(), 'reccut-export') }, ctx);
-    },
+    run: (ctx) => renderProject(payload, ctx),
   });
   done.finally(() => reservedOutputs.delete(payload.settings.output)).catch(() => {});
   done.then(
@@ -1271,7 +1290,7 @@ ipcMain.handle('project:pendingOpen', () => {
 });
 
 app.whenReady().then(async () => {
-  for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(event, () => send('screens:changed'));
+  for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(event, () => { send('screens:changed'); externalPreview.displaysChanged(); });
   splash = createSplashWindow({ BrowserWindow, version: app.getVersion() });
   try {
     await splash.ready;

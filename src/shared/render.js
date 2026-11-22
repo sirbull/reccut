@@ -6,6 +6,7 @@ import { containRect, followed } from './follow.js';
 import { gpuGradeAvailable, gradeImage, gradeParams } from './grade.js';
 import { shadowStyle } from './shadow.js';
 import { applyVideoEffects } from './videoEffectsRender.js';
+import { sourceEffectMask, visibilityMaskClip } from './effectMasks.js';
 import { drawTestCard } from './testcard.js';
 import { drawTemplate, findTemplate } from './titletemplates.js';
 import { stabilizeAt } from './stabilize.js';
@@ -313,7 +314,8 @@ function zoomAround(ctx, W, H, s) {
 }
 
 // Fargekorrigering på skjermkortet når det finnes. Uten WebGL2 brukes enkle 2D-filtre.
-function graded(clip, T, src, target = 'main', media = null) {
+function graded(clip, T, src, target = 'main', media = null, project = null, sourceToProject = null) {
+  if(project&&sourceToProject)src={...src,effectMask:e=>sourceEffectMask(clip,e,T,project,src.w,src.h,sourceToProject)};
   src = applyVideoEffects(src, clip, target, sourceTime(clip, T), T);
   const g = gradeParams(clip, T, target);
   const cam = media?.cameraLut || null;
@@ -475,7 +477,7 @@ function drawClipContent(ctx, project, clip, T, getSource, alphaMul = 1, unmaske
   if (clip.type === 'adjustment') return drawAdjustment(ctx, project, clip, T, alpha);
   if (clip.type === 'redact' && clip.props.mode === 'highlight') return drawHighlight(ctx, clip, T, W, H, alpha);
   if (clip.type === 'redact') return drawRedact(ctx, clip, T, W, H, alpha);
-  if (!unmasked && clip.type !== 'caption' && maskList(clip).length) return drawMasked(ctx, project, clip, T, getSource, alphaMul);
+  if (!unmasked && clip.type !== 'caption' && maskList(visibilityMaskClip(clip)).length) return drawMasked(ctx, project, clip, T, getSource, alphaMul);
   const media = project.media[clip.mediaId];
 
   ctx.save();
@@ -501,7 +503,10 @@ function drawClipContent(ctx, project, clip, T, getSource, alphaMul = 1, unmaske
   }
   if (clip.type === 'video' || clip.type === 'image') {
     let src = getSource(clip, 'main', s);
-    if (src) src = graded(clip, T, src, 'main', media);
+    if (src) {
+      const full=clip.type==='image'?imageRectAt(clip,T,src.w,src.h,W,H):containRect(src.w,src.h,W,H);
+      src = graded(clip,T,src,'main',media,project,new DOMMatrix([full.w/src.w,0,0,full.h/src.h,full.x,full.y]));
+    }
     if (src) {
       const full = clip.type === 'image' ? imageRectAt(clip, T, src.w, src.h, W, H) : containRect(src.w, src.h, W, H);
       // Beskjæring (Crop): kantene trimmes, og bildet blir stående der det er.
@@ -602,7 +607,7 @@ function drawAdjustment(ctx, project, clip, T, alpha) {
   const inverse = m.inverse();
   og.setTransform(sx * inverse.a, sy * inverse.b, sx * inverse.c, sy * inverse.d, sx * inverse.e, sy * inverse.f);
   og.drawImage(ctx.canvas, 0, 0);
-  const src = graded(clip, T, { img: original, w, h, pixelScale: k });
+  const src = graded(clip, T, { img: original, w, h, pixelScale: k },'main',null,project,new DOMMatrix([W/w,0,0,H/h,0,0]));
   const { c: processed, g: pg } = scratchCanvas(5, w, h);
   pg.setTransform(sx, 0, 0, sy, 0, 0);
   drawWithEffects(pg, clip, T, { x: 0, y: 0, w: W, h: H }, H, (g) => {
@@ -610,7 +615,7 @@ function drawAdjustment(ctx, project, clip, T, alpha) {
     g.drawImage(src.img, 0, 0, src.w, src.h, 0, 0, W, H);
   });
   const { c: mask, g: mg } = scratchCanvas(6, w, h);
-  if (maskList(clip).length) paintMask(mg, clip, T, W, H, new DOMMatrix([sx, 0, 0, sy, 0, 0]), w, h, project);
+  if (maskList(visibilityMaskClip(clip)).length) paintMask(mg, visibilityMaskClip(clip), T, W, H, new DOMMatrix([sx, 0, 0, sy, 0, 0]), w, h, project);
   else { mg.fillStyle = '#fff'; mg.fillRect(0, 0, w, h); }
   pg.setTransform(1, 0, 0, 1, 0, 0);
   pg.globalCompositeOperation = 'destination-in';
@@ -759,7 +764,7 @@ function drawMasked(ctx, project, clip, T, getSource, alphaMul) {
   const content = shadow > 0 ? { ...clip, props: { ...clip.props, shadow: 0 }, kf: { ...clip.kf, shadow: [] } } : clip;
   drawClipContent(lg, project, content, T, getSource, 1 / visualOpacity(clip, T), true);
   const { c: M, g: mg } = scratchCanvas(3, cw, ch);
-  paintMask(mg, clip, T, project.width, project.height, base, cw, ch, project);
+  paintMask(mg, visibilityMaskClip(clip), T, project.width, project.height, base, cw, ch, project);
   lg.setTransform(1, 0, 0, 1, 0, 0);
   lg.globalCompositeOperation = 'destination-in';
   lg.drawImage(M, 0, 0, cw, ch, 0, 0, cw, ch);
@@ -806,7 +811,10 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
   if (screen && clip.recordingPart !== 'camera') {
     if (side > 0.001) drawSideBackground(ctx, project, layoutClip, sp, side, W, H, getSource);
     let src = getSource(clip, 'screen', s - (screen.offset || 0));
-    if (src) src = graded(clip, T, src, 'screen', media);
+    if (src) {
+      const r=side>0?layout.screen:containRect(src.w,src.h,W,H);
+      src=graded(clip,T,src,'screen',media,project,new DOMMatrix([r.w/src.w,0,0,r.h/src.h,r.x,r.y]));
+    }
     if (src) {
       const r = (screenRect = side > 0 ? layout.screen : containRect(src.w, src.h, W, H));
       if (side > 0.001 && !(valueAt(clip, 'shadow', T) > 0)) drawSideShadow(ctx, r, side);
@@ -837,7 +845,13 @@ function drawRecording(ctx, project, clip, media, T, s, getSource) {
   if (camera?.hasVideo && showCamera && clip.recordingPart !== 'screen') {
     const rect = screen && layout ? layout.cam : { x: 0, y: 0, w: W, h: H, r: 0, a: 1 };
     let src = rect.a > 0.01 ? getSource(clip, 'camera', s - (camera.offset || 0)) : null;
-    if (src) src = graded(clip, T, src, 'camera', media);
+    if(src){
+      const k=Math.max(rect.w/src.w,rect.h/src.h),sw=rect.w/k,sh=rect.h/k;
+      const ox=clamp(valueAt(clip,'cameraOffsetX',T)||0,-1,1),oy=clamp(valueAt(clip,'cameraOffsetY',T)||0,-1,1);
+      const sx=(src.w-sw)/2*(1+(clip.props.mirror?ox:-ox)),sy=(src.h-sh)/2*(1-oy);
+      const map=clip.props.mirror?new DOMMatrix([-k,0,0,k,rect.x+rect.w+sx*k,rect.y-sy*k]):new DOMMatrix([k,0,0,k,rect.x-sx*k,rect.y-sy*k]);
+      src=graded(clip,T,src,'camera',media,project,map);
+    }
     if (src) {
       ctx.save();
       ctx.globalAlpha *= rect.a;

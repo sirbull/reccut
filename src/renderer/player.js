@@ -3,6 +3,10 @@
 // Redigeringen og eksportfanen har hver sin spiller.
 import { audioWindow, computeAudio, computeFrame, instSpeed, sideBackgroundMedia, sourceTime, transitionWindow, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
+import { motionFramePlan, needsNaturalMotion } from '../shared/motionBlur.js';
+import { createNaturalMotionSource } from './naturalMotionSource.js';
+import { naturalMotionSupported } from '../shared/motionBlurRender.js';
+import { toast } from './ui.jsx';
 import { onFlareSprites } from '../shared/lensFlareRender.js';
 import { cleanAmount, componentEffects } from '../shared/audiofx.js';
 import { effect } from '@preact/signals';
@@ -10,6 +14,7 @@ import { audioSink, prefs, previewResolutionScale } from './prefs.js';
 
 const PRELOAD = 1.5;
 const KEEP = 6;
+const NO_PREVIEWS = [];
 
 function lastFrameTime(p, end = p.duration) {
   const fps = Number.isFinite(p.fps) && p.fps > 0 ? p.fps : 30;
@@ -95,12 +100,13 @@ export function elementAudio(el, { clean = false } = {}) {
  * getProject: gir prosjektet som skal spilles.
  * playing: signal med true/false. getTime/setTime: spillhodet.
  */
-export function createPlayer({ getProject, playing, getTime, setTime, resolutionScale = previewResolutionScale, keepSeconds = KEEP }) {
+export function createPlayer({ getProject, getPreviews = () => NO_PREVIEWS, playing, getTime, setTime, resolutionScale = previewResolutionScale, keepSeconds = KEEP }) {
   const master = audioCtx.createGain();
   master.connect(audioCtx.destination);
   const pool = new Map();
   const images = new Map();
   const previewSources = new WeakMap();
+  const motionSources = new Map();
   let canvas = null;
   let ctx = null;
   let rate = 1;
@@ -113,9 +119,21 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
   let staging = null;
   let canvasProjectId = null;
   let preloadProject = null;
+  let preloadPreviews = null;
   let preloadPoints = [];
 
+  function previewAt(p, T) {
+    const r = getPreviews(p).find(r => T >= r.in && T < r.out);
+    if (!r || pool.get(`preview:${r.file}:main`)?.el.error) return null;
+    return r;
+  }
+
+  function previewClip(r) {
+    return { id: `preview:${r.file}`, previewFile: r.file, start: r.in, in: 0, dur: r.out - r.in, speed: 1, props: {} };
+  }
+
   function streamFor(clip, key) {
+    if (clip.previewFile) return { path: clip.previewFile, hasVideo: true, hasAudio: false };
     const m = getProject().media[clip.mediaId];
     const s = m?.streams?.[key];
     if (!s) return null;
@@ -250,11 +268,27 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
   }
 
   // Kilde for tegnemotoren: elementet som allerede står på riktig sted.
-  function getSource(clip, key) {
+  function getSource(clip, key, s, T) {
     const m = key === 'background' ? sideBackgroundMedia(getProject(), clip) : getProject().media[clip.mediaId];
     if (m?.kind === 'image') {
       const img = getImage(m.streams?.main?.proxy || m.path);
       return img ? previewSource({ img, w: img.naturalWidth, h: img.naturalHeight }) : null;
+    }
+    if(needsNaturalMotion(clip,key,T)&&naturalMotionSupported()){
+      const st=m?.streams?.[key],path=st&&workPath(st),id=`${clip.id}:${key}`;
+      if(!path)return null;
+      const w=resolutionScale()===1?Infinity:canvas?.width||1280,h=resolutionScale()===1?Infinity:canvas?.height||720;
+      let reader=motionSources.get(id);
+      if(reader&&(reader.path!==path||reader.width!==w||reader.height!==h)){reader.close();motionSources.delete(id);reader=null;}
+      if(!reader){reader=createNaturalMotionSource(path,w,h,()=>{dirty=true;});motionSources.set(id,reader);}
+      reader.lastUsed=performance.now();
+      const plan=motionFramePlan(clip,st,T,getProject().fps);
+      try{
+        const temporal=reader.get(plan,playing.value?Math.max(1/(getProject().fps||30),1/plan.fps)*2:1e-7);
+        if(!temporal)return null;
+        const f=temporal.current;
+        return {img:f.img,w:f.w,h:f.h,temporal,pixelScale:st.height?f.h/st.height:1};
+      }catch(e){if(!reader.reported){reader.reported=true;toast(e.message,{kind:'error',timeout:8000});}}
     }
     const entry = pool.get(`${clip.id}:${key}`);
     const el = entry?.el;
@@ -270,9 +304,12 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
   }
 
   function upcomingAt(p, T) {
-    if (preloadProject !== p) {
+    const previews = getPreviews(p);
+    if (preloadProject !== p || preloadPreviews !== previews) {
       preloadProject = p;
+      preloadPreviews = previews;
       const points = new Set();
+      for (const r of previews) { points.add(r.in); points.add(r.out); }
       for (const clip of Object.values(p.clips)) {
         points.add(clip.start);
         points.add(clip.start + clip.dur);
@@ -314,7 +351,8 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
   function neededAt(p, T) {
     const out = new Map();
     const visualT = viewerFrameTime(p, T);
-    const frame = computeFrame(p, visualT, { captions: false });
+    const preview = previewAt(p, visualT);
+    const frame = preview ? null : computeFrame(p, visualT, { captions: false });
     const addVisual = (clip, t) => {
       const m = p.media[clip.mediaId];
       if (!m || m.kind === 'image' || m.offline) return;
@@ -324,7 +362,11 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
         if (st.hasVideo) out.set(`${clip.id}:${key}`, { clip, key, src: s - (st.offset || 0), gain: 0, speed: clip.speed === 0 && !clip.ramp ? 0 : sp });
       }
     };
-    for (const l of frame.layers) {
+    if (preview) {
+      const clip = previewClip(preview);
+      out.set(`${clip.id}:main`, { clip, key: 'main', src: visualT - preview.in, gain: 0, speed: 1 });
+    }
+    for (const l of preview ? [] : frame.layers) {
       if (l.transition) {
         if (l.a) addVisual(l.a.clip, visualT);
         if (l.b) addVisual(l.b.clip, visualT);
@@ -453,13 +495,14 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
   }
 
   // cap: høyeste skala mot prosjektet, så eksportvisningen ikke tegner skarpere enn filen blir.
-  function resizeCanvas(cssW, cssH, cap = 1) {
+  // Visningszoom øker tegneoppløsningen uten å endre størrelsen bildet passer inn i.
+  function resizeCanvas(cssW, cssH, cap = 1, viewZoom = 1) {
     if (!canvas) return;
     const p = getProject();
     const dpr = window.devicePixelRatio || 1;
     const fit = Math.min(cssW / p.width, cssH / p.height);
     // Reduser etter at full oppløsning er begrenset, også i fullskjerm på Retina.
-    const scale = Math.min(1, fit * dpr, cap) * resolutionScale();
+    const scale = Math.min(1, fit * dpr * viewZoom, cap) * resolutionScale();
     const W = Math.max(2, Math.round(p.width * scale));
     const H = Math.max(2, Math.round(p.height * scale));
     if (canvas.width !== W || canvas.height !== H) {
@@ -481,6 +524,14 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       canvasProjectId = p.id;
     }
+    const preview = previewAt(p, viewerFrameTime(p, T));
+    if (preview) {
+      const entry = pool.get(`preview:${preview.file}:main`);
+      const el = entry?.el;
+      if (!el || el.readyState < 2 || el.seeking || !el.videoWidth) return false;
+      ctx.drawImage(el, 0, 0, canvas.width, canvas.height);
+      return true;
+    }
     const frame = computeFrame(p, viewerFrameTime(p, T));
     staging ||= document.createElement('canvas');
     if (staging.width !== canvas.width || staging.height !== canvas.height) {
@@ -488,8 +539,8 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
       staging.height = canvas.height;
     }
     let waiting = false;
-    drawFrame(staging.getContext('2d', { alpha: false }), p, frame, (clip, key) => {
-      const src = getSource(clip, key);
+    drawFrame(staging.getContext('2d', { alpha: false }), p, frame, (clip, key, s) => {
+      const src = getSource(clip,key,s,frame.T);
       if (!src) {
         const media = key === 'background' ? sideBackgroundMedia(p, clip) : p.media[clip.mediaId];
         const el = pool.get(`${clip.id}:${key}`)?.el;
@@ -500,6 +551,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
       }
       return src;
     }, { scale: canvas.width / p.width });
+    for(const [id,r] of motionSources)if(performance.now()-r.lastUsed>keepSeconds*1000){r.close();motionSources.delete(id);}
     // Ikke tøm det synlige bildet før alle lagene er klare. Tomme områder og
     // bevisste toninger til svart tegnes som normalt.
     if (waiting) return false;
@@ -626,14 +678,26 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
   function snapshot({ fresh = false } = {}) {
     if (dirty || !canvas) return null;
     if (fresh) {
-      const p = getProject(), frame = computeFrame(p, viewerFrameTime(p, getTime()));
+      const p = getProject(), T = viewerFrameTime(p, getTime());
+      const preview = previewAt(p, T);
+      if (preview) {
+        const el = pool.get(`preview:${preview.file}:main`)?.el;
+        return el && !el.seeking && el.readyState >= 2 && Math.abs(el.currentTime - (T - preview.in)) <= 0.5 / 60 ? canvas : null;
+      }
+      const frame = computeFrame(p, T);
       const sides = frame.layers.flatMap(l => l.clip ? [l] : [l.a, l.b].filter(Boolean));
       for (const side of sides) for (const clip of [side.clip, ...(side.companions || [])]) {
         const media = p.media[clip.mediaId];
         if (media?.kind === 'image') {
           const img = images.get(media.streams?.main?.proxy || media.path);
           if (!img?.complete || !img.naturalWidth) return null;
-        } else for (const [key] of visualStreams(clip, media)) {
+        } else for (const [key,st] of visualStreams(clip, media)) {
+          if(needsNaturalMotion(clip,key,side.T)&&naturalMotionSupported()){
+            const reader=motionSources.get(`${clip.id}:${key}`);
+            if(!reader)return null;
+            try{if(!reader.get(motionFramePlan(clip,st,side.T,p.fps)))return null;}catch{return null;}
+            continue;
+          }
           const entry = pool.get(`${clip.id}:${key}`), el = entry?.el;
           if (!el || el.error || el.seeking || el.readyState < 2 || !el.videoWidth || Math.abs(el.currentTime - entry.target) > 0.5 / 60) return null;
         }
@@ -648,6 +712,7 @@ export function createPlayer({ getProject, playing, getTime, setTime, resolution
     stopFlares();
     for (const [id, entry] of pool) disposeEntry(id, entry);
     images.clear();
+    for(const r of motionSources.values())r.close();motionSources.clear();
     staging = null;
     preloadProject = null;
   }

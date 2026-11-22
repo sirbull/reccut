@@ -23,7 +23,7 @@ function project(specs = [{ dur: 10, in: 2 }, { dur: 5, in: 4 }]) {
   return p;
 }
 
-function setup(p = project(), initialTime = 0, { quality = 'quality', dpr = 1 } = {}) {
+function setup(p = project(), initialTime = 0, { quality = 'quality', dpr = 1, getPreviews } = {}) {
   let now = 1000;
   let time = initialTime;
   let nextFrame;
@@ -92,6 +92,7 @@ function setup(p = project(), initialTime = 0, { quality = 'quality', dpr = 1 } 
   const module = { exports: {} };
   vm.runInNewContext(bundle, {
     module, exports: module.exports, console,
+    DOMMatrix: class { constructor([a, b, c, d, e, f] = [1, 0, 0, 1, 0, 0]) { Object.assign(this, { a, b, c, d, e, f }); } },
     window: { devicePixelRatio: dpr }, localStorage: { getItem: key => key === 'prefs' ? JSON.stringify({ viewerQuality: quality }) : null, setItem() {} },
     AudioContext: class {
       currentTime = 0;
@@ -111,7 +112,7 @@ function setup(p = project(), initialTime = 0, { quality = 'quality', dpr = 1 } 
     } },
   });
   const playing = { value: false };
-  const player = module.exports.createPlayer({ getProject: () => p, playing, getTime: () => time, setTime: (t) => { time = t; } });
+  const player = module.exports.createPlayer({ getProject: () => p, getPreviews, playing, getTime: () => time, setTime: (t) => { time = t; } });
   const canvas = new Canvas();
   player.attachCanvas(canvas);
   player.start();
@@ -337,6 +338,21 @@ test('Full, Half and Third reduce render pixels while retaining the preview disp
   }
 });
 
+test('viewer zoom increases render detail within source and quality limits without changing layout or time', () => {
+  const s = setup(project(), 3);
+  for (const [quality, divisor] of [['quality', 1], ['performance', 2], ['third', 3]]) {
+    s.setQuality(quality);
+    for (const zoom of [1, 2, 16]) {
+      s.player.resizeCanvas(480, 270, 1, zoom);
+      assert.equal(s.canvas.width, Math.min(1920, 480 * zoom) / divisor);
+      assert.equal(s.canvas.height, Math.min(1080, 270 * zoom) / divisor);
+      assert.equal(s.canvas.style.width, '480px');
+      assert.equal(s.canvas.style.height, '270px');
+      assert.equal(s.getTime(), 3);
+    }
+  }
+});
+
 test('lower preview resolution reduces source-effect work and preserves blur size', () => {
   for (const [quality, width, height, blur] of [['quality', 1280, 720, 4], ['performance', 480, 270, 1.5], ['third', 320, 180, 1]]) {
     const p = project([{ dur: 10, in: 2 }]);
@@ -388,4 +404,48 @@ test('fresh snapshots reject remembered frames until the requested decoder seek 
   assert.equal(s.player.snapshot({ fresh: true }), null, 'scoring must not relabel that frame with the new time');
   video.finish(); s.tick(); assert.equal(s.player.snapshot({ fresh: true }), s.canvas);
   assert.match(s.canvas.pixel, /@5\.000$/);
+});
+
+test('pre-rendered areas play one composite video, keep source audio and bypass live effects', () => {
+  const p = project([{ dur: 2, in: 4 }, { dur: 2, in: 10 }]);
+  p.clips[p.primary[0]].props.vfx = [{ type: 'blur', on: true, p: { amount: 20 } }];
+  let previews = [{ in: 0, out: 2, file: '/tmp/preview.mp4' }];
+  const s = setup(p, 0, { getPreviews: () => previews });
+  s.tick(); s.videos.forEach(v => v.finish()); s.tick();
+  const rendered = s.videos.find(v => v.src.includes('preview.mp4'));
+  const audio = s.videos.find(v => v.src.includes('media0'));
+  assert.ok(rendered); assert.ok(audio, 'audio continues from the timeline source');
+  assert.equal(rendered.muted, true, 'cached video must never double the source audio');
+  assert.equal(s.canvas.pixel, rendered.pixel);
+  assert.equal(s.canvases.flatMap(cv => cv.draws).some(d => d.filter?.startsWith('blur(')), false);
+  s.player.play(); s.tick(16); s.videos.forEach(v => v.finish()); s.tick(16);
+  assert.equal(rendered.paused, false); assert.equal(audio.paused, false);
+  assert.equal(s.player.snapshot(), s.canvas);
+  s.player.seek(2.5); s.tick(); s.videos.forEach(v => v.finish()); s.tick();
+  assert.match(s.canvas.pixel, /media1/);
+  assert.equal(rendered.paused, true);
+  // An edit withdraws the cache; normal rendering must take over immediately.
+  previews = []; s.player.seek(0.5); s.tick(); s.videos.forEach(v => v.finish()); s.tick();
+  assert.match(s.canvas.pixel, /media0/);
+  assert.ok(s.canvases.flatMap(cv => cv.draws).some(d => d.filter?.startsWith('blur(')));
+});
+
+test('cached preview seeking, last frame and decoder failure use correct timeline times', () => {
+  const p = project([{ dur: 4, in: 10 }]);
+  const previews = [{ in: 2, out: 4, file: '/tmp/preview.mp4' }];
+  const s = setup(p, 2.5, { getPreviews: () => previews });
+  s.tick(); s.videos.forEach(v => v.finish()); s.tick();
+  const rendered = s.videos.find(v => v.src.includes('preview.mp4'));
+  assert.equal(rendered.currentTime, 0.5);
+  s.player.seek(3); s.tick();
+  assert.equal(s.player.snapshot({ fresh: true }), null);
+  rendered.finish(); s.tick();
+  assert.equal(rendered.currentTime, 1);
+  assert.equal(s.player.snapshot({ fresh: true }), s.canvas);
+  s.player.play(); s.tick(1100); rendered.finish(); s.tick();
+  assert.equal(s.playing.value, false);
+  assert.ok(Math.abs(rendered.currentTime - (59 / 30)) < 1e-7);
+  rendered.error = new Error('File removed'); s.player.invalidate(); s.tick();
+  s.videos.forEach(v => v.finish()); s.tick();
+  assert.match(s.canvas.pixel, /media0/, 'failed cache decoding falls back to source rendering');
 });

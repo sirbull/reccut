@@ -1268,13 +1268,39 @@ input[type='color'].color::-webkit-color-swatch {
 .viewer-head .title {
   font-weight: 600;
 }
+.preview-display-control { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.viewer-head:has(.preview-display-control) { height: auto; min-height: 32px; flex-wrap: wrap; padding: 3px 8px; }
+.preview-display-control > .select { max-width: 190px; min-height: 24px; padding-top: 2px; padding-bottom: 2px; }
+.viewer-head > .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.editor-top.external-preview-layout { grid-template-rows: minmax(0, 1fr) auto; }
+.external-preview-layout > .editor-side { grid-row: 1; }
+.external-preview-layout > .viewer { grid-row: 2; grid-column: 1 / -1; }
+.external-preview-layout > .editor-side > .side-resize { display: none; }
+/* Keep the canvas alive for the local video stream while giving its space to tools. */
+.viewer.external-preview-only > .viewer-box { position: fixed; left: -100000px; top: 0; width: 640px; height: 360px; pointer-events: none; }
 .viewer-box {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  padding: 12px;
+}
+.viewer-stage {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
+  padding: inherit;
+  transform-origin: center;
+}
+.viewer-stage > canvas {
+  flex-shrink: 0;
+}
+.viewer-zoom {
+  min-width: 48px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
 }
 .viewer-box canvas {
   background: #000;
@@ -2670,7 +2696,13 @@ input[type='color'].color::-webkit-color-swatch {
 .viewer-box canvas.movable { cursor: move; }
 .viewer-box canvas.drawable { cursor: crosshair; }
 .viewer-box { position: relative; }
-.viewer-box.two-up { gap: 2px; } /* = TWO_UP_GAP i Viewer.jsx */
+.viewer-box.two-up .viewer-stage { gap: 2px; }
+/* Bevegelsesbanen i visningen (Viewer.jsx, MotionPath). */
+.motion-path .motion-line { fill: none; stroke: #e5484d; filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8)); }
+.motion-path .motion-handle-line { stroke: #fff; opacity: 0.85; }
+.motion-path .motion-handle { fill: #5b5bd6; stroke: #fff; pointer-events: all; cursor: grab; }
+.motion-path .motion-kf { fill: #fff; stroke: rgba(0, 0, 0, 0.75); pointer-events: all; cursor: grab; }
+.motion-path .motion-kf.on { fill: var(--yellow); } /* = TWO_UP_GAP i Viewer.jsx */
 
 
 /* Nøkkelbilder, animasjon og effekter i inspektøren */
@@ -7382,3 +7414,4 @@ button.vo-badge { border: 0; cursor: pointer; }
 .fs-row.grouped { padding-left: 18px; }
 .fs-inspector { min-height: 0; overflow-y: auto; border-left: 1px solid var(--line); padding: 4px 14px 14px; background: var(--bg-1); }
 .fs-inspector h4 { margin: 12px 0 4px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ruler-preview { position: absolute; bottom: 0; height: 3px; background: #52c78a; pointer-events: none; }

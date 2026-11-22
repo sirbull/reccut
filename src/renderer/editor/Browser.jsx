@@ -1069,6 +1069,16 @@ function EffectsTab() {
           </button>
         ))}
       </div>
+      <div class="sub-head">Blur</div>
+      <div class="card-grid" onPointerLeave={endPreview}>
+        {BROWSER_VIDEO_EFFECTS.filter(fx=>fx.category==='Blur').map(fx=><button key={fx.type} class="gen-card" data-blurfx={fx.type} draggable
+          onDragStart={e=>dragData(e,{kind:'effect',id:fx.type})}
+          onPointerEnter={()=>commands.previewEffect(fx.type)} onClick={()=>commands.addEffect(fx.type)}
+          title={fx.type==='naturalMotionBlur'?'Reconstruct motion blur from neighbouring video frames. Apply to a video or recording clip.':'Directional, Zoom and Spin blur. Apply to a clip or adjustment layer, then add masks.'}>
+          {fx.type==='naturalMotionBlur'?<div class="adjustment-preview"><span>Natural</span><small>Motion from video frames</small></div>:<MiniPreview frameAt={effectFrameAt({id:fx.type})} duration={2} still={.5} label={fx.label}/>}
+          <span>{fx.label}</span>
+        </button>)}
+      </div>
       <div class="sub-head">Stylize</div>
       <div class="card-grid" onPointerLeave={endPreview}>
         {BROWSER_VIDEO_EFFECTS.filter((fx) => fx.category === 'Stylize').map((fx) => (

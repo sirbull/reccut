@@ -51,6 +51,8 @@ const DEFAULTS = {
   checkOfflineOnFocus: true,
   playheadAfterEdit: false,
   viewerQuality: 'quality',
+  askExternalPreview: true,
+  externalPreviewShowLocal: false,
   editorBrowserVisible: true,
   editorInspectorVisible: true,
   videoScopesVisible: false,

@@ -91,6 +91,17 @@ import { setKeyframe } from './keyframes.js';
 import { enableKenBurns } from '../../shared/imageMotion.js';
 import { addSlideshow, slideshowOptions } from '../../shared/slideshow.js';
 import { mediaRemovalPlan, removeProjectMedia } from '../../shared/mediaRemoval.js';
+import { renderSelectedPreviews } from './previews.js';
+
+export async function preRenderSelected() {
+  pause();
+  if (selection.value.length) toast('Pre-rendering selected clips… See Background tasks for progress or to cancel.', { timeout: 4000 });
+  try {
+    toast(await renderSelectedPreviews(), { timeout: 5000 });
+  } catch (error) {
+    if (!/canceled/i.test(error.message)) throw error;
+  }
+}
 
 const api = window.api;
 
@@ -1509,6 +1520,7 @@ export async function clipContextMenu(clipId, T) {
   if (!c) return;
   const items = [
     { id: 'blade', label: 'Blade at Playhead', accelerator: 'CmdOrCtrl+B', enabled: T > c.start && T < c.start + c.dur },
+    { id: 'preRender', label: 'Pre-render Selected Clips', accelerator: 'Ctrl+R' },
     ...(c.type === 'video' ? [{ id: 'detectEdits', label: 'Detect Edits', accelerator: 'Shift+E' }] : []),
     { id: 'toggle', label: c.enabled ? 'Disable Clip' : 'Enable Clip', accelerator: 'V' },
     { separator: true },
@@ -1611,6 +1623,9 @@ export async function clipContextMenu(clipId, T) {
   if (id === 'reverse') return toggleReverse();
   if (id?.startsWith('comp:')) return toggleComponent(clipId, id.slice(5));
   switch (id) {
+    case 'preRender':
+      preRenderSelected().catch(error => toast(error.message, { kind: 'error' }));
+      break;
     case 'copy':
       copySelection();
       break;

@@ -45,7 +45,6 @@ import {
   speedOf,
   formatTimecode,
   moveKeyframes,
-  setKeyframeEase,
   isVisual,
   redactLabel,
   transitionWindow,
@@ -57,10 +56,11 @@ import {
   CLIP_COLORS,
   deepClone,
   valueAt,
-  removeKeyframe,
 } from '../../shared/model.js';
 import { groupLead, mediaClip, moveClip, positionMove, positionTrim, recordingEditId, removeTransition, rollEdit, rollPair, setTransition, slideClip, slipClip, splitClip, syncRecordingTracks, trimClip, withConnectionsOverridden } from '../../shared/ops.js';
 import { commandsBlocked } from '../keyboard.js';
+import { keyframeMenu } from './keyframeMenu.js';
+import { previewsFor } from './previews.js';
 import {
   beginTransient,
   commitClipEdit as commit,
@@ -879,25 +879,7 @@ export function Timeline() {
       const prop = el.dataset.hit === 'vol' ? el.dataset.prop : null;
       const t = prop ? c.kf[prop]?.[Number(el.dataset.kf)]?.[0] : Number(el.dataset.t);
       if (t == null) return;
-      const current = Object.entries(c.kf).filter(([key]) => !prop || prop === key).flatMap(([, l]) => l.filter((k) => Math.abs(k[0] - t) < 1e-4)).map((k) => k[2] || 'linear');
-      const id = await window.api.popupMenu([
-        ...EASINGS.map((x) => ({ id: x.id, label: x.label, checked: current.includes(x.id) })),
-        { separator: true },
-        { id: 'delete', label: 'Delete Keyframe' },
-      ]);
-      if (!id) return;
-      commit((p) => {
-        const cc = p.clips[cid];
-        if (!cc) return;
-        for (const [prop, list] of Object.entries(cc.kf)) {
-          if (prop === 'layout' || (el.dataset.hit === 'vol' && prop !== el.dataset.prop)) continue;
-          if (id === 'delete') {
-            // Behold siste nivå når volumautomatiseringen fjernes helt.
-            if (list.length === 1 && ['volume', 'micVolume', 'sysVolume'].includes(prop)) cc.props[prop] = list[0][1];
-            removeKeyframe(cc, prop, t);
-          } else if (list.some((k) => Math.abs(k[0] - t) < 1e-4)) setKeyframeEase(cc, prop, t, id);
-        }
-      });
+      await keyframeMenu(cid, t, prop ? [prop] : null);
       return;
     }
     if (clipId) {
@@ -1301,6 +1283,7 @@ function Ruler({ width }) {
   return (
     <div class="tl-ruler" data-hit="ruler" style={{ width }}>
       {ticks}
+      {previewsFor(p).map(r => <div key={r.file} class="ruler-preview" style={{ left: tx(r.in), width: (r.out - r.in) * z }} title="Pre-rendered for smooth playback" />)}
       {p.range && <div class="ruler-range" style={{ left: tx(p.range.in), width: (p.range.out - p.range.in) * z }} />}
       {p.markers.map((m) => (
         <div key={m.id} class="marker" data-hit="marker" data-id={m.id} data-t={m.t} style={{ left: tx(m.t) }} title={m.label || 'Marker'} />

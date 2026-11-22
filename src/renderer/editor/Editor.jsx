@@ -23,6 +23,8 @@ import { handleMissingModel } from '../AiModels.jsx';
 import { mediaSourcePaths } from '../../shared/mediaSources.cjs';
 import { wordsForCaption } from '../../shared/captionWords.js';
 import { splitCaptions } from '../../shared/ops.js';
+import { externalPreviewOnly, suspendExternalPreview } from './externalPreview.js';
+import { PreviewDisplayOffer } from './PreviewDisplayControl.jsx';
 
 const api = window.api;
 
@@ -62,6 +64,7 @@ export function Editor({ active }) {
   const [split, setSplit] = useState(() => Number(localStorage.getItem('editorSplit')) || 0.56);
   const [sides, setSides] = useState(() => ({ browser: Number(localStorage.getItem('editorBrowserW')) || 300, inspector: Number(localStorage.getItem('editorInspectorW')) || 320 }));
   const ref = useRef(null);
+  const externalOnly = externalPreviewOnly.value;
   // Under rull, slip og slide får visningen hele bredden til de to bildene.
   const browserVisible = prefs.value.editorBrowserVisible && !twoUp.value;
   const inspectorVisible = prefs.value.editorInspectorVisible && !twoUp.value;
@@ -69,6 +72,7 @@ export function Editor({ active }) {
   useEffect(() => {
     if (!active) {
       playback.pause();
+      suspendExternalPreview();
       if (document.fullscreenElement === ref.current?.querySelector('.viewer')) toggleViewerFullscreen();
     }
   }, [active]);
@@ -109,7 +113,9 @@ export function Editor({ active }) {
 
   return (
     <div class="editor" ref={ref} style={{ gridTemplateRows: `${split * 100}% 6px 1fr` }}>
-      <div class="editor-top" style={{ gridTemplateColumns: [browserVisible && `${sides.browser}px`, 'minmax(320px, 1fr)', inspectorVisible && `${sides.inspector}px`].filter(Boolean).join(' ') }}>
+      <div class={`editor-top${externalOnly ? ' external-preview-layout' : ''}`} style={{ gridTemplateColumns: externalOnly
+        ? Array(Math.max(1, Number(browserVisible) + Number(inspectorVisible))).fill('minmax(0, 1fr)').join(' ')
+        : [browserVisible && `${sides.browser}px`, 'minmax(320px, 1fr)', inspectorVisible && `${sides.inspector}px`].filter(Boolean).join(' ') }}>
         <div class="editor-side" hidden={!browserVisible}>
           <Browser />
           <div class="side-resize right" onPointerDown={onSideDown('browser')} />
@@ -122,6 +128,7 @@ export function Editor({ active }) {
       </div>
       <div class="divider" onPointerDown={onDividerDown} />
       <Timeline />
+      <PreviewDisplayOffer active={active} />
       {commands.syncDialog.value && <SyncDialog />}
       {commands.attributesDialog.value && <AttributesDialog />}
       {commands.importOptions.value && !needsProject.value && <ImportOptionsDialog />}

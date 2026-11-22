@@ -5,6 +5,7 @@ import { makeClip, mediaClipType, newProject } from '../../shared/model.js';
 import { createPlayer, fileUrl } from '../player.js';
 import { browserPlayhead, getSourceTime, getTime, loadLut, loadMotion, motionVersion, playing, project, setSourceTime, setTime, skim, skimming, sourceMediaId, trimView } from './store.js';
 import { prefs } from '../prefs.js';
+import { previewsFor, renderedPreviews } from './previews.js';
 
 export { fileUrl };
 
@@ -38,6 +39,7 @@ export function getViewerTime() {
 
 const player = createPlayer({
   getProject: () => sourceProject.value || skim.value?.project || project.value,
+  getPreviews: previewsFor,
   playing,
   getTime: getViewerTime,
   setTime: (T, opts) => sourceProject.value ? setSourceTime(T, opts) : setTime(T, opts),
@@ -111,6 +113,7 @@ export function seek(T) {
 
 effect(() => {
   project.value;
+  renderedPreviews.value;
   sourceProject.value;
   skim.value;
   motionVersion.value;

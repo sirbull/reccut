@@ -295,7 +295,7 @@ export const COMMANDS = [
   { id: 'duckMusic', label: 'Duck Music Under Speech', menu: 'Clip', group: 'audio', run: () => commands.duckSelectedMusic(), help: 'ducking', keywords: 'duck ducking auto lower music voice speech dialogue sidechain volume keyframes', desc: 'Lower the selected music while someone speaks, with volume keyframes you can adjust.' },
   { id: 'volumeUp', label: 'Volume Up 1 dB', menu: 'Clip', group: 'audio', mac: 'Ctrl+=', win: 'Alt+=', run: () => commands.adjustVolume(1), help: 'audio' },
   { id: 'volumeDown', label: 'Volume Down 1 dB', menu: 'Clip', group: 'audio', mac: 'Ctrl+-', win: 'Alt+-', run: () => commands.adjustVolume(-1), help: 'audio' },
-  { id: 'retime', label: 'Show Speed Controls', menu: 'Clip', submenu: 'Retime', keys: 'CmdOrCtrl+R', run: commands.openRetime, help: 'speed' },
+  { id: 'retime', label: 'Show Speed Controls', menu: 'Clip', submenu: 'Retime', run: commands.openRetime, help: 'speed' },
   { id: 'speedNormal', label: 'Normal Speed (100%)', menu: 'Clip', submenu: 'Retime', keys: 'Alt+CmdOrCtrl+R', run: () => commands.setSpeedSelected(1), help: 'speed' },
   { id: 'speedSlow', label: 'Slow 50%', menu: 'Clip', submenu: 'Retime', keys: 'Shift+Alt+-', run: () => commands.setSpeedSelected(0.5), help: 'speed' },
   { id: 'speedFast', label: 'Fast 2x', menu: 'Clip', submenu: 'Retime', keys: 'Shift+Alt+=', run: () => commands.setSpeedSelected(2), help: 'speed' },
@@ -359,6 +359,7 @@ export const COMMANDS = [
   { id: 'viewerFullscreen', label: 'Toggle Preview Full Screen', menu: 'View', group: 'screen', keys: 'Shift+CmdOrCtrl+F', run: () => toggleViewerFullscreen(), help: 'playback' },
 
   /* Playback */
+  { id: 'preRender', label: 'Pre-render Selected Clips', menu: 'Playback', keys: 'Ctrl+R', also: isMac ? ['Cmd+R'] : [], run: commands.preRenderSelected, help: 'playback', keywords: 'render cache preview smooth playback selected all', desc: 'Render the selected timeline areas with their effects and transitions for smoother playback. Use Select All first to pre-render the entire timeline. Editing the timeline clears the rendered previews.' },
   { id: 'play', label: 'Play or Pause', menu: 'Playback', keys: 'Space', rooms: ['edit', 'export'], run: () => room.value === 'export' ? roomActions.togglePlay() : playback.toggle(), help: 'playback' },
   { id: 'playReverse', label: 'Play Reverse', menu: 'Playback', keys: 'Shift+Space', run: playback.playReverse, help: 'playback' },
   { id: 'shuttleBack', label: 'Play Backward (faster each press)', menu: 'Playback', group: 'jkl', keys: 'J', run: () => playback.shuttle(-1), help: 'playback' },

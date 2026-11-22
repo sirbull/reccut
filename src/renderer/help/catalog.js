@@ -6,6 +6,8 @@ import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { VIDEO_FORMATS, AUDIO_FORMATS, CONTAINERS, VIDEO_CODECS, AUDIO_CODECS, PRESETS, QUALITIES, FIT_MODES } from '../../shared/formats.js';
 
 const descriptions = {
+  motionBlur: 'Directional, Zoom or Spin blur with adjustable amount, angle or center, and shutter bias. Numeric controls support keyframes. In Masks, set Applies to to this effect and invert the mask to protect a foreground subject while keeping the rest of the clip visible.',
+  naturalMotionBlur: 'Reconstructs a simulated exposure from neighbouring video frames using local optical flow. Amount 50% corresponds to a 180° shutter; 100% to 360°. Rolling shutter is off by default; enable it for a top-to-bottom scan with motion-dependent skew. It does not repair rolling shutter in the source. Useful for sharp video and rendered animation. Apply directly to a video or recording, with effect-scoped masks to protect a subject. Requires hardware acceleration; existing camera blur is not removed.',
   hueSaturation: 'Adjusts hue and saturation independently for eight source color ranges. Refine Target hue and Range width to isolate a shade, and use Strength to blend the result. Soft range edges preserve neutral grays and transparency. Numeric controls support keyframes. To isolate an object spatially, use a masked adjustment layer.',
   solid: 'Fills the source with a solid colour. Strength blends with the source; Preserve source alpha keeps its existing transparent areas.',
   gradient: 'Fills the source with a linear, radial or freeform gradient. Add and drag colour stops or points, and adjust each freeform point’s spread. Preserve source alpha keeps existing transparent areas.',
