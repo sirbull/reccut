@@ -1,4 +1,4 @@
-// Photograph Beat Grid and Transcript Search in the real editor for the website feature cards,
+// Photograph Beat Grid, Transcript Search, the color tools and the video scopes in the real editor for the website feature cards,
 // using an isolated profile. Media comes from scripts/feature-demo-media.mjs and the nature demo.
 // The speech model is copied from the given app profile into the temporary profile; nothing is downloaded.
 // Usage: node scripts/capture-features.cjs [feature-media-dir] [nature-media-dir] [user-data-with-models] [output-dir]
@@ -38,9 +38,10 @@ if (!electron.app) {
         import * as model from ${file('src/shared/model.js')};
         import * as transcripts from ${file('src/renderer/editor/transcripts.js')};
         import { addMediaClip } from ${file('src/shared/ops.js')};
+        import { setPrefs } from ${file('src/renderer/prefs.js')};
         import { toasts } from ${file('src/renderer/ui.jsx')};
         import { notice } from ${file('src/renderer/recorder/engine.js')};
-        window.q = {notice, store, commands, playback, model, transcripts, addMediaClip, toasts};
+        window.q = {notice, store, commands, playback, model, transcripts, addMediaClip, setPrefs, toasts};
       `, resolveDir: root, sourcefile: 'feature-photography.jsx', loader: 'jsx' },
       banner: { js: `
         localStorage.setItem('prefs',JSON.stringify({checkUpdates:false,reopenLast:false,aiModelsAsked:true,voicePackagesAsked:true,importCopy:false,importOptimize:false,importAnalyzeStab:false,skimming:false,audioSkimming:false,beatGrid:true}));
@@ -128,6 +129,20 @@ if (!electron.app) {
         await js(`q.commands.zoomFit();q.store.pps.value=62;q.playback.seek(9.6);document.querySelector('.tl-scroll, .timeline [class*="scroll"]')?.scrollTo?.({left:0})`);
         await wait(1500);
         await photo('feature-beat-grid', '.timeline');
+
+        // Color: Mountain lake with teal shadows and warm highlights, the Color tab, then the four video scopes.
+        await js(`(()=>{const c=Object.values(q.store.project.value.clips).find(c=>c.lane===0&&q.store.project.value.media[c.mediaId].name.startsWith('Mountain lake'));
+          q.store.commit(p=>Object.assign(p.clips[c.id].props,{contrast:0.14,highlights:-0.15,shadows:0.06,saturation:0.06,temperature:0.04,liftX:-0.14,liftY:-0.08,liftL:-0.03,gainX:0.08,gainY:0.1,gainL:0.02}));
+          q.store.selection.value=[c.id];q.commands.inspectorTab.value='color';q.setPrefs({editorBrowserVisible:false});q.playback.seek(2.2);})()`);
+        for (let i = 0; i < 100 && !(await js('Boolean(q.playback.snapshot({fresh:true}))')); i++) await wait(100);
+        await wait(800);
+        await js(`document.querySelector('.inspector [data-section="wheels"]').scrollIntoView({block:'end'})`);
+        await wait(300);
+        await photo('color-wheels', '.editor-top');
+        await js(`q.setPrefs({videoScopesVisible:true,videoScopesMode:'all',videoScopesGain:2})`);
+        await wait(2500);
+        await photo('color-scopes', '.video-scopes');
+        await js(`q.setPrefs({videoScopesVisible:false})`);
 
         // Transcript Search: three English takes transcribed by the local speech model, searched for "sunrise".
         // A project of its own, so only the takes are listed.

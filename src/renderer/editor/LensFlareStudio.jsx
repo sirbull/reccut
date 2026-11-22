@@ -3,12 +3,12 @@
 // (vanlige angresteg); Revert setter effekten tilbake slik den var da studioet ble åpnet.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Focus, Trash2 } from 'lucide-preact';
-import { FLARE_ASSETS, FLARE_BLENDS, FLARE_DEFAULTS, FLARE_GRADIENTS, FLARE_GROUPS, FLARE_PRESETS, PROC_DEFAULTS, PROC_KEYS, elementCenter, flareAsset, keepsOwnColors, makeElement, newElementId, procParams } from '../../shared/lensFlare.js';
+import { FLARE_ASSETS, FLARE_BLENDS, FLARE_DEFAULTS, FLARE_GRADIENTS, FLARE_GROUPS, FLARE_FILE_FORMAT, FLARE_PRESETS, PROC_DEFAULTS, PROC_KEYS, elementCenter, flareAsset, importFlarePreset, keepsOwnColors, makeElement, newElementId, procParams } from '../../shared/lensFlare.js';
 import { drawLensFlare, onFlareSprites } from '../../shared/lensFlareRender.js';
 import { animatedEffect } from '../../shared/videoEffectsRender.js';
 import { effectParams } from '../../shared/videoEffects.js';
 import { formatTimecode, kfTime, setPropBase, uid, vfxProp } from '../../shared/model.js';
-import { Button, IconButton, Modal, NumberField, Row, Segmented, Select, Slider, Toggle } from '../ui.jsx';
+import { Button, IconButton, Modal, NumberField, Row, Segmented, Select, Slider, Toggle, toast } from '../ui.jsx';
 import { beginTransient, commit, endTransient, project, redo, setTime, timeSig, undo, updateTransient } from './store.js';
 import { setKeyframe } from './keyframes.js';
 import { readClipFrame } from './sourceFrame.js';
@@ -191,6 +191,26 @@ function Studio({ clip, effect }) {
     setName('');
   };
   const updatePreset = () => setPrefs({ lensFlarePresets: saved.map((x) => x.id === userCurrent.id ? { ...x, p: { ...look(), preset: x.id }, thumb: snapshot() } : x) });
+  const exportPreset = async () => {
+    const label = name.trim() || current?.label || 'Lens flare';
+    const file = await window.api.saveFileDialog({ title: 'Export Lens Flare Preset', defaultPath: `${label.replace(/[\\/:*?"<>|]/g, '_')}.json`, filters: [{ name: 'JSON', extensions: ['json'] }] });
+    if (file) await window.api.writeText(file, JSON.stringify({ format: FLARE_FILE_FORMAT, label, p: look() }, null, 2));
+  };
+  const importPreset = async () => {
+    const file = await window.api.openFileDialog({ title: 'Import Lens Flare Preset', filters: [{ name: 'JSON', extensions: ['json'] }] });
+    if (!file) return;
+    try {
+      const { label, p: q } = importFlarePreset(JSON.parse(await window.api.readText(file)));
+      const x = { id: `user-${uid()}`, label, p: { ...q, preset: '' }, thumb: '' };
+      x.p.preset = x.id;
+      x.thumb = flareThumb(x.p, 320, 180);
+      setPrefs({ lensFlarePresets: [...(prefs.value.lensFlarePresets || []), x] });
+      commit((d) => { const e = effectOf(d); if (e) applyFlarePreset(e, x); });
+      toast(`Imported the preset “${label}”.`, { kind: 'success' });
+    } catch (err) {
+      toast(err.message, { kind: 'error' });
+    }
+  };
   const deletePreset = (x) => {
     if (confirm(`Delete the preset “${x.label}”? Clips that use it keep their flare.`)) setPrefs({ lensFlarePresets: saved.filter((y) => y.id !== x.id) });
   };
@@ -266,6 +286,8 @@ function Studio({ clip, effect }) {
         onInput={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') savePreset(); }} />
       <Button onClick={savePreset}>Save as Preset</Button>
       {userCurrent && modified && <Button onClick={updatePreset} title="Replace the saved preset with these settings">Update “{userCurrent.label}”</Button>}
+      <Button variant="ghost" onClick={importPreset} title="Add a preset from a file, also the RecCut Lens Flare Kit JSON format">Import…</Button>
+      <Button variant="ghost" onClick={exportPreset} title="Save these settings as a preset file">Export…</Button>
       <span class="fs-spacer" />
       <Button onClick={revert} disabled={!changed} title="Undo every change made since Flare Studio was opened">Revert</Button>
       <Button variant="primary" onClick={close}>Done</Button>

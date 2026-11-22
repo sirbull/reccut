@@ -169,3 +169,24 @@ test('procedural parameters are clamped, and the drawn area leaves room for soft
   const made = makeElement('ring_spectral');
   assert.equal(made.spectrum, flareAsset('ring_spectral').defaults.spectrum);
 });
+
+test('preset files: round trip, kit JSON, and untrusted values are cleaned', async () => {
+  const { importFlarePreset, FLARE_FILE_FORMAT, FLARE_PRESETS } = await import('../src/shared/lensFlare.js');
+  const kitJson = (await import('../assets/lensflare/presets/golden_sunset.json', { with: { type: 'json' } })).default;
+  assert.throws(() => importFlarePreset({ shortcuts: {} }), /Not a Reccut lens flare preset/);
+  const p = FLARE_PRESETS[0].p;
+  const back = importFlarePreset(JSON.parse(JSON.stringify({ format: FLARE_FILE_FORMAT, label: 'Mine', p })));
+  assert.equal(back.label, 'Mine');
+  assert.deepEqual(back.p.elements.map(({ id, ...e }) => e), p.elements.map(({ id, ...e }) => e));
+  assert.equal(back.p.x, p.x);
+  const kit = importFlarePreset({ ...kitJson, elements: [...kitJson.elements, { ...kitJson.elements[0], asset_id: 'nope' }] });
+  assert.equal(kit.label, 'Golden Sunset');
+  assert.equal(kit.p.elements.length, FLARE_PRESETS.find((x) => x.id === 'golden_sunset').p.elements.length);
+  const bad = importFlarePreset({ format: FLARE_FILE_FORMAT, p: { x: 'evil', blend: 'nope', elements: [{ asset: 'glow_white', size: null, blend: 'dirt', on: 0 }, { asset: 'missing' }, null] } });
+  assert.equal(bad.p.x, p.x);
+  assert.equal(bad.p.blend, 'add');
+  assert.equal(bad.p.elements.length, 1);
+  assert.equal(bad.p.elements[0].blend, 'add');
+  assert.equal(bad.p.elements[0].on, true);
+  assert.ok(bad.p.elements[0].size > 0);
+});

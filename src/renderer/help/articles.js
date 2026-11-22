@@ -1602,7 +1602,7 @@ Drag a color handle down off the color bar to remove it, or select it and press 
     section: 'Look',
     title: 'Lens Flare and Flare Studio',
     summary: 'Add an optical lens flare, adjust it in Properties, animate the light and build your own flares in Flare Studio.',
-    keywords: 'lens flare flare studio sun light source optical center ghost ghosts ring arc starburst streak glow glint diffraction lens dirt anamorphic preset flare color spread reflections axis solo',
+    keywords: 'lens flare flare studio sun light source optical center ghost ghosts ring arc starburst streak glow glint diffraction lens dirt anamorphic preset import export flare color spread reflections axis solo',
     body: `
 **Lens Flare** imitates what happens when strong light hits a camera lens: a bright light source, and a chain of reflections (ghosts, rings and arcs) on a straight line through the middle of the lens. You choose a ready preset and adjust it in **Properties**, or open **Flare Studio** to build the flare element by element.
 
@@ -1775,6 +1775,8 @@ To keep a flare for later projects, type a name in the field at the bottom left 
 When you change a saved preset of your own, **Update “name”** replaces it with the new settings. Hover a saved preset and click **×** to delete it. Clips that use it keep their flare.
 
 Saved presets belong to Reccut on this computer, not to a project. Each project keeps its own copy of every flare, so changing or deleting a preset never alters a finished edit.
+
+To move a flare to another computer or share it, click **Export…** to save the current settings as a JSON file. **Import…** adds a preset file as a new ★ preset and applies it to the clip. It also reads presets in the RecCut Lens Flare Kit format.
 
 ### Revert and Done
 

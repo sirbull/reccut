@@ -148,6 +148,28 @@ export function makeElement(assetId) {
   };
 }
 
+// Preset-fil (eksport fra Flare Studio) eller kit-preset (reccut.lensflare.preset.v1) til { label, p }.
+// Filen kommer utenfra: bare kjente nøkler og gyldige verdier slipper gjennom; ukjente teksturer droppes.
+export const FLARE_FILE_FORMAT = 'reccut-lensflare-preset';
+export function importFlarePreset(data) {
+  const kit = data?.schema === 'reccut.lensflare.preset.v1';
+  if (!kit && data?.format !== FLARE_FILE_FORMAT) throw new Error('Not a Reccut lens flare preset.');
+  const src = kit ? kitPreset({ ...data, elements: (data.elements || []).filter((e) => flareAsset(e?.asset_id)) }) : data.p || {};
+  const pick = (v, d) => (typeof d === 'number' ? num(v, d) : typeof d === 'string' ? (typeof v === 'string' ? v : d) : d);
+  const p = Object.fromEntries(Object.entries(FLARE_DEFAULTS).map(([k, d]) => [k, k === 'elements' ? [] : pick(src[k], d)]));
+  p.blend = p.blend === 'screen' ? 'screen' : 'add';
+  for (const e of Array.isArray(src.elements) ? src.elements : []) {
+    const a = flareAsset(e?.asset);
+    if (!a) continue;
+    const base = makeElement(a.id), el = { ...base };
+    for (const [k, d] of Object.entries(base)) if (k !== 'id') el[k] = typeof d === 'boolean' ? e[k] !== false : pick(e[k], d);
+    el.blend = a.dirt ? 'dirt' : e.blend === 'screen' ? 'screen' : 'add';
+    p.elements.push(el);
+  }
+  const label = String((kit ? data.title : data.label) || 'Imported flare').slice(0, 80);
+  return { label, p };
+}
+
 // Det som skal tegnes, i piksler: midtpunkt, størrelse, vinkel og lysstyrke (lineært lys) for hvert element.
 // Global styrke og opasitet er bakt inn i hvert element. hue er Flare color i lineært lys med største kanal = 1,
 // colorize hvor mye av den elementet får. only: vis bare dette elementet (solo i Flare Studio).

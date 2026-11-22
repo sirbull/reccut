@@ -161,13 +161,15 @@ html[data-keyboard-focus] .compare:focus-within { outline: 2px solid #c3c5cc; ou
 .compare .tag.l { left: 18px; }
 .compare .tag.r { right: 18px; }
 
-.looks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; }
-.look { position: relative; border-radius: 14px; overflow: hidden; cursor: zoom-in; }
-.look img { width: 100%; aspect-ratio: 16/9; object-fit: cover; transition: transform 1s cubic-bezier(.2,.7,.2,1); }
+.tools { display: grid; gap: 22px; margin-top: 56px; }
+.tools .card .shot { height: auto; }
+.looks { display: grid; grid-template-columns: repeat(6, 1fr); margin-top: 22px; border-radius: var(--radius); overflow: hidden; }
+.look { position: relative; overflow: hidden; cursor: zoom-in; }
+.look img { width: 100%; aspect-ratio: 3/4; object-fit: cover; transition: transform 1s cubic-bezier(.2,.7,.2,1); }
 .look:hover img { transform: scale(1.04); }
 .look-open { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
 html[data-keyboard-focus] .look:focus-within { outline: 2px solid #c3c5cc; outline-offset: 4px; }
-.look figcaption { position: absolute; inset: auto 0 0; padding: 30px 16px 14px; font-size: 14px; font-weight: 600; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
+.look figcaption { position: absolute; inset: auto 0 0; padding: 30px 12px 12px; font-size: 13px; font-weight: 600; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
 .look figcaption { pointer-events: none; }
 .look figcaption small { display: block; font-weight: 400; color: #c9cad0; font-size: 12px; }
 figure { margin: 0; }
@@ -262,7 +264,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   footer .wrap > :last-child { justify-self: center; }
   section { padding: 40px 0; }
   .rooms, .stills, .oss, .record-details, .import-formats { grid-template-columns: 1fr; }
-  .looks { grid-template-columns: 1fr 1fr; }
+  .looks { grid-template-columns: repeat(3, 1fr); }
   .feature, .feature.flip { grid-template-columns: 1fr; gap: 32px; }
   .feature.flip .copy { order: 0; }
   .grid, .cards { grid-template-columns: repeat(2, 1fr); }
@@ -510,12 +512,15 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <h2>Color correction and <span class="serif">film looks</span></h2>
       <p class="sub">Exposure, white balance and color wheels, more than 40 film looks, LOG conversion and your own LUTs.</p>
     </div>
-    <div class="compare reveal" id="compare">
-      <img src="media/ba-before.jpg" width="1600" height="900" alt="Coastal ridge, original footage" loading="lazy">
-      <img class="after" src="media/ba-after.jpg" width="1600" height="900" alt="Coastal ridge with the Technicolor three-strip look" loading="lazy">
-      <div class="bar"></div>
-      <span class="tag l">Original</span><span class="tag r">Technicolor three-strip</span>
-      <input type="range" min="0" max="100" value="50" aria-label="Drag to compare original and graded footage">
+    <div class="tools reveal">
+      <figure class="card">
+        <div class="shot ui"><img src="media/color-wheels.jpg" width="1440" height="477" alt="A mountain lake graded with teal shadows and warm highlights, with the Light, Color and Color Wheels settings in the Color tab" loading="lazy"></div>
+        <figcaption><h3>Light, color and color wheels</h3><p>Exposure, contrast, highlights, shadows and white balance, plus wheels for shadows, midtones and highlights. Calculated in 16-bit floating point, so 10-bit footage keeps smooth gradients.</p></figcaption>
+      </figure>
+      <figure class="card">
+        <div class="shot ui"><img src="media/color-scopes.jpg" width="1139" height="250" alt="Four video scopes side by side: luma waveform, RGB parade, RGB and luma histogram, and vectorscope with 75 percent targets" loading="lazy"></div>
+        <figcaption><h3>Video scopes</h3><p>Luma waveform, RGB parade, histogram and vectorscope, side by side or one at a time. They measure the finished picture, after color correction, LUTs and effects.</p></figcaption>
+      </figure>
     </div>
     <div class="looks">
       <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-velvia50-before.jpg" aria-label="Compare Fujifilm Velvia 50 with original footage"><img src="media/look-velvia50.jpg" width="1280" height="720" alt="Waterfall with the Fujifilm Velvia 50 look" loading="lazy"></button><figcaption>Fujifilm Velvia 50<small>Color film</small></figcaption></figure>
@@ -525,7 +530,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-bleachbypass-before.jpg" aria-label="Compare Bleach bypass with original footage"><img src="media/look-bleachbypass.jpg" width="1280" height="720" alt="River gorge with the Bleach bypass look" loading="lazy"></button><figcaption>Bleach bypass<small>Cinema film</small></figcaption></figure>
       <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-trix400-before.jpg" aria-label="Compare Kodak Tri-X 400 with original footage"><img src="media/look-trix400.jpg" width="1280" height="720" alt="Beach with the Kodak Tri-X 400 look" loading="lazy"></button><figcaption>Kodak Tri-X 400<small>Black &amp; white film</small></figcaption></figure>
     </div>
-    <p class="caption">Click a look to compare it with the original.</p>
+    <p class="caption">Six of more than 40 film looks. Click a look to compare it with the original.</p>
   </div>
 </section>
 
