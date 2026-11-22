@@ -629,6 +629,36 @@ function scheduleMotion(media, notify) {
   return job;
 }
 
+// Beat Detection: beats and bars of a music clip, for the beat grid in the timeline. Cached per file.
+const beatJobs = new Map();
+function scheduleBeats(media, notify) {
+  const st = media.streams.main;
+  if (!st?.hasAudio || beatJobs.has(media.id)) return beatJobs.get(media.id) || null;
+  const job = jobs.add({
+    kind: 'analyze',
+    mediaId: media.id,
+    title: `Detecting beats in ${media.name}`,
+    queue: 'light',
+    run: async (ctx) => {
+      const { BEAT_RATE, BEATS_VERSION, detectBeats } = await import('../shared/beats.js');
+      const out = path.join(await cacheDirFor(st.path), `beats-v${BEATS_VERSION}.json`);
+      if (!fs.existsSync(out)) {
+        ctx.progress(0, 'Detecting beats');
+        const dec = ff.decodePcm(st.path, { rate: BEAT_RATE, channels: 1 });
+        ctx.setCancel(dec.kill);
+        const buf = await dec.promise;
+        const beats = detectBeats(new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 4)));
+        await fs.promises.writeFile(out, JSON.stringify(beats));
+      }
+      const beats = JSON.parse(await fs.promises.readFile(out, 'utf8'));
+      notify({ mediaId: media.id, stream: 'main', patch: { beats: beats || { version: BEATS_VERSION, bpm: 0, downbeat: 0, beats: [] } } });
+    },
+  });
+  beatJobs.set(media.id, job);
+  job.done.finally(() => beatJobs.delete(media.id)).catch(() => {});
+  return job;
+}
+
 /* Filbrowseren i importvinduet */
 
 // Mapper og mediefiler i én mappe. Skjulte filer og filer appen ikke kan lese, vises ikke.
@@ -772,4 +802,4 @@ function extensions() {
   return [...VIDEO_EXT, ...AUDIO_EXT, ...IMAGE_EXT, ...raw.RAW_EXT, '.psb', '.reccut-title'].map((e) => e.slice(1));
 }
 
-module.exports = { browseDir, browseThumb, browsePlaces, scheduleMotion, isOffline, relink, scheduleOptimize, reverseStream, scheduleReverse, cleanAudio, extensions, imageExtensions, readableImage, importFiles, recordingMedia, recordingPaths, kindOf, cacheRoot, newId };
+module.exports = { browseDir, browseThumb, browsePlaces, scheduleMotion, scheduleBeats, isOffline, relink, scheduleOptimize, reverseStream, scheduleReverse, cleanAudio, extensions, imageExtensions, readableImage, importFiles, recordingMedia, recordingPaths, kindOf, cacheRoot, newId };

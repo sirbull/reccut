@@ -1193,7 +1193,7 @@ function AudioFxTab() {
 
 /* Undertekster */
 
-const LANGS = [
+export const LANGS = [
   { value: 'english', label: 'English' },
   { value: 'norwegian', label: 'Norwegian' },
   { value: 'swedish', label: 'Swedish' },

@@ -15,6 +15,7 @@ import { saveSettings, settings } from './recorder/settings.js';
 import { pause, seek, snapshot } from './editor/playback.js';
 import { readClipFrames } from './editor/sourceFrame.js';
 import { attachToTrack, detach, removeTrackingKeyframes, trackForward } from './editor/track.js';
+import { mediaSources, runTranscribe, saveTranscript } from './editor/transcripts.js';
 import { aiVoiceInstalled, aiVoicePayload } from '../shared/aiVoice.js';
 import { LANGUAGES, VOICES, languageById, spokenText, voiceLanguage } from '../shared/tts.js';
 import { detectSpeech, encodeWav, freeAudioLane, levelEnvelope, trimFor } from '../shared/voiceover.js';
@@ -90,10 +91,8 @@ const RUNTIME_TOOLS = [
       if (m === null) throw new Error('Unknown mediaId.');
       let sources, duration;
       if (m) {
-        const stream = m.kind === 'recording' ? (m.streams.camera?.hasAudio ? m.streams.camera : m.streams.screen) : m.streams.main;
-        if (!stream?.hasAudio) throw new Error('This media has no audio.');
         duration = m.duration;
-        sources = [{ path: workPath(stream), in: 0, dur: duration, start: Math.max(0, stream.offset || 0) }];
+        sources = mediaSources(m);
       } else {
         sources = speechSources(p);
         duration = p.duration;
@@ -103,18 +102,9 @@ const RUNTIME_TOOLS = [
         model = (await api.subtitleModels()).active;
       const key = JSON.stringify([sources, language, model]);
       if (!transcripts.has(key)) {
-        let off = [];
-        const job = api.startTranscribe({ sources, duration, language, projectId: p.id, agent: true });
-        const result = await new Promise((resolve, reject) => {
-          job.catch(reject);
-          const abort = () => job.then((id) => api.cancelTask(id));
-          signal.addEventListener('abort', abort, { once: true });
-          off = [
-            api.onTranscribeDone((e) => job.then((id) => e.id === id && resolve(e))),
-            api.onTranscribeError((e) => job.then((id) => e.id === id && reject(new Error(String(e.error).replace(/^MODEL_MISSING:\w+ /, ''))))),
-            () => signal.removeEventListener('abort', abort),
-          ];
-        }).finally(() => off.forEach((f) => f()));
+        const result = await runTranscribe({ sources, duration, language, projectId: p.id }, signal)
+          .catch((e) => { throw new Error(e.message.replace(/^MODEL_MISSING:\w+ /, '')); });
+        if (m && project.value.id === p.id) saveTranscript(m, language, result.segments);
         transcripts.set(key, { mediaId: m?.id, segments: result.segments, words: result.words || [], pauses: result.pauses || [] });
       }
       const t = transcripts.get(key);

@@ -78,3 +78,21 @@ node scripts/capture-effects.cjs "$HOME/Movies/Reccut/Website Demos - 2026-11-05
 ```
 
 The script uses a temporary, isolated app profile like the other capture scripts and writes to `assets/help`. Run `npm run docs` afterwards to copy the images to the website handbook. Lens Flare images are not part of this script.
+
+## Highlights cards — 22 November 2026
+
+The Highlights section has seven cards with a small picture and a short text. Two pictures are photographed from the real editor; the others are cropped from handbook images so only the picture area shows:
+
+| Card | Asset | Source |
+| --- | --- | --- |
+| Lens flares | `feature-lens-flare.jpg` | `assets/help/lensflare-viewer.jpg` |
+| Cut to the beat | `feature-beat-grid.jpg` | `scripts/capture-features.cjs` |
+| Search what is said | `feature-transcript-search.jpg` | `scripts/capture-features.cjs` |
+| Light leaks | `feature-light-leaks.jpg` | `assets/help/effects-light-leaks.jpg` |
+| Double exposures | `feature-blend-modes.jpg` | `assets/help/effects-blend-mode.jpg` |
+| Change one color | `feature-hue-saturation.jpg` | `assets/help/effects-hue-saturation.jpg` |
+| Redactions that follow | `feature-redact-tracking.jpg` | `assets/help/tracking-follow.jpg` |
+
+The demo media is in `~/Movies/Reccut/Website Demos - 2026-11-22/Feature Cards/Media` and is made by `node scripts/feature-demo-media.mjs`: a synthesized 100 BPM drum and bass loop (24 bars of 4/4) and three English takes spoken by Kokoro (`af_heart` and `am_fenrir`), using the Kokoro model and eSpeak NG add-on downloaded in the app. No system voices are used.
+
+Run `npm run build`, then `node scripts/capture-features.cjs`. The script uses a temporary, isolated app profile with a copy of the installed Whisper model from `~/Library/Application Support/Reccut Development`, and downloads nothing. The beat grid is the real beat detection of the demo loop (the script checks that it finds 100 BPM), with six nature clips cut every second bar on V1. Transcript Search shows the real Whisper Base transcription of the three takes, searched for “sunrise”. Afterwards the beat grid picture was cropped to 1000 × 356 to leave out the empty area below the tracks.

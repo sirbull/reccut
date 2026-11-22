@@ -1,4 +1,5 @@
 // Tilstand for redigeringen: prosjekt, utvalg, historikk og lagring.
+import { BEATS_VERSION } from '../../shared/beats.js';
 import { signal, computed, effect, batch } from '@preact/signals';
 import { produce, setAutoFreeze } from 'immer';
 import {
@@ -667,6 +668,12 @@ api.onAnalyzed(({ mediaId, stream, patch }) => {
   scheduleSave();
 });
 
+// Transcript Search: hva som blir sagt i mediet lagres uten eget angresteg.
+export function setMediaTranscript(id, transcript) {
+  patchMedia((media) => (media[id] ? { ...media, [id]: { ...media[id], transcript } } : media));
+  scheduleSave();
+}
+
 /* Media som mangler (Media Offline). Sjekkes når prosjektet åpnes og når vinduet får fokus,
    så en disk som kobles til igjen blir oppdaget. Endringen lagres uten eget angresteg. */
 function patchMedia(fn) {
@@ -693,6 +700,19 @@ effect(() => {
       cleanRequested.add(st.path);
       api.cleanAudio({ file: st.path, mediaId: m.id, stream: key }).catch((err) => console.warn('Clean Voice failed', st.path, err));
     }
+  }
+});
+
+// Beat Detection: musikk på spor merket som Music analyseres i bakgrunnen, én gang per medium.
+const beatsRequested = new Set();
+effect(() => {
+  const p = project.value;
+  for (const c of Object.values(p.clips)) {
+    const m = p.media[c.mediaId];
+    const st = m?.streams?.main;
+    if (!p.lanes?.[c.lane]?.music || m?.offline || !st?.hasAudio || st.beats?.version === BEATS_VERSION || beatsRequested.has(m.id)) continue;
+    beatsRequested.add(m.id);
+    api.analyzeBeats(m).catch((err) => console.warn('Beat detection failed', m.name, err));
   }
 });
 

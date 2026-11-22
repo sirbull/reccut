@@ -1974,6 +1974,14 @@ input[type='color'].color::-webkit-color-swatch {
   pointer-events: none;
   z-index: 6;
 }
+.tl-beat {
+  position: absolute;
+  top: 0;
+  width: 0;
+  border-left: 1px dashed rgba(10, 132, 255, 0.35);
+  pointer-events: none;
+}
+.tl-beat.bar { border-left: 1px solid rgba(10, 132, 255, 0.7); }
 .tl-snapline {
   position: absolute;
   top: 26px;
@@ -3485,6 +3493,18 @@ kbd.keycap {
   color: var(--text-3);
   font-size: 11px;
 }
+.transcript-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line-2);
+  color: var(--text-2);
+  font-size: 12px;
+}
+.transcript-bar > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transcript-search .tc { font-variant-numeric: tabular-nums; }
+.transcript-search mark { background: rgba(255, 214, 10, 0.35); color: inherit; border-radius: 2px; }
 .palette footer span {
   display: inline-flex;
   align-items: center;

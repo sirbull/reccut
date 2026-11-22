@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { alignWords, findPauses, groupWords, matchScript, scriptLines } from '../src/shared/speech.js';
+import { alignWords, findPauses, groupWords, matchScript, scriptLines, searchTranscripts } from '../src/shared/speech.js';
 
 // One second of tone, half a second of near silence, one more second of tone, at 16 kHz.
 function tone(parts, rate = 16000) {
@@ -47,4 +47,15 @@ test('every take of a script line is found, also repeated takes in one file, and
   assert.equal(bread.takes[0].sourceIn, 9);
   assert.equal(bread.takes[0].match, 1);
   assert.ok(!bread.takes.some((t) => t.sourceIn === 5 && t.match === 1), 'the broken take is not a full match');
+});
+
+test('searchTranscripts finds phrases with every word, across media', () => {
+  const media = {
+    a: { id: 'a', name: 'Take 1', transcript: { segments: [{ start: 1, end: 3, text: 'Hei og velkommen' }, { start: 4, end: 6, text: 'Her er været' }] } },
+    b: { id: 'b', name: 'Take 2', transcript: { segments: [{ start: 10, end: 12, text: 'Velkommen tilbake' }] } },
+    c: { id: 'c', name: 'B-roll' },
+  };
+  assert.deepEqual(searchTranscripts(media, 'velkommen').map((h) => [h.mediaId, h.start]), [['a', 1], ['b', 10]]);
+  assert.deepEqual(searchTranscripts(media, 'VELKOMMEN tilbake').map((h) => h.mediaId), ['b']);
+  assert.deepEqual(searchTranscripts(media, '  '), []);
 });

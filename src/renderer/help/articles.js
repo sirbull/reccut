@@ -333,6 +333,12 @@ With nothing typed, scroll down to see everything you can search for, grouped by
 
 The top right corner shows how many clips are selected, so you know what an effect will be applied to. Press {{key:findCommand}} again or Escape to close it. You can also open it with Cmd K (Ctrl K on Windows) or the question mark at the top right.
 
+## Transcript Search
+
+Press {{key:transcriptSearch}} in the editor to search what is said in all your media. The first time, choose the spoken language and click **Transcribe**. The local speech model writes down what is said in every clip with sound, with times, and the transcript is saved in the project. Nothing is sent from your computer. It runs in the background, so you can close the window and keep working.
+
+Type a word or phrase to see every place it is said, with the timecode and the clip. Press Enter or click a result to open the clip in the viewer at that moment. Clips the AI agent has transcribed are searchable too. Click **Transcribe all again** to redo it in another language or with another model.
+
 On a Mac the Help menu also has a search field. Type a word and macOS points to the menu item, just like in other Mac apps. The help window ({{key:help}}) has its own search with articles and pictures.
 `,
     see: ['shortcuts', 'effects'],
@@ -2240,6 +2246,23 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
 - **Solo** ({{key:solo}}) plays only the selected clips.
 `,
     see: ['sync', 'enable', 'transitions', 'ducking'],
+  },
+  {
+    id: 'beat-grid',
+    section: 'Audio',
+    title: 'Cutting to the Beat',
+    summary: 'Mark a track as music, and the beats and bars of the song appear as a grid you can snap edits to.',
+    keywords: 'beat detection beat grid music bpm tempo bars rhythm snap cut to the beat montage',
+    body: `
+Click the music note in the header of an audio track to mark it as a music track. Reccut listens to the music clips on that track in the background and finds the tempo, the beats and where each bar starts. This runs on your computer and is done once per song.
+
+The grid appears behind the tracks: a solid line at the start of each bar and a dashed line for the other beats, counted in 4/4. When you zoom out, the beat lines are hidden first so the bars stay readable.
+
+With [[run:snapping|snapping]] on, edit points, the blade and moved clips snap to the grid lines, just as they snap to markers and other clips. The grid follows the music clip when you move or trim it.
+
+Turn the grid off and on with [[run:beatGrid|View → Beat Grid]] or the waveform button next to the snapping button. The grid works on clips that play at normal or constant speed; clips with a speed ramp or played in reverse do not show it.
+`,
+    see: ['ducking', 'audio'],
   },
   {
     id: 'ducking',

@@ -19,6 +19,8 @@ import {
   SquareDashed,
   StretchHorizontal,
   Magnet,
+  Music,
+  AudioWaveform,
   MoveHorizontal,
   MousePointer2,
   Scissors,
@@ -99,6 +101,7 @@ import { fadePath, formatVolumeDb, moveVolumeKeyframe, shiftVolume, volumeDelta,
 import { libraryDropTarget, mediaDropPreview, mediaDropProject, resizedTransitionDuration } from '../../shared/libraryDrop.js';
 import { endLibraryDrag, libraryDrag } from './libraryDrag.js';
 import { editMulticam } from './multicam.js';
+import { clipBeatLines } from '../../shared/beats.js';
 
 const PAD = 16;
 const RULER_H = 26;
@@ -149,6 +152,15 @@ export function laneRows(p) {
 }
 
 const tx = (t) => PAD + t * pps.value;
+
+// Beat Detection: grid lines from music clips on tracks marked Music. Bars are the strong lines.
+const beatCache = new WeakMap();
+function beatLines(p) {
+  if (!prefs.value.beatGrid) return [];
+  if (!beatCache.has(p)) beatCache.set(p, Object.values(p.clips).flatMap((c) =>
+    p.lanes?.[c.lane]?.music ? clipBeatLines(c, p.media[c.mediaId]?.streams?.main?.beats).map((l) => ({ ...l, id: c.id })) : []));
+  return beatCache.get(p);
+}
 const MAX_PPS = 2400;
 // Alt som gjøres med musa på tidslinjen, havner på en hel frame.
 const fpsOf = () => project.value.fps || 30;
@@ -386,6 +398,7 @@ export function Timeline() {
     consider(getTime());
     consider(0);
     for (const m of project.value.markers) consider(m.t);
+    for (const l of beatLines(project.value)) if (!exclude.has(l.id)) consider(l.t);
     for (const c of Object.values(project.value.clips)) {
       if (exclude.has(c.id)) continue;
       consider(c.start);
@@ -995,6 +1008,7 @@ export function Timeline() {
             {rows.map((r) => (
               <LaneBg key={r.lane} row={r} p={p} />
             ))}
+            <BeatGrid p={p} z={z} height={rows.length ? rows[rows.length - 1].y + rows[rows.length - 1].h : 0} />
             {(() => {
               // Bare klipp i og nær det synlige området blir komponenter (lange prosjekter).
               const { left, width: vw } = view.value;
@@ -1143,6 +1157,11 @@ function TrackHeaders({ rows, p, scrollRef }) {
                         {l.hidden ? <EyeOff size={12} /> : <Eye size={12} />}
                       </button>
                     )}
+                    {r.kind === 'audio' && (
+                      <button class={l.music ? 'on' : ''} title={l.music ? 'Music track: beats are detected. Click to turn off' : 'Mark as music track to detect beats'} onClick={() => toggle(r.lane, 'music')}>
+                        <Music size={12} />
+                      </button>
+                    )}
                     {r.kind !== 'caption' && (
                       <button class={l.muted ? 'off' : ''} title={l.muted ? 'Unmute track' : 'Mute track'} onClick={() => toggle(r.lane, 'muted')}>
                         {l.muted ? <VolumeX size={12} /> : <Volume2 size={12} />}
@@ -1202,6 +1221,7 @@ function TimelineToolbar() {
         </div>
         <span class="sep" />
         <IconButton icon={Magnet} data-toggle="snapping" title="Snapping (N)" active={snapping.value} onClick={() => (snapping.value = !snapping.value)} />
+        <IconButton icon={AudioWaveform} data-toggle="beatGrid" title="Beat grid for music tracks" active={prefs.value.beatGrid} onClick={() => setPrefs({ beatGrid: !prefs.value.beatGrid })} />
         <IconButton icon={StretchHorizontal} data-toggle="skimming" title="Skimming (S)" active={skimming.value} onClick={() => (skimming.value = !skimming.value)} />
         <IconButton icon={Headphones} data-toggle="audioSkimming" title="Audio skimming (Shift S)" active={skimming.value && audioSkimming.value} disabled={!skimming.value} onClick={() => (audioSkimming.value = !audioSkimming.value)} />
         <IconButton icon={Spline} data-toggle="keyframeEasing" title={`Default for new keyframes: ${prefs.value.keyframeEasing === 'linear' ? 'Linear. Click for Eased' : 'Eased. Click for Linear'}`} active={prefs.value.keyframeEasing !== 'linear'} onClick={() => setPrefs({ keyframeEasing: prefs.value.keyframeEasing === 'linear' ? 'easeInOut' : 'linear' })} />
@@ -1268,6 +1288,19 @@ function Ruler({ width }) {
       ))}
     </div>
   );
+}
+
+// Only the lines in view are drawn. Zoomed out, single beats are left out first, then bars.
+function BeatGrid({ p, z, height }) {
+  const lines = beatLines(p);
+  if (!lines.length) return null;
+  const { left, width } = view.value;
+  const t0 = (left - PAD) / z, t1 = (left + width - PAD) / z;
+  const gap = (lines.length > 1 ? Math.min(...lines.slice(1, 9).map((l, i) => l.t - lines[i].t).filter((d) => d > 0)) : 1) * z;
+  if (gap * 4 < 6) return null;
+  return lines.map((l) => (l.t < t0 || l.t > t1 || (!l.bar && gap < 6) ? null : (
+    <div key={`${l.id}:${l.t}`} class={`tl-beat${l.bar ? ' bar' : ''}`} style={{ left: tx(l.t), height }} />
+  )));
 }
 
 function LaneBg({ row, p }) {

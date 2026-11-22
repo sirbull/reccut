@@ -913,6 +913,9 @@ ipcMain.handle('design:clipboardWrite', (_e, text) => clipboard.writeText(String
 ipcMain.handle('media:analyzeMotion', (_e, m) => {
   media.scheduleMotion(m, notifyAnalyzed);
 });
+ipcMain.handle('media:analyzeBeats', (_e, m) => {
+  media.scheduleBeats(m, notifyAnalyzed);
+});
 // Følger et objekt i videoen (se track i motion.js), så et klipp kan festes til det.
 ipcMain.handle('media:track', (_e, file, opts) => {
   const { done } = jobs.add({
@@ -1171,7 +1174,7 @@ ipcMain.handle('transcribe:start', async (_e, payload) => {
   const lease = await subtitleModels.acquireActiveModel();
   const { id, done } = jobs.add({
     kind: 'transcribe',
-    title: 'Generating captions',
+    title: payload.agent ? 'Transcribing speech' : 'Generating captions',
     queue: 'heavy',
     run: async (ctx) => {
       ctx.progress(0, 'Reading audio');

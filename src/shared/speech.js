@@ -167,3 +167,19 @@ export function matchScript(lines, takes, { minMatch = 0.5, perLine = 6 } = {}) 
     return { line: index, text, ...(entry.speaker ? { speaker: entry.speaker } : {}), takes: found.slice(0, perLine) };
   });
 }
+
+// Transcript Search: every phrase in the media's saved transcripts that contains all the typed words.
+// ponytail: phrase-level match, so words split across two phrases are not found together.
+export function searchTranscripts(media, query, limit = 200) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const hits = [];
+  for (const m of Object.values(media)) {
+    for (const s of m.transcript?.segments || []) {
+      const text = s.text.toLowerCase();
+      if (words.every((w) => text.includes(w))) hits.push({ mediaId: m.id, name: m.name, start: s.start, end: s.end, text: s.text });
+      if (hits.length >= limit) return hits;
+    }
+  }
+  return hits;
+}

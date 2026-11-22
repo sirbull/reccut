@@ -133,6 +133,15 @@ h3 { font-size: 22px; letter-spacing: -.01em; margin: 0 0 8px; }
 .room p { color: var(--muted); margin: 0; font-size: 16px; }
 
 /* Stills: finished frames straight out of the viewer */
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-flow: dense; gap: 22px; margin-top: 56px; }
+.card.wide { grid-column: span 2; }
+.card { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.card .shot { height: 230px; display: grid; place-items: center; overflow: hidden; background: #1b1b1d; border-bottom: 1px solid var(--line); }
+.card .shot img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
+.card .shot.ui img { object-fit: contain; }
+.card figcaption { padding: 20px 22px 24px; }
+.card h3 { margin: 0 0 6px; font-size: 17px; }
+.card p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.55; }
 .stills { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 56px; }
 .still { border-radius: var(--radius); overflow: hidden; position: relative; cursor: zoom-in; box-shadow: 0 40px 90px -40px rgba(0,0,0,.9); }
 .still img { width: 100%; aspect-ratio: 16/9; object-fit: cover; transition: transform 1.2s cubic-bezier(.2,.7,.2,1); }
@@ -256,7 +265,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   .looks { grid-template-columns: 1fr 1fr; }
   .feature, .feature.flip { grid-template-columns: 1fr; gap: 32px; }
   .feature.flip .copy { order: 0; }
-  .grid { grid-template-columns: repeat(2, 1fr); }
+  .grid, .cards { grid-template-columns: repeat(2, 1fr); }
   .oss, .ai { padding: 40px 24px; }
   .showcase { margin-top: -140px; }
   .screens { gap: 14px; }
@@ -264,7 +273,9 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
 }
 @media (max-width: 520px) {
   .wrap { padding: 0 16px; }
-  .grid { grid-template-columns: 1fr; }
+  .grid, .cards { grid-template-columns: 1fr; }
+  .card.wide { grid-column: auto; }
+  .card .shot.ui, .card .shot.ui img { height: auto; }
   .hero { padding-bottom: 180px; }
   .screens { font-size: 12px; }
   .screens b { font-size: 12px; }
@@ -650,6 +661,45 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   </div>
 </section>
 
+<section id="highlights" style="padding-top:0">
+  <div class="wrap">
+    <div class="center reveal">
+      <div class="kicker">Highlights</div>
+      <h2>Small tools, <span class="serif">big time savers</span></h2>
+    </div>
+    <div class="cards reveal">
+      <figure class="card">
+        <div class="shot"><img src="media/feature-lens-flare.jpg" width="960" height="540" alt="A lens flare over a mountain lake, with the sun handle in the viewer and the reflections along a dashed line through the center of the picture" loading="lazy"></div>
+        <figcaption><h3>Lens flares</h3><p>Drag the sun in the viewer and the reflections follow. Start from a preset, or build your own flare piece by piece in Flare Studio.</p></figcaption>
+      </figure>
+      <figure class="card wide">
+        <div class="shot"><img src="media/feature-beat-grid.jpg" width="1000" height="356" alt="The timeline with a 100 BPM music track marked as music. Solid blue lines mark each bar and dashed lines each beat, and the video cuts fall on the bar lines" loading="lazy"></div>
+        <figcaption><h3>Cut to the beat</h3><p>Mark a track as music and Reccut finds the beats and bars. Edits snap to the grid, so your cuts land on the beat.</p></figcaption>
+      </figure>
+      <figure class="card wide">
+        <div class="shot ui"><img src="media/feature-transcript-search.jpg" width="720" height="203" alt="Transcript Search with the word sunrise typed in, listing two takes where it is said, each with its timecode" loading="lazy"></div>
+        <figcaption><h3>Search what is said</h3><p>Press <kbd>Option</kbd> <kbd>Space</kbd> (Alt Space on Windows) and type a word. Your footage is transcribed on your computer, and you jump straight to the moment it is said.</p></figcaption>
+      </figure>
+      <figure class="card">
+        <div class="shot"><img src="media/feature-light-leaks.jpg" width="867" height="488" alt="A coastal cliff with the Golden Hour light leak drifting in warm orange from the lower right" loading="lazy"></div>
+        <figcaption><h3>Light leaks</h3><p>Soft film light that drifts across the picture. Pick a preset such as Golden Hour, then change the colors, direction and speed.</p></figcaption>
+      </figure>
+      <figure class="card">
+        <div class="shot"><img src="media/feature-blend-modes.jpg" width="867" height="484" alt="A double exposure of white blossoms over a mountain lake, made with the Screen blend mode" loading="lazy"></div>
+        <figcaption><h3>Double exposures</h3><p>Place one clip over another and choose a blend mode such as Screen, Multiply or Overlay. Sixteen modes are available.</p></figcaption>
+      </figure>
+      <figure class="card">
+        <div class="shot"><img src="media/feature-hue-saturation.jpg" width="867" height="484" alt="A waterfall where the green leaves have been turned autumn orange with Advanced Hue / Saturation" loading="lazy"></div>
+        <figcaption><h3>Change one color</h3><p>Turn green leaves autumn orange. Pick a color range and shift its hue and saturation, and the rest of the picture stays as it is.</p></figcaption>
+      </figure>
+      <figure class="card">
+        <div class="shot"><img src="media/feature-redact-tracking.jpg" width="733" height="412" alt="A pixelated face in front of a green screen, with the redaction box that follows the person" loading="lazy"></div>
+        <figcaption><h3>Redactions that follow</h3><p>Pixelate a face, a sign or a number plate and pin it to the object, so it stays covered as the object moves.</p></figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
 <section style="padding-top:0">
   <div class="wrap">
     <div class="center reveal">
@@ -744,7 +794,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   const lookSlider = lookCompare.querySelector('input');
   const lookTitle = box.querySelector('#lightbox-look-title');
   const lookLabel = lookCompare.querySelector('[data-look-label]');
-  document.querySelectorAll('.frame img, .still img').forEach((img) => img.addEventListener('click', () => {
+  document.querySelectorAll('.frame img, .still img, .card img').forEach((img) => img.addEventListener('click', () => {
     lookView.hidden = true;
     big.hidden = false;
     big.src = img.src;

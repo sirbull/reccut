@@ -24,6 +24,7 @@ const DEFAULTS = {
   audioSkimming: true,
   playbackFromSkimmer: true,
   snapping: true,
+  beatGrid: true,
   keyframeEasing: 'easeInOut',
   preservePitch: true,
   syncMuteCamera: true,

@@ -54,6 +54,8 @@ import { currentSequence, formatDuration } from '../shared/model.js';
 import { Button, IconButton, Modal, Toasts, toast } from './ui.jsx';
 import { HistoryDialog, NewProjectDialog, PackageDialog, ProjectsDialog, SaveAsDialog, SequenceSettingsDialog } from './ProjectDialogs.jsx';
 import { CommandPalette, HelpCenter, installHelpBridge } from './help/Help.jsx';
+import { TranscriptSearch } from './editor/TranscriptSearch.jsx';
+import { transcriptSearchOpen } from './editor/transcripts.js';
 import { SettingsWindow } from './Settings.jsx';
 import { prefs } from './prefs.js';
 import { helpOpen, paletteOpen } from './registry.js';
@@ -482,6 +484,7 @@ function App() {
       {voicePackagesOpen.value && !needsProject.value && <VoicePackagesDialog key={voicePackagesOpen.value.lang || 'all'} />}
       {helpOpen.value && <HelpCenter />}
       {paletteOpen.value && <CommandPalette />}
+      {transcriptSearchOpen.value && r === 'edit' && <TranscriptSearch />}
       {recoverList.value.length > 0 && <RecoverDialog />}
       <UpdateDialog />
       <Toasts />

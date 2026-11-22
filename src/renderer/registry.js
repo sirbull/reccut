@@ -42,6 +42,7 @@ import { LAYOUTS, modifierInfo, settings as recordSettings } from './recorder/se
 import { addFiles, roomActions } from './export/state.js';
 import { boothOpen, openBooth } from './voiceover/state.js';
 import { openQuick } from './voiceover/quick.js';
+import { transcriptSearchOpen } from './editor/transcripts.js';
 
 const api = window.api;
 export const isMac = api.platform === 'darwin';
@@ -191,6 +192,8 @@ export const COMMANDS = [
   { id: 'ungroup', label: 'Ungroup', menu: 'Edit', group: 'group', keys: 'Shift+CmdOrCtrl+G', run: commands.ungroupSelected, help: 'grouping' },
   { id: 'checkUpdates', label: 'Check for Updates…', menu: 'Help', group: 'about', rooms: ALL, run: () => import('./updates.js').then((m) => m.checkForUpdates(true)), help: 'updates', keywords: 'update new version download github release' },
   { id: 'findCommand', label: 'Quick Search', menu: 'Help', group: 'search', keys: 'Ctrl+Space', also: ['CmdOrCtrl+K'], rooms: ALL, anywhere: true, run: () => (paletteOpen.value = !paletteOpen.value), help: 'search', keywords: 'find command palette console fx effects tools search everything' },
+  { id: 'beatGrid', label: 'Beat Grid', menu: 'View', group: 'toggles', run: () => setPrefs({ beatGrid: !prefs.value.beatGrid }), checked: () => prefs.value.beatGrid, help: 'beat-grid', keywords: 'beat detection music bpm tempo bars grid rhythm snap cut to the beat', desc: 'Show the beats and bars of music on tracks marked as music, and snap edits to them.' },
+  { id: 'transcriptSearch', label: 'Transcript Search', menu: 'Help', group: 'search', keys: 'Alt+Space', anywhere: true, run: () => (transcriptSearchOpen.value = !transcriptSearchOpen.value), help: 'search', keywords: 'transcript transcribe speech spoken said words dialogue find footage raw media whisper', desc: 'Search what is said in all media in the project, and open the clip at that moment.' },
 
   /* Design */
   { id: 'design:removeBackground', label: 'Remove Background', run: () => removeBackground(), enabled: () => design.selectedLayers().some(l => l.type === 'image'), menu: 'Design', rooms: DESIGN, help: 'design' },
