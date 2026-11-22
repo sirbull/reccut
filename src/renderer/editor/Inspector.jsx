@@ -177,7 +177,7 @@ function tabsFor(clip, media) {
 }
 
 // Fanene som gir mening for flere klipp samtidig. Endringene i dem kopieres til alle (mirror i store.js).
-const MULTI_TABS = ['video', 'color', 'effects', 'audio'];
+const MULTI_TABS = ['caption', 'video', 'color', 'effects', 'audio'];
 
 function ClipInspector({ clip, clips = [clip], group = false }) {
   const p = project.value;
@@ -229,7 +229,7 @@ function ClipInspector({ clip, clips = [clip], group = false }) {
           </div>
         </> : multi && <p class="hint">{tabs.length ? 'Changes apply to all selected clips. The values shown are from the first clip.' : 'These clips have no settings in common.'}</p>}
         {tab === 'text' && <TextTab clip={clip} />}
-        {tab === 'caption' && <CaptionTab clip={clip} />}
+        {tab === 'caption' && <CaptionTab clip={clip} clips={clips} />}
         {tab === 'recording' && <RecordingTab clip={clip} media={media} />}
         {tab === 'video' && (group ? <GroupVideoTab clips={clips} /> : <VideoTab clip={clip} />)}
         {tab === 'redact' && <RedactTab clip={clip} />}
@@ -1976,11 +1976,18 @@ function captionLines(text, max) {
   return String(text).split('\n').slice(0, max).join('\n');
 }
 
-export function CaptionStyleEditor() {
+// Uten ids: standardstilen for alle undertekster. Med ids: bare de valgte, lagret som endringer i props.style.
+export function CaptionStyleEditor({ ids } = {}) {
   const p = project.value;
-  const st = { ...DEFAULT_CAPTION_STYLE, ...p.captionStyle };
-  const set = (patch) => commit((q) => (q.captionStyle = { ...DEFAULT_CAPTION_STYLE, ...q.captionStyle, ...patch }));
-  const live = (patch) => updateTransient((q) => (q.captionStyle = { ...DEFAULT_CAPTION_STYLE, ...q.captionStyle, ...patch }));
+  const own = Boolean(ids?.length);
+  const st = { ...DEFAULT_CAPTION_STYLE, ...p.captionStyle, ...(own ? p.clips[ids[0]]?.props.style : null) };
+  const write = (q, patch) => {
+    if (!own) q.captionStyle = { ...DEFAULT_CAPTION_STYLE, ...q.captionStyle, ...patch };
+    else for (const id of ids) if (q.clips[id]) q.clips[id].props.style = { ...q.clips[id].props.style, ...patch };
+  };
+  const set = (patch) => commit((q) => write(q, patch));
+  const live = (patch) => updateTransient((q) => write(q, patch));
+  const overridden = own && ids.some((id) => p.clips[id]?.props.style);
   return (
     <>
       <Row label="Font" stacked>
@@ -2019,6 +2026,7 @@ export function CaptionStyleEditor() {
       <Row label="Shadow">
         <Toggle checked={st.shadow} onChange={(v) => set({ shadow: v })} />
       </Row>
+      {!own && <>
       <Row label="Alignment">
         <Segmented
           value={st.align}
@@ -2051,6 +2059,7 @@ export function CaptionStyleEditor() {
       <Row label="Max lines">
         <Segmented value={st.maxLines} onChange={(v) => set({ maxLines: v })} options={[1, 2, 3].map((n) => ({ value: n, label: String(n) }))} />
       </Row>
+      </>}
       <Row label="All caps">
         <Toggle checked={Boolean(st.uppercase)} onChange={(v) => set({ uppercase: v })} />
       </Row>
@@ -2065,9 +2074,14 @@ export function CaptionStyleEditor() {
       <Row label="Entrance">
         <Segmented value={st.entrance || 'none'} onChange={(v) => set({ entrance: v })} options={CAPTION_ENTRANCES} />
       </Row>
-      <Row label="New captions">
+      {!own && <Row label="New captions">
         <Select value={st.chunkWords || 0} options={CHUNK_OPTIONS} onChange={(v) => set({ chunkWords: Number(v) })} />
-      </Row>
+      </Row>}
+      {own && (
+        <Button disabled={!overridden} onClick={() => commit((q) => { for (const id of ids) if (q.clips[id]) delete q.clips[id].props.style; })}>
+          Reset to default style
+        </Button>
+      )}
     </>
   );
 }
@@ -2093,7 +2107,7 @@ function previewCaption(style) {
   return { id: 'preview', type: 'caption', start: 0, in: 0, dur: PREVIEW_DUR, props: { text, words, align: null, pos: null } };
 }
 
-function CaptionPresetCard({ preset, current, onApply }) {
+function CaptionPresetCard({ preset, current, onApply, onMenu }) {
   const ref = useRef(null);
   const [hover, setHover] = useState(false);
   useEffect(() => {
@@ -2137,6 +2151,7 @@ function CaptionPresetCard({ preset, current, onApply }) {
       onFocus={() => setHover(true)}
       onBlur={() => setHover(false)}
       onClick={onApply}
+      onContextMenu={onMenu}
     >
       <canvas ref={ref} />
       <span>{preset.label}</span>
@@ -2144,18 +2159,36 @@ function CaptionPresetCard({ preset, current, onApply }) {
   );
 }
 
-export function CaptionPresets() {
+// Uten ids: klikk endrer standardstilen. Med ids: klikk endrer bare de valgte undertekstene,
+// og høyreklikk gir «Use as default subtitle style».
+export function CaptionPresets({ ids } = {}) {
   const p = project.value;
+  const own = Boolean(ids?.length);
   const st = { ...DEFAULT_CAPTION_STYLE, ...p.captionStyle };
+  const shown = own ? { ...st, ...p.clips[ids[0]]?.props.style } : st;
   const caps = Object.values(p.clips).filter((c) => c.type === 'caption');
-  const current = CAPTION_PRESETS.find((x) => Object.entries(x.style).every(([key, v]) => st[key] === v))?.id;
+  const current = CAPTION_PRESETS.find((x) => Object.entries(x.style).every(([key, v]) => key === 'chunkWords' || key === 'maxLines' || shown[key] === v))?.id;
+  const applyOwn = (preset) => {
+    // Oppdeling og antall linjer følger standardstilen, de gjelder ikke én boks.
+    const { chunkWords, maxLines, ...look } = preset.style;
+    commit((q) => { for (const id of ids) if (q.clips[id]) q.clips[id].props.style = { ...q.clips[id].props.style, ...look }; });
+    toast(`${preset.label} on ${ids.length === 1 ? 'this caption' : `${ids.length} captions`}.`);
+  };
   const apply = (preset) => {
     let result = { before: 0, after: 0 };
     commit((q) => {
       q.captionStyle = { ...DEFAULT_CAPTION_STYLE, ...q.captionStyle, ...preset.style };
       if (preset.style.chunkWords > 0) result = splitCaptions(q, preset.style.chunkWords);
     });
-    toast(result.after ? `${preset.label}: split ${result.before} captions into ${result.after} short ones. Undo to go back.` : `Caption style: ${preset.label}.`, { timeout: 6000 });
+    toast(result.after ? `${preset.label}: split ${result.before} captions into ${result.after} short ones. Undo to go back.` : `Default caption style: ${preset.label}.`, { timeout: 6000 });
+  };
+  const menu = async (e, preset) => {
+    e.preventDefault();
+    const items = [{ id: 'default', label: 'Use as Default Subtitle Style' }];
+    if (own) items.unshift({ id: 'own', label: ids.length === 1 ? 'Apply to This Caption' : `Apply to ${ids.length} Captions` });
+    const action = await window.api.popupMenu(items);
+    if (action === 'default') apply(preset);
+    else if (action === 'own') applyOwn(preset);
   };
   const split = () => {
     const n = st.chunkWords || 3;
@@ -2170,7 +2203,7 @@ export function CaptionPresets() {
           <h4 class="cap-presets-head">{g.label}</h4>
           <div class="cap-presets">
             {CAPTION_PRESETS.filter((x) => x.group === g.id).map((x) => (
-              <CaptionPresetCard key={x.id} preset={x} current={current === x.id} onApply={() => apply(x)} />
+              <CaptionPresetCard key={x.id} preset={x} current={current === x.id} onApply={() => (own ? applyOwn(x) : apply(x))} onMenu={(e) => menu(e, x)} />
             ))}
           </div>
         </Fragment>
@@ -2180,13 +2213,14 @@ export function CaptionPresets() {
           Split into {st.chunkWords > 0 ? `${st.chunkWords}-word` : '3-word'} captions
         </Button>
       )}
-      <p class="hint">Hover a style to see it move. Word timing comes from Generate captions; typed and imported captions are timed evenly. Animation shows in the viewer and in burned-in exports.</p>
+      <p class="hint">{own ? 'Click a style to use it on the selected captions. Right click to make it the default for all captions. ' : 'Right click a style to make it the default. '}Hover a style to see it move. Word timing comes from Generate captions; typed and imported captions are timed evenly. Animation shows in the viewer and in burned-in exports.</p>
     </>
   );
 }
 
-function CaptionTab({ clip }) {
+function CaptionTab({ clip, clips = [clip] }) {
   const p = project.value;
+  const ids = clips.map((c) => c.id);
   const st = { ...DEFAULT_CAPTION_STYLE, ...p.captionStyle };
   const id = clip.id;
   const pos = clip.props.pos;
@@ -2199,7 +2233,7 @@ function CaptionTab({ clip }) {
   }, [id, editRequest]);
   return (
     <>
-      <Section title="Caption">
+      {ids.length === 1 && <Section title="Caption">
         <textarea
           class="text-input caption-text"
           ref={textRef}
@@ -2220,8 +2254,8 @@ function CaptionTab({ clip }) {
         <Row label="Duration">
           <NumberField value={clip.dur} min={0.2} max={60} step={0.05} precision={2} unit="s" onStart={beginTransient} onChange={(v) => updateTransient((q) => (q.clips[id].dur = Math.max(0.2, v)))} onCommit={() => endTransient(true)} />
         </Row>
-      </Section>
-      <Section title="This caption">
+      </Section>}
+      <Section title={ids.length === 1 ? 'This caption' : `${ids.length} captions`}>
         <Row label="Alignment">
           <Segmented
             value={clip.props.align || 'style'}
@@ -2245,10 +2279,13 @@ function CaptionTab({ clip }) {
         )}
         <p class="hint">You can also drag the caption in the viewer to place it.</p>
       </Section>
-      <Section title="Styles" open={false}>
-        <CaptionPresets />
+      <Section title={ids.length === 1 ? 'Style for this caption' : 'Style for these captions'} open={false}>
+        <CaptionStyleEditor ids={ids} />
       </Section>
-      <Section title="Style for all captions" open={false}>
+      <Section title="Styles" open={false}>
+        <CaptionPresets ids={ids} />
+      </Section>
+      <Section title="Default style for all captions" open={false}>
         <CaptionStyleEditor />
       </Section>
     </>

@@ -141,16 +141,28 @@ if (!electron.app) {
           q.store.selection.value=[c.id];q.commands.inspectorTab.value='color';q.setPrefs({editorBrowserVisible:false});q.playback.seek(2.2);})()`);
         for (let i = 0; i < 100 && !(await js('Boolean(q.playback.snapshot({fresh:true}))')); i++) await wait(100);
         await wait(800);
-        await js(`document.querySelector('.inspector [data-section="wheels"]').scrollIntoView({block:'end'})`);
-        await wait(300);
-        await photo('color-tile-grade', '.editor-top', { left: 233, top: 44, width: 674, height: 378 });
-        // The color wheels with room below them, for the website tile.
-        await js(`document.querySelector('.inspector [data-section="wheels"]').scrollIntoView({block:'center'})`);
-        await wait(300);
-        await photo('color-tile-wheels', '.inspector', { left: 5, top: 190, width: 285, height: 160 });
+        // Each color tool on its own, from Properties: the section heading and controls, without the hint text below.
+        const section = async (title, name) => {
+          const found = await js(`(()=>{const s=[...document.querySelectorAll('.inspector section.section')].find(s=>s.querySelector('h3')?.textContent===${JSON.stringify(title)});
+            if(!s)return false;document.querySelectorAll('[data-shot]').forEach(e=>delete e.dataset.shot);s.dataset.shot='1';s.scrollIntoView({block:'center'});return true;})()`);
+          if (!found) throw new Error(`Properties has no ${title} section`);
+          await wait(300);
+          const height = await js(`(()=>{const s=document.querySelector('[data-shot]'),top=s.getBoundingClientRect().top;
+            const stop=[...s.querySelectorAll('.hint, .section-body > .btn, .section-body > button')].map(e=>e.getBoundingClientRect().top).filter(t=>t>top+40);
+            return Math.round(stop.length?Math.min(...stop)-top+4:s.getBoundingClientRect().bottom-top-2);})()`);
+          await photo(name, '[data-shot]', { height });
+        };
+        await section('Light', 'color-tool-light');
+        await section('Color', 'color-tool-color');
+        await section('Color Wheels', 'color-tool-wheels');
+        await section('Film Looks', 'color-tool-film');
+
+        // The four video scopes of the same frame, one picture each.
         await js(`q.setPrefs({videoScopesVisible:true,videoScopesMode:'all',videoScopesGain:2})`);
         await wait(2500);
-        await photo('color-tile-vectorscope', '.video-scopes', { left: 892, top: 62, width: 210, height: 165 });
+        for (const [i, name] of ['waveform', 'parade', 'histogram', 'vectorscope'].entries()) {
+          await photo(`scope-${name}`, `.video-scopes .scope-plot:nth-child(${i + 1})`);
+        }
         await js(`q.setPrefs({videoScopesVisible:false})`);
 
         // Transcript Search: three English takes transcribed by the local speech model, searched for "sunrise".

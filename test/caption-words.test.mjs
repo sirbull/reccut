@@ -131,3 +131,14 @@ test('a word wider than a portrait frame shrinks the caption to fit', async () =
   assert.ok(L.widths[0] * 1.1 <= 1080 * 0.92 + 1, 'room is kept for the pop');
   assert.ok(L.size < style.size * (1920 / 1080));
 });
+
+test('A caption’s own style overrides the default, the rest follows the default', async () => {
+  const { captionLayout } = await import('../src/shared/render.js');
+  const measure = (font, text, maxW) => (maxW == null ? text.length * 10 : [text]);
+  const project = { width: 1920, height: 1080, captionStyle: { ...DEFAULT_CAPTION_STYLE, size: 40, color: '#ffffff' } };
+  const own = captionLayout(project, { props: { text: 'Hi', style: { color: '#ff0000' } } }, measure);
+  assert.equal(own.st.color, '#ff0000');
+  assert.equal(own.st.size, 40);
+  const plain = captionLayout(project, { props: { text: 'Hi' } }, measure);
+  assert.equal(plain.st.color, '#ffffff');
+});

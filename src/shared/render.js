@@ -1257,7 +1257,8 @@ function drawTitle(ctx, clip, T, W, H) {
 export function captionLayout(project, clip, measure) {
   const W = project.width;
   const H = project.height;
-  const st = { ...DEFAULT_CAPTION_STYLE, ...(project.captionStyle || {}) };
+  // props.style: egne endringer på én undertekst, oppå prosjektets standardstil.
+  const st = { ...DEFAULT_CAPTION_STYLE, ...(project.captionStyle || {}), ...(clip.props.style || {}) };
   const k = H / 1080;
   let size = st.size * k;
   const align = clip.props.align || st.align;

@@ -30,7 +30,7 @@ if (!electron.app) {
         import { toasts } from ${file('src/renderer/ui.jsx')};
         window.voicePhotography = {store, booth, preview, timeline, newProject, parseScript, detectSpeech, levelEnvelope, trimFor, peakInfo, roomToneLevel, toasts};
       `, resolveDir: root, loader: 'jsx' },
-      banner: { js: `localStorage.setItem('prefs',JSON.stringify({checkUpdates:false,reopenLast:false,aiModelsAsked:true,voSubtitles:true,voRoomFill:false,voTimelineH:180,voFont:22,voMic:'',voCam:''}));navigator.mediaDevices.getUserMedia=()=>Promise.reject(new DOMException('Demo capture does not use input devices','NotAllowedError'));navigator.mediaDevices.enumerateDevices=async()=>[];` },
+      banner: { js: `localStorage.setItem('prefs',JSON.stringify({checkUpdates:false,reopenLast:false,aiModelsAsked:true,voSubtitles:true,voRoomFill:true,voTimelineH:180,voFont:22,voMic:'',voCam:''}));navigator.mediaDevices.getUserMedia=()=>Promise.reject(new DOMException('Demo capture does not use input devices','NotAllowedError'));navigator.mediaDevices.enumerateDevices=async()=>[];` },
       outfile: path.join(temporary, 'capture.js'), bundle: true, format: 'iife', platform: 'browser',
       target: 'chrome130', jsx: 'automatic', jsxImportSource: 'preact', loader: { '.svg': 'text' },
     });
@@ -47,6 +47,9 @@ if (!electron.app) {
   const temporary = process.argv[2], demo = process.argv[3];
   app.setPath('appData', temporary);
   app.setPath('userData', path.join(temporary, 'profile'));
+  // The voice package list has been shown in this profile, so it does not cover the studio.
+  fs.mkdirSync(path.join(temporary, 'profile'), { recursive: true });
+  fs.writeFileSync(path.join(temporary, 'profile/voice-packages.json'), JSON.stringify({ voicePackagesAsked: true }));
   const originalLoad = BrowserWindow.prototype.loadFile;
   BrowserWindow.prototype.loadFile = function(file, options) {
     return originalLoad.call(this, file === path.join(root, 'build/index.html') ? path.join(temporary, 'capture.html') : file, options);
@@ -63,7 +66,7 @@ if (!electron.app) {
       try {
         await wait(1500);
         win.unmaximize();
-        win.setContentSize(1500, 1050);
+        win.setContentSize(1600, 912);
         const script = fs.readFileSync(path.join(demo, 'script.txt'), 'utf8');
         const files = Array.from({ length: 4 }, (_, i) => path.join(demo, `line-${i}.wav`));
         await js(`(async () => {

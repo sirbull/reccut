@@ -333,15 +333,55 @@ With nothing typed, scroll down to see everything you can search for, grouped by
 
 The top right corner shows how many clips are selected, so you know what an effect will be applied to. Press {{key:findCommand}} again or Escape to close it. You can also open it with Cmd K (Ctrl K on Windows) or the question mark at the top right.
 
-## Transcript Search
-
-Press {{key:transcriptSearch}} in the editor to search what is said in all your media. The first time, choose the spoken language and click **Transcribe**. The local speech model writes down what is said in every clip with sound, with times, and the transcript is saved in the project. Nothing is sent from your computer. It runs in the background, so you can close the window and keep working.
-
-Type a word or phrase to see every place it is said, with the timecode and the clip. Press Enter or click a result to open the clip in the viewer at that moment. Clips the AI agent has transcribed are searchable too. Click **Transcribe all again** to redo it in another language or with another model.
+To search what is said in your footage instead, use [[article:transcript-search|Transcript Search]] ({{key:transcriptSearch}}).
 
 On a Mac the Help menu also has a search field. Type a word and macOS points to the menu item, just like in other Mac apps. The help window ({{key:help}}) has its own search with articles and pictures.
 `,
     see: ['shortcuts', 'effects'],
+  },
+  {
+    id: 'transcript-search',
+    section: 'Getting Started',
+    title: 'Transcript Search',
+    summary: 'Search what is said in all your footage, and open the clip at the moment it is said.',
+    keywords: 'transcript transcribe transcription speech spoken said words dialogue interview find footage raw media search whisper option space alt space logging',
+    body: `
+Transcript Search finds words in what people say in your media, across every clip in the project. Press {{key:transcriptSearch}} in the editor, or choose [[run:transcriptSearch|Help → Transcript Search]].
+
+![Transcript Search with the word sunrise typed in. Each result shows the timecode, the sentence with the word highlighted, and the clip it is in.](transcript-search.jpg)
+
+## Transcribe your media
+
+Before you can search, the speech has to be written down. This happens once per clip:
+
+1. Open Transcript Search. The top right corner shows how many of the clips with sound are transcribed, for example **0 of 5 transcribed**.
+2. Choose the spoken language. **Detect automatically** works for most clips, but choosing the language is faster and more accurate.
+3. Click **Transcribe 5 clips**.
+
+The clips are transcribed one at a time by the speech model on your computer, the same model as for [[article:captions|captions]]. Nothing is sent from your computer. The bar shows which clip is being transcribed. You can close the window and keep working; the transcription continues in the background, and **Stop** ends it after the current clip.
+
+Every clip with sound is included: video with sound, audio files and the camera sound of Reccut recordings (the screen sound when the recording has no camera sound). Clips that are offline are left out until they are found again.
+
+If no speech model is installed, the window for AI models opens so you can download one. You can also install and switch models in **Settings → AI**, or with **Manage Models** in the Captions tab. Smaller models are faster, larger ones more accurate.
+
+## Search
+
+Type a word or a few words. Results appear as you type: every sentence where all the words are said, with the timecode and the name of the clip. The words are highlighted. Upper and lower case do not matter, and part of a word is enough, so **sun** also finds sunrise and sunset.
+
+Use the arrow keys to move through the results, and press Enter or click a result to open the clip in the viewer at that moment. From there, mark a range and add it to the timeline as usual. Press Escape or {{key:transcriptSearch}} again to close the window.
+
+## Good to know
+
+- **The transcript is saved in the project.** You only transcribe a clip once, and it is searchable the next time you open the project. Transcribing does not add an undo step.
+- **Times are in the clip's own time**, so trimming or moving the clip on the timeline does not change where a result points.
+- **New clips** are not transcribed automatically. When you add media, the window shows how many are left, for example **Transcribe 2 clips**.
+- **Transcribe all again** transcribes every clip again, for example in another language or with a larger model. The old transcript is replaced.
+- **The AI Agent** shares the transcripts. Clips the agent has transcribed for an edit can be searched here.
+- **Words that span two sentences** are not found together, because each sentence is searched on its own. Search for a shorter part instead.
+- **Music** has sound too, so it is counted among the clips. Its transcript is usually empty, which does no harm.
+- On Windows, Alt Space can also open the window menu of some apps. If it does not open Transcript Search, choose another shortcut in [[article:shortcuts|Keyboard Shortcuts]].
+`,
+    see: ['search', 'captions', 'ai-plugins'],
   },
   /* Opptak */
   {
@@ -804,6 +844,8 @@ Preview the first three photos, pause or scrub to inspect motion and transitions
 Blade ({{key:blade}}) cuts the selected clips, or the storyline clip, at the playhead. Blade All ({{key:bladeAll}}) cuts every clip under the playhead. With the Blade tool ({{key:tool:blade}}) you cut where you click, and a line shows where the cut will be.
 
 When you cut through every clip in a group, the right hand pieces become a new group.
+
+Detect Edits ({{key:detectEdits}}, or right click a video clip) finds every place where the camera angle changes, for example in a video downloaded from the web, and cuts the clip there. Undo to go back.
 `,
     see: ['trimming', 'grouping'],
   },
@@ -1432,15 +1474,53 @@ Import the template ({{key:importTemplate}}), drop the .reccut-title file on Rec
     section: 'Editing',
     title: 'Captions',
     summary: 'Subtitles with full styling, import, export and automatic captions.',
-    keywords: 'captions subtitles srt vtt transcribe whisper shorts reels tiktok short-form animated word by word karaoke highlight pop',
+    keywords: 'captions subtitles srt vtt transcribe whisper shorts reels tiktok short-form animated word by word karaoke highlight pop default style own style one caption single caption several captions restyle red bigger reset right click',
     body: `
 Add Caption ({{key:addCaption}}) adds a caption at the playhead. Double click an empty spot on the caption track to add one that starts there. The Captions tab ({{key:browser:captions}}) generates captions automatically from speech, and imports and exports SRT and WebVTT. Captions can have one to three lines, any font, color, outline and background, and can be placed anywhere. When exporting, burn them in, embed them, or save them as a separate file.
 
 Captions keep their own timing when video clips are moved, trimmed or deleted. You can add text without selecting a video clip. Type directly in the inspector, drag a caption along the caption track to change its time, or drag it in the viewer to change its position. Only explicit grouping makes a caption follow a video clip. While an input field has focus, editor shortcuts are disabled so you can type freely.
 
+## Default style and a caption's own style
+
+Every caption uses the **default style** of the sequence, so one change restyles them all. A caption can also have its **own style** on top of the default. Make one caption bigger or red, and the rest stay as they are.
+
+Only what you change is kept for the caption. Everything else still follows the default. If a caption has its own red colour and you later make the default bigger, that caption becomes bigger too and stays red.
+
+![One caption made bigger and red under Style for this caption. The other captions keep the default style.](captions-own-style.jpg)
+
+### Change one caption
+
+1. Select the caption on the timeline.
+2. In the Caption tab of the inspector, open **Style for this caption**.
+3. Change font, size, weight, text colour, outline, background, shadow, all caps, word animation or entrance.
+
+**Reset to default style** removes the caption's own changes, so it follows the default again.
+
+### Change several captions at once
+
+Select several captions on the timeline, for example with Cmd (Ctrl) click or by dragging a selection box. The Caption tab shows **Style for these captions**, and each change applies to every selected caption. **Alignment** and **Own position** also apply to all of them; you find them in the section titled with the number of captions, for example **3 captions**. The text, start and duration are hidden while several captions are selected, since each caption has its own.
+
+![Three captions selected on the timeline, given the same blue box under Style for these captions.](captions-several.jpg)
+
+### Change all captions
+
+Use **Default style for all captions** in the Caption tab, or **Caption style** in the Captions tab ({{key:browser:captions}}). A caption's own changes stay on top.
+
+What every caption shares: **Max lines**, the **Position** (Top, Middle, Bottom or Custom) and **New captions**. They belong to the default style only, because typing, splitting and new automatic captions use them. To place a single caption elsewhere, use **Alignment** and **Own position** under This caption, or drag it in the viewer.
+
 ## Styles
 
-Under **Styles** in the Captions tab, click a style to use it for all captions. Hover a style to see it move. The styles come in two groups.
+Hover a style to see it move. What a click does depends on where you are:
+
+- **Captions tab in the browser:** click a style to make it the default for all captions.
+- **Caption tab in the inspector:** click a style to use it on the selected captions only. The card of the style the caption uses is outlined.
+- **Right click a style** anywhere and choose **Use as Default Subtitle Style** to make it the default for all captions. In the inspector, the menu also has **Apply to This Caption** (or **Apply to N Captions**).
+
+![The Styles cards in the inspector. Yellow Outline is outlined because the selected caption uses it.](captions-styles.jpg)
+
+A style used on single captions changes how they look, not how they are split. Splitting into short captions, and the number of lines, only follow the default style.
+
+The styles come in two groups.
 
 **Subtitles** are full sentences at the bottom of the picture:
 
@@ -1463,11 +1543,11 @@ Under **Styles** in the Captions tab, click a style to use it for all captions. 
 - **Highlighter**: black capitals marked with a yellow highlighter.
 - **Neon Pink**: white capitals, and the word being spoken glows pink.
 
-The social styles also split long captions into short ones of one to four words, timed to the speech, in one undo step. **Split into 3-word captions** (the number follows the style) does the same with the current style, and **New captions** under Caption style decides how new automatic captions are split.
+When a social style becomes the default, it also splits long captions into short ones of one to four words, timed to the speech, in one undo step. **Split into 3-word captions** (the number follows the style) does the same with the current style, and **New captions** under Caption style decides how new automatic captions are split.
 
 The word timing comes from **Generate captions**. Captions you type or import from SRT are timed evenly over their length, and a caption whose words you change is timed evenly again. If you blade a caption, the words are divided at the cut, so each half keeps the words spoken there.
 
-In **Caption style** you can choose each part yourself: **All caps**, **Word animation** (Highlight, Pop, Box or Reveal), the colour of the spoken word or box, and an **Entrance** (Fade or Pop) for each new caption. A word that is too wide for the picture makes the text smaller, so it never runs off the edge.
+In **Caption style**, and in **Style for this caption**, you can choose each part yourself: **All caps**, **Word animation** (Highlight, Pop, Box or Reveal), the colour of the spoken word or box, and an **Entrance** (Fade or Pop) for each new caption. A word that is too wide for the picture makes the text smaller, so it never runs off the edge.
 
 The animation is shown in the viewer and in exports with burned-in captions. Embedded captions and SRT or WebVTT files contain only the text.
 `,
@@ -1602,7 +1682,7 @@ Drag a color handle down off the color bar to remove it, or select it and press 
     section: 'Look',
     title: 'Lens Flare and Flare Studio',
     summary: 'Add an optical lens flare, adjust it in Properties, animate the light and build your own flares in Flare Studio.',
-    keywords: 'lens flare flare studio sun light source optical center ghost ghosts ring arc starburst streak glow glint diffraction lens dirt anamorphic preset import export flare color spread reflections axis solo',
+    keywords: 'lens flare flare studio sun light source optical center ghost ghosts ring arc starburst streak glow glint diffraction lens dirt anamorphic preset import export group groups keyframe custom texture occlusion threshold 4k flare color spread reflections axis solo',
     body: `
 **Lens Flare** imitates what happens when strong light hits a camera lens: a bright light source, and a chain of reflections (ghosts, rings and arcs) on a straight line through the middle of the lens. You choose a ready preset and adjust it in **Properties**, or open **Flare Studio** to build the flare element by element.
 
@@ -1650,6 +1730,8 @@ Under **Optical center & opacity**:
 
 - **Center X** and **Center Y** move the optical center. Leave it at 50 % / 50 % for a normal lens. Moving it changes the angle of the reflection line.
 - **Opacity** fades the whole flare, from 0 to 100 %.
+- **Occlusion** dims the flare when the picture is dark where the light is, for example when a person, a tree or a cloud passes in front of the sun. Reccut looks at a small circle of the picture around the light source and measures how much of it is bright; at 100 % the flare follows that completely, at 0 % (the default) it is always on. Half of the sun covered gives about half the flare. A light outside the picture is never dimmed.
+- **Threshold** (with Occlusion): how bright the picture must be at the light to count as light, from 0 to 100 %. Raise it if the flare stays on when something covers a bright sky, lower it if the flare fades on a sun that is not quite white.
 
 ![Flare color set to blue with Color amount at 100 %. The Cinematic Warm preset turns blue, while the rainbow ring keeps its colors.](lensflare-color.jpg)
 
@@ -1667,7 +1749,7 @@ The handles are guides only. They are never exported.
 
 ## Animate the flare
 
-Light position, optical center, Intensity, Global scale, Spread, Flare color, Color amount and Opacity can all have keyframes. Click the diamond beside a setting to add a keyframe at the playhead. See [[article:keyframes|Keyframes]].
+Light position, optical center, Intensity, Global scale, Spread, Flare color, Color amount, Opacity, Occlusion and Threshold can all have keyframes. In Flare Studio every element has its own keyframes too: Distance, offset, Size, Rotation, Intensity, Opacity, Tint and the shape settings, for example a ghost that grows or a streak that fades in. Choosing another preset removes the element keyframes, since they belong to the old elements. Click the diamond beside a setting to add a keyframe at the playhead. See [[article:keyframes|Keyframes]].
 
 To make the flare follow the sun as the camera pans:
 
@@ -1712,6 +1794,8 @@ Each row shows a thumbnail, the element's name and where it sits: at the light s
 - **Duplicate** (Cmd/Ctrl D): copy the element, for example to make a second ghost further out.
 - **Delete** (Delete or Backspace): remove the element.
 
+**Groups** keep elements that belong together, for example the core of the light or a row of ghosts. Type a group name in **Group** in the element settings (or pick an existing one); the element moves to the end of that group. The group row has its own eye, solo and collapse buttons, and **Ungroup** keeps the elements but removes the group.
+
 ### Add element
 
 Choose a group, then click a texture to add it. The new element is selected so you can adjust it at once.
@@ -1726,6 +1810,7 @@ Choose a group, then click a texture to add it. The new element is selected so y
 - **Glints**: small, sharp sparkles.
 - **Diffraction**: fine rainbow patterns around the light.
 - **Lens dirt**: dust and smudges on the lens that only show where the light falls.
+- **Custom**: your own textures. Click **Import texture…** and choose a PNG, JPEG or WebP. A PNG with transparency works best, but a flare photographed on black works too, since the texture is added as light. The picture is scaled down to at most 1024 pixels and stored in the project, so the project and presets you save or export take it with them. Hover a texture and click **×** to remove it and the elements that use it.
 
 Glows, starbursts, streaks, halos, glints, diffraction and lens dirt start at the light source. Ghosts, rings and arcs start on the other side of the optical center, at distance −0.6.
 
@@ -1733,7 +1818,9 @@ Glows, starbursts, streaks, halos, glints, diffraction and lens dirt start at th
 
 The first elements under Ghosts (**Iris ghost round**, **Iris ghost polygon** and **Iris ghost spectral**), Rings (**Ring** and **Ring spectral**) and **Halo** are procedural. Reccut calculates their shape, color and brightness for every pixel when it draws the picture, so they stay sharp at 4K, 8K and any zoom, with clean edges and no seams. The geometric ghosts and rings in the presets are drawn this way.
 
-The other elements are photographic textures: glows, starbursts, streaks, arcs, glints, diffraction, lens dirt and the textured ghosts and rings further down the lists. Use them for complex, organic reflections.
+Glows, starbursts, streaks, arcs, glints and diffraction are also calculated for every pixel, from the same formulas their textures were made with. They look the same as the textures, but stay sharp however much they are enlarged, for example a streak across a 4K picture.
+
+The textured ghosts and rings further down the lists, lens dirt and your own textures are pictures. Use them for complex, organic reflections. Without a graphics card that supports WebGL 2, every element is drawn from its picture.
 
 ### Element settings
 
@@ -2254,15 +2341,46 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
     section: 'Audio',
     title: 'Cutting to the Beat',
     summary: 'Mark a track as music, and the beats and bars of the song appear as a grid you can snap edits to.',
-    keywords: 'beat detection beat grid music bpm tempo bars rhythm snap cut to the beat montage',
+    keywords: 'beat detection beat grid music bpm tempo bars rhythm snap cut to the beat montage downbeat music track',
     body: `
-Click the music note in the header of an audio track to mark it as a music track. Reccut listens to the music clips on that track in the background and finds the tempo, the beats and where each bar starts. This runs on your computer and is done once per song.
+Beat Detection finds the beats in a music clip and shows them as a grid behind the timeline, so you can see where to cut. With snapping on, edit points land exactly on the beat.
 
-The grid appears behind the tracks: a solid line at the start of each bar and a dashed line for the other beats, counted in 4/4. When you zoom out, the beat lines are hidden first so the bars stay readable.
+![A 100 BPM music track marked as music. Solid blue lines mark the start of each bar and dashed lines the other beats. The video cuts fall on the bar lines.](beat-grid.jpg)
 
-With [[run:snapping|snapping]] on, edit points, the blade and moved clips snap to the grid lines, just as they snap to markers and other clips. The grid follows the music clip when you move or trim it.
+## Mark a track as music
 
-Turn the grid off and on with [[run:beatGrid|View → Beat Grid]] or the waveform button next to the snapping button. The grid works on clips that play at normal or constant speed; clips with a speed ramp or played in reverse do not show it.
+Click the music note in the header of an audio track. The note lights up, and Reccut listens to every music clip on that track in the background. The task list shows **Detecting beats in** and the name of the song while it works. It takes a few seconds per song and is done only once: the result is saved with the project and in Reccut's cache, so the grid is there at once the next time, also in other projects that use the same file.
+
+Click the note again to turn the track back into an ordinary audio track. The grid disappears; nothing is deleted.
+
+## Read the grid
+
+- A **solid line** marks the start of a bar, the first beat.
+- A **dashed line** marks the other beats in the bar.
+- The bars are counted in 4/4, the time signature of most pop, rock and electronic music.
+
+The grid follows the music clip: move or trim it, and the lines move with it. When you zoom out, the beat lines are hidden first so the bars stay readable, and when the bars are very close together, the grid is hidden.
+
+Turn the grid off and on with [[run:beatGrid|View → Beat Grid]] or the waveform button next to the snapping button. The setting is remembered.
+
+## Cut to the beat
+
+With [[run:snapping|snapping]] on ({{key:snapping}}), edit points snap to the grid lines while you trim, move clips, use the blade or set a range, just as they snap to markers and other clips. A cut on a solid line falls on the first beat of a bar; for a montage, cut every bar or every second bar. The music clip itself does not snap to its own grid when you move it.
+
+## Limits
+
+- Tempos from 60 to 200 BPM are found. Music that is much slower or faster gets a grid at half or double speed.
+- The grid follows small changes in tempo, but music without a steady beat, such as ambient pads or free piano, gives an uneven grid.
+- The first beat of the bar is guessed from where the bass is strongest. In music without a clear kick drum, the solid lines can land one beat off. The dashed lines are still on the beat.
+- Music in 3/4 or 6/8 is shown in 4/4.
+- Clips with a speed ramp or played in reverse do not show a grid. Clips at another constant speed do.
+
+## If the grid does not appear
+
+- Check that the music note is lit in the track header, and that the clip is on that track.
+- Check that **View → Beat Grid** is on.
+- Zoom in. The grid is hidden when the bars are very close together.
+- Look in the task list. If the file is offline or has no sound, it cannot be analyzed.
 `,
     see: ['ducking', 'audio'],
   },

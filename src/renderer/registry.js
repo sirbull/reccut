@@ -193,7 +193,7 @@ export const COMMANDS = [
   { id: 'checkUpdates', label: 'Check for Updates…', menu: 'Help', group: 'about', rooms: ALL, run: () => import('./updates.js').then((m) => m.checkForUpdates(true)), help: 'updates', keywords: 'update new version download github release' },
   { id: 'findCommand', label: 'Quick Search', menu: 'Help', group: 'search', keys: 'Ctrl+Space', also: ['CmdOrCtrl+K'], rooms: ALL, anywhere: true, run: () => (paletteOpen.value = !paletteOpen.value), help: 'search', keywords: 'find command palette console fx effects tools search everything' },
   { id: 'beatGrid', label: 'Beat Grid', menu: 'View', group: 'toggles', run: () => setPrefs({ beatGrid: !prefs.value.beatGrid }), checked: () => prefs.value.beatGrid, help: 'beat-grid', keywords: 'beat detection music bpm tempo bars grid rhythm snap cut to the beat', desc: 'Show the beats and bars of music on tracks marked as music, and snap edits to them.' },
-  { id: 'transcriptSearch', label: 'Transcript Search', menu: 'Help', group: 'search', keys: 'Alt+Space', anywhere: true, run: () => (transcriptSearchOpen.value = !transcriptSearchOpen.value), help: 'search', keywords: 'transcript transcribe speech spoken said words dialogue find footage raw media whisper', desc: 'Search what is said in all media in the project, and open the clip at that moment.' },
+  { id: 'transcriptSearch', label: 'Transcript Search', menu: 'Help', group: 'search', keys: 'Alt+Space', anywhere: true, run: () => (transcriptSearchOpen.value = !transcriptSearchOpen.value), help: 'transcript-search', keywords: 'transcript transcribe speech spoken said words dialogue find footage raw media whisper', desc: 'Search what is said in all media in the project, and open the clip at that moment.' },
 
   /* Design */
   { id: 'design:removeBackground', label: 'Remove Background', run: () => removeBackground(), enabled: () => design.selectedLayers().some(l => l.type === 'image'), menu: 'Design', rooms: DESIGN, help: 'design' },
@@ -279,6 +279,7 @@ export const COMMANDS = [
 
   /* Clip */
   { id: 'blade', label: 'Blade', menu: 'Clip', keys: 'CmdOrCtrl+B', run: commands.blade, help: 'cutting', desc: 'Cut the selected clips, or the storyline clip, at the playhead.' },
+  { id: 'detectEdits', label: 'Detect Edits', menu: 'Clip', keys: 'Shift+E', run: () => commands.detectEdits(), help: 'cutting', keywords: 'scene detection camera change angle shot cut auto split downloaded', desc: 'Cut the selected video clip wherever the camera angle changes.' },
   { id: 'bladeAll', label: 'Blade All', menu: 'Clip', keys: 'Shift+CmdOrCtrl+B', run: commands.bladeAll, help: 'cutting', desc: 'Cut every clip under the playhead.' },
   { id: 'trimStart', label: 'Trim Start to Playhead', menu: 'Clip', keys: 'Alt+[', run: () => commands.trimToPlayhead('start'), help: 'trimming' },
   { id: 'trimEnd', label: 'Trim End to Playhead', menu: 'Clip', keys: 'Alt+]', run: () => commands.trimToPlayhead('end'), help: 'trimming' },

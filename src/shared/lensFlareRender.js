@@ -344,7 +344,9 @@ function gpuFlare(img, w, h, draws, screen) {
     const dirt = d.blend === 'dirt', kit = !dirt && flareOptions.analytic ? d.asset.kit : null;
     const t = kit ? null : spriteTexture(d.asset);
     if (!kit && !t) continue;
-    if (t) gl.bindTexture(gl.TEXTURE_2D, t);
+    // Formel-elementene leser ingen tekstur, men enhet 0 må ikke peke på lysbufferen vi tegner i
+    // (det er en lese/skrive-løkke, og WebGL hopper over tegningen).
+    gl.bindTexture(gl.TEXTURE_2D, t);
     gl.uniform1i(sprite.u.kit, kit ? kit.kind : -1);
     if (kit) {
       gl.uniform1i(sprite.u.variant, kit.variant);

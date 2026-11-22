@@ -48,3 +48,19 @@ Når vi lager en ny versjon av Reccut, må About-vinduet også vise det nye vers
 
 - Klippene på tidslinjen er sannheten for kutt og trimming. Før multicam-klippet bygges på nytt (Edit Multicam Clip, Active Audio Angle), leses de tilbake med `absorbTimeline` i [src/shared/multicam.js](src/shared/multicam.js), og `buildMulticamClips` gir hver ny bit effektene, nøkkelbildene, fargen og overgangene fra klippet den kom fra. Brukerens arbeid i redigeringen skal aldri gå tapt uten at de blir spurt.
 - Active Video Angle bytter kilden i selve klippet (`switchClipAngle`), uten å bygge om gruppen.
+
+## Transcript Search
+
+- Option Space (Alt Space på Windows) åpner søket i hva som blir sagt ([src/renderer/editor/TranscriptSearch.jsx](src/renderer/editor/TranscriptSearch.jsx)). Transkriberingen bruker den samme lokale Whisper-jobben som tekstingen (`transcribe:start`) via `runTranscribe` i [src/renderer/editor/transcripts.js](src/renderer/editor/transcripts.js). Ingenting sendes ut av maskinen.
+- Jobbene sendes med `agent: true`, så resultatet aldri erstatter undertekstsporet. Den globale lytteren i `Editor.jsx` hopper over slike jobber.
+- Transkripsjonen lagres på mediet som `media.transcript = { language, segments: [{ start, end, text }] }` i kildesekunder, uten angresteg (`setMediaTranscript` i `store.js`). Bare frasene lagres, ikke ordtidene, så prosjektfilen holder seg liten.
+- AI-agentens `transcribe_speech` med `mediaId` lagrer også transkripsjonen på mediet, så agent og søk deler resultatet.
+- Søket (`searchTranscripts` i [src/shared/speech.js](src/shared/speech.js)) finner fraser som inneholder alle ordene, uten hensyn til store og små bokstaver. Testen ligger i `test/speech.test.mjs`.
+
+## Beat Detection
+
+- Et lydspor merkes som musikk med `lanes[lane].music` (notetasten i sporhodet). Musikkklipp på slike spor analyseres én gang i bakgrunnen (`media:analyzeBeats`, `scheduleBeats` i [src/main/media.js](src/main/media.js)), lokalt.
+- Analysen ligger i [src/shared/beats.js](src/shared/beats.js): spektral flux (ikke bare lydstyrke, ellers drukner trommene under bassen), tempo med autokorrelasjon (60 til 200 BPM) og slag med dynamisk programmering. Takten antas å være 4/4, og første slag er der bassen er sterkest.
+- Resultatet lagres på strømmen (`streams.main.beats = { version, bpm, downbeat, beats }`) og i hurtigbufferen som `beats-v<versjon>.json`. Øk `BEATS_VERSION` når analysen endres, så lagrede grid lages på nytt.
+- Gridet og snappingen ligger i [src/renderer/editor/Timeline.jsx](src/renderer/editor/Timeline.jsx) (`beatLines`, `BeatGrid`). `clipBeatLines` regner kildetid om til tidslinjetid og gir ikke grid for klipp med fartsrampe eller baklengs avspilling. Av/på er `prefs.beatGrid`.
+- `test/beats.test.mjs` bruker en syntetisk 4/4-rytme med en ringende bass. Den skal fortsette å finne riktig tempo og takt; den gamle lydstyrkemetoden fant halvt tempo på slik musikk.

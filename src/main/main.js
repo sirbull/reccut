@@ -929,14 +929,15 @@ ipcMain.handle('media:track', (_e, file, opts) => {
 ipcMain.handle('media:details', (_e, file) => ff.details(file));
 // Sceneskift (nytt vindu, ny side, kameraklipp) for AI-agenten. Bildet skaleres ned først, så
 // også lange skjermopptak går raskt. Resultatet er [[sekund, styrke 0 til 1], ...].
-ipcMain.handle('media:scenes', (_e, file, duration) => {
+// exact: alle bilder i stedet for 4 i sekundet, så kuttene havner på riktig bilde (Detect Edits).
+ipcMain.handle('media:scenes', (_e, file, duration, exact = false) => {
   const { done } = jobs.add({
     kind: 'analyze',
     title: 'Finding scene changes',
     queue: 'light',
     run: async (ctx) => {
       const job = ff.run(
-        ['-hwaccel', 'auto', '-i', file, '-an', '-sn', '-vf', "fps=4,scale=160:-2,select='gte(scene\\,0.04)',metadata=print:file=-", '-f', 'null', '-'],
+        ['-hwaccel', 'auto', '-i', file, '-an', '-sn', '-vf', `${exact ? '' : 'fps=4,'}scale=160:-2,select='gte(scene\\,0.04)',metadata=print:file=-`, '-f', 'null', '-'],
         { onProgress: (t) => ctx.progress(Math.min(0.99, t / Math.max(duration || 1, 1))) }
       );
       ctx.setCancel(job.kill);

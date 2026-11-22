@@ -25,10 +25,11 @@ if (!electron.app) {
     // Light and optical center in the middle, so every element is centered at distance 1.
     const scene = (elements) => ({ ...structuredClone(FLARE_DEFAULTS), x: 0.5, y: 0.5, cx: 0.5, cy: 0.5, scale: 1, spread: 1, intensity: 1, opacity: 1, colorize: 0, blend: 'add',
       elements: elements.map((e) => ({ ...makeElement(e.asset), distance: 1, intensity: 2.5, ...e })) });
-    function render(p, w, h) {
+    function render(p, w, h, paint = null) {
       const img = document.createElement('canvas'), out = document.createElement('canvas');
       img.width = out.width = w; img.height = out.height = h;
       img.getContext('2d').fillRect(0, 0, w, h);
+      paint?.(img.getContext('2d'));
       const ctx = out.getContext('2d', { willReadFrequently: true });
       drawLensFlare(ctx, img, w, h, p);
       return { canvas: out, px: ctx.getImageData(0, 0, w, h).data, w, h };
@@ -99,6 +100,22 @@ if (!electron.app) {
         report.kitVsPng[a.id] = { meanAbs: +(sum / n).toFixed(3), max };
         if (sum / n > 1.5 || max > 12) fail.push(a.id + ': formula differs from the PNG ' + JSON.stringify(report.kitVsPng[a.id]));
       }
+      // 6. Occlusion: a dark disc over the light source dims the flare; a light outside the picture is not dimmed.
+      {
+        const w = 1280, h = 720, R = 0.02 * h; // the probed circle in flareVisibility
+        const gray = (cover) => (c) => {
+          c.fillStyle = '#c0c0c0'; c.fillRect(0, 0, w, h);
+          c.fillStyle = '#000'; c.beginPath(); c.arc(w / 2, h / 2, R * cover, 0, 2 * Math.PI); c.fill();
+        };
+        const p = { ...scene([{ asset: 'glow_white', size: 0.8, intensity: 0.3 }]), occlusion: 1, threshold: 0.6 };
+        const lift = (q, paint, x = w / 2 + 0.12 * h) => at(render(q, w, h, paint), x, h / 2)[1] - 192;
+        const open = lift(p, gray(0)), covered = lift(p, gray(1.5)), half = lift(p, gray(0.7));
+        // Light just outside the right edge; its glow reaches into the picture.
+        const off = [lift({ ...p, x: 1.2 }, gray(1.5), w - 2), lift({ ...p, x: 1.2, occlusion: 0 }, gray(1.5), w - 2)];
+        report.occlusion = { open, half, covered, offscreen: off };
+        if (!(open > 20) || covered > 1 || !(half > covered && half < open)) fail.push('occlusion does not follow the picture: ' + JSON.stringify(report.occlusion));
+        if (!(off[0] > 0) || off[0] !== off[1]) fail.push('a light source outside the picture is dimmed by occlusion');
+      }
       const all = scene([...mix, { asset: 'iris_spectral', size: 0.35, distance: 1, blades: 7, chroma: 0.06 }]);
       return { report, fail, png: render(all, W, H).canvas.toDataURL('image/png') };
     };`;
@@ -119,7 +136,7 @@ if (!electron.app) {
         console.log('Wrote ' + path.join(out, 'procedural-4k.png'));
       }
       if (fail.length) throw new Error(fail.join('\n'));
-      console.log('Procedural lens flare: no seams, clean center, ~1 px edges, resolution independent, kit formulas match the PNGs.');
+      console.log('Procedural lens flare: no seams, clean center, ~1 px edges, resolution independent, kit formulas match the PNGs, occlusion follows the picture.');
       app.exit(0);
     } catch (error) {
       console.error(error.message || error); app.exit(1);

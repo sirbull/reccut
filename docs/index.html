@@ -161,10 +161,13 @@ html[data-keyboard-focus] .compare:focus-within { outline: 2px solid #c3c5cc; ou
 .compare .tag.l { left: 18px; }
 .compare .tag.r { right: 18px; }
 
-.looks.tools { grid-template-columns: 1.6fr 1.2fr 1.2fr; margin-top: 56px; }
-.tools .look { margin: 0; }
-.tools .look img { aspect-ratio: auto; height: 320px; }
-.tools .look.fit img { object-fit: contain; object-position: center 30%; background: #1c1c1e; }
+.looks.tools { grid-template-columns: repeat(4, 1fr); margin-top: 56px; }
+.looks.tools + .looks { margin-top: 22px; }
+.tools .look { margin: 0; height: 250px; background: #1c1c1e; cursor: zoom-in; }
+.tools.scopes .look { background: #0d1015; }
+.tools .look img { aspect-ratio: auto; height: auto; transform: none; }
+.tools .look figcaption { background: linear-gradient(transparent, #1c1c1e 55%); }
+.tools.scopes .look figcaption { background: linear-gradient(transparent, #0d1015 55%); }
 .looks { display: grid; grid-template-columns: repeat(6, 1fr); margin-top: 22px; border-radius: var(--radius); overflow: hidden; }
 .look { position: relative; overflow: hidden; cursor: zoom-in; }
 .look img { width: 100%; aspect-ratio: 3/4; object-fit: cover; transition: transform 1s cubic-bezier(.2,.7,.2,1); }
@@ -267,8 +270,8 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   section { padding: 40px 0; }
   .rooms, .stills, .oss, .record-details, .import-formats { grid-template-columns: 1fr; }
   .looks { grid-template-columns: repeat(3, 1fr); }
-  .looks.tools { grid-template-columns: 1fr; }
-  .tools .look img { height: auto; aspect-ratio: 4/3; }
+  .looks.tools { grid-template-columns: repeat(2, 1fr); }
+  .tools .look { height: 210px; }
   .feature, .feature.flip { grid-template-columns: 1fr; gap: 32px; }
   .feature.flip .copy { order: 0; }
   .grid, .cards { grid-template-columns: repeat(2, 1fr); }
@@ -444,7 +447,7 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <p class="sub">Record one line at a time, keep the best takes and send the voice over to the timeline with subtitles.</p>
     </div>
     <figure class="reveal" style="margin-top:40px">
-      <div class="frame"><img src="media/voice-over-studio.jpg" alt="Voice Over Studio in Reccut with a four-line demo script, a starred take, narration waveforms, audio effect templates, AI Clean Voice and Send to Edit with subtitles" loading="lazy" width="2000" height="1141"></div>
+      <div class="frame"><img src="media/voice-over-studio.jpg" alt="Voice Over Studio in Reccut with a four-line script, four microphone takes on the Narrator track, room tone filling the pauses between them, audio effect templates, AI Clean Voice and Send to Edit with subtitles" loading="lazy" width="2400" height="1368"></div>
     </figure>
     <div class="rooms reveal">
       <div class="room">
@@ -501,11 +504,12 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
   <div class="wrap center">
     <div class="kicker">Titles</div>
     <h2>Titles and <span class="serif">lower thirds</span></h2>
-    <p class="sub">Add a title to the timeline, enter your text and position it in the preview. The animation adjusts to the length of the clip.</p>
+    <p class="sub">Choose from ready-made titles and lower thirds, enter your text and position it in the preview. The animation adjusts to the length of the clip.</p>
     <div class="stills">
       <figure class="still reveal"><img src="media/still-title.jpg" width="1600" height="900" alt="Title Into the Wild, A moment outside, over a mountain lake" loading="lazy"><span>Title</span></figure>
       <figure class="still reveal"><img src="media/still-lowerthird.jpg" width="1600" height="900" alt="Lower third Falling water, A quiet moment in the forest, over a waterfall" loading="lazy"><span>Lower third</span></figure>
     </div>
+    <p class="caption">Want your own? Design lower thirds in Adobe After Effects with the free Reccut Template Kit and import them as a <code>.reccut-title</code> file, or write the open format by hand.</p>
   </div>
 </section>
 
@@ -517,9 +521,16 @@ dialog img { max-width: 96vw; max-height: 94vh; border-radius: 10px; cursor: zoo
       <p class="sub">Exposure, white balance and color wheels, more than 40 film looks, LOG conversion and your own LUTs.</p>
     </div>
     <div class="looks tools reveal">
-      <figure class="look"><img src="media/color-tile-grade.jpg" width="1348" height="756" alt="A mountain lake graded with teal shadows and warm highlights" loading="lazy"><figcaption>Light &amp; color<small>Exposure, contrast, highlights, shadows and white balance</small></figcaption></figure>
-      <figure class="look fit"><img src="media/color-tile-wheels.jpg" width="570" height="320" alt="The Color and Color Wheels settings, with wheels for shadows, midtones and highlights" loading="lazy"><figcaption>Color wheels<small>Shadows, midtones and highlights, in 16-bit</small></figcaption></figure>
-      <figure class="look"><img src="media/color-tile-vectorscope.jpg" width="420" height="330" alt="The vectorscope with 75 percent targets, showing the teal and orange of the graded lake" loading="lazy"><figcaption>Video scopes<small>Vectorscope, waveform, RGB parade and histogram</small></figcaption></figure>
+      <figure class="look"><img src="media/color-tool-light.jpg" width="580" height="328" alt="The Light settings in Properties: exposure, contrast, highlights and shadows" loading="lazy"><figcaption>Light<small>Exposure, contrast, highlights and shadows</small></figcaption></figure>
+      <figure class="look"><img src="media/color-tool-color.jpg" width="580" height="268" alt="The Color settings in Properties: saturation, temperature and tint" loading="lazy"><figcaption>Color<small>Saturation and white balance</small></figcaption></figure>
+      <figure class="look"><img src="media/color-tool-wheels.jpg" width="580" height="336" alt="The Color Wheels in Properties, for shadows, midtones and highlights" loading="lazy"><figcaption>Color wheels<small>Shadows, midtones and highlights, in 16-bit</small></figcaption></figure>
+      <figure class="look"><img src="media/color-tool-film.jpg" width="580" height="606" alt="The Film Looks list in Properties, starting with Kodak and Fujifilm color film stocks" loading="lazy"><figcaption>Film looks<small>More than 40 film stocks and styles</small></figcaption></figure>
+    </div>
+    <div class="looks tools scopes reveal">
+      <figure class="look"><img src="media/scope-waveform.jpg" width="568" height="378" alt="Luma waveform of a graded mountain lake" loading="lazy"><figcaption>Waveform<small>Brightness from left to right</small></figcaption></figure>
+      <figure class="look"><img src="media/scope-parade.jpg" width="568" height="378" alt="RGB parade of a graded mountain lake" loading="lazy"><figcaption>RGB parade<small>Red, green and blue side by side</small></figcaption></figure>
+      <figure class="look"><img src="media/scope-histogram.jpg" width="568" height="378" alt="RGB and luma histogram of a graded mountain lake" loading="lazy"><figcaption>Histogram<small>How the levels are spread</small></figcaption></figure>
+      <figure class="look"><img src="media/scope-vectorscope.jpg" width="568" height="378" alt="Vectorscope of a graded mountain lake, with 75 percent targets" loading="lazy"><figcaption>Vectorscope<small>Hue and saturation, with skin tone guide</small></figcaption></figure>
     </div>
     <div class="looks">
       <figure class="look reveal"><button class="look-open" type="button" data-before="media/look-velvia50-before.jpg" aria-label="Compare Fujifilm Velvia 50 with original footage"><img src="media/look-velvia50.jpg" width="1280" height="720" alt="Waterfall with the Fujifilm Velvia 50 look" loading="lazy"></button><figcaption>Fujifilm Velvia 50<small>Color film</small></figcaption></figure>

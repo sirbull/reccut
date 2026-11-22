@@ -12,7 +12,7 @@ import sciFiViolet from '../../assets/lensflare/presets/sci_fi_violet.json' with
 import vintage35mm from '../../assets/lensflare/presets/vintage_35mm.json' with { type: 'json' };
 import { toLinear, toSrgb } from './oklab.js';
 
-const GROUP_LABELS = { glows: 'Glows', starbursts: 'Starbursts', streaks: 'Streaks', ghosts: 'Ghosts', rings: 'Rings', halos: 'Halos', arcs: 'Arcs', glints: 'Glints', diffraction: 'Diffraction', dirt: 'Lens dirt' };
+const GROUP_LABELS = { glows: 'Glows', starbursts: 'Starbursts', streaks: 'Streaks', ghosts: 'Ghosts', rings: 'Rings', halos: 'Halos', arcs: 'Arcs', glints: 'Glints', diffraction: 'Diffraction', dirt: 'Lens dirt', custom: 'Custom' };
 export const FLARE_GROUPS = Object.entries(GROUP_LABELS).map(([id, label]) => ({ id, label }));
 const words = (id) => id.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 

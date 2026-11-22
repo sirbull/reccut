@@ -79,6 +79,16 @@ node scripts/capture-effects.cjs "$HOME/Movies/Reccut/Website Demos - 2026-11-05
 
 The script uses a temporary, isolated app profile like the other capture scripts and writes to `assets/help`. Run `npm run docs` afterwards to copy the images to the website handbook. Lens Flare images are not part of this script.
 
+## Captions handbook images (22 November 2026)
+
+`assets/help/captions-own-style.jpg`, `captions-several.jpg` and `captions-styles.jpg` are photographed from the real editor with the Coastal ridge clip from the Into the Wild demo and three typed captions. Run `npm run build`, then:
+
+```sh
+node scripts/capture-captions.cjs "$HOME/Movies/Reccut/Website Demos - 2026-11-05/Into the Wild/Media"
+```
+
+The script uses a temporary, isolated app profile and writes to `assets/help`. Run `npm run docs` afterwards to copy the images to the website handbook. The right click menu is a native menu and cannot be photographed this way, so the handbook describes it in text.
+
 ## Highlights cards — 22 November 2026
 
 The Highlights section has seven cards with a small picture and a short text. Two pictures are photographed from the real editor; the others are cropped from handbook images so only the picture area shows:
@@ -102,3 +112,7 @@ Run `npm run build`, then `node scripts/capture-features.cjs`. The script uses a
 `scripts/capture-features.cjs` photographs the color tools at 2x as three tiles: `color-tile-grade.jpg` (the Mountain lake clip with a light teal and orange grade: contrast 14, highlights −15, shadows 6, saturation 6, temperature 4, shadows wheel toward teal, highlights wheel toward orange), `color-tile-wheels.jpg` (the Color Wheels section of the Color tab) and `color-tile-vectorscope.jpg` (the vectorscope of the same frame, from the four-scope view). The media browser is hidden for the pictures. The tiles sit in one row above the film look strip, with the title on the picture like the looks. The large before/after slider was removed from the page; each film look in the strip still opens a before/after comparison.
 
 All pictures from `capture-features.cjs` are taken at 2x (the window is twice the size with zoom 2), so they stay sharp on high-density screens.
+
+## Voice Over Studio picture — 22 November 2026
+
+`media/voice-over-studio.jpg` was photographed again so it looks like a microphone session: four green takes on the Narrator track (the app's color for the first person), a recorded room tone set in the header, and room tone filling the pauses between the takes on the Room tone track. The narration is still Kokoro `af_heart` with the same four-line English script, but `scripts/feature-demo-media.mjs` now places it in a simulated room at 48 kHz: a pink noise floor around −56 dBFS with a low rumble, a breath before each sentence, and room sound before and after the speech. `roomtone.wav` is five seconds of the same room. The demo folder is `~/Movies/Reccut/Website Demos - 2026-11-22/Voice Over`; photograph it with `node scripts/capture-voiceover.cjs "<that folder>"`. The takes are trimmed like microphone takes, against the room tone's noise floor. The capture profile marks the voice package list as shown, so it does not cover the studio. The picture is 2400 × 1368.

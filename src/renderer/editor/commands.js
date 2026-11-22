@@ -1,6 +1,6 @@
 // Kommandoer som brukes av snarveier, menyer og knapper.
 import { signal } from '@preact/signals';
-import { addSequence, currentSequence, deleteSequence, sequenceList, hasFreeTransitions, CAPTION_LANE, CLIP_COLORS, EFFECTS, parseTransitionSelection, transitionSelection, nearestEdit, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, componentVolumeProp, kfTime, valueAt, HIGHLIGHT_DEFAULTS } from '../../shared/model.js';
+import { addSequence, currentSequence, deleteSequence, sequenceList, hasFreeTransitions, CAPTION_LANE, CLIP_COLORS, EFFECTS, parseTransitionSelection, transitionSelection, nearestEdit, audioComponents, RAMP_PRESETS, clipHasAudio, editPoints, isVisual, makeClip, primaryAt, componentVolumeProp, kfTime, valueAt, HIGHLIGHT_DEFAULTS, speedOf, workPath } from '../../shared/model.js';
 import { BUILTIN_TEMPLATES, validateTemplate } from '../../shared/titletemplates.js';
 import { STAB_DEFAULTS } from '../../shared/stabilize.js';
 import { DUCK_DEFAULTS, duckMusic, speechUnderMusic } from '../../shared/ducking.js';
@@ -1477,6 +1477,7 @@ export async function clipContextMenu(clipId, T) {
   if (!c) return;
   const items = [
     { id: 'blade', label: 'Blade at Playhead', accelerator: 'CmdOrCtrl+B', enabled: T > c.start && T < c.start + c.dur },
+    ...(c.type === 'video' ? [{ id: 'detectEdits', label: 'Detect Edits', accelerator: 'Shift+E' }] : []),
     { id: 'toggle', label: c.enabled ? 'Disable Clip' : 'Enable Clip', accelerator: 'V' },
     { separator: true },
     { id: 'copy', label: 'Copy', accelerator: 'CmdOrCtrl+C' },
@@ -1636,6 +1637,9 @@ export async function clipContextMenu(clipId, T) {
     case 'blade':
       commitClipEdit((p) => splitClip(p, clipId, T));
       break;
+    case 'detectEdits':
+      detectEdits(clipId);
+      break;
     case 'toggle':
       toggleEnabled();
       break;
@@ -1661,6 +1665,38 @@ export async function clipContextMenu(clipId, T) {
       deleteSelection(false);
       break;
   }
+}
+
+// Detect Edits: kutter et klipp uten kutt (f.eks. en nedlastet video) der kameravinkelen skifter.
+// ponytail: fast terskel, gjør den justerbar om myke overganger eller blitz gir feil kutt.
+const EDIT_SCORE = 0.3;
+export async function detectEdits(clipId) {
+  const p = project.value;
+  clipId ??= selection.value.find((id) => p.clips[id]?.type === 'video');
+  const c = p.clips[clipId];
+  const st = c?.type === 'video' ? p.media[c.mediaId]?.streams?.main : null;
+  if (!st?.hasVideo) return toast('Select a video clip first.');
+  if (c.ramp || c.reverse || !(speedOf(c) > 0)) return toast('Set the clip back to normal forward speed first.');
+  toast('Looking for camera changes…', { timeout: 2500 });
+  let scenes;
+  try {
+    scenes = await api.mediaScenes(workPath(st), p.media[c.mediaId].duration, true);
+  } catch (err) {
+    return toast(err.message, { kind: 'error', timeout: 6000 });
+  }
+  const src = scenes.filter(([, s]) => s >= EDIT_SCORE).map(([t]) => t + (st.offset || 0));
+  let n = 0;
+  commitClipEdit((q) => {
+    // Klippet kan ha flyttet seg mens analysen gikk, så tidene regnes fra slik det er nå.
+    let cur = q.clips[clipId];
+    if (!cur) return;
+    const times = src.map((t) => cur.start + (t - cur.in) / speedOf(cur));
+    for (const T of times) {
+      const right = splitClip(q, cur.id, T);
+      if (right) { cur = q.clips[right]; n++; }
+    }
+  });
+  toast(n ? `Cut at ${n} camera change${n > 1 ? 's' : ''}. Undo to go back.` : 'No camera changes found in the clip.', { kind: n ? 'success' : undefined, timeout: 4000 });
 }
 
 export async function laneContextMenu(lane, T) {
