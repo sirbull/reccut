@@ -39,7 +39,7 @@ $build = Join-Path $OutputDir 'server-build'
 # MSVC gets no /arch flag (x64 SSE2). Each flag is explicit because
 # GGML_NATIVE=OFF alone does not disable them. MSVC has no FMA/F16C options.
 cmake -S (Join-Path $projectDir 'native\voxcpm') -B $build -G Ninja "-DVOXCPM_SOURCE_DIR=$SourceDir" `
-  -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
   -DBUILD_SHARED_LIBS=OFF -DGGML_BACKEND_DL=OFF -DGGML_NATIVE=OFF `
   -DGGML_METAL=OFF -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DENABLE_COREML=OFF -DGGML_OPENMP=OFF `
   -DGGML_SSE42=OFF -DGGML_BMI2=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_AVX512=OFF -DGGML_AVX_VNNI=OFF `

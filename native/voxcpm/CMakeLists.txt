@@ -13,6 +13,12 @@ if(WIN32)
     message(FATAL_ERROR "The Windows engine is built with MSVC, which embeds windows.manifest")
   endif()
   target_sources(reccut-voxcpm PRIVATE windows.manifest)
+  # Upstream's MoE slot file misses struct iovec/ssize_t on Windows; see windows-compat.h.
+  if(CMAKE_VERSION VERSION_LESS 3.18)
+    message(FATAL_ERROR "The Windows engine needs CMake 3.18 or newer")
+  endif()
+  set_source_files_properties("${VOXCPM_SOURCE_DIR}/src/llama-moe-slot.cpp" TARGET_DIRECTORY llama
+    PROPERTIES COMPILE_OPTIONS "/FI${CMAKE_CURRENT_SOURCE_DIR}/windows-compat.h")
   target_compile_definitions(reccut-voxcpm PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
   target_compile_options(reccut-voxcpm PRIVATE /utf-8)
 endif()

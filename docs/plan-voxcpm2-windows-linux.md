@@ -19,13 +19,17 @@ katalogens størrelse og SHA-256. Upstream er klonet på låst revisjon i `vendo
 
 Gjort (uten kompilator, verifisert med tester og en falsk protokollmotor):
 
-- `native/voxcpm/build-windows.ps1`: MSVC via vswhere, statisk runtime (`/MT`,
-  CMP0091), ingen `/arch` (x64/SSE2), avhengighetskontroll med `dumpbin`
+- `native/voxcpm/build-windows.ps1`: MSVC via vswhere, statisk runtime (`/MT`),
+  ingen `/arch` (x64/SSE2), avhengighetskontroll med `dumpbin`
   (bare System32-DLL-er, aldri VC-runtime), innebygd manifest, `--help`,
   `--protocol`, lisens og SHA-256.
 - `native/voxcpm/build-linux.sh`: alle x86-utvidelser av, statisk libstdc++/libgcc,
   bare glibc-avhengigheter, høyeste GLIBC-versjon i `glibc.txt`. CI bygger i
   `ubuntu:22.04` (glibc 2.35) som foreslått eldste grunnlinje.
+- `native/voxcpm/windows-compat.h`: første CI-bygg (MSVC 19.52) stoppet i upstream
+  `src/llama-moe-slot.cpp`, som har en Windows-lesevei, men mangler `struct iovec` og
+  `ssize_t` uten POSIX-headere. Filen legges inn med `/FI` bare for den kildefilen;
+  upstream endres ikke. MoE-koden brukes ikke av VoxCPM2.
 - `native/voxcpm/windows.manifest`: `activeCodePage=UTF-8`. Den låste runtime-en
   åpner token-tabellen med `std::ifstream(path)` ([voxcpm2_runtime.cpp:323](https://github.com/tc-mb/llama.cpp-omni/blob/d30f00feadb7ebce95bacd55b0d104e3ef501481/tools/omni/voxcpm2/voxcpm2_runtime.cpp#L323)),
   som ellers ville feilet med `æøå` i brukernavnet. Manifestet gjør `argv` og

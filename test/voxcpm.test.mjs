@@ -318,6 +318,9 @@ test('phase 9: Windows and Linux CPU engines are prepared but stay disabled unti
   assert.match(read('native/voxcpm/build-windows.ps1'), /MultiThreaded[\s\S]*dumpbin[\s\S]*activeCodePage/);
   assert.match(read('native/voxcpm/windows.manifest'), /<activeCodePage[^>]*>UTF-8<\/activeCodePage>/);
   assert.match(read('native/voxcpm/CMakeLists.txt'), /windows\.manifest/);
+  // Upstream stays unpatched; Windows gaps are filled by a force-included header for one file.
+  assert.match(read('native/voxcpm/CMakeLists.txt'), /llama-moe-slot\.cpp" TARGET_DIRECTORY llama[\s\S]*\/FI[^"]*windows-compat\.h/);
+  assert.match(read('native/voxcpm/windows-compat.h'), /#ifdef _WIN32[\s\S]*struct iovec[\s\S]*ssize_t/);
   // Benchmark texts are fixed, and the long scripts split without losing text.
   const { chunksForSpeech, spokenText } = await import('../src/shared/tts.js');
   const texts = JSON.parse(read('native/voxcpm/benchmark-texts.json'));
