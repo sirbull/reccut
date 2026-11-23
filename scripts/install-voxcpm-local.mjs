@@ -10,7 +10,9 @@ import crypto from 'node:crypto';
 import { writePackage } from './package-addons.mjs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { createVoxcpm } = require('../src/main/voxcpm');
+const { createVoxcpm, engineFor } = require('../src/main/voxcpm');
+const platformEngine = engineFor(process.platform, process.arch);
+if (!platformEngine) throw new Error(`VoxCPM2 is not enabled for ${process.platform}-${process.arch}. Test the engine with scripts/test-voxcpm-process.mjs and scripts/benchmark-voxcpm.mjs first.`);
 const catalog = require('../src/main/ttsCatalog.json').voxcpm;
 const root = path.resolve(import.meta.dirname, '..');
 const [engine, modelDir, dir] = process.argv.slice(2, 5).map((p) => path.resolve(p));
@@ -28,7 +30,7 @@ async function archive(id, entries) {
     files: entries.map(e => ({ path: e.path, size: e.data.length, sha256: sha(e.data), ...(e.executable ? { executable: true } : {}) })) };
   files.set(name, file);
 }
-await archive('voxcpm-mac', [{ path: 'reccut-voxcpm-mac', data: await fs.readFile(engine), executable: true }]);
+await archive(platformEngine.package, [{ path: platformEngine.asset, data: await fs.readFile(engine), executable: true }]);
 for (const l of catalog.languages.filter(l => languages.includes(l.lang))) {
   const entries = [];
   for (const v of l.voices) {

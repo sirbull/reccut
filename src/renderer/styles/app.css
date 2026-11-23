@@ -3811,6 +3811,7 @@ kbd.keycap {
 .palette-item .kind.k-title { background: rgba(106, 75, 176, 0.4); color: #ddd0ff; }
 .palette-item .kind.k-look { background: rgba(255, 55, 95, 0.22); color: #ffc4d0; }
 .palette-item .kind.k-setting { background: rgba(10, 132, 255, 0.25); color: #cfe5ff; }
+.palette-item .kind.k-option { background: rgba(94, 92, 230, 0.28); color: #dcdbff; }
 .palette-item .kind.k-media { background: rgba(48, 209, 88, 0.22); color: #c9f5d5; }
 .palette-item.active .kind {
   background: rgba(255, 255, 255, 0.25);
@@ -4824,7 +4825,23 @@ kbd.keycap {
 .ai-message.user { margin-left: 30px; background: #337bd01c; }
 .ai-message b { font-size: 11px; color: #adbfd8; }
 .ai-message p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 0; line-height: 1.5; }
-.ai-compose { display: flex; align-items: flex-end; gap: 10px; margin-top: 14px; }
+.ai-compose { display: flex; align-items: flex-end; gap: 10px; margin-top: 14px; position: relative; }
+/* Slash commands in the AI chat (/help, /new …). */
+.ai-slash { position: absolute; left: 90px; bottom: calc(100% + 4px); display: flex; flex-direction: column; min-width: 300px; padding: 4px; border: 1px solid #ffffff1f; border-radius: var(--radius); background: #1d1d20; box-shadow: 0 8px 24px #0008; z-index: 5; }
+.ai-slash button { display: block; padding: 6px 10px; border: 0; border-radius: 6px; background: none; color: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.ai-slash button:hover, .ai-slash button:focus-visible { background: #ffffff14; }
+.ai-slash b { display: inline-block; min-width: 76px; color: var(--accent); }
+/* Tool servers (MCP) in Settings › AI. */
+.mcp-servers { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.mcp-server { padding: 10px 12px; border: 1px solid #ffffff1a; border-radius: var(--radius); }
+.mcp-server.on { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.mcp-server-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.mcp-server p { margin: 4px 0; }
+.mcp-server .extension-actions { margin-top: 8px; align-items: center; }
+.mcp-server code { display: block; margin-top: 4px; word-break: break-all; }
+.mcp-snippet { max-height: 220px; overflow: auto; padding: 10px; border-radius: 6px; background: #0003; font-size: 11px; white-space: pre-wrap; word-break: break-all; user-select: text; }
+.agent-examples button.needs-server { opacity: 0.6; }
+.agent-examples button small { opacity: 0.8; }
 .ai-compose textarea { resize: vertical; flex: 1; }
 
 /* Recording microphone mixer. */

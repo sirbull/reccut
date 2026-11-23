@@ -3,11 +3,18 @@ import * as esbuild from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildLicenses } from './build-licenses.mjs';
+// Quick Search (Ctrl Space) finds every option in Settings from this list, made from the Settings sources.
+import { indexText } from './build-settings-index.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const out = path.join(root, 'build');
 const watch = process.argv.includes('--watch');
 fs.mkdirSync(out, { recursive: true });
+{
+  const file = path.join(root, 'src/renderer/help/settingsIndex.json');
+  const text = indexText();
+  if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n') !== text) fs.writeFileSync(file, text);
+}
 
 const common = {
   bundle: true,

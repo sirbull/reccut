@@ -1,11 +1,12 @@
 // Editing tools for the AI agent. The same registry gives the model its tool list, validates arguments
 // and makes the edit, so documentation and behaviour cannot drift apart.
-import { makeVideoEffect } from './videoEffects.js';
+import { VIDEO_EFFECTS, makeVideoEffect } from './videoEffects.js';
 import { addMediaClip, autoFormat, bladeAt, deleteClips, moveClip, placeFree, setSpeed, setTransition, trimClip } from './ops.js';
 import { CAPTION_LANE, TITLE_TEMPLATES, TRANSITIONS, audioComponents, deepClone, makeClip, primaryAt, round, titleText, uid } from './model.js';
 import { BUILTIN_TEMPLATES, TEMPLATE_FORMAT, templateDefaults, validateTemplate } from './titletemplates.js';
 import { fitCaptions } from './srt.js';
 import { FILM_IDS } from './filmLooks.js';
+import { clipBeatLines } from './beats.js';
 const PROPERTY_RANGES = {
   exposure: [-1, 1],
   contrast: [-1, 1],
@@ -59,10 +60,10 @@ export function validateAIActions(p, actions) {
     if (a.type === 'addEffect') {
       if (
         !['video', 'image', 'recording'].includes(c.type) ||
-        !['chroma', 'luma', 'blur', 'saturation', 'contrast', 'opacity'].includes(a.effect)
+        !AGENT_EFFECTS.includes(a.effect)
       )
         throw new Error('Unsupported effect proposal.');
-      return { type: a.type, clipId: c.id, effect: a.effect };
+      return { type: a.type, clipId: c.id, effect: a.effect, ...(a.params ? { params: checkPatch(makeVideoEffect(a.effect).p, a.params, `Effect ${a.effect}`) } : {}) };
     }
     throw new Error('Unsupported AI action.');
   });
@@ -75,6 +76,7 @@ export function applyAIActions(p, actions) {
     else if (a.type === 'setProperty') c.props[a.property] = a.value;
     else {
       const e = makeVideoEffect(a.effect);
+      if (a.params) Object.assign(e.p, a.params);
       if (c.type === 'recording') e.target = p.media[c.mediaId]?.streams?.camera?.hasVideo ? 'camera' : 'screen';
       c.props.vfx = [...(c.props.vfx || []), e];
     }
@@ -95,7 +97,17 @@ export function checkPatch(current, patch, what) {
   return patch;
 }
 const MAX_TIME = 24 * 3600;
-const STACK_EFFECTS = ['chroma', 'luma', 'blur', 'saturation', 'contrast', 'opacity'];
+// Every effect in the Effects browser except the background reference key, which needs a picked reference frame.
+export const AGENT_EFFECTS = VIDEO_EFFECTS.map((e) => e.type).filter((t) => t !== 'difference');
+const STACK_EFFECTS = AGENT_EFFECTS;
+const effectList = () => VIDEO_EFFECTS.filter((e) => AGENT_EFFECTS.includes(e.type)).map((e) => `${e.type} (${e.label})`).join(', ');
+function effectAt(p, a) {
+  const c = clipOf(p, a.clipId),
+    stack = c.props.vfx || [];
+  const i = Number.isInteger(a.index) ? a.index : typeof a.effect === 'string' ? stack.findIndex((e) => e.type === a.effect) : -1;
+  if (!stack[i]) throw new Error(`Clip ${c.id} has no such effect. Its stack is ${JSON.stringify(stack.map((e) => e.type))}; use index from 0.`);
+  return { c, i, e: stack[i] };
+}
 function clipOf(p, id) {
   const c = typeof id === 'string' && Object.hasOwn(p.clips, id) && p.clips[id];
   if (!c) throw new Error(`No clip with id ${JSON.stringify(id)}. Call get_timeline for current ids.`);
@@ -400,7 +412,8 @@ export const TOOLS = [
       const c = clipOf(p, a.clipId);
       const props = Object.fromEntries(Object.entries(c.props).filter(([, v]) => v === null || typeof v !== 'object' || (Array.isArray(v) && v.every((x) => typeof x !== 'object'))));
       if (c.props.cleanVoice && Object.keys(c.props.cleanVoice).length) props.cleanVoice = c.props.cleanVoice;
-      return { ...summary(p, c), properties: props, keyframed: Object.keys(c.kf || {}).filter((k) => c.kf[k]?.length), ...(c.props.fields ? { fields: c.props.fields } : {}) };
+      const effects = (c.props.vfx || []).map((e, index) => ({ index, type: e.type, on: e.on !== false, settings: Object.fromEntries(Object.entries(e.p || {}).filter(([, v]) => v === null || typeof v !== 'object')) }));
+      return { ...summary(p, c), properties: props, keyframed: Object.keys(c.kf || {}).filter((k) => c.kf[k]?.length), ...(c.props.fields ? { fields: c.props.fields } : {}), ...(effects.length ? { effects } : {}) };
     },
   },
   {
@@ -483,11 +496,65 @@ export const TOOLS = [
   },
   {
     name: 'add_video_effect',
-    description: `Add an effect to the top-to-bottom effect stack of a video, image or recording clip: ${STACK_EFFECTS.join(', ')}. chroma removes a green/blue screen; luma keys dark areas.`,
-    parameters: obj({ clipId: { type: 'string' }, effect: { type: 'string', enum: STACK_EFFECTS } }, ['clipId', 'effect']),
+    description: `Add an effect to the top-to-bottom effect stack of a video, image or recording clip, optionally with settings. Effects: EFFECTS. chroma removes a green/blue screen (set color to the screen colour); luma keys dark areas. Leave out params for the defaults; get_clip shows every setting of each effect in the stack, then change them with set_video_effect. Amounts are usually 0..1; colours are "#rrggbb".`,
+    parameters: obj({ clipId: { type: 'string' }, effect: { type: 'string', enum: STACK_EFFECTS }, params: { type: 'object', description: 'Only settings to change from the default, for example {"amount": 0.2}.' } }, ['clipId', 'effect']),
     edit(p, a) {
-      applyAIActions(p, [{ type: 'addEffect', clipId: clipOf(p, a.clipId).id, effect: a.effect }]);
-      return summary(p, p.clips[a.clipId]);
+      applyAIActions(p, [{ type: 'addEffect', clipId: clipOf(p, a.clipId).id, effect: a.effect, ...(a.params ? { params: a.params } : {}) }]);
+      return { ...summary(p, p.clips[a.clipId]), index: p.clips[a.clipId].props.vfx.length - 1 };
+    },
+  },
+  {
+    name: 'set_video_effect',
+    description: "Change the settings of an effect in a clip's effect stack, turn it on or off (on), or move it (moveTo, 0 is the top). Pick the effect by index (0 is the top) or by effect type. get_clip lists the stack with every setting.",
+    parameters: obj({ clipId: { type: 'string' }, index: { type: 'integer' }, effect: { type: 'string' }, params: { type: 'object' }, on: { type: 'boolean' }, moveTo: { type: 'integer' } }, ['clipId']),
+    edit(p, a) {
+      const { c, i, e } = effectAt(p, a);
+      if (a.params) Object.assign(e.p, checkPatch(e.p, a.params, `Effect ${e.type}`));
+      if (typeof a.on === 'boolean') e.on = a.on;
+      if (Number.isInteger(a.moveTo)) {
+        const stack = [...c.props.vfx];
+        stack.splice(i, 1);
+        stack.splice(Math.max(0, Math.min(stack.length, a.moveTo)), 0, e);
+        c.props.vfx = stack;
+      }
+      return { clip: c.id, effectStack: c.props.vfx.map((x) => ({ type: x.type, on: x.on !== false })) };
+    },
+  },
+  {
+    name: 'remove_video_effect',
+    description: "Remove an effect from a clip's effect stack, by index (0 is the top) or by effect type.",
+    parameters: obj({ clipId: { type: 'string' }, index: { type: 'integer' }, effect: { type: 'string' } }, ['clipId']),
+    edit(p, a) {
+      const { c, i } = effectAt(p, a);
+      c.props.vfx = c.props.vfx.filter((_, j) => j !== i);
+      return { clip: c.id, effectStack: c.props.vfx.map((x) => x.type) };
+    },
+  },
+  {
+    name: 'set_music_lane',
+    description: 'Mark an audio lane (-1 and down) as a music track, or turn it off. Music clips on such a lane get beat detection in the background (tempo, beats and bars); read them with get_beats a few seconds later.',
+    parameters: obj({ lane: { type: 'integer' }, music: { type: 'boolean' } }, ['lane', 'music']),
+    edit(p, a) {
+      if (!Number.isInteger(a.lane) || a.lane > -1 || a.lane < -50) throw new Error('Music tracks are audio lanes, -1 and down.');
+      p.lanes = { ...(p.lanes || {}), [a.lane]: { ...(p.lanes?.[a.lane] || {}), music: Boolean(a.music) } };
+      return { lane: a.lane, music: Boolean(a.music) };
+    },
+  },
+  {
+    name: 'get_beats',
+    description: 'Beats of the music on music lanes (set_music_lane), in timeline seconds: tempo (bpm), every beat, and which beats start a bar (4/4). Use them to cut, place titles and transitions on the beat. Clips with a speed ramp or reverse have no beats.',
+    parameters: obj({ clipId: { type: 'string' }, from: num('Only beats from this timeline time.'), to: num('Only beats until this time.') }),
+    read(p, a) {
+      const music = Object.values(p.clips).filter((c) => p.lanes?.[c.lane]?.music && c.mediaId && (!a.clipId || c.id === a.clipId));
+      if (!music.length) return { clips: [], note: 'No clips on a music lane. Mark the lane with set_music_lane first.' };
+      return {
+        clips: music.map((c) => {
+          const b = p.media[c.mediaId]?.streams?.main?.beats;
+          if (!b?.beats?.length) return { clipId: c.id, status: 'Beat detection is running. Try again in a few seconds.' };
+          const lines = clipBeatLines(c, b).filter((l) => (a.from == null || l.t >= a.from) && (a.to == null || l.t <= a.to)).slice(0, 2000);
+          return { clipId: c.id, bpm: b.bpm, beats: lines.map((l) => round(l.t)), bars: lines.filter((l) => l.bar).map((l) => round(l.t)) };
+        }),
+      };
     },
   },
   {
@@ -506,7 +573,7 @@ export const TOOLS = [
     },
   },
 ];
-for (const t of TOOLS) t.description = t.description.replace('TITLES', titleList()).replace('EXAMPLE', JSON.stringify(BUILTIN_TEMPLATES[0]));
+for (const t of TOOLS) t.description = t.description.replace('EFFECTS', effectList()).replace('TITLES', titleList()).replace('EXAMPLE', JSON.stringify(BUILTIN_TEMPLATES[0]));
 export const TOOL_MAP = new Map(TOOLS.map((t) => [t.name, t]));
 // What is visible at a time, as text. Lets models without image input check the composition.
 export function describeAt(p, T) {

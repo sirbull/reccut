@@ -295,3 +295,35 @@ test('bad WAV output discards the warm process, cleans files and permits a clean
   assert.equal((await f.manager.generate(payload, context())).rate, 48000);
   assert.equal(native.children.filter((p) => p.args[0] === '--serve').length, 2);
 });
+
+test('phase 9: Windows and Linux CPU engines are prepared but stay disabled until measured', async () => {
+  const fsSync = await import('node:fs');
+  const read = (p) => fsSync.readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
+  const { engineFor } = require('../src/main/voxcpm.js');
+  assert.deepEqual(engineFor('darwin', 'arm64'), { package: 'voxcpm-mac', asset: 'reccut-voxcpm-mac' });
+  for (const [platform, arch] of [['win32', 'x64'], ['linux', 'x64'], ['win32', 'arm64'], ['linux', 'arm64'], ['darwin', 'x64'], ['constructor', '']]) assert.equal(engineFor(platform, arch), null);
+  // Separate, manual measurement workflow: pinned upstream, no release, no weights.
+  const ci = read('.github/workflows/voxcpm-cpu.yml');
+  assert.ok(ci.includes(`ref: ${CATALOG.engine.revision}`));
+  assert.match(ci, /^on:\s*\n\s*workflow_dispatch:\s*$/m);
+  assert.match(ci, /contents: read/);
+  assert.ok(!/gh release|\.gguf|huggingface|package-addons/i.test(ci));
+  for (const script of ['native/voxcpm/build-windows.ps1', 'native/voxcpm/build-linux.sh']) {
+    const s = read(script);
+    assert.ok(s.includes('voxcpm.engine.revision') && s.includes('voxcpm.engine.protocol'), `${script} checks the pinned revision and protocol`);
+    for (const flag of ['GGML_NATIVE=OFF', 'GGML_AVX2=OFF', 'GGML_OPENMP=OFF', 'GGML_CUDA=OFF', 'GGML_VULKAN=OFF', 'BUILD_SHARED_LIBS=OFF']) assert.ok(s.includes(flag), `${script}: ${flag}`);
+    assert.ok(s.includes('llama-cpp-omni-MIT.txt') && s.includes('nlohmann-json-MIT.txt'));
+    assert.ok(!/\.gguf|huggingface/i.test(s));
+  }
+  assert.match(read('native/voxcpm/build-windows.ps1'), /MultiThreaded[\s\S]*dumpbin[\s\S]*activeCodePage/);
+  assert.match(read('native/voxcpm/windows.manifest'), /<activeCodePage[^>]*>UTF-8<\/activeCodePage>/);
+  assert.match(read('native/voxcpm/CMakeLists.txt'), /windows\.manifest/);
+  // Benchmark texts are fixed, and the long scripts split without losing text.
+  const { chunksForSpeech, spokenText } = await import('../src/shared/tts.js');
+  const texts = JSON.parse(read('native/voxcpm/benchmark-texts.json'));
+  for (const lang of ['en-us', 'nb']) {
+    const spoken = spokenText(texts.texts[lang].long), chunks = chunksForSpeech(spoken);
+    assert.ok(chunks.length >= 5 && spoken.length > 500);
+    assert.equal(chunks.join(' '), spoken);
+  }
+});

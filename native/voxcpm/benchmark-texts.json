@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "note": "Fixed synthetic texts for scripts/benchmark-voxcpm.mjs. Change the version when a text changes, so reports stay comparable.",
+  "texts": {
+    "en-us": {
+      "short": "This is not difficult.",
+      "medium": "Open the project and select the first clip. Trim the start, then add a title above it. Press play to check the result before you export.",
+      "long": "Welcome to this short guide. Today we will record the screen, add a voice over and export the finished video. First, choose the window you want to record and press the record button. Speak calmly and take short pauses between the steps, so the edit is easier later. When you are done, stop the recording and open it in the editor. Here you can cut away the parts you do not need, move clips on the timeline and add titles. If the sound has background noise, turn on Clean Voice for the microphone. Finally, choose a format, pick a folder and press export. The video is saved on your computer, and nothing is uploaded unless you decide to share it yourself."
+    },
+    "nb": {
+      "short": "Dette er ikke vanskelig.",
+      "medium": "Åpne prosjektet og velg det første klippet. Klipp bort starten, og legg en tittel over. Trykk på avspilling for å se resultatet før du eksporterer.",
+      "long": "Velkommen til denne korte veiledningen. I dag skal vi ta opp skjermen, legge på en stemme og eksportere den ferdige videoen. Først velger du vinduet du vil ta opp, og trykker på opptaksknappen. Snakk rolig og ta korte pauser mellom stegene, så blir redigeringen enklere etterpå. Når du er ferdig, stopper du opptaket og åpner det i redigeringen. Her kan du klippe bort det du ikke trenger, flytte klipp på tidslinjen og legge til titler. Hvis lyden har bakgrunnsstøy, slår du på Clean Voice for mikrofonen. Til slutt velger du format og mappe, og trykker på eksporter. Videoen lagres på maskinen din, og ingenting lastes opp med mindre du selv velger å dele den."
+    }
+  }
+}

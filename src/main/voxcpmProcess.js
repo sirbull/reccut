@@ -95,13 +95,16 @@ function createVoxcpmProcess({ spawnImpl = spawn, idleTimeoutMs = 60000, startup
   async function ready(config, signal, onLoading) {
     await closing;
     signal?.throwIfAborted();
-    const key = JSON.stringify([config.exe, config.sha256, config.models]);
+    // Optional engine flags (--cpu, --threads N) are for measurements only;
+    // they are part of the key so a process is never reused with other flags.
+    const args = config.args || [];
+    const key = JSON.stringify([config.exe, config.sha256, config.models, args]);
     if (session && session.key !== key) await stop();
     signal?.throwIfAborted();
     if (!session) {
       onLoading();
       signal?.throwIfAborted();
-      const child = spawnImpl(config.exe, ['--serve', ...config.models], { cwd: config.cwd, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+      const child = spawnImpl(config.exe, ['--serve', ...config.models, ...args], { cwd: config.cwd, stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
       const s = { child, key, ready: deferred(), closed: deferred(), loaded: false, pending: null, rest: '' };
       session = s;
       child.stdout.setEncoding?.('utf8');

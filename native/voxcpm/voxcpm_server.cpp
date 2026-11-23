@@ -12,6 +12,10 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 using json = nlohmann::json;
 static constexpr int protocol = 1;
@@ -88,18 +92,40 @@ static void generate(VoxCPM2Runtime & runtime, const json & request) {
     auto audio = runtime.generate_with_clone(text, pcm, params);
     write_wav(output, audio, runtime.sample_rate());
 }
+// Optional development flags after the two model paths: --cpu and --threads N.
+static bool options(int argc, char ** argv, bool & gpu, int & threads) {
+    for (int i = 4; i < argc; i++) {
+        const std::string arg = argv[i];
+        if (arg == "--cpu" && gpu) gpu = false;
+        else if (arg == "--threads" && !threads && i + 1 < argc) {
+            const std::string n = argv[++i];
+            if (n.empty() || n.size() > 3 || n.find_first_not_of("0123456789") != std::string::npos) return false;
+            threads = std::stoi(n);
+            if (threads < 1 || threads > 256) return false;
+        } else return false;
+    }
+    return true;
+}
 int main(int argc, char ** argv) {
+#ifdef _WIN32
+    // Protocol lines are exact bytes: no CRLF translation and no Ctrl-Z EOF.
+    // The embedded manifest (windows.manifest) makes argv and narrow paths UTF-8.
+    _setmode(_fileno(stdin), _O_BINARY);
+    _setmode(_fileno(stdout), _O_BINARY);
+#endif
     if (argc == 2 && std::string(argv[1]) == "--protocol") {
         reply({{"type", "protocol"}, {"protocol", protocol}}); return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--help") {
-        std::cout << "Reccut VoxCPM2 CLI adapter\n--serve <BaseLM.gguf> <Acoustic.gguf> [--cpu]\nJSON lines over stdin/stdout; EOF stops the engine.\n"; return 0;
+        std::cout << "Reccut VoxCPM2 CLI adapter\n--serve <BaseLM.gguf> <Acoustic.gguf> [--cpu] [--threads N]\nJSON lines over stdin/stdout; EOF stops the engine.\n"; return 0;
     }
-    if ((argc != 4 && argc != 5) || std::string(argv[1]) != "--serve" || (argc == 5 && std::string(argv[4]) != "--cpu")) return 2;
+    bool gpu = true; int threads = 0;
+    if (argc < 4 || std::string(argv[1]) != "--serve" || !options(argc, argv, gpu, threads)) return 2;
     try {
         ggml_time_init();
         VoxCPM2Runtime runtime;
-        if (!runtime.init(argv[2], argv[3], -1, argc != 5)) { reply({{"type", "fatal"}, {"error", "Could not load the voice model."}}); return 1; }
+        if (!runtime.init(argv[2], argv[3], -1, gpu)) { reply({{"type", "fatal"}, {"error", "Could not load the voice model."}}); return 1; }
+        if (threads) runtime.set_n_threads(threads);
         reply({{"type", "ready"}, {"protocol", protocol}, {"rate", runtime.sample_rate()}});
         while (true) {
             // Bound input before parsing, including a request without a newline.

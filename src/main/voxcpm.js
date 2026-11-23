@@ -13,8 +13,19 @@ const { stagePackage } = require('./addonPackages');
 const fingerprint = (value) => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const missing = () => new Error('MODEL_MISSING:voices Download the VoxCPM2 model and voice package first.');
 const canceled = () => new Error('Canceled');
+// Enabled engines per platform: add-on package id and executable inside it.
+// Phase 9 (docs/plan-voxcpm2-windows-linux.md) adds 'win32-x64' with
+// voxcpm-win-x64 / reccut-voxcpm-win-x64.exe and 'linux-x64' with
+// voxcpm-linux-x64 / reccut-voxcpm-linux-x64, each only after its CPU
+// measurements in docs/voxcpm-cpu pass. Until then they stay unavailable.
+const ENGINES = {
+  'darwin-arm64': { package: 'voxcpm-mac', asset: 'reccut-voxcpm-mac' },
+};
+function engineFor(platform = process.platform, arch = process.arch) {
+  return Object.hasOwn(ENGINES, `${platform}-${arch}`) ? ENGINES[`${platform}-${arch}`] : null;
+}
 function assetName(platform = process.platform, arch = process.arch) {
-  return platform === 'darwin' && arch === 'arm64' ? 'reccut-voxcpm-mac' : null;
+  return engineFor(platform, arch)?.asset ?? null;
 }
 function localFile(dir, rel) {
   if (typeof rel !== 'string' || !rel || rel.split(/[\\/]/).some((s) => !s || s === '.' || s === '..') || path.isAbsolute(rel)) throw new Error('Invalid catalog path.');
@@ -48,7 +59,9 @@ function readWav(buf) {
 function createVoxcpm({ dir, catalog = CATALOG.voxcpm, addonCatalog = ADDONS,
   platform = process.platform, arch = process.arch, fetchImpl = globalThis.fetch, spawnImpl = spawn, onChange = () => {}, idleTimeoutMs, startupTimeoutMs, requestTimeoutMs }) {
   const asset = assetName(platform, arch);
-  const enginePackage = addonCatalog.packages['voxcpm-mac'];
+  // Unsupported platforms keep a placeholder package so paths stay defined;
+  // every install and generate path refuses before using it.
+  const enginePackage = addonCatalog.packages[engineFor(platform, arch)?.package ?? 'voxcpm-mac'] ?? { sha256: 'unavailable', files: [] };
   const engineSpec = enginePackage.files.find(f => f.path === asset);
   const engineDir = path.join(dir, 'engine', enginePackage.sha256);
   const modelDir = path.join(dir, 'models', fingerprint(catalog.model));
@@ -72,7 +85,7 @@ function createVoxcpm({ dir, catalog = CATALOG.voxcpm, addonCatalog = ADDONS,
     } catch { return false; }
   }
   async function engineInfo(verify = false) {
-    if (!asset) return null;
+    if (!asset || !engineSpec) return null;
     try {
       const info = JSON.parse(await fs.readFile(path.join(engineDir, 'verified.json'), 'utf8'));
       const file = path.join(engineDir, asset);
@@ -143,6 +156,7 @@ function createVoxcpm({ dir, catalog = CATALOG.voxcpm, addonCatalog = ADDONS,
 
   function install(lang, onProgress = () => {}) {
     if (!asset) return Promise.reject(new Error('VoxCPM2 currently requires an Apple Silicon Mac.'));
+    if (!engineSpec) return Promise.reject(new Error('The VoxCPM2 engine for this platform is not published yet.'));
     const l = lang === null ? null : language(lang);
     if (lang !== null && !l) return Promise.reject(new Error('Unknown VoxCPM2 language.'));
     if (active) return Promise.reject(new Error('VoxCPM2 is already downloading.'));
@@ -269,4 +283,4 @@ function createVoxcpm({ dir, catalog = CATALOG.voxcpm, addonCatalog = ADDONS,
     stop: () => { cancel(); speaking?.cancel(); return processor.stop(canceled()); } };
 }
 
-module.exports = { createVoxcpm, assetName, readWav };
+module.exports = { createVoxcpm, assetName, engineFor, readWav };

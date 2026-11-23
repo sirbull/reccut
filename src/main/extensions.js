@@ -137,7 +137,7 @@ const TOOL_NAME = /^[a-z_][a-z0-9_]{0,63}$/;
 const IMAGE = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/;
 function validateRequest({ system, messages, tools }) {
   if (typeof system !== 'string' || system.length > 100000) throw new Error('Invalid system prompt.');
-  if (!Array.isArray(tools) || tools.length > 64 || tools.some((t) => !TOOL_NAME.test(t?.name) || typeof t.description !== 'string' || typeof t.parameters !== 'object'))
+  if (!Array.isArray(tools) || tools.length > 128 || tools.some((t) => !TOOL_NAME.test(t?.name) || typeof t.description !== 'string' || typeof t.parameters !== 'object'))
     throw new Error('Invalid tool list.');
   const ok = (m) =>
     (m.role === 'user' && typeof m.content === 'string' && (!m.images || (Array.isArray(m.images) && m.images.length <= 4 && m.images.every((i) => IMAGE.test(i))))) ||

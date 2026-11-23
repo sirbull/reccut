@@ -18,7 +18,8 @@ import { FILM_LOOKS } from '../../shared/filmLooks.js';
 
 import { commit, project, room, selection } from '../editor/store.js';
 import * as commands from '../editor/commands.js';
-import { COMMANDS, runCommand } from '../registry.js';
+import { COMMANDS, menuTemplate, runCommand } from '../registry.js';
+import SETTINGS from './settingsIndex.json';
 import { ARTICLES } from './articles.js';
 import { toast } from '../ui.jsx';
 
@@ -26,7 +27,7 @@ import { toast } from '../ui.jsx';
 
 export function flash(selector, { focus = false, tries = 12 } = {}) {
   const attempt = (n) => {
-    const el = typeof selector === 'string' ? document.querySelector(selector) : selector;
+    const el = typeof selector === 'string' ? document.querySelector(selector) : typeof selector === 'function' ? selector() : selector;
     if (!el) {
       if (n > 0) requestAnimationFrame(() => attempt(n - 1));
       return;
@@ -93,10 +94,38 @@ const PARAMS = [
   ['video', 'cropB', 'Crop Bottom', 'crop trim edge'],
 ];
 
+// Menu items that are not commands (About, Quit, Full Screen, Minimize …), taken from the menu itself.
+const ROLE_SKIP = new Set(['help', 'windowMenu', 'appMenu', 'editMenu']);
+function menuRoles(items = menuTemplate(), path = [], out = []) {
+  for (const it of items) {
+    if (it.submenu) menuRoles(it.submenu, [...path, it.label], out);
+    // Text roles such as copy and paste belong to their command (Copy, Paste), which is already listed.
+    else if (it.role && !ROLE_SKIP.has(it.role) && !COMMANDS.some((c) => c.text === it.role) && !out.some((x) => x.role === it.role)) out.push({ role: it.role, label: it.label, where: path.join(' › ') });
+  }
+  return out;
+}
+
+// An option in Settings: open its pane and highlight the row, with the focus on its control.
+function openSetting(s) {
+  localStorage.setItem('settingsPane', s.pane);
+  commands.prefsOpen.value = false;
+  requestAnimationFrame(() => (commands.prefsOpen.value = true));
+  if (s.kind === 'pane') return;
+  const find = () => {
+    const body = document.querySelector('.settings-body');
+    if (!body) return null;
+    const same = (el) => el?.textContent.replace(/\s+/g, ' ').trim().toLowerCase().startsWith(s.label.toLowerCase());
+    if (s.kind === 'section') return [...body.querySelectorAll('section')].find((x) => same(x.querySelector('h3')));
+    return [...body.querySelectorAll('.row')].find((x) => same(x.querySelector('.row-label')));
+  };
+  flash(find, { focus: true, tries: 30 });
+}
+
 function itemsFor() {
   const out = [];
+  // Every command, also those only in the menus (Record, Auto Sync Audio), so all of the menus are here.
   for (const c of COMMANDS) {
-    if (c.hidden || c.menuOnly) continue;
+    if (c.hidden) continue;
     out.push({ kind: 'Command', id: `cmd:${c.id}`, label: c.label, sub: [c.menu === 'App' ? 'Reccut' : c.menu, c.submenu].filter(Boolean).join(' › '), cmd: c, keywords: `${c.keywords || ''} ${c.desc || ''}`, run: () => runCommand(c.id) });
   }
   for (const fx of EFFECTS) {
@@ -264,6 +293,16 @@ function itemsFor() {
       },
     });
   }
+  for (const r of menuRoles()) out.push({ kind: 'Command', id: `role:${r.role}`, label: r.label, sub: r.where, keywords: `menu ${r.role}`, run: () => window.api.menuRole(r.role) });
+  for (const s of SETTINGS)
+    out.push({
+      kind: 'Option',
+      id: `setting:${s.pane}:${s.section}:${s.label}`,
+      label: s.label,
+      sub: ['Settings', s.paneLabel, s.kind === 'row' ? s.section : ''].filter(Boolean).join(' › '),
+      keywords: `settings preferences option ${s.paneLabel} ${s.section} ${s.pref || ''}`,
+      run: () => openSetting(s),
+    });
   for (const a of ARTICLES) out.push({ kind: 'Help', id: `help:${a.id}`, label: a.title, sub: a.summary, keywords: a.keywords || '', article: a.id });
   return out;
 }
@@ -281,13 +320,13 @@ function score(item, words) {
   }
   if (label === words.join(' ')) total += 10;
   // Effekter, verktøy og innstillinger først når de passer like godt, som i FX Console.
-  total += { Effect: 0.6, Setting: 0.5, Transition: 0.4, Title: 0.4, 'Lower Third': 0.4, Look: 0.3, Command: 0.3, Animation: 0.2, Media: 0.1, Help: 0 }[item.kind] || 0;
+  total += { Effect: 0.6, Setting: 0.5, Transition: 0.4, Title: 0.4, 'Lower Third': 0.4, Look: 0.3, Command: 0.3, Option: 0.25, Animation: 0.2, Media: 0.1, Help: 0 }[item.kind] || 0;
   return total;
 }
 
 const DEFAULT = ['cmd:import', 'fx:blur', 'param:exposure', 'tr:dissolve', 'title:lower', 'cmd:syncAudio', 'cmd:blade', 'cmd:retime', 'param:wheels', 'cmd:export'];
 
-const KIND_ORDER = ['Command', 'Effect', 'Transition', 'Title', 'Lower Third', 'Look', 'Animation', 'Setting', 'Media', 'Help'];
+const KIND_ORDER = ['Command', 'Effect', 'Transition', 'Title', 'Lower Third', 'Look', 'Animation', 'Setting', 'Option', 'Media', 'Help'];
 const plural = (kind) => (kind === 'Media' || kind === 'Help' ? kind : `${kind}s`);
 
 // Uten søkeord: forslagene først, så alt annet gruppert etter type, så du kan bla og lære. group gir overskriften.
@@ -328,7 +367,7 @@ function highlightFor(cmd) {
 
 export function runItem(item, openArticle) {
   if (item.article) return openArticle(item.article);
-  if (item.kind !== 'Command' && room.value !== 'edit') room.value = 'edit';
+  if (!['Command', 'Option'].includes(item.kind) && room.value !== 'edit') room.value = 'edit';
   const hl = highlightFor(item.cmd);
   Promise.resolve()
     .then(() => item.run())

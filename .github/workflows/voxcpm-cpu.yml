@@ -1,0 +1,71 @@
+name: Build VoxCPM2 CPU engines (Windows/Linux)
+
+# Phase 9 measurement builds. Manual only: uploads workflow artifacts, never a
+# release or add-on package, and downloads no model weights. Windows and Linux
+# stay disabled in the app until docs/voxcpm-cpu has measurements for them.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - uses: actions/checkout@v7
+        with:
+          repository: tc-mb/llama.cpp-omni
+          ref: d30f00feadb7ebce95bacd55b0d104e3ef501481
+          path: .voxcpm-source
+          persist-credentials: false
+      - name: Bygg VoxCPM2 (Windows x64 / CPU)
+        shell: pwsh
+        run: ./native/voxcpm/build-windows.ps1 .voxcpm-source voxcpm-artifacts
+      - name: Avhengigheter og protokoll
+        shell: pwsh
+        run: Get-Content voxcpm-artifacts/dependencies.txt, voxcpm-artifacts/protocol.json, voxcpm-artifacts/reccut-voxcpm-win-x64.exe.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Reccut-VoxCPM-win-x64
+          path: |
+            voxcpm-artifacts/reccut-voxcpm-*
+            voxcpm-artifacts/dependencies.txt
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    # Oldest supported glibc baseline (2.35). Newer distributions also run it.
+    container: ubuntu:22.04
+    steps:
+      - name: Byggeverktøy
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential cmake ninja-build git ca-certificates binutils
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - uses: actions/checkout@v7
+        with:
+          repository: tc-mb/llama.cpp-omni
+          ref: d30f00feadb7ebce95bacd55b0d104e3ef501481
+          path: .voxcpm-source
+          persist-credentials: false
+      - name: Bygg VoxCPM2 (Linux x64 / CPU)
+        run: |
+          git config --global --add safe.directory "$PWD/.voxcpm-source"
+          bash native/voxcpm/build-linux.sh .voxcpm-source voxcpm-artifacts
+          cat voxcpm-artifacts/dependencies.txt voxcpm-artifacts/glibc.txt voxcpm-artifacts/reccut-voxcpm-linux-x64.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Reccut-VoxCPM-linux-x64
+          path: |
+            voxcpm-artifacts/reccut-voxcpm-*
+            voxcpm-artifacts/dependencies.txt
+            voxcpm-artifacts/glibc.txt
+          if-no-files-found: error

@@ -5,7 +5,7 @@ import { openAiModels } from './AiModels.jsx';
 import { PacingFields, isDefaultPacing, resetPacing } from './voiceover/Pacing.jsx';
 // Innstillinger (Cmd ,), bygd som i Final Cut Pro: faner med ikoner øverst, og en kommandoeditor
 // for hurtigtaster. Alle valg lagres med en gang og gjelder hele appen.
-import { ExtensionsPane } from './Extensions.jsx';
+import { ExtensionsPane, ReccutMcpPane, ToolServersPane } from './Extensions.jsx';
 import { PluginsPane } from './Plugins.jsx';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { AudioLines, Download, FolderOpen, Keyboard, Play, Puzzle, RotateCcw, Scissors, Search, Settings2, Share, Sparkles, Upload, X } from 'lucide-preact';
@@ -568,7 +568,7 @@ export function SettingsWindow() {
           {current.id === 'export' && <ExportPane />}
           {current.id === 'design' && <OnlineSettings/>}
           {current.id === 'keyboard' && <KeyboardPane />}
-          {current.id === 'extensions' && <><AiModelsSection/><LocalSubtitleModels/><AiVoiceSettings/><ExtensionsPane/><OnlineSettings/></>}
+          {current.id === 'extensions' && <><AiModelsSection/><LocalSubtitleModels/><AiVoiceSettings/><ExtensionsPane/><ToolServersPane/><ReccutMcpPane/><OnlineSettings/></>}
           {current.id === 'plugins' && <PluginsPane designSettings={<OnlineSettings/>}/>}
         </div>
       </div>

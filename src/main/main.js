@@ -321,6 +321,23 @@ function menuFromTemplate(items) {
   });
 }
 
+// Quick Search runs the menu items that are not commands (About, Quit, Full Screen …) through here.
+ipcMain.handle('menu:role', (event, role) => {
+  if (!win || event.sender !== win.webContents) return;
+  const actions = {
+    about: () => about.show(),
+    quit: () => app.quit(),
+    togglefullscreen: () => win.setFullScreen(!win.isFullScreen()),
+    minimize: () => win.minimize(),
+    zoom: () => (win.isMaximized() ? win.unmaximize() : win.maximize()),
+    hide: () => app.hide?.(),
+    hideOthers: () => Menu.sendActionToFirstResponder?.('hideOtherApplications:'),
+    front: () => app.focus({ steal: true }),
+  };
+  if (!Object.hasOwn(actions, role)) throw new Error('Unknown menu item.');
+  actions[role]();
+});
+
 ipcMain.handle('menu:set', (_e, items) => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuFromTemplate(items)));
 });
@@ -1328,6 +1345,7 @@ app.whenReady().then(async () => {
   buildMenu();
   createWindow();
   recordUI.init();
+  mcpServer.start().catch((e) => console.error('MCP server', e));
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -1474,6 +1492,63 @@ extensionHandler('ai:save', (config) => extensions.saveAI(config));
 extensionHandler('ai:complete', (request) => extensions.complete(request));
 extensionHandler('ai:models', (config) => extensions.listModels(config));
 extensionHandler('ai:readDocument', (file) => readDocument(String(file)));
+
+// Tool servers (MCP) for the AI agent, chosen in Settings › AI. Nothing starts before the user turns a server on.
+const mcpHub = require('./mcpClients').createMcpHub({
+  dir: path.join(app.getPath('userData'), 'extensions'),
+  safeStorage,
+  outputDir: () => path.join(baseDir(), 'Generated'),
+  version: app.getVersion(),
+});
+extensionHandler('mcp:list', () => mcpHub.list());
+extensionHandler('mcp:save', (raw) => mcpHub.save(raw || {}));
+extensionHandler('mcp:addCustom', (raw) => mcpHub.addCustom(raw || {}));
+extensionHandler('mcp:removeCustom', (id) => mcpHub.removeCustom(String(id)));
+extensionHandler('mcp:test', (id) => mcpHub.test(String(id)));
+extensionHandler('mcp:tools', () => mcpHub.tools());
+extensionHandler('mcp:call', (name, args) => mcpHub.call(String(name), args));
+extensionHandler('mcp:download', (url) => mcpHub.download(String(url)));
+
+// Reccut as an MCP server for other AI apps. Off until the user turns it on; the tools run in the main window.
+const mcpPending = new Map();
+let mcpSeq = 0;
+function askEditor(request, timeout = 15 * 60 * 1000) {
+  if (!win || win.isDestroyed()) return Promise.reject(new Error('Reccut is starting. Try again in a moment.'));
+  const id = ++mcpSeq;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      mcpPending.delete(id);
+      reject(new Error('Reccut did not answer in time.'));
+    }, timeout);
+    mcpPending.set(id, { resolve: (v) => (clearTimeout(timer), resolve(v)), reject: (e) => (clearTimeout(timer), reject(e)) });
+    send('mcp-server:request', { id, ...request });
+  });
+}
+ipcMain.on('mcp-server:reply', (event, msg) => {
+  if (event.sender !== win?.webContents) return;
+  const p = mcpPending.get(msg?.id);
+  if (!p) return;
+  mcpPending.delete(msg.id);
+  msg.error ? p.reject(new Error(String(msg.error))) : p.resolve(msg.result);
+});
+const mcpServer = require('./mcpServer').createMcpServer({
+  file: path.join(app.getPath('userData'), 'mcp-server.json'),
+  bridgePath: path.join(__dirname, 'mcp-stdio.cjs'),
+  execPath: process.execPath,
+  version: app.getVersion(),
+  bridge: {
+    instructions: () => askEditor({ kind: 'instructions' }, 30000),
+    tools: () => askEditor({ kind: 'tools' }, 30000),
+    call: (name, args) => askEditor({ kind: 'call', name, args }),
+  },
+  log: (e) => console.error('MCP server', e),
+});
+extensionHandler('mcp-server:status', () => mcpServer.status());
+extensionHandler('mcp-server:configure', (raw) => mcpServer.configure(raw || {}));
+app.on('before-quit', () => {
+  mcpHub.stopAll();
+  mcpServer.stop();
+});
 extensionHandler('plugins:draft', (raw) => extensions.draftProcessor(raw));
 extensionHandler('gen:config', () => extensions.genConfig());
 extensionHandler('gen:save', (raw) => extensions.saveGen(raw));

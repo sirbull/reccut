@@ -25,6 +25,18 @@ the pinned upstream checkout.
 Only macOS arm64 is enabled. Windows, Linux and Intel Macs stay unavailable until
 CPU performance has been measured. Nothing here is bundled in the installer.
 
+For phase 9, `build-windows.ps1` (MSVC, static runtime, embedded UTF-8 code page
+manifest) and `build-linux.sh` (static libstdc++, glibc only) build portable
+CPU-only engines. The manual `voxcpm-cpu.yml` workflow runs both and uploads
+workflow artifacts only. Measure an engine offline with:
+
+```sh
+node scripts/benchmark-voxcpm.mjs [--cpu] [--threads N] [--runs 3] [--warm 5] [--quick] --out <empty-dir> <engine> <model-directory>
+```
+
+It uses the fixed texts in `benchmark-texts.json`, the catalog settings and the
+locked references, and writes `report.json` with every repetition plus the WAVs.
+
 The backend supports model installation, language installation, cancel/resume,
 removal and sentence-by-sentence synthesis in the existing speech job queue.
 Synthesis reuses one process between sentences and speech jobs. It is released

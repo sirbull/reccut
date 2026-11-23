@@ -161,3 +161,14 @@ test('cancellation escalates to SIGKILL if graceful termination does not close t
   assert.deepEqual(child.signals, ['SIGTERM', 'SIGKILL']);
   assert.ok(child.closed);
 });
+
+test('measurement flags (--cpu, --threads) reach the engine and never share a process with other flags', async (t) => {
+  const { native, client } = fixture(t);
+  await client.run(config, request);
+  await client.run({ ...config, args: ['--cpu', '--threads', '4'] }, request);
+  await client.run({ ...config, args: ['--cpu', '--threads', '4'] }, request);
+  assert.equal(native.children.length, 2);
+  assert.deepEqual(native.children[0].args, ['--serve', ...config.models]);
+  assert.deepEqual(native.children[1].args, ['--serve', ...config.models, '--cpu', '--threads', '4']);
+  assert.equal(native.children[0].closed, true);
+});

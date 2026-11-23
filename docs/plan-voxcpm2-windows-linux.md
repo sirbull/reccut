@@ -5,6 +5,55 @@ Skrevet 12. november 2026. Utgangspunkt: Reccut 0.9.3 og
 Linux-støtten er ikke implementert eller målt ennå.** Arbeidet starter på en
 Windows-maskin. Windows testes direkte; Linux kan først bygges og måles i WSL2.
 
+## Status 23. november 2026
+
+Påbegynt på Windows x64 (AMD Ryzen 5 PRO 6650U, 6 kjerner/12 tråder, 11,8 GB RAM,
+Windows 11 Enterprise, strømprofil Balansert). **Ingen plattform er målt eller slått på.**
+
+Maskinen har ikke administratortilgang, så MSVC Build Tools kan ikke installeres
+her. CMake, Ninja og Python er installert per bruker med winget. Windows- og
+Linux-motorene bygges derfor i GitHub Actions ([voxcpm-cpu.yml](../.github/workflows/voxcpm-cpu.yml),
+manuell start, bare artifacts), og den ferdige EXE-filen måles lokalt.
+Modellfilene er lastet ned til `C:\reccut-models\voxcpm` og kontrollert mot
+katalogens størrelse og SHA-256. Upstream er klonet på låst revisjon i `vendor/voxcpm-source`.
+
+Gjort (uten kompilator, verifisert med tester og en falsk protokollmotor):
+
+- `native/voxcpm/build-windows.ps1`: MSVC via vswhere, statisk runtime (`/MT`,
+  CMP0091), ingen `/arch` (x64/SSE2), avhengighetskontroll med `dumpbin`
+  (bare System32-DLL-er, aldri VC-runtime), innebygd manifest, `--help`,
+  `--protocol`, lisens og SHA-256.
+- `native/voxcpm/build-linux.sh`: alle x86-utvidelser av, statisk libstdc++/libgcc,
+  bare glibc-avhengigheter, høyeste GLIBC-versjon i `glibc.txt`. CI bygger i
+  `ubuntu:22.04` (glibc 2.35) som foreslått eldste grunnlinje.
+- `native/voxcpm/windows.manifest`: `activeCodePage=UTF-8`. Den låste runtime-en
+  åpner token-tabellen med `std::ifstream(path)` ([voxcpm2_runtime.cpp:323](https://github.com/tc-mb/llama.cpp-omni/blob/d30f00feadb7ebce95bacd55b0d104e3ef501481/tools/omni/voxcpm2/voxcpm2_runtime.cpp#L323)),
+  som ellers ville feilet med `æøå` i brukernavnet. Manifestet gjør `argv` og
+  smale fil-API-er UTF-8 uten å endre upstream.
+- Adapteren: binær stdin/stdout på Windows (ingen CRLF-oversettelse eller Ctrl-Z),
+  og `--threads N` (via `set_n_threads`) i tillegg til `--cpu`.
+- `voxcpmProcess.js` tar valgfrie `args` med i oppstart og gjenbruksnøkkel.
+  `test-voxcpm-process.mjs` har `--cpu` og `--threads N`.
+- `scripts/benchmark-voxcpm.mjs` og `native/voxcpm/benchmark-texts.json` (se trinn 5).
+  Måler motorprosessens minne (Windows: `PeakWorkingSet64`/`PeakPagedMemorySize64`;
+  Linux: `VmHWM`).
+- `voxcpm.js` har en plattformtabell (`engineFor`), og `install-voxcpm-local.mjs`
+  bruker den. Windows og Linux står ikke i tabellen ennå.
+
+Merk: motoren distribueres nå som tilleggspakker ([addons.yml](../.github/workflows/addons.yml),
+`addonCatalog.json`, `scripts/package-addons.mjs`), ikke som vedlegg i `build.yml`.
+Trinn 7–8 må legge `voxcpm-win-x64` og `voxcpm-linux-x64` inn der når en plattform er godkjent.
+
+Neste steg:
+
+1. Start «Build VoxCPM2 CPU engines» i GitHub Actions og rett eventuelle MSVC-/GCC-feil.
+2. Last ned `Reccut-VoxCPM-win-x64`, og kjør på denne maskinen:
+   `node scripts/test-voxcpm-process.mjs --cpu <exe> C:\reccut-models\voxcpm <ref1> <ref2>`,
+   deretter `node scripts/benchmark-voxcpm.mjs --cpu --out <tom mappe> <exe> C:\reccut-models\voxcpm`.
+3. Lagre rapporten under `docs/voxcpm-cpu/` og vurder kriteriene. Test også
+   stier med `æøå` og mellomrom.
+4. Linux: krever WSL2 (administrator) eller en annen Linux-maskin.
+
 ## Mål og avgrensning
 
 Lever en separat CPU-motor for Windows x64 og Linux x64 dersom målingene viser

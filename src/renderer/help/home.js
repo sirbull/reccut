@@ -20,7 +20,7 @@ export const HOME = {
     { title: 'Audio and voice', image: 'audio.jpg', text: 'Clean Voice removes noise locally. Mix music, add effects and record or generate voice-over.', links: ['audio', 'audio-recipe', 'voiceover'] },
     { title: 'Colour and effects', image: 'color.jpg', text: 'Grade with scopes and film looks, key green screens, track, stabilise and mask.', links: ['color', 'effects', 'keying'] },
     { title: 'Titles and captions', image: 'titles.jpg', text: 'Animated titles and lower thirds, plus captions generated on your computer.', links: ['titles', 'lower-thirds', 'caption-workflow'] },
-    { title: 'AI Agent and plugins', image: 'ai-chat.jpg', text: 'Ask a cloud or local AI model to edit for you, and extend Reccut with plugins.', links: ['ai-setup', 'ai-local', 'plugins-guide'] },
+    { title: 'AI Agent and plugins', image: 'ai-chat.jpg', text: 'Ask a cloud or local AI model to edit for you, and extend Reccut with plugins.', links: ['ai-setup', 'ai-mcp', 'ai-local', 'plugins-guide'] },
     { title: 'Export and design', image: 'exportroom.jpg', text: 'Export for web, portrait, masters or audio, and make thumbnails in Design.', links: ['export', 'export-recipes', 'design'] },
   ],
   reference: ['command-reference', 'troubleshooting', 'glossary', 'preferences', 'third-party-licenses'],

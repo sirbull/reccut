@@ -1,0 +1,619 @@
+[
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "AI Models",
+  "label": "AI Models",
+  "kind": "section"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Screen Capture",
+  "label": "Screen Capture",
+  "kind": "section"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Screen Capture",
+  "label": "Include Reccut in screenshots and screen recordings",
+  "kind": "row"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "External Preview",
+  "label": "External Preview",
+  "kind": "section"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "External Preview",
+  "label": "Offer a separate preview screen when another display is connected",
+  "kind": "row",
+  "pref": "askExternalPreview"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Projects",
+  "label": "Projects",
+  "kind": "section"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Projects",
+  "label": "Default location for new projects",
+  "kind": "row"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Projects",
+  "label": "Open the last project when Reccut starts",
+  "kind": "row",
+  "pref": "reopenLast"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Projects",
+  "label": "Warn before removing adjusted effects",
+  "kind": "row",
+  "pref": "confirmEffectRemoval"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Projects",
+  "label": "Ask for sequence settings when adding the first clip",
+  "kind": "row",
+  "pref": "askSequenceSettings"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Updates",
+  "label": "Updates",
+  "kind": "section"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Updates",
+  "label": "Check for new versions on GitHub once a day",
+  "kind": "row",
+  "pref": "checkUpdates"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Media",
+  "label": "Media",
+  "kind": "section"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Media",
+  "label": "Warn before removing media from the project",
+  "kind": "row",
+  "pref": "confirmMediaRemoval"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Media",
+  "label": "Look for missing media when you return to Reccut",
+  "kind": "row",
+  "pref": "checkOfflineOnFocus"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "Reset",
+  "label": "Reset",
+  "kind": "section"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Default Durations",
+  "label": "Default Durations",
+  "kind": "section"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Default Durations",
+  "label": "Transitions",
+  "kind": "row",
+  "pref": "transitionDur"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Default Durations",
+  "label": "Audio crossfades",
+  "kind": "row",
+  "pref": "audioCrossfadeDur"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Default Durations",
+  "label": "Still images",
+  "kind": "row",
+  "pref": "stillDur"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Default Durations",
+  "label": "Titles and lower thirds",
+  "kind": "row",
+  "pref": "titleDur"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Default Durations",
+  "label": "Freeze frames",
+  "kind": "row",
+  "pref": "freezeDur"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Timeline",
+  "label": "Timeline",
+  "kind": "section"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Timeline",
+  "label": "Default keyframe interpolation",
+  "kind": "row"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Timeline",
+  "label": "Snapping",
+  "kind": "row"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Timeline",
+  "label": "Video transitions also crossfade the audio",
+  "kind": "row",
+  "pref": "transitionAudio"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Timeline",
+  "label": "Move the playhead to the end of added clips",
+  "kind": "row",
+  "pref": "playheadAfterEdit"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Voice Over Studio",
+  "label": "Voice Over Studio",
+  "kind": "section"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Voice Over Studio",
+  "label": "Air before the voice",
+  "kind": "row"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Voice Over Studio",
+  "label": "Air after the voice",
+  "kind": "row"
+ },
+ {
+  "pane": "playback",
+  "paneLabel": "Playback",
+  "section": "Skimming",
+  "label": "Skimming",
+  "kind": "section"
+ },
+ {
+  "pane": "playback",
+  "paneLabel": "Playback",
+  "section": "Skimming",
+  "label": "Audio skimming",
+  "kind": "row"
+ },
+ {
+  "pane": "playback",
+  "paneLabel": "Playback",
+  "section": "Playback",
+  "label": "Playback",
+  "kind": "section"
+ },
+ {
+  "pane": "playback",
+  "paneLabel": "Playback",
+  "section": "Playback",
+  "label": "Start playback at the mouse position",
+  "kind": "row",
+  "pref": "playbackFromSkimmer"
+ },
+ {
+  "pane": "playback",
+  "paneLabel": "Playback",
+  "section": "Playback",
+  "label": "Preview resolution",
+  "kind": "row"
+ },
+ {
+  "pane": "playback",
+  "paneLabel": "Playback",
+  "section": "Playback",
+  "label": "Loop playback",
+  "kind": "row",
+  "pref": "loopPlayback"
+ },
+ {
+  "pane": "playback",
+  "paneLabel": "Playback",
+  "section": "Playback",
+  "label": "Keep the pitch when the speed changes",
+  "kind": "row",
+  "pref": "preservePitch"
+ },
+ {
+  "pane": "import",
+  "paneLabel": "Import",
+  "section": "Files",
+  "label": "Files",
+  "kind": "section"
+ },
+ {
+  "pane": "import",
+  "paneLabel": "Import",
+  "section": "Transcoding and Analysis",
+  "label": "Transcoding and Analysis",
+  "kind": "section"
+ },
+ {
+  "pane": "import",
+  "paneLabel": "Import",
+  "section": "Transcoding and Analysis",
+  "label": "Create optimized media in the background",
+  "kind": "row",
+  "pref": "importOptimize"
+ },
+ {
+  "pane": "import",
+  "paneLabel": "Import",
+  "section": "Transcoding and Analysis",
+  "label": "Analyze video for stabilization",
+  "kind": "row",
+  "pref": "importAnalyzeStab"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Audio Devices",
+  "label": "Audio Devices",
+  "kind": "section"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Audio Devices",
+  "label": "Input",
+  "kind": "row"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Audio Devices",
+  "label": "Input channel",
+  "kind": "row"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Audio Devices",
+  "label": "Output",
+  "kind": "row"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Camera",
+  "label": "Camera",
+  "kind": "section"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Camera",
+  "label": "Video input",
+  "kind": "row"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Camera",
+  "label": "Resolution",
+  "kind": "row"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Camera",
+  "label": "Frame rate",
+  "kind": "row"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Camera",
+  "label": "Delay microphone",
+  "kind": "row"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Auto Sync Audio",
+  "label": "Auto Sync Audio",
+  "kind": "section"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Auto Sync Audio",
+  "label": "Group synced audio with the video",
+  "kind": "row",
+  "pref": "syncGroup"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Auto Sync Audio",
+  "label": "Switch off the camera audio after syncing",
+  "kind": "row",
+  "pref": "syncMuteCamera"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Defaults",
+  "label": "Defaults",
+  "kind": "section"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "Defaults",
+  "label": "Audio crossfade length",
+  "kind": "row",
+  "pref": "audioCrossfadeDur"
+ },
+ {
+  "pane": "export",
+  "paneLabel": "Export",
+  "section": "Destination",
+  "label": "Destination",
+  "kind": "section"
+ },
+ {
+  "pane": "export",
+  "paneLabel": "Export",
+  "section": "Destination",
+  "label": "Export to",
+  "kind": "row"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "AI Agent",
+  "label": "AI Agent",
+  "kind": "section"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "AI Agent",
+  "label": "Provider",
+  "kind": "row"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "AI Agent",
+  "label": "API format",
+  "kind": "row"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "AI Agent",
+  "label": "API base URL",
+  "kind": "row"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "AI Agent",
+  "label": "API key",
+  "kind": "row"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "AI Agent",
+  "label": "Model ID",
+  "kind": "row"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "AI Agent",
+  "label": "Model can see images",
+  "kind": "row"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "Tool servers (MCP)",
+  "label": "Tool servers (MCP)",
+  "kind": "section"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "Use Reccut from other AI apps",
+  "label": "Use Reccut from other AI apps",
+  "kind": "section"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "Use Reccut from other AI apps",
+  "label": "Allow AI apps to use Reccut",
+  "kind": "row"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "Local Subtitle Models",
+  "label": "Local Subtitle Models",
+  "kind": "section"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "Local Subtitle Models",
+  "label": "Active subtitle model",
+  "kind": "row"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "Voice Packages",
+  "label": "Voice Packages",
+  "kind": "section"
+ },
+ {
+  "pane": "design",
+  "paneLabel": "Design",
+  "section": "Stock Services",
+  "label": "Stock Services",
+  "kind": "section"
+ },
+ {
+  "pane": "design",
+  "paneLabel": "Design",
+  "section": "Online Resources",
+  "label": "Online Resources",
+  "kind": "section"
+ },
+ {
+  "pane": "design",
+  "paneLabel": "Design",
+  "section": "Online Resources",
+  "label": "Use this source",
+  "kind": "row"
+ },
+ {
+  "pane": "design",
+  "paneLabel": "Design",
+  "section": "Online Template Catalog",
+  "label": "Online Template Catalog",
+  "kind": "section"
+ },
+ {
+  "pane": "plugins",
+  "paneLabel": "Plugins",
+  "section": "Advanced: command-line tools and other formats",
+  "label": "Advanced: command-line tools and other formats",
+  "kind": "section"
+ },
+ {
+  "pane": "general",
+  "paneLabel": "General",
+  "section": "",
+  "label": "General Settings",
+  "kind": "pane"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "",
+  "label": "Editing Settings",
+  "kind": "pane"
+ },
+ {
+  "pane": "playback",
+  "paneLabel": "Playback",
+  "section": "",
+  "label": "Playback Settings",
+  "kind": "pane"
+ },
+ {
+  "pane": "import",
+  "paneLabel": "Import",
+  "section": "",
+  "label": "Import Settings",
+  "kind": "pane"
+ },
+ {
+  "pane": "audio",
+  "paneLabel": "Audio & Video",
+  "section": "",
+  "label": "Audio & Video Settings",
+  "kind": "pane"
+ },
+ {
+  "pane": "export",
+  "paneLabel": "Export",
+  "section": "",
+  "label": "Export Settings",
+  "kind": "pane"
+ },
+ {
+  "pane": "design",
+  "paneLabel": "Design",
+  "section": "",
+  "label": "Design Settings",
+  "kind": "pane"
+ },
+ {
+  "pane": "extensions",
+  "paneLabel": "AI",
+  "section": "",
+  "label": "AI Settings",
+  "kind": "pane"
+ },
+ {
+  "pane": "plugins",
+  "paneLabel": "Plugins",
+  "section": "",
+  "label": "Plugins Settings",
+  "kind": "pane"
+ },
+ {
+  "pane": "keyboard",
+  "paneLabel": "Keyboard",
+  "section": "",
+  "label": "Keyboard Settings",
+  "kind": "pane"
+ }
+]

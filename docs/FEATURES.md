@@ -8,6 +8,10 @@ Record, edit and export video in one app, for Mac, Windows and Linux. The app is
 
 Finished work, newest first. Each item links to its full description further down.
 
+### 23 November 2026
+
+- [x] **AI chat, skills and tool servers (MCP).** The AI Agent is a plain chat: write what you want, press Enter, and type **/** for commands (**/help** with examples, **/new**, **/undo**, **/tools**, **/settings**). It now has craft guides (skills) it loads by itself for tutorial editing, colour grading, sound design, transitions, effects, social video and generated media; it can add every effect from the Effects browser with settings, change and remove them, mark music tracks and cut on the beat. In **Settings › AI › Tool servers (MCP)** you connect ready-made servers (ElevenLabs for sound effects, music and voices; Replicate and Hugging Face for generated images, video and sound; Brave Search for facts) or your own. **Use Reccut from other AI apps** turns Reccut into an MCP server for Claude Desktop, Claude Code, Cursor and VS Code, with the same tools and instructions. Also **View › AI Agent…**. See [AI Chat, Skills and Tool Servers](../docs/docs/index.html#ai-mcp). Code in [src/main/mcpClients.js](../src/main/mcpClients.js), [src/main/mcpServer.js](../src/main/mcpServer.js), [src/main/mcp-stdio.cjs](../src/main/mcp-stdio.cjs), [src/shared/agentSkills.js](../src/shared/agentSkills.js) and [src/shared/agentExamples.js](../src/shared/agentExamples.js); tests in [test/mcp.test.mjs](../test/mcp.test.mjs) and [test/agent-skills.test.mjs](../test/agent-skills.test.mjs).
+
 ### 22 November 2026
 
 - [x] **Transcript Search.** Press **Option Space** (Alt Space on Windows) in the editor to search what is said in all media in the project. The speech model on your computer transcribes every clip with sound once, with times, and the transcript is saved in the project. Results show the sentence, its timecode and the clip; Enter opens the clip in the viewer at that moment. Previously, finding a line in raw footage meant skimming through it, or asking the AI Agent. See [Transcript Search](#editing).

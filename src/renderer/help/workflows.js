@@ -182,6 +182,58 @@ Local performance depends on model size, available memory and your hardware. Sta
 `, see: ['ai-setup', 'ai-troubleshooting', 'ai-recipes'],
   },
   {
+    id: 'ai-mcp', section: 'AI and Plugins', title: 'AI Chat, Skills and Tool Servers (MCP)',
+    summary: 'Chat with the agent, use /help for examples, connect tool servers for sound, music and images, and use Reccut from Claude, Cursor or VS Code.',
+    keywords: 'mcp model context protocol tool server elevenlabs replicate hugging face brave search sound effects music generate claude desktop claude code cursor vs code skills slash commands /help /new /undo /tools chat',
+    body: `
+Open the AI Agent with **View → AI Agent…** or the **AI Agent** button at the top right, and write what you want in your own words, for example **“Add short cross dissolves between all the clips”** or **“Give the whole video a warm, cinematic look”**. Press **Enter** to send and **Shift+Enter** for a new line. The agent reads the project, makes the changes, checks the result and tells you what it did. **Undo this request** reverts everything it changed.
+
+## Chat commands
+
+Type **/** in the message field to see the commands. They run in Reccut and are not sent to the model.
+
+- **/help** shows examples you can click and adapt. Examples that need a tool server are marked until you connect one.
+- **/new** starts a new chat.
+- **/undo** reverts all changes from the last request.
+- **/tools** shows the connected tool servers and the agent's skills.
+- **/settings** opens Settings › AI.
+
+## Skills
+
+The agent has built-in craft guides that it reads by itself when a request needs them: tutorial editing, colour correction and grading, sound design and mixing, transitions, video effects, social media video, and generating media. You do not need to do anything. Use **/tools** to see them.
+
+## Tool servers (MCP)
+
+Tool servers give the agent abilities Reccut does not have, such as sound effects, music, generated images and web search. They use the Model Context Protocol (MCP), the open standard many AI apps use. Set them up in **Settings › AI › Tool servers (MCP)**:
+
+1. Choose a server from the list. Each one says what it is for, who publishes it and what it costs.
+2. Choose **Get a key**, create a key on the publisher's website and paste it. The key is stored encrypted and sent only to that server.
+3. Turn the server on and choose **Test connection**. Reccut shows how many tools it found.
+4. Ask the agent, for example **“Add a whoosh sound on every push transition”** or **“Make 30 seconds of calm background music without vocals for the intro.”**
+
+- **ElevenLabs**: sound effects, music and AI voices. Needs an ElevenLabs key and uv.
+- **Replicate**: images, video, music and sound from open AI models. Needs a Replicate token and Node.js.
+- **Hugging Face**: search models and use AI apps (Spaces) you add on Hugging Face. Needs a Hugging Face token.
+- **Brave Search**: check facts and names for titles and captions. Needs a Brave Search key and Node.js.
+
+Some servers run as a small program on your computer and need **uv** (from astral.sh) or **Node.js** installed. Paid servers bill your account with the publisher. The agent uses them only for what you ask. Generated files are saved in **Videos › Reccut › Generated** and imported into the project. Your media files are not uploaded; a server receives only what its tool needs, such as the description of a sound.
+
+**Add your own server…** connects any other MCP server: a command for a program on this computer, or an https address. Use only servers you trust.
+
+## Use Reccut from other AI apps
+
+You can also edit in Reccut from Claude Desktop, Claude Code, Cursor, VS Code or another app that supports MCP, with the AI subscription you already have. These apps get the same tools, skills and instructions as the built-in agent.
+
+1. Open **Settings › AI › Use Reccut from other AI apps** and turn on **Allow AI apps to use Reccut**.
+2. Choose your app, select **Copy** and follow the instruction shown. Claude Desktop starts Reccut's bridge and reads the token from Reccut. Claude Code, Cursor and VS Code connect to the address with the token.
+3. Keep Reccut open with your project, and ask in the other app, for example **“In Reccut, cut the pauses from my recording and add captions.”**
+
+Reccut listens only on this computer, needs the secret token and refuses requests from web pages. Every change is an undo step in Reccut. **New token** makes the old setup stop working. Tool servers you connected in Reccut are not passed on to other apps.
+
+**If it does not connect:** check that Reccut is open and the switch is on, that the port is not used by another program, and that you copied the newest setup after making a new token.
+`, see: ['ai-setup', 'ai-recipes', 'ai-troubleshooting'],
+  },
+  {
     id: 'ai-recipes', section: 'AI and Plugins', title: 'AI Editing: Prompts and Worked Examples',
     summary: 'Give the agent a clear brief, point to clips, review its work and undo a whole request.',
     keywords: 'ai prompts examples agent edit tutorial script story brief translation captions graphics intro infographic reference attach undo stop',

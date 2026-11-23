@@ -8,6 +8,8 @@ import { aiChatOpen } from './aiChatOpen.js';
 import * as commands from './editor/commands.js';
 import { PluginReview } from './Plugins.jsx';
 import { runAgent } from './agent.js';
+import { CHAT_COMMANDS, EXAMPLES } from '../shared/agentExamples.js';
+import { SKILLS } from '../shared/agentSkills.js';
 import { fileUrl } from './player.js';
 export { aiChatOpen };
 export const aiDraft = signal(''); // Text to start the next chat message with, e.g. from the Plugins menu.
@@ -456,15 +458,12 @@ function AgentSetup({ onDone }) {
   );
 }
 
-const EXAMPLES = [
-  ['Edit', ['Make a 2 minute tutorial from my talking head and the screen recordings. Remove mistakes and pauses.', 'Cut this interview into a 60 second story for Instagram, vertical.', 'Edit the takes following the attached script. Use the best take of each line.']],
-  ['Text', ['Subtitle this video in Finnish.', 'Add a lower third with my name, Ada Hansen, product designer, when I first appear.', 'Make a lower third in our brand colours, dark blue and orange, with a clean animation.']],
-  ['Look and sound', ['Adjust colour and exposure on every clip so they look good and match.', 'Make the clips look like this image.', 'Put the music on its own lane at −15 dB and fade it out at the end.']],
-  ['Graphics', ['Make a 5 second intro with the title "Getting started" in a modern style.', 'Make an animated bar chart: Q1 120, Q2 180, Q3 240, and place it at 0:45.', 'Generate a 5 second drone shot over a Norwegian fjord at sunrise and use it as the opening.']],
-  ['Plugins', ['Make a plugin that reduces video noise, with a strength slider.', 'Make a plugin that sharpens soft footage.']],
-  ['Help', ['Where do I change the frame rate?', 'How do I stabilize a shaky clip?', 'What can you do?']],
-];
-function AgentHelp({ onExample }) {
+const openAISettings = () => {
+  localStorage.setItem('settingsPane', 'extensions');
+  commands.prefsOpen.value = true;
+};
+function AgentHelp({ onExample, servers = [] }) {
+  const kinds = new Set(servers.filter((s) => s.enabled).flatMap((s) => s.kinds));
   return (
     <div class="agent-help">
       <p>
@@ -478,16 +477,32 @@ function AgentHelp({ onExample }) {
         <li>Attach a reference image to match a look, or a logo to use in graphics.</li>
         <li>Long footage: the agent reads transcripts and scene changes first and only looks at frames where needed. The first transcription takes a while.</li>
         <li>AI video from Higgsfield costs money and asks before each generation. Set it up in Settings → Plugins.</li>
+        <li>
+          Sound effects, music, images and web search come from tool servers you connect in{' '}
+          <button class="link" onClick={openAISettings}>
+            Settings › AI › Tool servers (MCP)
+          </button>
+          .
+        </li>
+        <li>
+          Type <b>/</b> for chat commands: {CHAT_COMMANDS.map((c) => c.label).join(', ')}.
+        </li>
       </ul>
       {EXAMPLES.map(([title, list]) => (
         <div key={title}>
           <b>{title}</b>
           <div class="agent-examples">
-            {list.map((t) => (
-              <button key={t} onClick={() => onExample(t)}>
-                {t}
-              </button>
-            ))}
+            {list.map((ex) =>
+              ex.needs && !kinds.has(ex.needs) ? (
+                <button key={ex.text} class="needs-server" title="Connect a tool server for this first" onClick={openAISettings}>
+                  {ex.text} <small>· needs a {ex.needs} tool server</small>
+                </button>
+              ) : (
+                <button key={ex.text} onClick={() => onExample(ex.text)}>
+                  {ex.text}
+                </button>
+              ),
+            )}
           </div>
         </div>
       ))}
@@ -521,7 +536,30 @@ export function AIChat() {
     [docs, setDocs] = useState([]),
     [busy, setBusy] = useState(null),
     [run, setRun] = useState(null),
-    [error, setError] = useState('');
+    [error, setError] = useState(''),
+    [servers, setServers] = useState([]),
+    [panel, setPanel] = useState(null);
+  useEffect(() => {
+    api.mcpList().then((s) => setServers(s.servers), () => {});
+  }, []);
+  // Slash commands run here and are never sent to the model.
+  const slash = (text) => {
+    const cmd = CHAT_COMMANDS.find((c) => c.label === text.trim().toLowerCase().split(/\s+/)[0]);
+    if (!cmd) return false;
+    setInput('');
+    setError('');
+    if (cmd.id === 'help') (setHelp(true), setPanel(null));
+    else if (cmd.id === 'new') {
+      if (busy) busy.abort();
+      setMessages([]);
+      setRun(null);
+      setHelp(false);
+      setPanel(null);
+    } else if (cmd.id === 'undo') run && project.value === run.after ? revert() : toast('There is no request to undo. Use Edit › Undo for single steps.');
+    else if (cmd.id === 'tools') api.mcpList().then((s) => (setServers(s.servers), setPanel('tools'), setHelp(false)), (e) => toast(e.message, { kind: 'error' }));
+    else if (cmd.id === 'settings') openAISettings();
+    return true;
+  };
   // Read the setup again when Settings closes, so a model chosen there opens the chat right away.
   const settingsOpen = commands.prefsOpen.value;
   useEffect(() => {
@@ -533,7 +571,9 @@ export function AIChat() {
     list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' });
   }, [messages.length, busy]);
   const send = async () => {
-    if (!input.trim() || busy) return;
+    if (!input.trim()) return;
+    if (input.trim().startsWith('/') && slash(input)) return;
+    if (busy) return;
     if (docs.length) commit((p) => docs.forEach((d) => addStoryDocument(p, d.name, d.text)));
     const note = docs.map((d) => `[Attached ${d.name}: saved to the project story as a document (${d.text.length} characters). Read it with get_story.]`).join('\n');
     const history = [...messages, { role: 'user', content: `${note ? `${note}\n` : ''}${input.trim()}`, ...(images.length ? { images } : {}) }],
@@ -626,7 +666,8 @@ export function AIChat() {
         <AgentSetup onDone={setConfig} />
       ) : (
         <>
-          {help && <AgentHelp onExample={(t) => (setInput(t), setHelp(false))} />}
+          {help && <AgentHelp servers={servers} onExample={(t) => (setInput(t), setHelp(false))} />}
+          {panel === 'tools' && <ToolsPanel servers={servers} onClose={() => setPanel(null)} />}
           <div class="ai-messages" aria-live="polite" ref={list}>
             {messages.length ? (
               messages.map((m, i) =>
@@ -649,9 +690,9 @@ export function AIChat() {
               )
             ) : (
               <p class="hint">
-                Describe what you want, for example “Make a 2 minute tutorial from my recordings and remove the mistakes”,
-                “Subtitle this video in Finnish” or “Make an intro with our logo”. Attach a script or reference image if
-                you have one. Choose <b>? What can I ask</b> for more.
+                Write what you want in your own words, for example “Make a 2 minute tutorial from my recordings and remove
+                the mistakes”, “Add cross dissolves between the clips” or “Give it a warm cinematic look”. Attach a script
+                or reference image if you have one. Type <b>/help</b> for examples.
               </p>
             )}
             {busy && <p class="hint">Working… Long footage can take a few minutes. Progress is in Background tasks.</p>}
@@ -692,17 +733,26 @@ export function AIChat() {
               rows={3}
               value={input}
               maxLength={20000}
-              placeholder="Describe what you want… (Cmd/Ctrl Enter sends)"
+              placeholder="What do you want to do? Type /help for examples. (Enter sends, Shift+Enter new line)"
               onInput={(e) => setInput(e.currentTarget.value)}
               onKeyDown={(e) => {
                 e.stopPropagation();
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
                   e.preventDefault();
                   send();
                 }
               }}
             />
-            {busy ? (
+            {/^\/\S*$/.test(input) && (
+              <div class="ai-slash" role="listbox">
+                {CHAT_COMMANDS.filter((c) => c.label.startsWith(input.trim().toLowerCase())).map((c) => (
+                  <button key={c.id} role="option" onClick={() => slash(c.label)}>
+                    <b>{c.label}</b> {c.desc}
+                  </button>
+                ))}
+              </div>
+            )}
+            {busy && !input.trim().startsWith('/') ? (
               <Button onClick={() => busy.abort()}>Stop</Button>
             ) : (
               <Button disabled={!input.trim()} variant="primary" onClick={send}>
@@ -713,5 +763,253 @@ export function AIChat() {
         </>
       )}
     </Modal>
+  );
+}
+
+// /tools in the chat: what the agent can use right now.
+function ToolsPanel({ servers, onClose }) {
+  const on = servers.filter((s) => s.enabled);
+  return (
+    <div class="agent-help">
+      <p>
+        <b>Tool servers (MCP).</b>{' '}
+        {on.length ? 'The agent can use these connected servers:' : 'None connected. Connect ready-made servers for sound effects, music, images, video and web search in Settings › AI.'}
+      </p>
+      {on.length > 0 && (
+        <ul>
+          {on.map((s) => (
+            <li key={s.id}>
+              <b>{s.name}</b>: {s.purpose}
+              {s.status === 'error' && <small class="warn"> · {s.error}</small>}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p>
+        <b>Skills.</b> The agent reads these craft guides by itself when a request needs them:
+      </p>
+      <ul>
+        {SKILLS.map((s) => (
+          <li key={s.id}>
+            <b>{s.title}</b>: {s.when}
+          </li>
+        ))}
+      </ul>
+      <div class="extension-actions">
+        <Button onClick={openAISettings}>Tool server settings</Button>
+        <Button onClick={onClose}>Close</Button>
+      </div>
+    </div>
+  );
+}
+
+const copy = (text) =>
+  navigator.clipboard.writeText(text).then(
+    () => toast('Copied.', { kind: 'success', timeout: 1500 }),
+    () => toast('Could not copy.', { kind: 'error' }),
+  );
+
+// Settings › AI › Tool servers (MCP): ready-made servers from src/main/mcpCatalog.json, and the user's own.
+export function ToolServersPane() {
+  const [state, setState] = useState(null),
+    [keys, setKeys] = useState({}),
+    [busy, setBusy] = useState(''),
+    [custom, setCustom] = useState(null);
+  useEffect(() => {
+    api.mcpList().then(setState, (e) => toast(e.message, { kind: 'error' }));
+  }, []);
+  const act = async (id, fn, done) => {
+    setBusy(id);
+    try {
+      const r = await fn();
+      if (r?.servers) setState(r);
+      if (done) toast(typeof done === 'function' ? done(r) : done, { kind: 'success' });
+      return r;
+    } catch (e) {
+      toast(e.message, { kind: 'error', timeout: 8000 });
+      api.mcpList().then(setState, () => {});
+      return null;
+    } finally {
+      setBusy('');
+    }
+  };
+  if (!state) return null;
+  const field = (key, props) => <input class="text-input" value={custom[key]} onInput={(e) => setCustom({ ...custom, [key]: e.currentTarget.value })} {...props} />;
+  return (
+    <Section title="Tool servers (MCP)" collapsible={false}>
+      <p class="hint">
+        Give the AI Agent more abilities, such as sound effects, music, images, video and web search. These are MCP servers:
+        separate programs or online services from their publishers. Turn on only the ones you need. Your key goes only to
+        that server, and the agent sends a server only what a tool needs, for example the description of a sound effect.
+        Your media files are not uploaded. Generated files are saved in Videos › Reccut › Generated.{' '}
+        <button class="link" onClick={() => (helpOpen.value = { article: 'ai-mcp' })}>
+          Read the guide
+        </button>
+      </p>
+      <div class="mcp-servers">
+        {state.servers.map((s) => (
+          <div class={`mcp-server${s.enabled ? ' on' : ''}`} key={s.id}>
+            <div class="mcp-server-head">
+              <div>
+                <b>{s.name}</b> <small class="hint">{s.publisher}</small>
+                <p>{s.purpose}</p>
+                <small class="hint">
+                  {s.costs && <>{s.costs} </>}
+                  {s.requires === 'uv' && 'Needs uv installed. '}
+                  {s.requires === 'node' && 'Needs Node.js installed. '}
+                  {s.homepage && (
+                    <button class="link" onClick={() => api.openExternal(s.homepage)}>
+                      About this server
+                    </button>
+                  )}
+                  {s.custom && <code>{s.address}</code>}
+                </small>
+              </div>
+              <Toggle checked={s.enabled} disabled={busy === s.id} onChange={(enabled) => act(s.id, () => api.mcpSave({ id: s.id, enabled, secret: keys[s.id] }))} />
+            </div>
+            {s.secretLabel && (
+              <div class="extension-actions">
+                <input
+                  type="password"
+                  class="text-input"
+                  style="flex:1"
+                  autoComplete="off"
+                  value={keys[s.id] || ''}
+                  placeholder={s.hasSecret ? 'Key saved · leave blank to keep it' : s.secretLabel}
+                  onInput={(e) => setKeys({ ...keys, [s.id]: e.currentTarget.value })}
+                />
+                {s.secretHelpUrl && <Button onClick={() => api.openExternal(s.secretHelpUrl)}>Get a key</Button>}
+                <Button
+                  disabled={busy === s.id || !keys[s.id]?.trim()}
+                  onClick={() => act(s.id, () => api.mcpSave({ id: s.id, secret: keys[s.id] }), 'Key saved.').then((r) => r && setKeys({ ...keys, [s.id]: '' }))}
+                >
+                  Save key
+                </Button>
+              </div>
+            )}
+            {s.enabled && (
+              <div class="extension-actions">
+                <Button
+                  disabled={busy === s.id}
+                  onClick={() => act(s.id, async () => ({ ...(await api.mcpTest(s.id).then((test) => ({ test }))), ...(await api.mcpList()) }), (r) => `${s.name} is connected with ${r.test.tools.length} tools.`)}
+                >
+                  {busy === s.id ? 'Connecting…' : 'Test connection'}
+                </Button>
+                {s.status === 'ready' && <small class="hint">Connected · {s.tools.length} tools</small>}
+                {s.status === 'error' && <small class="warn">{s.error}</small>}
+              </div>
+            )}
+            {s.custom && (
+              <div class="extension-actions">
+                <Button disabled={busy === s.id} onClick={() => act(s.id, () => api.mcpRemoveCustom(s.id), 'Removed.')}>
+                  Remove
+                </Button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {custom ? (
+        <div class="mcp-server">
+          <b>Add your own MCP server</b>
+          <p class="hint">Use a server you trust. Copy the command or address from the server’s own instructions.</p>
+          <Row label="Name" stacked>
+            {field('name', { placeholder: 'For example Freesound' })}
+          </Row>
+          <Row label="What it is for" stacked>
+            {field('purpose', { placeholder: 'Tells the agent when to use it' })}
+          </Row>
+          <Row label="Type" stacked>
+            <Select
+              value={custom.transport}
+              options={[
+                { value: 'stdio', label: 'Program on this computer (command)' },
+                { value: 'http', label: 'Online server (https address)' },
+              ]}
+              onChange={(transport) => setCustom({ ...custom, transport })}
+            />
+          </Row>
+          {custom.transport === 'http' ? (
+            <Row label="Address" stacked>
+              {field('url', { placeholder: 'https://example.com/mcp' })}
+            </Row>
+          ) : (
+            <>
+              <Row label="Command" stacked>
+                {field('command', { placeholder: 'npx, uvx or a full path' })}
+              </Row>
+              <Row label="Arguments" stacked>
+                {field('args', { placeholder: '-y some-mcp-server' })}
+              </Row>
+              <Row label="Key variable (optional)" stacked>
+                {field('secretEnv', { placeholder: 'MY_API_KEY' })}
+              </Row>
+            </>
+          )}
+          <Row label={custom.transport === 'http' ? 'Bearer token (optional)' : 'Key (optional)'} stacked>
+            {field('secret', { type: 'password', autoComplete: 'off' })}
+          </Row>
+          <div class="extension-actions">
+            <Button variant="primary" disabled={busy === 'custom'} onClick={() => act('custom', () => api.mcpAddCustom(custom), 'Added and turned on. Click Test connection to check it.').then((r) => r && setCustom(null))}>
+              Add server
+            </Button>
+            <Button onClick={() => setCustom(null)}>Cancel</Button>
+          </div>
+        </div>
+      ) : (
+        <div class="extension-actions">
+          <Button onClick={() => setCustom({ name: '', purpose: '', transport: 'stdio', command: '', args: '', url: '', secretEnv: '', secret: '' })}>Add your own server…</Button>
+        </div>
+      )}
+      {!state.encryptedStorage && <p class="hint">Secure storage is unavailable. Keys are kept in memory for this session only.</p>}
+    </Section>
+  );
+}
+
+// Settings › AI › Use Reccut from other AI apps: Reccut's own MCP server (src/main/mcpServer.js).
+const MCP_APPS = {
+  claudeDesktop: ['Claude Desktop', 'In Claude, open Settings › Developer › Edit Config. Paste this into claude_desktop_config.json (merge it with servers you already have) and restart Claude.'],
+  claudeCode: ['Claude Code', 'Run this command once in a terminal.'],
+  vscode: ['VS Code', 'Paste this into .vscode/mcp.json in your project, or run MCP: Add Server.'],
+  json: ['Cursor and others', 'Paste this into the app’s MCP settings, for example ~/.cursor/mcp.json.'],
+};
+export function ReccutMcpPane() {
+  const [s, setS] = useState(null),
+    [target, setTarget] = useState('claudeDesktop');
+  useEffect(() => {
+    api.mcpServerStatus().then(setS, () => {});
+  }, []);
+  const configure = (raw) => api.mcpServerConfigure(raw).then(setS, (e) => toast(e.message, { kind: 'error' }));
+  if (!s) return null;
+  return (
+    <Section title="Use Reccut from other AI apps" collapsible={false}>
+      <p class="hint">
+        Lets AI apps such as Claude Desktop, Claude Code, Cursor and VS Code edit in Reccut with the same tools, skills and
+        instructions as the AI Agent, with the AI subscription you already have. Reccut must be open. It listens only on
+        this computer and needs a secret token. Every change is an undo step.{' '}
+        <button class="link" onClick={() => (helpOpen.value = { article: 'ai-mcp' })}>
+          Read the guide
+        </button>
+      </p>
+      <Row label="Allow AI apps to use Reccut" hint={s.running ? `Running at ${s.url}` : s.error || 'Off'}>
+        <Toggle checked={s.enabled} onChange={(enabled) => configure({ enabled })} />
+      </Row>
+      {s.enabled && s.setup && (
+        <>
+          <Row label="App" stacked>
+            <Select value={target} options={Object.entries(MCP_APPS).map(([value, [label]]) => ({ value, label }))} onChange={setTarget} />
+          </Row>
+          <p class="hint">{MCP_APPS[target][1]}</p>
+          <pre class="mcp-snippet">{s.setup[target]}</pre>
+          <div class="extension-actions">
+            <Button variant="primary" onClick={() => copy(s.setup[target])}>
+              Copy
+            </Button>
+            <Button onClick={() => configure({ newToken: true }).then(() => toast('New token made. Copy the setup again into apps that use the address.'))}>New token</Button>
+          </div>
+          <p class="hint">Keep the token private: anyone with it can edit your open project. Claude Desktop reads it from Reccut, so it is not in that setup.</p>
+        </>
+      )}
+    </Section>
   );
 }

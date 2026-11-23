@@ -41,6 +41,7 @@ import { toggleViewerFullscreen } from './editor/fullscreen.js';
 import { LAYOUTS, modifierInfo, settings as recordSettings } from './recorder/settings.js';
 import { addFiles, roomActions } from './export/state.js';
 import { boothOpen, openBooth } from './voiceover/state.js';
+import { aiChatOpen } from './aiChatOpen.js';
 import { openQuick } from './voiceover/quick.js';
 import { transcriptSearchOpen } from './editor/transcripts.js';
 
@@ -324,6 +325,7 @@ export const COMMANDS = [
   { id: 'tool:hand', label: 'Hand Tool', menu: 'Tools', keys: 'H', run: () => setTool('hand'), checked: () => tool.value === 'hand', help: 'tools' },
 
   /* View */
+  { id: 'aiAgent', label: 'AI Agent…', menu: 'View', rooms: ALL, run: () => (aiChatOpen.value = true), help: 'ai-mcp', keywords: 'ai agent chat assistant prompt claude gpt gemini mcp tool server edit for me help examples', desc: 'Open the AI Agent chat. Write what you want and the agent edits for you; type /help for examples.' },
   { id: 'roomRecord', label: 'Record', menu: 'View', keys: 'CmdOrCtrl+1', register: true, rooms: ALL, run: () => (room.value = 'record'), checked: () => room.value === 'record', help: 'recording' },
   { id: 'roomEdit', label: 'Edit', menu: 'View', keys: 'CmdOrCtrl+2', register: true, rooms: ALL, run: () => (room.value = 'edit'), checked: () => room.value === 'edit', help: 'editing' },
   { id: 'roomExport', label: 'Export Room', menu: 'View', keys: 'CmdOrCtrl+3', register: true, rooms: ALL, run: () => (room.value = 'export'), checked: () => room.value === 'export', help: 'export' },

@@ -314,7 +314,7 @@ To collect everything into one folder for archiving, use Package Project.
     section: 'Getting Started',
     title: 'Quick Search',
     summary: 'Press Control Space, type the name of anything, and it is applied or opened.',
-    keywords: 'command palette find help menu console fx console effects tools',
+    keywords: 'command palette find help menu console fx console effects tools settings options preferences copy paste undo quit full screen menu items',
     body: `
 Press {{key:findCommand}} when you are not typing in a field. A search window opens in the middle of the screen. Type a few letters of what you want and press Enter:
 
@@ -324,7 +324,9 @@ Press {{key:findCommand}} when you are not typing in a field. A search window op
 - **Looks** and **animations** are applied to the selected clips.
 - **Settings** such as Exposure, Scale or Volume open the right tab in the inspector, and the setting is highlighted with its number field ready to type in.
 - **Tools** are switched on and the tool button flashes.
-- **Commands** run, and **media** is found and highlighted in the browser.
+- **Commands** run, exactly as from the menu. Everything in the menus is here, also About, Quit, Full Screen and Minimize. Type **copy** and press Enter to copy the selected clips, **undo** to undo.
+- **Options** in Settings, such as Snapping, Loop playback or the AI provider, open Settings on the right page with the option highlighted, ready to change.
+- **Media** is found and highlighted in the browser.
 - **Help** articles open in the help window.
 
 ![Quick Search. The label on the left shows what kind of result it is, and commands show their shortcut.](palette.jpg)

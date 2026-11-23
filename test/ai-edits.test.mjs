@@ -244,3 +244,35 @@ test('the agent sets Clean Voice on speech, never on system audio, and null turn
   assert.deepEqual(p.clips.a.props.cleanVoice, {});
   assert.throws(() => edit(p, 'set_clip_properties', { edits: [{ clipId: 'a', properties: { cleanVoice: 2 } }] }));
 });
+
+test('the agent adds any effect with settings, changes, reorders and removes it', () => {
+  const p = project();
+  edit(p, 'add_video_effect', { clipId: 'a', effect: 'filmGrain', params: { amount: 0.2 } });
+  edit(p, 'add_video_effect', { clipId: 'a', effect: 'vhs' });
+  assert.deepEqual(p.clips.a.props.vfx.map((e) => e.type), ['filmGrain', 'vhs']);
+  assert.equal(p.clips.a.props.vfx[0].p.amount, 0.2);
+  assert.throws(() => edit(p, 'add_video_effect', { clipId: 'a', effect: 'glow', params: { amount: 'lots' } }), /must be a number/);
+  assert.throws(() => edit(p, 'add_video_effect', { clipId: 'a', effect: 'difference' }));
+  edit(p, 'set_video_effect', { clipId: 'a', effect: 'vhs', params: { amount: 0.4 }, on: false, moveTo: 0 });
+  assert.deepEqual(p.clips.a.props.vfx.map((e) => [e.type, e.on]), [['vhs', false], ['filmGrain', true]]);
+  assert.equal(p.clips.a.props.vfx[0].p.amount, 0.4);
+  const read = TOOL_MAP.get('get_clip').read(p, { clipId: 'a' });
+  assert.equal(read.effects[1].settings.amount, 0.2);
+  edit(p, 'remove_video_effect', { clipId: 'a', index: 0 });
+  assert.deepEqual(p.clips.a.props.vfx.map((e) => e.type), ['filmGrain']);
+  assert.throws(() => edit(p, 'remove_video_effect', { clipId: 'a', index: 5 }), /no such effect/);
+});
+
+test('the agent marks music lanes and reads beats in timeline time', () => {
+  const p = project();
+  p.media.music = { id: 'music', name: 'song.mp3', kind: 'audio', duration: 60, streams: { main: { hasAudio: true, beats: { version: 1, bpm: 120, downbeat: 0, beats: [10, 10.5, 11, 11.5, 12, 12.5] } } } };
+  p.clips.m = { id: 'm', type: 'audio', mediaId: 'music', name: 'Song', dur: 2, start: 1, in: 10, lane: -1, enabled: true, props: {}, kf: {} };
+  assert.match(TOOL_MAP.get('get_beats').read(p, {}).note, /set_music_lane/);
+  assert.throws(() => edit(p, 'set_music_lane', { lane: 2, music: true }));
+  edit(p, 'set_music_lane', { lane: -1, music: true });
+  assert.equal(p.lanes[-1].music, true);
+  const [r] = TOOL_MAP.get('get_beats').read(p, {}).clips;
+  assert.equal(r.bpm, 120);
+  assert.deepEqual(r.beats, [1, 1.5, 2, 2.5, 3]);
+  assert.deepEqual(r.bars, [1, 3]);
+});

@@ -1,5 +1,5 @@
 // Real offline test of the optional persistent engine. No installation or model
-// downloads. Usage: node scripts/test-voxcpm-process.mjs <engine> <model-dir> <reference.wav> [second-reference.wav]
+// downloads. Usage: node scripts/test-voxcpm-process.mjs [--cpu] [--threads N] <engine> <model-dir> <reference.wav> [second-reference.wav]
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -11,19 +11,27 @@ const { createVoxcpmProcess } = require('../src/main/voxcpmProcess');
 const { hashFile } = require('../src/main/downloadFile');
 const { readWav } = require('../src/main/voxcpm');
 const catalog = require('../src/main/ttsCatalog.json').voxcpm;
-const [exe, modelDir, reference, secondReference] = process.argv.slice(2).map((p) => path.resolve(p));
+const argv = process.argv.slice(2), engineArgs = [];
+for (let i = argv.indexOf('--cpu'); i >= 0; i = argv.indexOf('--cpu')) { argv.splice(i, 1); engineArgs.push('--cpu'); }
+const threadsAt = argv.indexOf('--threads');
+if (threadsAt >= 0) {
+  const n = argv[threadsAt + 1];
+  if (!/^\d{1,3}$/.test(n || '') || Number(n) < 1) throw new Error('--threads needs a positive number.');
+  engineArgs.push('--threads', n); argv.splice(threadsAt, 2);
+}
+const [exe, modelDir, reference, secondReference] = argv.map((p) => path.resolve(p));
 if (!exe || !modelDir || !reference) throw new Error('Supply an engine binary, local model directory and synthetic reference WAV.');
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'reccut-voxcpm-process-test-'));
 let launches = 0;
 const client = createVoxcpmProcess({ spawnImpl: (...args) => { launches++; return spawn(...args); } });
-const report = { engineRevision: catalog.engine.revision, modelRevision: catalog.model.revision, protocol: 1, measurements: [] };
+const report = { engineRevision: catalog.engine.revision, modelRevision: catalog.model.revision, protocol: 1, engineArgs, platform: `${process.platform}-${process.arch}`, measurements: [] };
 try {
   const models = catalog.model.files.map((f) => path.join(modelDir, f.path));
   for (const [i, f] of catalog.model.files.entries()) {
     assert.equal((await fs.stat(models[i])).size, f.size);
     assert.equal(await hashFile(models[i]), f.sha256);
   }
-  const config = { exe, models, sha256: await hashFile(exe), cwd: dir };
+  const config = { exe, models, args: engineArgs, sha256: await hashFile(exe), cwd: dir };
   report.engineSha256 = config.sha256;
   const base = { reference, cfg: catalog.settings.cfg, steps: catalog.settings.steps, timesteps: catalog.settings.timesteps, temperature: catalog.settings.temperature, seed: 42 };
   async function generate(name, mood = 'neutral', ref = reference) {
