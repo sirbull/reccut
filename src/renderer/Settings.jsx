@@ -6,6 +6,7 @@ import { PacingFields, isDefaultPacing, resetPacing } from './voiceover/Pacing.j
 // Innstillinger (Cmd ,), bygd som i Final Cut Pro: faner med ikoner øverst, og en kommandoeditor
 // for hurtigtaster. Alle valg lagres med en gang og gjelder hele appen.
 import { ExtensionsPane, ReccutMcpPane, ToolServersPane } from './Extensions.jsx';
+import { reservedFor } from './SystemShortcuts.jsx';
 import { PluginsPane } from './Plugins.jsx';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { AudioLines, Download, FolderOpen, Keyboard, Play, Puzzle, RotateCcw, Scissors, Search, Settings2, Share, Sparkles, Upload, X } from 'lucide-preact';
@@ -363,7 +364,12 @@ function ExportPane() {
 const MENUS = ['All', 'File', 'Edit', 'Export', 'Mark', 'Clip', 'Tools', 'Playback', 'View', 'Window', 'Design', 'Help'];
 
 function KeyboardPane() {
-  const [query, setQuery] = useState('');
+  // Opened from the macOS shortcut dialog or Quick Search with a command already filled in.
+  const [query, setQuery] = useState(() => {
+    const q = localStorage.getItem('keyboardQuery') || '';
+    localStorage.removeItem('keyboardQuery');
+    return q;
+  });
   const [menu, setMenu] = useState('All');
   const [recording, setRecording] = useState(null); // kommando-id
   const [pending, setPending] = useState(null); // { id, accel, conflicts }
@@ -391,6 +397,11 @@ function KeyboardPane() {
       const accel = accelFromEvent(e);
       if (!accel) return;
       const conflicts = conflictsFor(accel, recording);
+      if (reservedFor(accel)) {
+        toast(`macOS uses ${formatAccel(accel)} itself. Choose another key.`, { kind: 'error' });
+        setRecording(null);
+        return;
+      }
       if (conflicts.length) setPending({ id: recording, accel, conflicts });
       else setShortcut(recording, accel);
       setRecording(null);
@@ -461,6 +472,11 @@ function KeyboardPane() {
                     {c.submenu ? ` › ${c.submenu}` : ''}
                     {custom && defaultKeys(c)[0] ? ` · default ${formatAccel(defaultKeys(c)[0])}` : ''}
                   </small>
+                  {keys.filter(reservedFor).map((k) => (
+                    <small key={k} class="warn">
+                      macOS uses {formatAccel(k)} to {reservedFor(k).what.charAt(0).toLowerCase() + reservedFor(k).what.slice(1)}, so it does not reach Reccut. Choose another key.
+                    </small>
+                  ))}
                 </div>
                 <button class={`kb-key${rec ? ' recording' : ''}`} title="Click and press the new shortcut" onClick={() => setRecording(rec ? null : c.id)}>
                   {rec ? 'Press keys…' : keys.length ? keys.map((k) => <kbd key={k} class="keycap">{formatAccel(k)}</kbd>) : <span class="dim">None</span>}

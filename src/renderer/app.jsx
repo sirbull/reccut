@@ -76,6 +76,7 @@ import { quickOpen } from './voiceover/quick.js';
 import { AiModelsDialog, aiModelsOpen, maybeAskFirstRun } from './AiModels.jsx';
 import { VoicePackagesDialog } from './VoicePackages.jsx';
 import { voicePackagesOpen } from './voicePackages.js';
+import { SystemShortcutsDialog, checkSystemShortcuts } from './SystemShortcuts.jsx';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -388,6 +389,8 @@ function App() {
   // Første oppstart: når prosjektet er valgt, spør appen én gang om KI-modeller.
   useEffect(() => {
     if (started && !needsProject.value) setTimeout(maybeAskFirstRun, 600);
+    // macOS shortcuts that take Reccut's keys, such as Control Space with several keyboard languages.
+    if (started && !needsProject.value) setTimeout(checkSystemShortcuts, 1500);
   }, [started, needsProject.value]);
   useEffect(() => installFileDrop(window, {
     pathForFile: api.pathForFile,
@@ -488,6 +491,7 @@ function App() {
       {voicePackagesOpen.value && !needsProject.value && <VoicePackagesDialog key={voicePackagesOpen.value.lang || 'all'} />}
       {helpOpen.value && <HelpCenter />}
       {paletteOpen.value && <CommandPalette />}
+      {!needsProject.value && !aiModelsOpen.value && <SystemShortcutsDialog />}
       {transcriptSearchOpen.value && r === 'edit' && <TranscriptSearch />}
       {recoverList.value.length > 0 && <RecoverDialog />}
       <UpdateDialog />

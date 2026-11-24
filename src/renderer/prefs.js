@@ -30,6 +30,7 @@ const DEFAULTS = {
   syncMuteCamera: true,
   // Egne hurtigtaster: { kommando: 'CmdOrCtrl+Shift+B' }, tom streng betyr ingen.
   shortcuts: {},
+  systemShortcutsAsked: '', // Which macOS shortcut conflicts the user has already been asked about.
   designPanel: 'templates',
   designPanelWide: false,
   designLayersHeight: null,

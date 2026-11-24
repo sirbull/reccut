@@ -578,7 +578,18 @@ ipcMain.handle('updates:download', (_e, requested) => {
 ipcMain.handle('app:version', () => app.getVersion());
 // Bare nettadresser til GitHub åpnes i nettleseren.
 ipcMain.handle('shell:openExternal', (_e, url) => {
-  if (/^https:\/\/(github\.com|aistudio\.google\.com|console\.anthropic\.com|platform\.openai\.com|console\.higgsfield\.ai|ollama\.com|lmstudio\.ai|openrouter\.ai|console\.mistral\.ai|console\.groq\.com|www\.python\.org|www\.blackmagicdesign\.com|www\.red\.com|www\.arri\.com|imaging\.nikon\.com)\//.test(String(url))) return shell.openExternal(url);
+  if (/^https:\/\/(elevenlabs\.io|replicate\.com|huggingface\.co|brave\.com|docs\.astral\.sh|nodejs\.org|github\.com|aistudio\.google\.com|console\.anthropic\.com|platform\.openai\.com|console\.higgsfield\.ai|ollama\.com|lmstudio\.ai|openrouter\.ai|console\.mistral\.ai|console\.groq\.com|www\.python\.org|www\.blackmagicdesign\.com|www\.red\.com|www\.arri\.com|imaging\.nikon\.com)\//.test(String(url))) return shell.openExternal(url);
+});
+// macOS shortcuts that Reccut cannot receive, such as Control Space when there are several keyboard languages.
+ipcMain.handle('shortcuts:systemReserved', () => require('./systemShortcuts').systemReserved());
+ipcMain.handle('shortcuts:openSystemSettings', async () => {
+  if (process.platform !== 'darwin') return;
+  // Keyboard › Keyboard Shortcuts › Input Sources. The newer address works from macOS 13; the older before that.
+  try {
+    await shell.openExternal('x-apple.systempreferences:com.apple.Keyboard-Settings.extension');
+  } catch {
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.keyboard?Shortcuts');
+  }
 });
 ipcMain.handle('history:list', (_e, file) => projects.historyList(file));
 ipcMain.handle('history:load', (_e, snap, file) => projects.historyLoad(snap, file));

@@ -3,9 +3,9 @@ import { Fragment } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { effect } from '@preact/signals';
 import { CornerDownLeft, Keyboard, Search } from 'lucide-preact';
-import { COMMANDS, helpOpen, isMac, paletteOpen, runCommand, shortcutText } from '../registry.js';
+import { COMMANDS, byId, commandForEvent, helpOpen, isMac, paletteOpen, runCommand, shortcutText } from '../registry.js';
 import { consoleSearch, runItem } from './console.js';
-import { selection } from '../editor/store.js';
+import { room, selection } from '../editor/store.js';
 import { toast } from '../ui.jsx';
 
 const snapshot = () => COMMANDS.filter((c) => !c.hidden && !c.menuOnly).map((c) => ({
@@ -64,7 +64,8 @@ export function CommandPalette() {
   }, [index]);
   const onKey = (e) => {
     e.stopPropagation();
-    if (e.key === 'Escape' || (e.code === 'Space' && e.ctrlKey)) {
+    // Escape, or the Quick Search shortcut again, also when the user chose another one.
+    if (e.key === 'Escape' || (e.code === 'Space' && e.ctrlKey) || commandForEvent(e, room.value, { includeRegistered: true })?.id === 'findCommand') {
       e.preventDefault();
       close();
     } else if (e.key === 'ArrowDown') {
@@ -106,7 +107,7 @@ export function CommandPalette() {
           <span>
             <CornerDownLeft size={12} /> apply or open
           </span>
-          <span>{isMac ? '⌃Space' : 'Ctrl+Space'} opens and closes</span>
+          <span>{shortcutText(byId.get('findCommand')) || (isMac ? '⌃Space' : 'Ctrl+Space')} opens and closes</span>
           <span>
             <Keyboard size={12} /> {isMac ? '⌥⌘K' : 'Ctrl+Alt+K'} all shortcuts
           </span>

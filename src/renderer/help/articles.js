@@ -335,6 +335,8 @@ With nothing typed, scroll down to see everything you can search for, grouped by
 
 The top right corner shows how many clips are selected, so you know what an effect will be applied to. Press {{key:findCommand}} again or Escape to close it. You can also open it with Cmd K (Ctrl K on Windows) or the question mark at the top right.
 
+**On a Mac with more than one keyboard language,** macOS uses Control Space to switch language, and the key never reaches Reccut. Reccut checks this when it starts and asks you once: choose **Use ⌘K**, choose your own key in **Settings › Keyboard**, or turn the macOS shortcut off with **Open macOS Keyboard Settings** (Keyboard Shortcuts › Input Sources). Settings › Keyboard also marks every shortcut macOS takes, and does not let you pick one.
+
 To search what is said in your footage instead, use [[article:transcript-search|Transcript Search]] ({{key:transcriptSearch}}).
 
 On a Mac the Help menu also has a search field. Type a word and macOS points to the menu item, just like in other Mac apps. The help window ({{key:help}}) has its own search with articles and pictures.

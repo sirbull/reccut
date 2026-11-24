@@ -97,6 +97,8 @@ contextBridge.exposeInMainWorld('api', {
   appVersion: invoke('app:version'),
   openExternal: invoke('shell:openExternal'),
   menuRole: invoke('menu:role'),
+  systemReservedShortcuts: invoke('shortcuts:systemReserved'),
+  openSystemShortcutSettings: invoke('shortcuts:openSystemSettings'),
   historyList: invoke('history:list'),
   historyLoad: invoke('history:load'),
   historySnapshot: invoke('history:snapshot'),
