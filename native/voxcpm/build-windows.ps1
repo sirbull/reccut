@@ -1,9 +1,11 @@
 # Build the optional persistent adapter for Windows x64: CPU only, static
 # ggml and a static MSVC runtime, so the user needs no Visual C++ redistributable.
-# Usage: powershell -File native/voxcpm/build-windows.ps1 <llama.cpp-omni checkout> <output directory>
+# Usage: powershell -File native/voxcpm/build-windows.ps1 <llama.cpp-omni checkout> <output directory> [baseline|avx2]
+# baseline runs on every x64 CPU (SSE2 only); avx2 needs AVX2, FMA and F16C (2013 and newer).
 param(
   [Parameter(Mandatory = $true)][string]$SourceDir,
-  [Parameter(Mandatory = $true)][string]$OutputDir
+  [Parameter(Mandatory = $true)][string]$OutputDir,
+  [ValidateSet('baseline', 'avx2')][string]$Cpu = 'baseline'
 )
 $ErrorActionPreference = 'Stop'
 function Check($what) { if ($LASTEXITCODE -ne 0) { throw "$what failed (exit $LASTEXITCODE)" } }
@@ -35,14 +37,19 @@ foreach ($tool in 'cl.exe', 'cmake', 'ninja', 'dumpbin.exe', 'mt.exe') {
 New-Item -ItemType Directory -Force $OutputDir | Out-Null
 $OutputDir = (Resolve-Path $OutputDir).Path
 $build = Join-Path $OutputDir 'server-build'
-# Portable baseline: no GPU backends, OpenMP or optional x86 extensions, so
-# MSVC gets no /arch flag (x64 SSE2). Each flag is explicit because
-# GGML_NATIVE=OFF alone does not disable them. MSVC has no FMA/F16C options.
+# No GPU backends or OpenMP. Every x86 extension is explicit because
+# GGML_NATIVE=OFF alone does not disable them. baseline gives MSVC no /arch flag
+# (x64 SSE2); avx2 gives /arch:AVX2, where ggml also enables FMA and F16C.
+$simd = if ($Cpu -eq 'avx2') {
+  '-DGGML_SSE42=ON', '-DGGML_BMI2=ON', '-DGGML_AVX=ON', '-DGGML_AVX2=ON', '-DGGML_AVX512=OFF', '-DGGML_AVX_VNNI=OFF'
+} else {
+  '-DGGML_SSE42=OFF', '-DGGML_BMI2=OFF', '-DGGML_AVX=OFF', '-DGGML_AVX2=OFF', '-DGGML_AVX512=OFF', '-DGGML_AVX_VNNI=OFF'
+}
 cmake -S (Join-Path $projectDir 'native\voxcpm') -B $build -G Ninja "-DVOXCPM_SOURCE_DIR=$SourceDir" `
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
   -DBUILD_SHARED_LIBS=OFF -DGGML_BACKEND_DL=OFF -DGGML_NATIVE=OFF `
   -DGGML_METAL=OFF -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DENABLE_COREML=OFF -DGGML_OPENMP=OFF `
-  -DGGML_SSE42=OFF -DGGML_BMI2=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_AVX512=OFF -DGGML_AVX_VNNI=OFF `
+  @simd `
   -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF
 Check 'CMake configuration'
 cmake --build $build --target reccut-voxcpm --parallel 4; Check 'Engine build'
@@ -75,4 +82,5 @@ $licenses = 'llama-cpp-omni-MIT.txt', 'nlohmann-json-MIT.txt' | ForEach-Object {
 [IO.File]::WriteAllBytes((Join-Path $OutputDir "$asset.LICENSE.txt"), [byte[]]($licenses | ForEach-Object { $_ }))
 $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText((Join-Path $OutputDir "$asset.sha256"), "$hash  $asset`n")
-"Built $asset ($hash)"
+Set-Content -Encoding ascii (Join-Path $OutputDir 'cpu.txt') $Cpu
+"Built $asset for $Cpu ($hash)"

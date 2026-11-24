@@ -11,6 +11,11 @@ on:
       build_run:
         description: Run ID of a successful "Build VoxCPM2 CPU engines" run (the number in its URL)
         required: true
+      cpu:
+        description: Engine variant (baseline = every x64 CPU, avx2 = AVX2/FMA/F16C)
+        type: choice
+        options: [avx2, baseline]
+        default: avx2
       quick:
         description: Short smoke run only (not a measurement)
         type: boolean
@@ -49,7 +54,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - uses: actions/download-artifact@v7
         with:
-          name: ${{ matrix.artifact }}
+          name: ${{ matrix.artifact }}-${{ inputs.cpu }}
           run-id: ${{ inputs.build_run }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/engine
@@ -60,12 +65,16 @@ jobs:
           engine_dir="$RUNNER_TEMP/engine"
           (cd "$engine_dir" && sha256sum -c "${{ matrix.engine }}.sha256")
           chmod +x "$engine_dir/${{ matrix.engine }}"
-          model_dir="$RUNNER_TEMP/VoxCPM modeller æøå Ω"
-          mkdir -p "$model_dir"
-          for f in $(node -p "require('./src/main/ttsCatalog.json').voxcpm.model.files.map((f) => f.path).join(' ')"); do
-            curl -fL --retry 5 -o "$model_dir/$f" "https://huggingface.co/$MODEL_REPO/resolve/$MODEL_REVISION/$f"
-          done
+          tr -d '\r' < "$engine_dir/cpu.txt" | grep -qx "${{ inputs.cpu }}"
           test "$(node -p "require('./src/main/ttsCatalog.json').voxcpm.model.revision")" = "$MODEL_REVISION"
+          # curl on Windows cannot write non-ANSI paths, so download first and rename after.
+          mkdir -p "$RUNNER_TEMP/models"
+          for f in $(node -p "require('./src/main/ttsCatalog.json').voxcpm.model.files.map((f) => f.path).join(' ')"); do
+            curl -fsSL --retry 5 -o "$RUNNER_TEMP/models/$f" "https://huggingface.co/$MODEL_REPO/resolve/$MODEL_REVISION/$f"
+          done
+          model_dir="$RUNNER_TEMP/VoxCPM modeller æøå Ω"
+          mv "$RUNNER_TEMP/models" "$model_dir"
+          ls -l "$model_dir"
           echo "ENGINE=$engine_dir/${{ matrix.engine }}" >> "$GITHUB_ENV"
           echo "MODEL_DIR=$model_dir" >> "$GITHUB_ENV"
       - name: Prosesstest
@@ -74,7 +83,12 @@ jobs:
         run: node scripts/benchmark-voxcpm.mjs --cpu ${{ inputs.quick && '--quick' || '' }} --out "$RUNNER_TEMP/result" "$ENGINE" "$MODEL_DIR"
       - name: Resultat
         if: always()
-        run: test -f "$RUNNER_TEMP/result/report.json" && node scripts/summarize-voxcpm-benchmark.mjs "$RUNNER_TEMP/result/report.json" "VoxCPM2 ${{ matrix.os }}"
+        run: |
+          if [ -f "$RUNNER_TEMP/result/report.json" ]; then
+            node scripts/summarize-voxcpm-benchmark.mjs "$RUNNER_TEMP/result/report.json" "VoxCPM2 ${{ matrix.os }} ${{ inputs.cpu }}"
+          else
+            echo "No benchmark report; see the step that failed above."
+          fi
       - uses: actions/upload-artifact@v7
         if: always()
         with:

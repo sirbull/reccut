@@ -43,6 +43,17 @@ Gjort (uten kompilator, verifisert med tester og en falsk protokollmotor):
   Linux: `VmHWM`).
 - `voxcpm.js` har en plattformtabell (`engineFor`), og `install-voxcpm-local.mjs`
   bruker den. Windows og Linux står ikke i tabellen ennå.
+- Målingen kan kjøres på GitHubs Windows- og Linux-maskiner (4 vCPU, 16 GB) med
+  [voxcpm-benchmark.yml](../.github/workflows/voxcpm-benchmark.yml), med ID-en til et
+  bygg fra `voxcpm-cpu.yml`. Modellstien har mellomrom, `æøå` og `Ω`.
+
+Første måling (24. november, Linux-baseline uten AVX på `ubuntu-latest`): modellen
+lastet på 1,9 s, men 1,28 s lyd tok 255 s, altså sanntidsfaktor rundt 200. Neste
+setning nådde tidsgrensen på 300 s. Baseline med bare SSE2 er derfor ikke brukbar.
+Bygget lager nå også en `avx2`-variant (AVX2, FMA, F16C og BMI2; Intel Haswell og
+AMD Excavator/Zen, 2013 og nyere), og den er standardvalget i benchmarken. Velges
+den, må appen sjekke CPU-en før motoren startes, slik at eldre maskiner får en
+forklaring i stedet for en «illegal instruction»-krasj.
 
 Merk: motoren distribueres nå som tilleggspakker ([addons.yml](../.github/workflows/addons.yml),
 `addonCatalog.json`, `scripts/package-addons.mjs`), ikke som vedlegg i `build.yml`.

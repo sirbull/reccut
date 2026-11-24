@@ -5,6 +5,13 @@
 set -euo pipefail
 source_dir="${1:?Usage: build-linux.sh <llama.cpp-omni checkout> <output directory>}"
 output_dir="${2:?Supply an output directory}"
+# baseline runs on every x86-64 CPU; avx2 needs AVX2, FMA and F16C (2013 and newer).
+cpu="${3:-baseline}"
+case "$cpu" in
+  baseline) simd=(-DGGML_SSE42=OFF -DGGML_BMI2=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_AVX512=OFF -DGGML_AVX_VNNI=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF) ;;
+  avx2) simd=(-DGGML_SSE42=ON -DGGML_BMI2=ON -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_AVX512=OFF -DGGML_AVX_VNNI=OFF -DGGML_FMA=ON -DGGML_F16C=ON) ;;
+  *) echo "CPU variant must be baseline or avx2" >&2; exit 1 ;;
+esac
 project_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 expected_revision="$(node -p "require(process.argv[1]).voxcpm.engine.revision" "$project_dir/src/main/ttsCatalog.json")"
 expected_protocol="$(node -p "require(process.argv[1]).voxcpm.engine.protocol" "$project_dir/src/main/ttsCatalog.json")"
@@ -15,13 +22,11 @@ test "$(uname -s)" = Linux
 test "$(uname -m)" = x86_64
 mkdir -p "$output_dir"
 output_dir="$(cd "$output_dir" && pwd)"
-# Portable baseline: every optional x86 extension is off explicitly, because
-# GGML_NATIVE=OFF alone does not disable them.
+# Every x86 extension is explicit, because GGML_NATIVE=OFF alone does not disable them.
 cmake -S "$project_dir/native/voxcpm" -B "$output_dir/server-build" -G Ninja -DVOXCPM_SOURCE_DIR="$source_dir" \
   -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_BACKEND_DL=OFF -DGGML_NATIVE=OFF \
   -DGGML_METAL=OFF -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DENABLE_COREML=OFF -DGGML_OPENMP=OFF \
-  -DGGML_SSE42=OFF -DGGML_BMI2=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_AVX512=OFF -DGGML_AVX_VNNI=OFF \
-  -DGGML_FMA=OFF -DGGML_F16C=OFF \
+  "${simd[@]}" \
   -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
   -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF
 cmake --build "$output_dir/server-build" --target reccut-voxcpm --parallel 4
@@ -42,4 +47,5 @@ node -e 'if(JSON.parse(require("fs").readFileSync(process.argv[1])).protocol!==N
 cat "$project_dir/assets/licenses/llama-cpp-omni-MIT.txt" "$project_dir/assets/licenses/nlohmann-json-MIT.txt" > "$output_dir/$asset.LICENSE.txt"
 cd "$output_dir"
 sha256sum "$asset" > "$asset.sha256"
-echo "Built $asset, needs $(cat glibc.txt) or newer"
+echo "$cpu" > cpu.txt
+echo "Built $asset for $cpu, needs $(cat glibc.txt) or newer"

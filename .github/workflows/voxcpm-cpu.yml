@@ -12,6 +12,10 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cpu: [baseline, avx2]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -25,22 +29,27 @@ jobs:
           persist-credentials: false
       - name: Bygg VoxCPM2 (Windows x64 / CPU)
         shell: pwsh
-        run: ./native/voxcpm/build-windows.ps1 .voxcpm-source voxcpm-artifacts
+        run: ./native/voxcpm/build-windows.ps1 .voxcpm-source voxcpm-artifacts ${{ matrix.cpu }}
       - name: Avhengigheter og protokoll
         shell: pwsh
         run: Get-Content voxcpm-artifacts/dependencies.txt, voxcpm-artifacts/protocol.json, voxcpm-artifacts/reccut-voxcpm-win-x64.exe.sha256
       - uses: actions/upload-artifact@v7
         with:
-          name: Reccut-VoxCPM-win-x64
+          name: Reccut-VoxCPM-win-x64-${{ matrix.cpu }}
           path: |
             voxcpm-artifacts/reccut-voxcpm-*
             voxcpm-artifacts/dependencies.txt
+            voxcpm-artifacts/cpu.txt
           if-no-files-found: error
 
   linux:
     runs-on: ubuntu-latest
     # Oldest supported glibc baseline (2.35). Newer distributions also run it.
     container: ubuntu:22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cpu: [baseline, avx2]
     steps:
       - name: Byggeverktøy
         run: |
@@ -59,13 +68,14 @@ jobs:
       - name: Bygg VoxCPM2 (Linux x64 / CPU)
         run: |
           git config --global --add safe.directory "$PWD/.voxcpm-source"
-          bash native/voxcpm/build-linux.sh .voxcpm-source voxcpm-artifacts
+          bash native/voxcpm/build-linux.sh .voxcpm-source voxcpm-artifacts ${{ matrix.cpu }}
           cat voxcpm-artifacts/dependencies.txt voxcpm-artifacts/glibc.txt voxcpm-artifacts/reccut-voxcpm-linux-x64.sha256
       - uses: actions/upload-artifact@v7
         with:
-          name: Reccut-VoxCPM-linux-x64
+          name: Reccut-VoxCPM-linux-x64-${{ matrix.cpu }}
           path: |
             voxcpm-artifacts/reccut-voxcpm-*
             voxcpm-artifacts/dependencies.txt
             voxcpm-artifacts/glibc.txt
+            voxcpm-artifacts/cpu.txt
           if-no-files-found: error
