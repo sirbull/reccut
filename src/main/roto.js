@@ -6,6 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const readline = require('readline');
+const os = require('node:os');
+const { rotoRecommendation } = require('../shared/modelRecommendations.cjs');
 const { spawn } = require('child_process');
 const { Readable } = require('stream');
 
@@ -30,7 +32,7 @@ const GB = 1024 ** 3;
 const NEEDED = { darwin: 2 * GB, win32: 7 * GB, linux: 7 * GB };
 const CACHE_DAYS = 14;
 
-function createRoto({ dir, cacheDir, ffmpegPath, fetchImpl, platform = process.platform, arch = process.arch, spawnImpl = spawn, scriptSource = path.join(__dirname, 'roto.py') }) {
+function createRoto({ dir, cacheDir, ffmpegPath, fetchImpl, platform = process.platform, arch = process.arch, spawnImpl = spawn, scriptSource = path.join(__dirname, 'roto.py'), hardware = { ramGB: Math.round(os.totalmem() / GB * 10) / 10, cpuThreads: os.availableParallelism() } }) {
   const target = `${platform}-${arch}`;
   const supported = Boolean(UV[target]);
   const infoFile = path.join(dir, 'addon.json');
@@ -70,10 +72,12 @@ function createRoto({ dir, cacheDir, ffmpegPath, fetchImpl, platform = process.p
       free = s.bavail * s.bsize;
     } catch {}
     const i = info();
-    const models = MODELS.map((m) => ({ id: m.id, label: m.label, bytes: m.bytes, about: m.about, installed: hasModel(m) }));
+    const recommendation = supported ? rotoRecommendation(MODELS, hardware) : null;
+    const models = MODELS.map((m) => ({ id: m.id, label: m.label, bytes: m.bytes, about: m.about, installed: hasModel(m), recommended: m.id === recommendation?.id, recommendationReason: m.id === recommendation?.id ? recommendation.reason : '' }));
     const chosen = models.find((m) => m.id === i?.model && m.installed) || models.find((m) => m.installed);
     return {
       supported,
+      hardware, recommendation,
       installed: Boolean(i) && fs.existsSync(paths.python),
       installedAt: i?.installedAt || null,
       model: chosen?.id || null,

@@ -6,6 +6,34 @@ export const SECTIONS = ['Getting Started', 'Recording', 'Media', 'Editing', 'Au
 
 export const ARTICLES = [
   {
+    id: 'ai-models', section: 'AI and Plugins', title: 'Local AI Models and Recommendations',
+    summary: 'Choose local models for captions, backgrounds and voices, with recommendations based on this computer.',
+    keywords: 'recommended recommendation hardware weak powerful slow fast computer memory ram cpu gpu whisper tiny base small medium turbo background piper kokoro voxcpm roto models download',
+    body: `Open [[run:ai:models|AI Models]] from View or Quick Search, or go to **Settings → AI**. Each model explains what it does and how large the download is. **Recommended** marks a starting point for this computer, with a short reason. These are local estimates from RAM, available logical CPUs and, for background removal, WebGPU compatibility. No benchmark, model download or generation runs to make the recommendations.
+
+## Captions and transcripts
+
+The AI Models window, **Settings → AI → Local Subtitle Models → Manage Models**, and the Auto captions model list use the same recommendation. On machines with little RAM or very few available CPU threads, start with Whisper Tiny. Base is the lighter general choice; Small is suggested with about 16 GB RAM and at least eight logical CPUs, and Medium with about 32 GB and at least twelve. Unsupported models are never recommended. Large V3 Turbo remains an optional quality choice, rather than an automatic recommendation for CPU transcription.
+
+CPU count is only a rough indication of available capacity. New Whisper downloads currently use single-threaded CPU inference, so more cores do not directly make transcription faster. Language, recording quality and processor speed also matter. Larger models may recognize difficult speech better but can take much longer. The badges do not change your active model. After downloading, choose **Use this model** if you want to switch.
+
+## Background removal and Roto Brush
+
+Fast (GPU) is recommended when WebGPU exposes the capabilities required by the background worker. Otherwise Standard (any computer) is recommended. This detects compatibility, not GPU speed or graphics memory. A GPU can still fail or run out of memory during processing.
+
+In **Roto Brush → Models**, Small is suggested on machines with less memory or fewer available CPU threads, and Base+ on roomier machines. Large remains available for difficult subjects. Your current Roto Brush model is kept; actual GPU memory and tracking speed are not measured.
+
+## Voice packages
+
+Open **Voice Packages** from AI Models, Settings → AI or Voice Over Studio. Recommendations also take each package's languages and platform support into account. Piper is a smaller native-language choice; Kokoro is recommended for its supported languages when there is more capacity. On supported Apple Silicon Macs with about 16 GB RAM and at least eight logical CPUs, VoxCPM2 is suggested for expressive speech. Its shared model is about 3.55 GB. Other voices remain available, and you can listen to the bundled samples before downloading.
+
+## Your choices stay yours
+
+First-run checkboxes suggest suitable packages, but you can change or clear them. Nothing downloads until you press **Download** or **Download selected**. Opening AI Agent setup does not install the suggested models. No installed or active model is replaced by a recommendation. Hardware checks stay on your computer; asking the AI Agent which model to use lets it read these same recommendations with get_model_recommendations.
+`,
+    see: ['captions', 'design', 'effects', 'voiceover', 'ai-plugins'],
+  },
+  {
     id: 'third-party-licenses', section: 'Reference', title: 'Third-party Software and Licenses',
     summary: 'Find offline license texts, component credits and information about source-code and artwork rights.',
     keywords: 'about copyright attribution license licence open source GPL LGPL MPL ffmpeg mediabunny uiohook openmoji commercial credits',
@@ -115,6 +143,8 @@ Text styles with a second text color automatically emphasize the longest word us
 Library sections show a horizontal row of cards. See All opens the whole section as a grid; Back returns to the sections. Search filters the current panel. Hover or focus previews a card on the canvas without saving or adding undo steps. A single click applies the card and selects it; Enter also applies it. Double clicking inserts only once. Drag an image to place it at that point. Drag a style or color onto a compatible unlocked layer to affect only that layer. Right click offers Apply and the actions available for that item.
 
 Templates offers 22 built-in layouts for wide, tall and square designs, plus My Templates. Click a template or press Enter to create a new design using its size or the current canvas size. It uses the current frame, cutout, project title and My Logo when available. By Style groups templates by tags such as Bold, Minimal, Tutorial and News. Save as Template lets you assign picture and text placeholders, comma-separated tags and a color role for each text or shape layer. Import and export use .reccut-design-template files, without links to original project files.
+
+**More Templates** in Design → Templates loads Reccut's online catalog, with 22 layouts and picture previews. It is set up automatically for new profiles and needs no account or model download. Click a card to create an editable design. Loading the catalog or a template needs internet access; previews and the list are cached for 24 hours. Designs you have already created remain editable offline. If the service is unavailable, the built-in templates still work. In Settings → Plugins → Design → Online Template Catalog, you can change the address or clear it and choose Save Catalog to turn it off. Existing saved addresses, including an empty address, are preserved. To connect an older profile, paste https://sirbull.github.io/reccut/design-catalog/index.json and choose Save Catalog.
 
 Brand has the reusable Logo, Brand Colors, title/body Brand Fonts and a Brand Palette. Click a color to apply it to selected text or shapes, or to the background when nothing is selected. My Colors also stores up to 20 colors beside color controls. Save Color in Brand adds the chosen color; right click a swatch to remove it. My Logo is copied into each new design that uses it, so replacing the saved logo keeps existing projects intact.
 
@@ -1980,7 +2010,7 @@ On recordings, choose Camera or Screen before adding an effect. Preview and expo
     body: `
 Open **Settings → AI** and choose a provider: OpenAI, Anthropic Claude, Google Gemini, Mistral, OpenRouter, Groq, xAI, DeepSeek, or a local server such as Ollama, LM Studio or llama.cpp. **Other server or gateway** takes any OpenAI-compatible or Anthropic-compatible address, also on your local network. Choose **Fetch models** to pick an exact model ID. The model must support tool calling. Turn off **Model can see images** for text-only models.
 
-Cloud providers need your own API key and bill you for usage. Keys use encrypted operating system storage when available, otherwise session memory only. Changing the provider or address removes the previous key. Local servers need no key, and nothing leaves your computer.
+Cloud providers need your own API key and bill you for usage. Keys use encrypted operating system storage when available, otherwise session memory only. Changing the provider or address removes the previous key. A model server on your own computer can run the editing model locally without a provider key. External plugins and tool servers still contact their services when used.
 
 ## The editing agent
 
@@ -1993,6 +2023,7 @@ Choose **AI Agent** in the toolbar. The first time, a short setup lets you choos
 - **Your own titles:** describe a lower third, callout or end card and the agent designs an animated title template for it, adds it to the Titles library and places it.
 - **Tell a story:** attach a script (PDF, Typeloom project, Word, Final Draft, Fountain, RTF or text), storyboard images or a short brief with **Attach…**. The agent finds every take of every line, picks the best one and builds the edit. Without a script or brief it asks what the video is for, its length and tone before it cuts, or proposes a structure from the footage. The brief, the paper edit and the documents are saved with the project.
 - **Graphics and intros:** ask for an infographic, animated chart, intro, chapter card or logo animation. The agent writes and renders it as a video clip (with transparency when it goes over footage), adds it to the library and places it.
+- **Local AI voice-over:** "Read this script in English and put the narration on the timeline." The agent lists the available voices and uses a downloaded voice in the script's language. It creates a separate audio clip for each line, trimmed to the speech, with pauses between lines. Kokoro and Piper run locally; VoxCPM adds expressive moods on Apple Silicon. If a voice package is missing, the Voice Packages window opens for you to choose and download it. The agent does not start that download. For your own microphone narration, ask it to open Voice Over Studio.
 - **AI video:** **Higgsfield AI Video** comes with Reccut as a plugin. Open it from **Plugins** in the toolbar, set up your Higgsfield key once, describe a shot and generate it, optionally starting from the frame at the playhead. The agent can use it too. You see the estimated price and confirm each generation.
 - **Plugins:** ask the agent for a tool, for example "a plugin that reduces noise with a strength slider". It makes a plugin with its own icon and settings (an FFmpeg command or a Python script) and shows it to you in full. Nothing runs until you choose **Install processor**. Installed plugins are listed under **Plugins** in the toolbar and open as small tool windows you can move anywhere; choose a clip and **Apply to selected clip**. When you ask the agent to change a plugin, it updates the same plugin to a new version instead of adding another one.
 
@@ -2009,13 +2040,19 @@ Scripts from **Typeloom**: export the project as a Typeloom project file (.typel
 
 Each change is an undo step, and **Undo this request** reverts everything the agent did in its last request. **Stop** ends a request between steps.
 
-The agent cannot yet create voice-over or music, or export. What is sent to the provider: your messages and attached images, what the agent reads from the project (clip names, timings, captions, the transcript and look measurements) and, if the model can see images, rendered frames. Media files, audio and local paths are not uploaded. The speech model runs on your computer. Speech models for subtitles are optional downloads in Settings → AI.
+Music, sound effects and generated images need a connected tool server that offers them, under Settings → AI → Tool servers (MCP). Services may charge your account. Generated video uses the Higgsfield plugin and its account. The agent can open export and project packaging dialogs; choose the destination and confirm the operation there.
+
+With a cloud AI provider, your messages, attached images and documents, project information the agent reads (including captions and transcripts), and requested preview frames are sent to that provider. Transcription and AI voice synthesis run on your computer. Ordinary editing does not upload source video or audio. Generating video through Higgsfield sends the prompt and an optional start frame to that service; connected tool servers receive the arguments used for their tools. Keystroke events from recordings are never included in the agent's tools. Voice and subtitle models are optional downloads started by you.
+
+## Use Reccut from another AI app
+
+In **Settings → AI → Use Reccut from other AI apps**, turn on **Allow AI apps to use Reccut**, choose your app and copy its setup. Follow the instructions shown for Claude Desktop, Claude Code, VS Code or Cursor and others. Reccut must stay open. This local MCP server is off by default, listens only on this computer and requires a secret token. The other app gets the same Reccut tools and skills, and edits can be undone in Reccut. Connected third-party tool servers are not passed on to the other app. See [[article:ai-mcp|AI Chat, Skills and Tool Servers (MCP)]] for the full setup guide.
 
 **External video processors** install from a Reccut JSON manifest pointing to a trusted local executable. On a video clip, open Effects → External processing to process the full source and apply the result to that clip. The source timing must be preserved; original audio and media remain available. Cancel through Background tasks.
 
 Native OFX and Adobe plugins cannot be loaded directly. CorridorKey from Corridor Digital is available as an optional plugin: install it from Plugins. It is downloaded only after you have read what it needs and accepted its licence, and nothing of it is included in Reccut.
 `,
-    see: ['ai-setup', 'ai-local', 'ai-recipes', 'plugins-guide', 'processor-guide', 'keying'],
+    see: ['ai-setup', 'ai-local', 'ai-recipes', 'ai-mcp', 'voiceover', 'plugins-guide', 'processor-guide', 'keying'],
   },
   {
     id: 'inspector',

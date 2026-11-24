@@ -7,10 +7,13 @@ import { modelBytes } from './subtitleModels.js';
 import { tasks } from './editor/store.js';
 import { audioSink } from './prefs.js';
 import { refreshTts, tts, voicePackageRequests, voicePackagesOpen } from './voicePackages.js';
+import { hardwareSummary, voiceRecommendations } from '../shared/modelRecommendations.cjs';
 
 const api = window.api;
 export function VoicePackages({ lang = null, onDone = null, firstRun = false }) {
   const state = tts.value, rows = voicePackageRows(catalog, state);
+  const [hardware, setHardware] = useState(null);
+  const recommendations = new Map(voiceRecommendations(rows, hardware || {}).map(r => [r.key, r.reason]));
   const [picked, setPicked] = useState(new Set()), [query, setQuery] = useState('');
   const [samples, setSamples] = useState({}), [playing, setPlaying] = useState(null);
   const [offerModelRemoval, setOfferModelRemoval] = useState(false);
@@ -18,8 +21,10 @@ export function VoicePackages({ lang = null, onDone = null, firstRun = false }) 
   useEffect(() => {
     let alive = true;
     api.voicePackagesMarkAsked().catch(() => {});
-    Promise.all([refreshTts(), api.voicePackagesStatus()]).then(([s, context]) => {
-      if (alive && !touched.current) setPicked(suggestedVoicePackages(voicePackageRows(catalog, s), [lang, context.systemLanguage, context.appLanguage]));
+    Promise.all([refreshTts(), api.voicePackagesStatus(), api.subtitleModels()]).then(([s, context, subtitles]) => {
+      if (!alive) return;
+      setHardware(subtitles.hardware || {});
+      if (!touched.current) setPicked(suggestedVoicePackages(voicePackageRows(catalog, s), [lang, context.systemLanguage, context.appLanguage], subtitles.hardware || {}));
     }).catch(() => {});
     return () => { alive = false; audio.current?.pause(); };
   }, []);
@@ -81,6 +86,7 @@ export function VoicePackages({ lang = null, onDone = null, firstRun = false }) 
   return (
     <div class="voice-packages">
       <p class="hint">Voice packages read scripts aloud in the Voice Over Studio. They run on this computer, free and without an account. Your script stays here. Listen first, then download only the packages you want.</p>
+      <p class="hint">{hardware ? `${hardwareSummary(hardware)}. ` : ''}Recommended balances language support and resource demands. Piper is a lighter choice; Kokoro covers its own languages; VoxCPM2 is suggested on supported computers with more memory. These are estimates, not measured generation speeds.</p>
       <label class="search voice-packages-search"><Search size={14} /><input type="search" aria-label="Search voice packages" placeholder="Search language or voice" value={query} onInput={(e) => setQuery(e.currentTarget.value)} /></label>
       <ul class="voice-package-list">
         {shown.map((row) => {
@@ -91,7 +97,8 @@ export function VoicePackages({ lang = null, onDone = null, firstRun = false }) 
               <div class="voice-package-choice">
                 {row.installed ? <Check size={16} class="ok" aria-label="Installed" /> : <input type="checkbox" aria-label={`Download ${row.name}`} checked={selectedKeys.has(row.key)} disabled={Boolean(row.unavailable) || pending} onChange={() => toggle(row)} />}
                 <div class="voice-package-info">
-                  <b>{row.name}</b><span>{row.use}</span><small>{row.detail}</small>
+                  <b>{row.name} {hardware && recommendations.has(row.key) && <span class="setup-badge">Recommended</span>}</b><span>{row.use}</span><small>{row.detail}</small>
+                  {hardware && recommendations.has(row.key) && <small>{recommendations.get(row.key)}</small>}
                   {row.unavailable && <small>{row.unavailable}</small>}
                   <small>{modelBytes(row.size)} · {row.license}</small>
                 </div>

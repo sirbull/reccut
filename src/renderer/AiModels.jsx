@@ -2,7 +2,7 @@
 // Vinduet vises ved første oppstart (velg hva du vil laste ned), når en funksjon mangler sin
 // modell (teksting, fjerne bakgrunn eller AI-stemmer), og fra Settings → AI.
 import { signal } from '@preact/signals';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { AudioWaveform, Captions, Check, Download, Loader2, Scissors, Sparkles, Trash2, X } from 'lucide-preact';
 import { aiChatOpen } from './aiChatOpen.js';
 import { Button, IconButton, Modal } from './ui.jsx';
@@ -11,6 +11,8 @@ import { modelAction, modelBytes, subtitleModels } from './subtitleModels.js';
 import { tasks } from './editor/store.js';
 import { scriptLanguage } from './voiceover/booth.js';
 import { openVoicePackages, refreshTts } from './voicePackages.js';
+import { backgroundRecommendation, hardwareSummary } from '../shared/modelRecommendations.cjs';
+import { checkModelGpu, modelGpu } from './modelRecommendations.js';
 
 const api = window.api;
 
@@ -66,37 +68,29 @@ const GROUPS = [
   },
 ];
 
-// Samme sjekk som arbeidsvinduet for bakgrunn: WebGPU med nok lagringsbuffere.
-async function hasGoodGpu() {
-  try {
-    const adapter = navigator.gpu && (await navigator.gpu.requestAdapter());
-    return Boolean(adapter && adapter.limits.maxStorageBuffersPerShaderStage >= 8);
-  } catch {
-    return false;
-  }
-}
-
 export function AiModelsDialog() {
   const state = aiModelsOpen.value;
   const subs = subtitleModels.value;
   const bg = backgroundModels.value;
   const [picked, setPicked] = useState(() => new Set());
+  const selectionTouched = useRef(false);
   useEffect(() => {
     modelAction('subtitleModels');
     refreshBackground();
     refreshTts();
   }, []);
-  // Forslag ved første oppstart: det minste som dekker teksting og bakgrunn. AI-stemmer velges selv.
-  const [gpuOk, setGpuOk] = useState(null);
+  const gpuOk = modelGpu.value;
+  const backgroundChoice = backgroundRecommendation(bg, gpuOk);
   useEffect(() => {
-    hasGoodGpu().then(setGpuOk);
+    checkModelGpu();
   }, []);
   useEffect(() => {
-    if (!state?.firstRun || !subs || !bg.length || gpuOk == null || picked.size) return;
+    if (!state?.firstRun || !subs || !bg.length || gpuOk == null || selectionTouched.current) return;
+    selectionTouched.current = true;
     const next = new Set();
-    const base = subs.models.find((m) => m.id === 'whisper-base' && !m.installed && m.status !== 'unsupported');
-    if (base && !subs.models.some((m) => m.installed)) next.add('sub:whisper-base');
-    const choice = bg.find((m) => m.gpu === gpuOk && !m.installed) || null;
+    const base = subs.models.find((m) => m.recommended && !m.installed && m.status !== 'unsupported');
+    if (base && !subs.models.some((m) => m.installed)) next.add(`sub:${base.id}`);
+    const choice = bg.find((m) => m.id === backgroundChoice?.id && !m.installed) || null;
     if (choice && !bg.some((m) => m.installed)) next.add(`bg:${choice.id}`);
     setPicked(next);
   }, [subs, bg, gpuOk]);
@@ -105,7 +99,7 @@ export function AiModelsDialog() {
     if (state?.firstRun) setPrefs({ aiModelsAsked: true });
     aiModelsOpen.value = null;
   };
-  const toggle = (key) => setPicked((old) => (old.has(key) ? new Set([...old].filter((k) => k !== key)) : new Set([...old, key])));
+  const toggle = (key) => { selectionTouched.current = true; setPicked((old) => (old.has(key) ? new Set([...old].filter((k) => k !== key)) : new Set([...old, key]))); };
   const download = async (key) => {
     const [kind, id] = key.split(/:(.*)/s);
     try {
@@ -129,6 +123,7 @@ export function AiModelsDialog() {
       .map((m) => ({
         key: `sub:${m.id}`,
         name: m.name,
+        recommendation: m.recommended ? m.recommendationReason : '',
         detail: String(m.description || m.recommendedFor || '').replace(new RegExp(`^${m.name}:\\s*`), ''),
         size: m.downloadSizeBytes,
         installed: m.installed,
@@ -140,6 +135,7 @@ export function AiModelsDialog() {
     background: bg.map((m) => ({
       key: `bg:${m.id}`,
       name: m.label,
+      recommendation: m.id === backgroundChoice?.id ? backgroundChoice.reason : '',
       detail: m.description,
       size: m.sizeBytes,
       installed: m.installed,
@@ -150,7 +146,7 @@ export function AiModelsDialog() {
     })),
     voices: [{
       key: 'voices:choose', name: 'Voice packages',
-      detail: 'Choose languages, listen to samples and see the download size before installing. Kokoro and Piper are available; VoxCPM2 packages will add expressive moods.',
+      detail: 'Choose languages, see recommendations for this computer, listen to samples and check the size before installing. Kokoro and Piper are available; VoxCPM2 adds expressive moods on Apple Silicon.',
       size: 0, sizeLabel: 'From about 63 MB', choose: true,
     }],
   };
@@ -179,6 +175,7 @@ export function AiModelsDialog() {
       <p class="hint">
         {state?.firstRun ? 'Reccut has a few features that use AI models. ' : ''}The models run on your computer, are free and need no account. They are not part of the installer, so download only what you need. Your media and scripts never leave the computer. You can change this any time in Settings → AI.
       </p>
+      <p class="hint">{subs?.hardware ? `${hardwareSummary(subs.hardware)}. ` : ''}Recommended models are starting points based on memory, CPU count and GPU compatibility, not a speed test. You can choose another model. Nothing downloads until you choose Download.</p>
       {groups.map((g) => (
         <section key={g.id} class={`ai-models-group${state?.focus === g.id ? ' focus' : ''}`}>
           <header>
@@ -198,8 +195,9 @@ export function AiModelsDialog() {
                   <input type="checkbox" checked={picked.has(r.key)} disabled={r.busy} onChange={() => toggle(r.key)} aria-label={`Download ${r.name}`} />
                 )}
                 <div class="ai-models-name">
-                  <b>{r.name}</b>
+                  <b>{r.name} {r.recommendation && <span class="setup-badge">Recommended</span>}</b>
                   {r.detail && <span class="dim">{r.detail}</span>}
+                  {r.recommendation && <span class="dim">{r.recommendation}</span>}
                 </div>
                 <span class="dim ai-models-size">{r.sizeLabel || modelBytes(r.size)}</span>
                 {r.busy ? (
@@ -231,9 +229,7 @@ export function AiModelsDialog() {
               class="small"
               icon={Sparkles}
               onClick={() => {
-                // Models already ticked are still downloaded; the agent setup opens on top.
-                if (picked.size) downloadPicked();
-                else close();
+                close();
                 aiChatOpen.value = true;
               }}
             >

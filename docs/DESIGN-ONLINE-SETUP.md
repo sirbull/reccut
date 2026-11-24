@@ -20,11 +20,13 @@ The offline library and Brand work without any accounts. Openverse is built in a
 
 The prior `RECCUT_PIXABAY_KEY` / `RECCUT_PEXELS_KEY` publisher-key workflow is superseded by optional personal-key plugins. No provider approval, real-key test or account registration was performed during development.
 
-## Publish the template catalog
+## Online template catalog
 
-`design-catalog/` is ready to copy into a public repository or HTTPS static host. It includes index.json, 22 validated .reccut-design-template files, and matching PNG previews. Preserve relative paths. Its content contains no project/media paths, secrets or personal photos.
+Reccut's catalog is published at https://sirbull.github.io/reccut/design-catalog/index.json. New profiles use this address automatically. Open **Design → Templates → More Templates**, then click a card to create an editable design. No account, API key or model download is required. Existing designs remain editable offline. The catalog list and previews are cached for 24 hours; fetching a template needs a connection. The built-in templates remain available if the catalog cannot be reached.
 
-Once published, enter the public raw/static `index.json` URL in Settings → Design → Online Template Catalog. More Templates then appears in Templates. Test from a clean profile, apply a template and check offline behavior before advertising the catalog. The publication itself has not been done by the assistant.
+**Settings → Plugins → Design → Online Template Catalog** lets you use another public HTTPS index, or clear the address and choose **Save Catalog** to disable it. Saved settings, including an empty address, are preserved on upgrade. For an older profile with an empty address, paste the Reccut catalog URL above and choose Save Catalog. Turning off online resources also disables catalog requests.
+
+The website workflow publishes `docs/design-catalog/`, including index.json, 22 .reccut-design-template files and matching PNG previews. Preserve relative paths when adding entries or hosting a copy. Its content contains no project/media paths, secrets or personal photos.
 
 ## Magnific
 

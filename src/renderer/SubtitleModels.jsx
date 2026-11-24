@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { Button, Modal, Row, Section, Select } from './ui.jsx';
 import { modelAction, modelBytes, useSubtitleModels } from './subtitleModels.js';
 import './styles/subtitle-models.css';
+import { hardwareSummary } from '../shared/modelRecommendations.cjs';
 
 const labels = { 'not-installed': 'Not installed', downloading: 'Downloading', installing: 'Installing', installed: 'Installed', active: 'Active', failed: 'Failed', unsupported: 'Unsupported on this device' };
 
@@ -14,10 +15,11 @@ export function LocalSubtitleModels() {
       <Row label="Active subtitle model" stacked>
         <Select value={state?.active || ''} disabled={!state?.models.some(m => m.usable)} options={[
           ...(!state?.active ? [{ value: '', label: state ? 'Install a subtitle model to get started' : 'Checking installed models…' }] : []),
-          ...(state?.models.filter(m => m.usable).map(m => ({ value: m.id, label: `${m.name} — Installed` })) || []),
+          ...(state?.models.filter(m => m.usable).map(m => ({ value: m.id, label: `${m.name} · ${m.recommended ? 'Recommended · ' : ''}Installed` })) || []),
         ]} onChange={id => modelAction('selectSubtitleModel', id)} />
       </Row>
       {active && <p class="hint">{active.description}</p>}
+      {state?.recommendation && <p class="hint">Recommended for this computer: {state.models.find(m => m.recommended)?.name}. {state.recommendation.reason} This is a hardware-based estimate; your active model is kept.</p>}
       <div class="subtitle-model-summary"><Button onClick={() => setManager(true)}>Manage Models</Button><span class="hint">Storage used: {state ? modelBytes(state.storageBytes) : 'Checking…'}</span></div>
     </Section>
     {manager && <SubtitleModelManager state={state} onClose={() => setManager(false)} />}
@@ -33,7 +35,8 @@ export function SubtitleModelManager({ state, onClose }) {
   };
   return <Modal title="Subtitle Model Manager" width={710} class="subtitle-model-manager" onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
     <p class="hint">Install once, then transcribe offline. Speed and quality are estimates; results depend on your computer, language and audio.</p>
-    {state && <p class="hint">{state.hardware.backend} · {state.hardware.ramGB} GB RAM · Storage used: {modelBytes(state.storageBytes)}</p>}
+    {state && <p class="hint">{state.hardware.backend} · {hardwareSummary(state.hardware)} · Storage used: {modelBytes(state.storageBytes)}</p>}
+    <p class="hint">Recommended is an estimate from memory and CPU count, not a benchmark. More CPU cores do not directly predict transcription speed. Your active model is kept until you choose another.</p>
     {!state && <p class="hint">Checking installed models…</p>}
     <div class="subtitle-model-list">{state?.models.map(m => {
       const busy = ['downloading', 'installing'].includes(m.status), locked = pending.has(m.id);
@@ -45,6 +48,7 @@ export function SubtitleModelManager({ state, onClose }) {
         </div></div>
         <p class="hint">{modelBytes(m.downloadSizeBytes)} download{m.installed ? ` · ${modelBytes(m.installedSizeBytes)} installed` : ''} · Multilingual ({m.supportedLanguages.length} languages, including Norwegian)</p>
         <p>{m.recommendedFor}</p>
+        {m.recommended && <p class="hint">{m.recommendationReason}</p>}
         <dl><div><dt>Estimated speed</dt><dd>{m.speedCategory}</dd></div><div><dt>Estimated quality</dt><dd>{m.qualityCategory}</dd></div><div><dt>Strengths</dt><dd>{m.strengths}</dd></div><div><dt>Limitations</dt><dd>{m.weaknesses}</dd></div></dl>
         <p class="hint">Requires at least {m.minimumRequirements.ramGB} GB system RAM. {m.minimumRequirements.ramGB >= 8 && 'Substantial memory and processing power required.'}</p>
         <details><summary>Languages, source and license</summary><p class="hint">{m.supportedLanguages.join(', ')}</p><p class="hint">{m.repository} · MIT · ONNX Q8 · revision {m.version.slice(0, 12)}</p></details>

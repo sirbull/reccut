@@ -1,12 +1,40 @@
 # Plan: Eksport i HDR (PQ og HLG)
 
-Status: ikke påbegynt. Skrevet 13. november 2026.
+Status: Windows-utprøvingen er gjennomført 24. november 2026. HDR-eksport i produktet er ikke implementert. Opprinnelig plan skrevet 13. november 2026.
+
+## Resultat og valg etter Windows-utprøvingen
+
+**Velg vei C som kandidat på Windows: sammensetting i lineært lys i WebGL2/RGBA16F, med flyttallsdekoding og HDR-koding gjennom FFmpeg.** Et bytte til float16-Canvas alene er ikke tilstrekkelig. Arkitekturen må kontrolleres på Mac og Linux før valget regnes som verifisert der.
+
+Målingene finnes i [hdr-spike-results.json](hdr-spike-results.json), siste validerte kjøring. [Kjøreskript og metode](../scripts/hdr-spike/README.md) beskriver hvordan de kan gjentas. Testen kjører isolert, bruker bare syntetisk materiale og endrer ingen produktkode eller brukerprosjekter. Binærfiler og videomateriale ligger bare i en midlertidig mappe; rapporten inneholder ikke brukerens lokale filstier.
+
+Maskin: Windows x64, AMD Ryzen 5 PRO 6650U, 12 tilgjengelige logiske CPU-er, 11,8 GB RAM, AMD Radeon PRO Graphics gjennom ANGLE/D3D11. Faktisk runtime er **Electron 45.1.0 / Chromium 156.0.8078.49**, ikke Chromium 140 som den opprinnelige planen antok. FFmpeg og den kontrollerte ffprobe kommer fra det låste 9.0.2-bygget; rapporten har versjoner og SHA-256.
+
+| Test | Målt resultat | Følge for implementasjonen |
+|---|---|---|
+| T1: float16-Canvas | Vanlig lagring, tegning, transformasjoner, masker, tekst, skygger og uskarphet beholder høye verdier. `lighter`, `brightness`, `contrast` og `saturate` klipper til 1. Ved 50/50-blanding av lineære verdier 0,25 og 4 blir resultatet 1,467, mot riktig 2,125: omtrent 31 % feil. | float16 er nyttig lagring, men dagens Canvas-operasjoner gir ikke en full HDR-kompositor eller korrekt lineær lysblanding. |
+| T2: Mediabunny → VideoFrame → Canvas | HEVC Main10 dekodes med PQ/HLG og BT.2020 i metadata. GPU-bildets `format` er `null` (ugjennomsiktig GPU-format). Canvas gir SDR-lignende verdier rundt 0–1. Forespurt `toneMapping: extended` gir faktisk `standard`. | Bruk ikke denne veien som sannhet for HDR-lysverdier i eksporten på denne konfigurasjonen. |
+| T3: FFmpeg → lineært flyttall → RGBA16F | PQ har høyst 0,465 % feil i testfeltene; floatteksturen bevarer verdiene. Rå HLG-konvertering gir riktige gråfelt, men opptil 77,4 % feil for en mettet primærfarge. Eksplisitt luminansavhengig HLG-korreksjon reduserer største feil til 0,819 %. | PQ-veien fungerer. HLG trenger en eksplisitt, testet OOTF-korreksjon ved lesing og tilsvarende behandling ved skriving. |
+| T4: fargekorrigering | Dagens uendrede GLSL klipper alle verdier over 1, også når målet er RGBA16F. Eksponering bruker eksisterende gamma-2,2-domene. Den separate lineære kontrollshaderen bevarer verdier over 1 og dobler/halverer korrekt. | Fase I4 er nødvendig; det holder ikke å skifte bufferformat. SDR-korrigeringen må fortsatt bevares. |
+| T5: kodeker og metadata | Ti kombinasjoner består: PQ/HLG med HEVC, AV1, VP9 profil 2 og ProRes HQ/4444. Alle gir minst 10 bit og riktige BT.2020-/transfer-tagger. HEVC PQ har mastering display og CLL. Feilen er høyst 0,465 % for PQ og 0,819 % for HLG etter korreksjon. Kodede signalverdier er også sjekket mot den uavhengige referansen. | FFmpeg-bygget har de nødvendige kodekene på Windows. WebCodecs godtar ikke de prøvde HEVC Main10-/AV1-konfigurasjonene; VP9-konfigurasjonen godtas, men HDR-feltet fjernes. Behold FFmpeg som planlagt. |
+| T6: hele prototypeløkken | Fem like syntetiske lag, 12 bilder per tilfelle, inkludert lesing, tegning, tilbakelesing, pakking og koding. WebGL: 5,68 bilder/s ved 1080p mot SDR 13,96 (2,46× tidsbruk). Ved 2160p: 0,94 mot 3,42 (3,64×). HDR-feltene er bevart i de ferdige filene. | Målet på høyst 3× er ikke oppfylt ved 4K i denne prototypen. Tilbakelesing, pakking og koding må forbedres før ytelsen kan godkjennes. |
+| T7: skjerm og forhåndsvisning | Miljøet melder ikke høy dynamikk eller P3. `rec2100-pq` og `rec2100-hlg` avvises som Canvas-fargerom. Ingen fysisk HDR-visning er kontrollert. | Behold tonemappet SDR-forhåndsvisning som første mål. Faktisk HDR-visning må prøves på en HDR-skjerm. |
+
+T3-konverteringen, uten sammensetting og koding, ga omtrent 65–66 bilder/s ved 1080p og 26,6–26,9 ved 2160p i den korte prøven. Full eksport er derfor vesentlig mer enn bare dekoding. T6 bruker x264 CRF18 ultrafast for SDR og x265 lossless ultrafast for HDR, og lagene viser samme statiske testbilde uten effekter. Tallene inkluderer prosessoppstart og er **prototypemålinger, ikke en prognose for ferdig Reccut eller en sammenligning ved lik kodek/kvalitet**.
+
+Samlet målt arbeidssett for Electrons prosesser økte omtrent 1,74 GiB over utgangspunktet. Det er prøver tatt hver 50 ms, uten full måling av eksterne FFmpeg-prosesser og driverens VRAM. Kravet om under 4 GB ekstra minne er derfor **ikke ferdig verifisert**.
+
+HLG-testen bruker en 1000-nits skjerm, systemgamma 1,2 og svartnivå 0. HLG er relativt: testfeltene stopper ved 1000 nits, mens PQ-testen går til 10000 nits. Den opprinnelige formuleringen «samme innhold i HLG» ville ellers gitt en uklar eller ugyldig nitsreferanse. HLG er sjekket mot luminansavhengig OOTF i [ITU-R BT.2100](https://www.itu.int/rec/R-REC-BT.2100/en). [zimgs kilde](https://raw.githubusercontent.com/sekrit-twc/zimg/master/src/zimg/colorspace/gamma.cpp) beskriver sin kanalvise tilnærming. En ren rundtur gjennom samme encoder/decoder ville skjult dette avviket; utprøvingen sjekker derfor også signalverdiene mot egne referansefelt.
+
+**Ikke godkjent eller utført:** Mac/Linux-matrisen, full minnemåling, ytelse i den ferdige HDR-kompositoren, avspilling som HDR i QuickTime/Windows-spiller/VLC, fysisk HDR-skjerm og brukerens private YouTube-opplasting. Kodektesten er teknisk bestått på Windows; den er ikke en offentlig HDR-kompatibilitetsgodkjenning.
+
+Neste arbeid er fase I1 og deretter den lineære WebGL-veien, med HLG-korreksjonen og SDR-regresjonstester som eksplisitte krav. HDR-valg skal fortsatt ikke vises i produktet før fargekjeden, ytelsen og eksportvalgene er ferdige.
 
 Målet er at Reccut kan eksportere HDR-video (HDR10/PQ og HLG) med riktig metadata, uten at HDR-klippene først tonemappes til SDR. SDR-eksport skal fungere som før, og være standard.
 
 Planen har to deler:
 
-1. **Utprøving (del 1):** avgrensede tester som avgjør hvilken teknisk vei som virker i Electron 45 (Chromium 140) og i FFmpeg-bygget vårt. Ingen endringer i produktkoden.
+1. **Utprøving (del 1):** avgrensede tester som avgjør hvilken teknisk vei som virker i Electron 45 (faktisk Chromium-versjon logges) og i FFmpeg-bygget vårt. Ingen endringer i produktkoden.
 2. **Implementasjon (del 2):** fasene vi gjennomfører når del 1 har valgt vei.
 
 ---

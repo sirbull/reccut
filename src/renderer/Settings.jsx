@@ -88,7 +88,7 @@ function FolderRow({ label, value, onChoose, placeholder }) {
 function AiModelsSection() {
   return (
     <Section title="AI Models" collapsible={false}>
-      <p class="hint">Captions, background removal and AI voices use models that run on your computer. They are not part of the installer: download the ones you need, and remove them when you no longer use them.</p>
+      <p class="hint">Captions, background removal and AI voices use models that run on your computer. See recommendations based on memory, CPU count and GPU compatibility. Models are not part of the installer: download the ones you need, and remove them when you no longer use them.</p>
       <div class="row">
         <Button class="small" onClick={() => ((commands.prefsOpen.value = false), openAiModels())}>
           Choose AI Models…

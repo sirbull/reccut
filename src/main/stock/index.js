@@ -2,6 +2,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {validateSource,mapResults,https,credits,KINDS,pick}=require('../../shared/stockSources.cjs');
 const builtins=require('./builtins'),availablePlugins=require('./availablePlugins'),{network}=require('./network'),{secrets:secretStore}=require('./secrets'),mcp=require('./mcp');
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex'),DAY=86400000;
+const DEFAULT_TEMPLATE_CATALOG='https://sirbull.github.io/reccut/design-catalog/index.json';
 function imageType(bytes){if(bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))return'png';if(bytes[0]===255&&bytes[1]===216)return'jpg';if(bytes.toString('ascii',0,3)==='GIF')return'gif';if(bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP')return'webp';throw Error('The source did not return a supported PNG, JPEG, GIF or WebP image.');}
 function mediaType(b){
  try{return{ext:imageType(b),media:'image'};}catch{}
@@ -23,7 +24,8 @@ function fileUrl(v,depth=0){if(!v||typeof v!=='object'||depth>3)return;for(const
 function createStockHost({dir,cacheDir,fetchImpl,safeStorage,openExternal,env=process.env,lookup}){
  fs.mkdirSync(dir,{recursive:true});fs.mkdirSync(cacheDir,{recursive:true});for(const file of fs.readdirSync(cacheDir)){try{const p=path.join(cacheDir,file),s=fs.statSync(p);if(s.isFile()&&Date.now()-s.mtimeMs>DAY)fs.unlinkSync(p);}catch{}};const vault=secretStore(dir,safeStorage),request=network(fetchImpl,{lookup}),items=new Map(),clients=new Map(),listened=new Map(),pending=new Map(),cooldown=new Map(),inflight=new Map();
  const read=(file,fallback)=>{try{return JSON.parse(fs.readFileSync(path.join(dir,file),'utf8'));}catch{return fallback;}};
- let config=read('settings.json',{enabled:true,sources:{},catalog:''}),plugins=read('sources.json',[]).flatMap(p=>{try{return[validateSource(availablePlugins.find(a=>a.id===p.id)||p)];}catch{return[];}});
+ // An explicitly saved empty catalog disables it; never replace a user's URL.
+ let config={enabled:true,sources:{},catalog:DEFAULT_TEMPLATE_CATALOG,...read('settings.json',{})},plugins=read('sources.json',[]).flatMap(p=>{try{return[validateSource(availablePlugins.find(a=>a.id===p.id)||p)];}catch{return[];}});
  // Credit consent is remembered until sign-out, so Magnific keeps working after a restart.
  const accepted={has:id=>!!config.costsAccepted?.[id],set(id,on){const costsAccepted={...config.costsAccepted};if(on)costsAccepted[id]=true;else delete costsAccepted[id];config={...config,costsAccepted};fs.writeFileSync(path.join(dir,'settings.json'),JSON.stringify(config));}};
  const kindsOf=p=>[...new Set([...(p.kinds||['photo']),...Object.keys(p.searches||{})])];

@@ -1,5 +1,9 @@
 # Design follow-up and Phase C — 2026-11-05
 
+**Catalog update, 24 November 2026:** the 22-entry template catalog is now published by the website workflow and configured by default for new profiles. Existing saved URLs, including an empty URL, are preserved. The publication requirements below are historical; provider/account acceptance remains separate. See [current setup](DESIGN-ONLINE-SETUP.md).
+
+Catalog verification on Windows, 24 November 2026: 54 targeted tests pass, including catalog settings/restarts, valid templates and previews, offline caching, disabled online resources, Quick Search, agent skills, MCP and handbook/site consistency. The production build passes. `node scripts/test-design-catalog.cjs` checks the real app in a disposable profile: no catalog request before opening Design Templates, 22 live templates and previews, creation of an editable design, cached offline access, disabling/clearing the catalog, and the updated in-app handbook and locally generated website Docs. No provider account or model download is involved. This does not establish packaged-app or live-account acceptance.
+
 **Current update:** [personal API-key plugins](DESIGN-ONLINE-SETUP.md) supersede the publisher-key adapters described in the original validation below. Pixabay now uses an optional user-key plugin; Pexels still requires app approval. The follow-up suite has 550 passing tests.
 
 ## User-facing result

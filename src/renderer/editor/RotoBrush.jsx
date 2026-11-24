@@ -262,7 +262,7 @@ function RotoCanvas({ frame, preview, view, onPoints }) {
 }
 
 function Install({ status, onDone }) {
-  const [model, setModel] = useState('base');
+  const [model, setModel] = useState(status.recommendation?.id || 'small');
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
@@ -298,7 +298,7 @@ function Install({ status, onDone }) {
         {status.models.map((x) => (
           <label key={x.id} class={`roto-model${model === x.id ? ' active' : ''}`}>
             <input type="radio" name="roto-model" checked={model === x.id} disabled={Boolean(busy)} onChange={() => setModel(x.id)} />
-            <span><b>{x.label}</b>{x.id === 'base' && <em> Recommended</em>} · {modelBytes(x.bytes)}<br /><span class="hint">{x.about}</span></span>
+            <span><b>{x.label}</b>{x.recommended && <em> Recommended</em>} · {modelBytes(x.bytes)}<br /><span class="hint">{x.about}{x.recommended && ` ${x.recommendationReason}`}</span></span>
           </label>
         ))}
       </div>
@@ -340,11 +340,12 @@ function Models({ status, current, onStatus, onUse, onClose }) {
         {status.models.map((m) => (
           <article key={m.id} class={`subtitle-model-card${current === m.id ? ' active' : ''}`}>
             <div class="subtitle-model-heading"><h3>{m.label}</h3><div class="subtitle-model-badges">
-              {m.id === 'base' && <span>Recommended</span>}
+              {m.recommended && <span>Recommended</span>}
               <span class={current === m.id ? 'active' : ''}>{current === m.id ? 'In use' : m.installed ? 'Downloaded' : 'Not downloaded'}</span>
             </div></div>
             <p class="hint">{modelBytes(m.bytes)} · SAM 2.1 · Apache 2.0</p>
             <p>{m.about}</p>
+            {m.recommended && <p class="hint">{m.recommendationReason}</p>}
             {pending === m.id && !m.installed && <div class="subtitle-model-progress" role="status" aria-live="polite"><progress max="1" value={progress} /><p class="hint">{Math.round(progress * 100)}%</p></div>}
             <div class="subtitle-model-actions">
               {m.installed ? <>

@@ -88,7 +88,7 @@ export function DesignRoom({ active }) {
         {panel==='stock'&&<StockPanel/>}
         {panel==='elements'&&<ElementsPanel query={query}/>}
         {panel==='styles'&&<DesignStylesPanel query={query}/>}
-        {panel==='templates'&&<><TemplatesPanel query={query}/><MoreTemplates/></>}
+        {panel==='templates'&&<><TemplatesPanel query={query}/>{active&&<MoreTemplates/>}</>}
         {panel==='video'&&<VideoPanel><section class="dz-library-section"><header><h3>Pick a Frame</h3></header><FramePicker active={active}/></section></VideoPanel>}
         {panel==='text'&&<TextPanel query={query}/>}
         {panel==='content'&&<ContentPanel query={query}/>}

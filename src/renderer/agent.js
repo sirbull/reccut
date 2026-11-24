@@ -27,6 +27,10 @@ import { folder as voiceFolder } from './voiceover/booth.js';
 import { openVoicePackages, refreshTts, tts } from './voicePackages.js';
 import { SKILLS, SKILL_MAP, skillIndex } from '../shared/agentSkills.js';
 import SETTINGS_INDEX from './help/settingsIndex.json';
+import ttsCatalog from '../main/ttsCatalog.json';
+import { voicePackageRows } from '../shared/voicePackages.js';
+import { backgroundRecommendation, voiceRecommendations } from '../shared/modelRecommendations.cjs';
+import { checkModelGpu } from './modelRecommendations.js';
 
 const api = window.api;
 const MAX_STEPS = 40;
@@ -36,6 +40,21 @@ const scenes = new Map(); // path -> promise of [[seconds, strength]]
 const round2 = (v) => Math.round(v * 100) / 100;
 
 const RUNTIME_TOOLS = [
+  {
+    name: 'get_model_recommendations',
+    description: 'Read local AI model recommendations for this computer: captions/transcripts, background removal, voice packages by language and Roto Brush. Includes RAM, available logical CPU count and reasons. These are conservative estimates, not benchmarks. Does not download, load or select any model. Open the chooser with run_command ai:models; the user starts downloads.',
+    parameters: { type: 'object', properties: {} },
+    async run() {
+      const [subtitles, backgrounds, voices, roto, gpuOk] = await Promise.all([api.subtitleModels(), api.backgroundModels(), api.ttsStatus(), api.rotoStatus(), checkModelGpu()]);
+      const rows = voicePackageRows(ttsCatalog, voices);
+      return { content: JSON.stringify({ hardware: subtitles.hardware, estimate: true,
+        captions: subtitles.recommendation,
+        background: backgroundRecommendation(backgrounds, gpuOk),
+        voices: voiceRecommendations(rows, subtitles.hardware).map(r => ({ ...r, name: rows.find(row => row.key === r.key).name })),
+        roto: roto.recommendation,
+      }) };
+    },
+  },
   {
     name: 'preview_frames',
     description:

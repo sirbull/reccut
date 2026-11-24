@@ -1301,7 +1301,7 @@ function CaptionsTab() {
           <Select value={lang} options={LANGS} onChange={setLang} />
           <Select
             value={models?.active || ''}
-            options={models?.models.some(m => m.usable) ? models.models.filter(m => m.usable).map(m => ({ value: m.id, label: m.name })) : [{ value: '', label: 'Install a subtitle model' }]}
+            options={models?.models.some(m => m.usable) ? models.models.filter(m => m.usable).map(m => ({ value: m.id, label: `${m.name}${m.recommended ? ' · Recommended' : ''}` })) : [{ value: '', label: 'Install a subtitle model' }]}
             onChange={id => modelAction('selectSubtitleModel', id)}
             disabled={!models?.models.some(m => m.usable)}
           />

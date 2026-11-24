@@ -36,6 +36,7 @@ export const EXAMPLES = [
     { text: 'Make an animated bar chart: Q1 120, Q2 180, Q3 240, and place it at 0:45.', tools: ['create_motion_graphic'] },
   ]],
   ['Help', [
+    { text: 'Which local AI models do you recommend for this computer?', tools: ['get_model_recommendations'] },
     { text: 'Where do I change the frame rate?', tools: ['find_commands', 'search_help'] },
     { text: 'How do I stabilize a shaky clip?', tools: ['find_commands', 'search_help'] },
     { text: 'What can you do?', tools: [] },

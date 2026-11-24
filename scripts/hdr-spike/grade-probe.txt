@@ -1,0 +1,25 @@
+
+// Appended only to the temporary experiment bundle. Shader code is unchanged.
+export function probeHdrGrade(values, params = {}) {
+  if (!setup()) return { available: false };
+  const w = values.length;
+  canvas.width = w; canvas.height = 1;
+  const ext = gl.getExtension('EXT_color_buffer_float');
+  if (!ext) return { available: false, reason: 'EXT_color_buffer_float unavailable' };
+  const target = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, target);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, 1, 0, gl.RGBA, gl.FLOAT, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  const fbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target, 0);
+  const complete = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+  const data = new Float32Array(w * 4);
+  values.forEach((v, i) => { data.set([v, v, v, 1], i * 4); });
+  gradeImage({ hdrPixels: data }, w, 1, { ...GRADE_PROPS, ...params });
+  const result = new Float32Array(w * 4);
+  gl.readPixels(0, 0, w, 1, gl.RGBA, gl.FLOAT, result);
+  const error = gl.getError();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(fbo); gl.deleteTexture(target);
+  return { available: complete, error, values: values.map((_, i) => result[i * 4]), drawingBufferStorage: typeof gl.drawingBufferStorage === 'function' };
+}

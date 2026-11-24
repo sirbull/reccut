@@ -5,6 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
 const catalog = require('./subtitleCatalog');
+const { subtitleRecommendation } = require('../shared/modelRecommendations.cjs');
 
 async function digest(file) {
   const hash = crypto.createHash('sha256');
@@ -15,8 +16,8 @@ const canceled = () => new Error('Canceled');
 const required = new Set(['config.json', 'generation_config.json', 'tokenizer.json', 'tokenizer_config.json', 'preprocessor_config.json']);
 
 class SubtitleModelManager {
-  constructor({ dir, bundleDir, legacyDir, models = catalog, fetchImpl = globalThis.fetch, freeSpace, onChange = () => {}, unload = () => {}, ram = os.totalmem(), platform = process.platform, arch = process.arch, timeoutMs = 30000 }) {
-    Object.assign(this, { dir, bundleDir, legacyDir, models, fetchImpl, onChange, unload, ram, platform, arch, timeoutMs });
+  constructor({ dir, bundleDir, legacyDir, models = catalog, fetchImpl = globalThis.fetch, freeSpace, onChange = () => {}, unload = () => {}, ram = os.totalmem(), cpuThreads = os.availableParallelism(), platform = process.platform, arch = process.arch, timeoutMs = 30000 }) {
+    Object.assign(this, { dir, bundleDir, legacyDir, models, fetchImpl, onChange, unload, ram, cpuThreads, platform, arch, timeoutMs });
     this.freeSpace = freeSpace || (async () => { const s = await fs.statfs(dir); return s.bavail * s.bsize; });
     this.installed = new Map(); this.downloads = new Map(); this.states = new Map(); this.leases = new Map();
     this.active = 'whisper-base'; this.writes = Promise.resolve(); this.mutations = Promise.resolve(); this.closed = false;
@@ -77,9 +78,11 @@ class SubtitleModelManager {
     return this.writes;
   }
   snapshot() {
-    return { active: this.installed.has(this.active) ? this.active : null, storageBytes: [...this.installed.values()].reduce((s, r) => s + this.recordSize(r), 0), hardware: { platform: this.platform, arch: this.arch, ramGB: Math.round(this.ram / 1024 ** 3), backend: 'Local ONNX · CPU; existing WebGPU installations supported' }, models: this.models.map(m => {
+    const hardware = { platform: this.platform, arch: this.arch, ramGB: Math.round(this.ram / 1024 ** 3 * 10) / 10, cpuThreads: this.cpuThreads, backend: 'Local ONNX · CPU; existing WebGPU installations supported' };
+    const recommendation = subtitleRecommendation(this.models, { ...hardware, ramGB: this.ram / 1024 ** 3 });
+    return { active: this.installed.has(this.active) ? this.active : null, storageBytes: [...this.installed.values()].reduce((s, r) => s + this.recordSize(r), 0), hardware, recommendation, models: this.models.map(m => {
       const record = this.installed.get(m.id), state = this.states.get(m.id), compatible = this.compatible(m);
-      return { ...m, files: undefined, legacyGpuFiles: undefined, installedSizeBytes: record && this.recordSize(record), installed: Boolean(record), usable: Boolean(record) && compatible, inUse: Boolean(this.leases.get(m.id)), removable: m.removable && record?.source !== 'bundled', status: state?.status || (!compatible ? 'unsupported' : record ? (this.active === m.id ? 'active' : 'installed') : 'not-installed'), ...state };
+      return { ...m, recommended: compatible && recommendation?.id === m.id, recommendationReason: compatible && recommendation?.id === m.id ? recommendation.reason : '', files: undefined, legacyGpuFiles: undefined, installedSizeBytes: record && this.recordSize(record), installed: Boolean(record), usable: Boolean(record) && compatible, inUse: Boolean(this.leases.get(m.id)), removable: m.removable && record?.source !== 'bundled', status: state?.status || (!compatible ? 'unsupported' : record ? (this.active === m.id ? 'active' : 'installed') : 'not-installed'), ...state };
     }) };
   }
   recordSize(record) {

@@ -1,5 +1,6 @@
 // Shared package selection rules; rendering and installation are separate.
 import { LANGUAGES, languageById } from './tts.js';
+import { voiceRecommendations } from './modelRecommendations.cjs';
 
 export function voiceLanguageForLocale(locale) {
   const l = String(locale || '').toLowerCase().replaceAll('_', '-');
@@ -56,13 +57,15 @@ export function voicePackageBytes(rows, picked, catalog, state) {
   return selected.reduce((n, r) => n + r.size, 0) + (selected.some((r) => r.addon) && !state.addon ? catalog.phonemizer.size : 0);
 }
 
-export function suggestedVoicePackages(rows, locales) {
+export function suggestedVoicePackages(rows, locales, hardware) {
   const suggested = new Set();
+  const recommended = hardware ? new Set(voiceRecommendations(rows, hardware).map(r => r.key)) : null;
   for (const lang of new Set(locales.filter(Boolean).map(voiceLanguageForLocale))) {
     const own = rows.filter((r) => r.languages.includes(lang) && !r.installed && !r.unavailable);
     // Prefer an approved VoxCPM package, then the lightweight native voice.
-    const choice = own.find((r) => r.dependency) || own.find((r) => r.engine === 'piper') || own.find((r) => r.engine === 'kokoro');
-    if (choice) suggested.add(choice.key);
+    const choice = recommended ? rows.find(r => recommended.has(r.key) && r.languages.includes(lang))
+      : own.find((r) => r.dependency) || own.find((r) => r.engine === 'piper') || own.find((r) => r.engine === 'kokoro');
+    if (choice && !choice.installed && !choice.unavailable) suggested.add(choice.key);
   }
   return suggested;
 }
