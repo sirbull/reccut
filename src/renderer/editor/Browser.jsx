@@ -26,6 +26,7 @@ import {
   Wand2,
   ChevronRight,
   Globe,
+  BadgeCheck,
 } from 'lucide-preact';
 import { StockBrowser, StockCard, StockPoppedOut, StockWindow, stockPopout } from '../design/Online.jsx';
 import { findTemplate, templateDefaults } from '../../shared/titletemplates.js';
@@ -42,10 +43,12 @@ import { FILM_LOOKS } from '../../shared/filmLooks.js';
 import { startLibraryDrag } from './libraryDrag.js';
 import { newMulticamClip } from './multicam.js';
 import { CaptionPresets, CaptionStyleEditor } from './Inspector.jsx';
-import { Button, IconButton, Section, Select, toast } from '../ui.jsx';
+import { Button, IconButton, Modal, Row, Section, Segmented, Select, toast } from '../ui.jsx';
 import { prefs } from '../prefs.js';
 import { AUDIO_EFFECTS, AUDIO_FX_CATEGORIES, AUDIO_PRESETS, AUDIO_PRESET_CATEGORIES } from '../../shared/audiofx.js';
 import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../../shared/videoEffects.js';
+import { ATTRIBUTE_GROUPS } from '../../shared/attributes.js';
+import { BRAND_LIMIT, BRAND_SECTIONS, applyBrandEffects, brandSection, isLowerThird } from '../../shared/brandLibrary.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -58,6 +61,7 @@ const TABS = [
   { id: 'audio', label: 'Audio Effects', icon: AudioLines },
   { id: 'captions', label: 'Captions', icon: Captions },
   { id: 'stock', label: 'Stock', icon: Globe },
+  { id: 'brand', label: 'Brand', icon: BadgeCheck },
 ];
 
 export function Browser() {
@@ -81,6 +85,7 @@ export function Browser() {
         {tab === 'audio' && <AudioFxTab />}
         {tab === 'captions' && <CaptionsTab />}
         {tab === 'stock' && <StockTab />}
+        {tab === 'brand' && <BrandTab />}
       </div>
     </div>
   );
@@ -947,6 +952,185 @@ function TitlesTab() {
       <p class="hint small">Hover to preview the animation. Lower thirds animate in at the start and out at the end of the clip, so just set the length on the timeline. Type the name and title in the inspector.</p>
     </>
   );
+}
+
+/* Brand: titler, supringer og effekter som brukeren har lagret (commands.brandList). */
+
+const brandFrames = new Map();
+function brandTitleFrameAt(item) {
+  const key = `${item.id}:${item.created}`;
+  if (!brandFrames.has(key)) {
+    const saved = item.clip;
+    const dur = Math.max(0.5, saved.dur || 3);
+    brandFrames.set(key, (t) => {
+      const bg = imageClip('scene', 0, dur);
+      const title = { id: 't', type: 'title', lane: 1, start: 0, in: saved.in || 0, dur, enabled: true, kf: saved.kf || {}, expressions: saved.expressions, props: { ...defaultProps('title'), ...saved.props } };
+      const templates = { ...(project.value.templates || {}), ...(item.template ? { [item.template.id]: item.template } : {}) };
+      // A lower third that was not moved is shown up close in its corner, like in Titles.
+      const moved = (saved.props.x || 0) !== 0 || (saved.props.y || 0) !== 0 || (saved.props.scale ?? 1) !== 1 || Object.keys(saved.kf || {}).some((k) => ['x', 'y', 'scale'].includes(k));
+      const anchor = saved.props.template ? findTemplate(saved.props.template, templates)?.anchor || '' : item.section === 'lowerThird' ? 'bottom-left' : '';
+      if (!moved && anchor.includes('bottom')) Object.assign(title.props, { scale: 2, x: anchor.includes('right') ? -820 : anchor.includes('left') ? 820 : 0, y: -420 });
+      const proj = { ...PREVIEW_PROJECT, width: 1920, height: 1080, templates };
+      return { project: proj, frame: { layers: [{ clip: bg, T: t }, { clip: title, T: t }], captions: [] } };
+    });
+  }
+  return brandFrames.get(key);
+}
+function brandEffectsFrameAt(item) {
+  const key = `${item.id}:${item.created}`;
+  if (!brandFrames.has(key)) {
+    const clip = imageClip('scene', 0, Math.max(0.5, item.clip.dur || 2));
+    clip.in = item.clip.in || 0;
+    const visual = applyBrandEffects({ ...item, groups: item.groups.filter((g) => ATTRIBUTE_GROUPS.find((x) => x.id === g)?.kind === 'video') }, clip) > 0;
+    brandFrames.set(key, visual ? (t) => ({ project: { ...PREVIEW_PROJECT }, frame: { layers: [{ clip, T: t }], captions: [] } }) : null);
+  }
+  return brandFrames.get(key);
+}
+function brandMenu(item) {
+  return async (e) => {
+    e.preventDefault();
+    const id = await api.popupMenu([
+      { id: 'apply', label: item.kind === 'title' ? 'Add at Playhead' : 'Apply to Selected Clips' },
+      { id: 'rename', label: 'Rename…' },
+      { separator: true },
+      { id: 'delete', label: 'Delete from Brand' },
+    ]);
+    if (id === 'apply') commands.applyBrandItem(item.id);
+    else if (id === 'rename') commands.brandDialog.value = { rename: item.id, name: item.name };
+    else if (id === 'delete' && confirm(`Delete “${item.name}” from Brand? Clips that use it keep their look.`)) commands.deleteBrand(item.id);
+  };
+}
+function BrandCard({ item }) {
+  const title = item.kind === 'title';
+  const frameAt = title ? brandTitleFrameAt(item) : brandEffectsFrameAt(item);
+  const groups = title ? '' : item.groups.map((g) => ATTRIBUTE_GROUPS.find((x) => x.id === g)?.label).filter(Boolean).join(', ');
+  return (
+    <button
+      class="gen-card"
+      data-brand={item.id}
+      draggable
+      onDragStart={(e) => dragData(e, { kind: title ? 'brandTitle' : 'brandEffects', id: item.id, label: item.name })}
+      onPointerEnter={title ? undefined : () => commands.previewBrandItem(item.id)}
+      onClick={() => commands.applyBrandItem(item.id)}
+      onContextMenu={brandMenu(item)}
+      title={title ? 'Click to add at the playhead, or drag to the timeline. Right click to rename or delete.' : `${groups}. Point to preview on the selected clips. Click to apply, or drag onto a clip. Right click to rename or delete.`}
+    >
+      {frameAt ? <MiniPreview frameAt={frameAt} duration={Math.min(5, Math.max(1, item.clip.dur || 2))} still={title ? 0.5 : 0.9} label={item.name} /> : <div class="mini-preview brand-audio" aria-hidden="true"><AudioLines size={28} /></div>}
+      <span>{item.name}</span>
+    </button>
+  );
+}
+function BrandTab() {
+  const items = commands.brandList();
+  const [query, setQuery] = useState('');
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const found = items.filter((i) => words.every((w) => i.name.toLowerCase().includes(w)));
+  const selected = selection.value.map((id) => project.value.clips[id]).filter((c) => c && !['gap', 'caption'].includes(c.type));
+  const hints = { title: 'Style a title, select it and choose Save to Brand.', lowerThird: 'Style a lower third, select it and choose Save to Brand.', effects: 'Select a clip with effects, color or audio effects and choose Save to Brand.' };
+  return (
+    <div class="brand-tab">
+      <div class="tab-actions">
+        <Button variant="secondary" icon={Plus} disabled={!selected.length || items.length >= BRAND_LIMIT} onClick={() => commands.openSaveToBrand()} title="Save the selected title, lower third or the effects of the selected clip">
+          Save to Brand
+        </Button>
+      </div>
+      {items.length > 6 && <input class="text-input" type="search" placeholder="Search Brand" aria-label="Search Brand" value={query} onInput={(e) => setQuery(e.currentTarget.value)} />}
+      {BRAND_SECTIONS.map((sec) => {
+        const list = brandSection(found, sec.id);
+        return (
+          <div key={sec.id} class="title-group" onPointerLeave={sec.id === 'effects' ? endPreview : undefined}>
+            <h4 class="group-head">{sec.label}</h4>
+            {list.length ? (
+              <div class="card-grid">
+                {list.map((item) => <BrandCard key={item.id} item={item} />)}
+              </div>
+            ) : (
+              <p class="hint small">{query ? 'No matching items.' : hints[sec.id]}</p>
+            )}
+          </div>
+        );
+      })}
+      <p class="hint small">Brand keeps your own titles, lower thirds and effect presets in every project. Right click a clip and choose Save to Brand. Saved titles keep their text, font, colors, animation and length. Effect presets keep the parts you choose, with their keyframes.</p>
+    </div>
+  );
+}
+
+// Save to Brand and Rename for Brand items.
+export function BrandDialog() {
+  const d = commands.brandDialog.value;
+  const close = () => (commands.brandDialog.value = null);
+  const [name, setName] = useState(d.name || '');
+  const [kind, setKind] = useState(d.kind || 'title');
+  const [groups, setGroups] = useState(() => new Set(d.preferred || []));
+  const effects = !d.rename && kind === 'effects';
+  const ok = () => {
+    if (!name.trim() || (effects && !groups.size)) return;
+    if (d.rename) {
+      commands.renameBrand(d.rename, name);
+      close();
+    } else commands.confirmSaveToBrand({ kind, name, groups: [...groups] });
+  };
+  const clip = d.clipId ? project.value.clips[d.clipId] : null;
+  return (
+    <Modal
+      title={d.rename ? 'Rename Brand Item' : 'Save to Brand'}
+      width={440}
+      onClose={close}
+      footer={
+        <>
+          <Button onClick={close}>Cancel</Button>
+          <Button variant="primary" disabled={!name.trim() || (effects && !groups.size)} onClick={ok}>
+            {d.rename ? 'Rename' : 'Save'}
+          </Button>
+        </>
+      }
+    >
+      <Row label="Name" stacked>
+        <input class="text-input" autoFocus maxLength={120} value={name} onInput={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && ok()} />
+      </Row>
+      {!d.rename && clip?.type === 'title' && d.available.length > 0 && (
+        <Row label="Save as">
+          <Segmented
+            value={kind}
+            onChange={(next) => {
+              // Follow the kind with the suggested name until the user types their own.
+              const suggested = (k) => (k === 'effects' ? `${d.name} Effects` : d.name);
+              if (name === suggested(kind)) setName(suggested(next));
+              setKind(next);
+            }}
+            options={[{ value: 'title', label: 'Title' }, { value: 'effects', label: 'Effect Preset' }]}
+          />
+        </Row>
+      )}
+      {!d.rename && kind === 'title' && <p class="sync-lead">The title is saved with its text, font, colors, animation, keyframes and length. It appears under {clip && isLowerThirdClip(clip) ? 'Lower Thirds' : 'Titles'} in Brand.</p>}
+      {effects && (
+        <>
+          <p class="sync-lead">Choose what the preset keeps. Applying it replaces these parts of the clips you apply it to.</p>
+          <div class="attr-cols">
+            <div class="attr-col">
+              {ATTRIBUTE_GROUPS.filter((g) => d.available.includes(g.id)).map((g) => (
+                <label key={g.id} class="attr-row" title={g.desc}>
+                  <input
+                    type="checkbox"
+                    checked={groups.has(g.id)}
+                    onChange={(e) => {
+                      const n = new Set(groups);
+                      e.currentTarget.checked ? n.add(g.id) : n.delete(g.id);
+                      setGroups(n);
+                    }}
+                  />
+                  {g.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+function isLowerThirdClip(clip) {
+  return isLowerThird(clip.props, project.value.templates || {});
 }
 
 /* Overganger */

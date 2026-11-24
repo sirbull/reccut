@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { CAPTION_LANE, formatTimecode } from '../../shared/model.js';
 import { ATTRIBUTE_GROUPS } from '../../shared/attributes.js';
-import { Browser } from './Browser.jsx';
+import { BrandDialog, Browser } from './Browser.jsx';
 import { Viewer } from './Viewer.jsx';
 import { Inspector } from './Inspector.jsx';
 import { Timeline } from './Timeline.jsx';
@@ -131,6 +131,7 @@ export function Editor({ active }) {
       <PreviewDisplayOffer active={active} />
       {commands.syncDialog.value && <SyncDialog />}
       {commands.attributesDialog.value && <AttributesDialog />}
+      {commands.brandDialog.value && <BrandDialog key={commands.brandDialog.value.clipId || commands.brandDialog.value.rename} />}
       {commands.importOptions.value && !needsProject.value && <ImportOptionsDialog />}
       {commands.slideshowDialog.value && <SlideshowDialog />}
       {flareStudio.value && <LensFlareStudio />}

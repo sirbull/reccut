@@ -93,6 +93,11 @@ export function libraryDropTarget(project, item, lane, T, { transitionDur = 1, t
     const [a, b] = transitionWindow({ ...c, [key]: { type: item.id, dur } }, Boolean(prev), prev, edge);
     return { kind: 'transition', id: c.id, edge, dur, a, b, lane, label: item.label };
   }
+  if (item.kind === 'brandEffects') {
+    if (project.lanes?.[lane]?.locked) return null;
+    const c = Object.values(project.clips).find((c) => c.lane === lane && T >= c.start && T < c.start + c.dur && !['gap', 'caption'].includes(c.type));
+    return c ? { kind: 'effect', id: c.id, a: c.start, b: c.start + c.dur, lane, label: item.label } : null;
+  }
   if (['effect', 'afx', 'apreset'].includes(item.kind)) {
     if (project.lanes?.[lane]?.locked) return null;
     const audio = item.kind !== 'effect';

@@ -31,6 +31,8 @@ import ttsCatalog from '../main/ttsCatalog.json';
 import { voicePackageRows } from '../shared/voicePackages.js';
 import { backgroundRecommendation, voiceRecommendations } from '../shared/modelRecommendations.cjs';
 import { checkModelGpu } from './modelRecommendations.js';
+import { addBrandTitle, applyBrandItem, brandList, saveToBrand } from './editor/commands.js';
+import { brandLayerSets, placeBrandLayers } from './design/brand.js';
 
 const api = window.api;
 const MAX_STEPS = 40;
@@ -541,11 +543,57 @@ const RUNTIME_TOOLS = [
     },
   },
   {
+    name: 'list_brand',
+    description:
+      'List what the user saved to Brand, their own reusable styles kept across projects: titles, lower thirds and effect presets (Edit), and Design elements (styled layer sets for thumbnails). Use these first when the user asks for their style, brand, profile or "my" titles and effects.',
+    parameters: { type: 'object', properties: {} },
+    async run() {
+      const edit = brandList().map((b) => ({ id: b.id, name: b.name, section: b.section, ...(b.kind === 'title' ? { text: b.clip.props.text, subtext: b.clip.props.subtext, duration: round2(b.clip.dur) } : { parts: b.groups }) }));
+      const design = brandLayerSets().map((s) => ({ id: s.id, name: s.name, layers: s.layers.length, size: `${s.width}x${s.height}` }));
+      return { content: JSON.stringify({ edit, design }) };
+    },
+  },
+  {
+    name: 'apply_brand',
+    description:
+      'Use a Brand item from list_brand. A title or lower third is added at `time` (default the playhead) on `lane` (default 1) and gets the new clip id; change its text afterwards with set_clip_properties (text, subtext). An effect preset replaces those parts on clipIds (default the selected clips). A Design element is added to the open design in the Design room. Each use is one undo step.',
+    parameters: { type: 'object', properties: { id: { type: 'string' }, time: { type: 'number' }, lane: { type: 'integer' }, clipIds: { type: 'array', items: { type: 'string' } } }, required: ['id'] },
+    async run(a) {
+      const item = brandList().find((b) => b.id === a.id);
+      if (item?.kind === 'title') {
+        const T = Number.isFinite(a.time) && a.time >= 0 ? a.time : getTime();
+        const clipId = addBrandTitle(item.id, T, Number.isInteger(a.lane) && a.lane > 0 ? a.lane : 1);
+        return { content: JSON.stringify({ added: clipId, name: item.name, start: round2(T), duration: round2(item.clip.dur) }) };
+      }
+      if (item) {
+        const ids = Array.isArray(a.clipIds) ? a.clipIds.filter((id) => typeof id === 'string') : null;
+        const n = applyBrandItem(item.id, ids);
+        if (!n) throw new Error('No clip can take this preset. Pass clipIds of video, image, title, adjustment or audio clips.');
+        return { content: JSON.stringify({ applied: item.name, clips: selection.value }) };
+      }
+      const set = brandLayerSets().find((s) => s.id === a.id);
+      if (!set) throw new Error('No Brand item with that id. Use list_brand.');
+      if (room.value !== 'design') room.value = 'design';
+      const placed = await placeBrandLayers(set);
+      return { content: JSON.stringify({ placed: set.name, layers: placed?.length || 0 }) };
+    },
+  },
+  {
+    name: 'save_to_brand',
+    description:
+      'Save a clip to Brand so the user can reuse it in any project. kind "title" saves a title or lower third with its text, font, colors, animation and length; kind "effects" saves an effect preset with the chosen parts (groups: effects, color, cameraColor, transform, crop, compositing, masks, stabilization, vfades, volume, afx, afades; default effects, color, compositing, masks and audio effects). Only save when the user asks.',
+    parameters: { type: 'object', properties: { clipId: { type: 'string' }, kind: { type: 'string', enum: ['title', 'effects'] }, name: { type: 'string' }, groups: { type: 'array', items: { type: 'string' } } }, required: ['clipId'] },
+    async run(a) {
+      const item = saveToBrand(a.clipId, { kind: a.kind, name: a.name, groups: Array.isArray(a.groups) ? a.groups : undefined });
+      return { content: JSON.stringify({ saved: item.name, id: item.id, section: item.section, ...(item.groups ? { parts: item.groups } : {}) }) };
+    },
+  },
+  {
     name: 'get_settings',
     description: 'Read the app preferences (Settings), the recording settings and custom keyboard shortcuts.',
     parameters: { type: 'object', properties: {} },
     async run() {
-      const { shortcuts, ...app } = prefs.value;
+      const { shortcuts, brandItems, designBrandLayers, ...app } = prefs.value; // Brand has its own tools.
       const { micMixer, area, ...recording } = settings.value;
       return { content: JSON.stringify({ app, recording, shortcuts }) };
     },

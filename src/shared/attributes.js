@@ -39,7 +39,7 @@ export function groupsWithContent(src) {
   const defs = defaultProps(src.type);
   return ATTRIBUTE_GROUPS.filter((g) => {
     if (!groupApplies(g, src)) return false;
-    const changed = Object.keys(src.props).some((k) => g.keys(k) && JSON.stringify(src.props[k]) !== JSON.stringify(defs[k] ?? (k === 'fx' || k === 'afx' || k === 'masks' ? [] : undefined)));
+    const changed = Object.keys(src.props).some((k) => g.keys(k) && JSON.stringify(src.props[k] ?? null) !== JSON.stringify(defs[k] ?? (k === 'fx' || k === 'afx' || k === 'masks' ? [] : null)));
     const animated = Object.keys(src.kf || {}).some((k) => g.keys(k) && src.kf[k].length);
     return changed || animated || Object.keys(src.expressions || {}).some(k => g.keys(k));
   }).map((g) => g.id);

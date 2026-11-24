@@ -2,7 +2,7 @@ import { signal, effect } from '@preact/signals';
 import { project, projectEpoch, projectFolders, projectPath } from '../editor/store.js';
 import { prefs } from '../prefs.js';
 import { fileUrl } from '../player.js';
-import { newDesign, newLayer, normalizeLayer, fitBox, validDesignSize } from '../../shared/design.js';
+import { newDesign, newLayer, normalizeLayer, fitBox, validDesignSize, resizeDesignContent, selectionBounds } from '../../shared/design.js';
 import { designFileName } from '../../shared/designExport.js';
 import { frameExportSettings } from '../../shared/frameExport.js';
 import { uid } from '../../shared/model.js';
@@ -139,9 +139,8 @@ export function placeProjectImage(media, point = null) {
   const l = newLayer('image', { media: media.id, name: media.name, x: point ? point.x-b.w/2 : (d.width - b.w) / 2, y: point ? point.y-b.h/2 : (d.height - b.h) / 2, w: b.w, h: b.h, fit: 'contain' });
   designCommit((p) => { p.designs[d.id].layers.push(l); }); selection.value = [l.id];
 }
-export async function copyLayers(cut = false) {
-  const epoch = projectEpoch.value, design = currentDesign.value, layers = selectedLayers(), p = project.value;
-  if (!design || !layers.length) return;
+// Layers with the images they use, as copied to the clipboard and saved in Brand.
+export function layerPayload(design, layers, p = project.value) {
   const assets = {}, media = {};
   const reference = (id) => { if (id && p.designAssets[id]) assets[id] = p.designAssets[id]; };
   for (const l of layers) {
@@ -151,7 +150,12 @@ export async function copyLayers(cut = false) {
       media[l.media] = { id: l.media, path: imagePath(l, p), name: m.name, copied: false, origin: 'placed', width: m.streams?.main?.width, height: m.streams?.main?.height };
     }
   }
-  await api.writeDesignClipboard(JSON.stringify({ format: 'reccut-design-layers', version: 2, project: p.id, design: design.id, width: design.width, height: design.height, layers, assets, media }));
+  return { format: 'reccut-design-layers', version: 2, project: p.id, design: design.id, width: design.width, height: design.height, layers, assets, media };
+}
+export async function copyLayers(cut = false) {
+  const epoch = projectEpoch.value, design = currentDesign.value, layers = selectedLayers();
+  if (!design || !layers.length) return;
+  await api.writeDesignClipboard(JSON.stringify(layerPayload(design, layers)));
   if (cut && projectEpoch.value === epoch) {
     const ids = new Set(layers.map((l) => l.id));
     designCommit((p) => { if (p.designs[design.id]) p.designs[design.id].layers = p.designs[design.id].layers.filter((l) => !ids.has(l.id)); });
@@ -177,6 +181,11 @@ export async function pasteImage(inPlace = false) {
     if (currentDesignId.value === designId) selection.value = [l.id];
     return;
   }
+  return placeLayerPayload(copied, { designId, epoch, inPlace });
+}
+// Places copied or saved layers in a design. Images from other projects become Design assets;
+// files Reccut copied are copied into this project. point: centre of the layers on the canvas.
+export async function placeLayerPayload(copied, { designId = currentDesignId.value, epoch = projectEpoch.value, inPlace = false, point = null, scale = false } = {}) {
   if (!Array.isArray(copied.layers) || copied.layers.length > 2000) throw new Error('The copied layers are invalid.');
   const sameProject = copied.project === project.value.id, registrations = {}, assetIds = new Map(), mediaIds = new Map();
   const register = async (records, mapping, existing) => {
@@ -195,22 +204,31 @@ export async function pasteImage(inPlace = false) {
   if (!sameProject) await register(copied.media, mediaIds, null);
   if (epoch !== projectEpoch.value || !project.value.designs?.[designId]) return;
   const target = project.value.designs[designId], groups = new Map();
-  const layers = copied.layers.map(normalizeLayer).filter(Boolean).map((l) => {
+  let source = copied.layers.map(normalizeLayer).filter(Boolean);
+  // Saved Brand layers keep their size relative to the canvas, like Resize does for a design.
+  if (scale && copied.width > 0 && copied.height > 0 && (copied.width !== target.width || copied.height !== target.height)) source = resizeDesignContent({ width: copied.width, height: copied.height, layers: source }, target.width, target.height).layers;
+  const from = scale ? { width: target.width, height: target.height } : copied;
+  const box = point ? selectionBounds(source) : null;
+  const layers = source.map((l) => {
     if (l.group && !groups.has(l.group)) groups.set(l.group, uid());
     const next = { ...l, id: uid(), group: groups.get(l.group) || null, locked: false };
-    if (!inPlace && copied.width > 0 && copied.height > 0) {
-      next.x = (l.x + l.w / 2) / copied.width * target.width - l.w / 2;
-      next.y = (l.y + l.h / 2) / copied.height * target.height - l.h / 2;
+    if (box) {
+      next.x = l.x + point.x - (box.x + box.w / 2);
+      next.y = l.y + point.y - (box.y + box.h / 2);
+    } else if (!inPlace && from.width > 0 && from.height > 0) {
+      next.x = (l.x + l.w / 2) / from.width * target.width - l.w / 2;
+      next.y = (l.y + l.h / 2) / from.height * target.height - l.h / 2;
     }
     if (l.asset) next.asset = assetIds.get(l.asset) || (sameProject ? l.asset : uid());
     if (l.media && !sameProject) { next.asset = mediaIds.get(l.media) || uid(); next.media = null; }
     for (const key of ['cutout','mask']) if (l[key]?.asset) next[key] = { ...l[key], asset: assetIds.get(l[key].asset) || (sameProject ? l[key].asset : uid()) };
     return next;
   });
-  if (!layers.length) return;
+  if (!layers.length) return [];
   designCommit((p) => { Object.assign(p.designAssets, registrations); p.designs[designId].layers.push(...layers); });
   if (currentDesignId.value === designId) selection.value = layers.map((l) => l.id);
   loadDesignImages(project.value.designs[designId]);
+  return layers;
 }
 export async function locateImage(layer) {
   const epoch = projectEpoch.value;

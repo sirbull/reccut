@@ -9,7 +9,8 @@ import { cropSession } from './crop.js';
 import { TemplatesPanel, DesignLibraryDialogs } from './LibraryPanel.jsx';
 import { refreshTemplates, libraryPreview, endLibraryDrag } from './library.js';
 import { loadBrandLogo } from './brand.js';
-import { ContentPanel, TextPanel, BrandPanel, ImportImageButton, importDesignFiles } from './ContentPanel.jsx';
+import { ContentPanel, TextPanel, BrandPanel, BrandLayersDialog, ImportImageButton, importDesignFiles } from './ContentPanel.jsx';
+import { brandLayersDialog } from './brand.js';
 import { activeDesignPanel, wideDesignPanel, designPanelWidth, designSidebarWidth, openDesignPanel, toggleDesignPanel, expandDesignPanel } from './panels.js';
 import { SearchPanel, ElementsPanel, DesignStylesPanel, VideoPanel } from './OfflinePanels.jsx';
 import { DesignStrip } from './DesignStrip.jsx';
@@ -110,7 +111,7 @@ export function DesignRoom({ active }) {
       <DesignStrip active={active}/>
     </div>
     <DesignSidebar/>
-    <DesignLayerImportDialog /><DesignLibraryDialogs/><SuggestionsDialog/><CompareDialog/><DesignToolsDialogs/>
+    <DesignLayerImportDialog /><DesignLibraryDialogs/>{brandLayersDialog.value&&<BrandLayersDialog key={brandLayersDialog.value.rename||'save'}/>}<SuggestionsDialog/><CompareDialog/><DesignToolsDialogs/>
     {newDesignOpen.value && <NewDesignDialog design={p.designs?.[newDesignOpen.value.designId] || null} />}
     {exportDesignOpen.value && <ExportDesignDialog />}
     {readability&&d&&<Modal title="Readability" width={440} onClose={()=>setReadability(false)}><ReadabilityPanel/></Modal>}
