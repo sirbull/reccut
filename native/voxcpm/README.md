@@ -37,6 +37,13 @@ node scripts/benchmark-voxcpm.mjs [--cpu] [--threads N] [--runs 3] [--warm 5] [-
 It uses the fixed texts in `benchmark-texts.json`, the catalog settings and the
 locked references, and writes `report.json` with every repetition plus the WAVs.
 
+When the engine cannot be downloaded to a test machine, run
+`.github/workflows/voxcpm-benchmark.yml` with the ID of a successful build run.
+It measures those exact engines on GitHub's standard Windows and Linux runners
+(4 vCPU, 16 GB) with model paths containing spaces and non-ANSI characters, and
+prints the summary as a notice and job summary. Runner numbers describe that
+hardware, not a typical user's machine.
+
 The backend supports model installation, language installation, cancel/resume,
 removal and sentence-by-sentence synthesis in the existing speech job queue.
 Synthesis reuses one process between sentences and speech jobs. It is released

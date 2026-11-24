@@ -1,0 +1,83 @@
+name: Benchmark VoxCPM2 CPU engines (Windows/Linux)
+
+# Phase 9 measurement on GitHub's standard runners (4 vCPU, 16 GB), for when the
+# engine cannot be downloaded and run locally. Manual only. Measures the exact
+# engines from a "Build VoxCPM2 CPU engines" run, fetches the pinned model with
+# its SHA-256 checked by the benchmark, and publishes no release or package.
+# The result is printed as a notice and job summary, and uploaded as an artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Run ID of a successful "Build VoxCPM2 CPU engines" run (the number in its URL)
+        required: true
+      quick:
+        description: Short smoke run only (not a measurement)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  MODEL_REPO: DennisHuang648/VoxCPM2-GGUF
+  MODEL_REVISION: 169f64d8b98bbaab1761e4ca3a83e6af653456cc
+
+jobs:
+  benchmark:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: Reccut-VoxCPM-win-x64
+            engine: reccut-voxcpm-win-x64.exe
+          - os: ubuntu-latest
+            artifact: Reccut-VoxCPM-linux-x64
+            engine: reccut-voxcpm-linux-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 300
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/engine
+      # Paths with spaces and characters outside the Windows ANSI code page check
+      # the engine's UTF-8 handling of model paths.
+      - name: Motor og modell
+        run: |
+          engine_dir="$RUNNER_TEMP/engine"
+          (cd "$engine_dir" && sha256sum -c "${{ matrix.engine }}.sha256")
+          chmod +x "$engine_dir/${{ matrix.engine }}"
+          model_dir="$RUNNER_TEMP/VoxCPM modeller æøå Ω"
+          mkdir -p "$model_dir"
+          for f in $(node -p "require('./src/main/ttsCatalog.json').voxcpm.model.files.map((f) => f.path).join(' ')"); do
+            curl -fL --retry 5 -o "$model_dir/$f" "https://huggingface.co/$MODEL_REPO/resolve/$MODEL_REVISION/$f"
+          done
+          test "$(node -p "require('./src/main/ttsCatalog.json').voxcpm.model.revision")" = "$MODEL_REVISION"
+          echo "ENGINE=$engine_dir/${{ matrix.engine }}" >> "$GITHUB_ENV"
+          echo "MODEL_DIR=$model_dir" >> "$GITHUB_ENV"
+      - name: Prosesstest
+        run: node scripts/test-voxcpm-process.mjs --cpu "$ENGINE" "$MODEL_DIR" native/voxcpm/voices/reccut-voxcpm-nb-female-1.wav native/voxcpm/voices/reccut-voxcpm-en-us-male-1.wav
+      - name: Benchmark
+        run: node scripts/benchmark-voxcpm.mjs --cpu ${{ inputs.quick && '--quick' || '' }} --out "$RUNNER_TEMP/result" "$ENGINE" "$MODEL_DIR"
+      - name: Resultat
+        if: always()
+        run: test -f "$RUNNER_TEMP/result/report.json" && node scripts/summarize-voxcpm-benchmark.mjs "$RUNNER_TEMP/result/report.json" "VoxCPM2 ${{ matrix.os }}"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: VoxCPM-benchmark-${{ matrix.os }}
+          path: ${{ runner.temp }}/result
+          if-no-files-found: warn

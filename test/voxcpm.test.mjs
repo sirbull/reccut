@@ -308,6 +308,12 @@ test('phase 9: Windows and Linux CPU engines are prepared but stay disabled unti
   assert.match(ci, /^on:\s*\n\s*workflow_dispatch:\s*$/m);
   assert.match(ci, /contents: read/);
   assert.ok(!/gh release|\.gguf|huggingface|package-addons/i.test(ci));
+  // Runner benchmark: manual, measures a build run's engines, pinned model, no release.
+  const bench = read('.github/workflows/voxcpm-benchmark.yml');
+  assert.match(bench, /^on:\s*\n\s*workflow_dispatch:/m);
+  assert.ok(bench.includes(`MODEL_REVISION: ${CATALOG.model.revision}`) && bench.includes(`MODEL_REPO: ${CATALOG.model.repository}`));
+  assert.ok(bench.includes('sha256sum -c') && bench.includes('benchmark-voxcpm.mjs --cpu'));
+  assert.ok(!/gh release|package-addons|contents: write/i.test(bench));
   for (const script of ['native/voxcpm/build-windows.ps1', 'native/voxcpm/build-linux.sh']) {
     const s = read(script);
     assert.ok(s.includes('voxcpm.engine.revision') && s.includes('voxcpm.engine.protocol'), `${script} checks the pinned revision and protocol`);
