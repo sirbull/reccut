@@ -178,6 +178,8 @@ function EditingPane() {
           />
         </Row>
         <p class="hint">Applies to new keyframes for all properties. Right click a keyframe to change its easing.</p>
+        {toggle('autoVolumeKeyframes', 'Auto-add volume keyframes')}
+        <p class="hint">With two volume keyframes, dragging the line between them adds two inner points. The level outside stays unchanged. Applies in Edit and Voice Over Studio.</p>
         <Row label="Snapping">
           <Toggle
             checked={snapping.value}

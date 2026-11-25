@@ -78,13 +78,14 @@ const DEFAULTS = {
   captions: 'burn',
   // Mål for lydstyrken i LUFS (0 = av), se shared/loudness.js.
   loudness: 0,
-  dir: null,
 };
 
 function load() {
   try {
     const s = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('exportRoom') || '{}') };
     s.size = { ...DEFAULTS.size, ...s.size };
+    // Eksportmappen huskes nå per prosjekt (editor/ExportDialog.jsx), ikke felles for alle.
+    delete s.dir;
     return s;
   } catch {
     return { ...DEFAULTS };
@@ -94,7 +95,8 @@ function load() {
 export const settings = signal(load());
 
 export function setSettings(patch) {
-  settings.value = { ...settings.value, ...patch };
+  const { dir: _dir, ...next } = { ...settings.value, ...patch };
+  settings.value = next;
   try {
     const { ...persist } = settings.value;
     localStorage.setItem('exportRoom', JSON.stringify(persist));

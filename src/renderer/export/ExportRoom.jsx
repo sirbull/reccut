@@ -51,7 +51,7 @@ import {
 import { createPlayer } from '../player.js';
 import { LOUDNESS_CEILING, LOUDNESS_TARGETS } from '../../shared/loudness.js';
 import { tasks } from '../editor/store.js';
-import { ExportColorChoice, FrameRateWarning, SourceMediaChoice, defaultExportDir, exportCaptionsOnly, startExport } from '../editor/ExportDialog.jsx';
+import { DEFAULT_DIR_LABEL, ExportColorChoice, FrameRateWarning, SourceMediaChoice, defaultExportDir, exportCaptionsOnly, projectExportDir, rememberExportDir, startExport } from '../editor/ExportDialog.jsx';
 import { ThumbnailChoice } from '../design/ThumbnailChoice.jsx';
 import { Button, IconButton, NumberField, Row, Section, Segmented, Select, toast } from '../ui.jsx';
 import {
@@ -128,7 +128,7 @@ function extFor(s) {
 async function exportSource(id, name, thumbnailId=null) {
   const p = sourceProject(id);
   const rs = resolvedSettings(id);
-  const folder = settings.value.dir || (await defaultExportDir());
+  const folder = await defaultExportDir();
   const sep = api.platform === 'win32' ? '\\' : '/';
   const safe = (name || p.name).replace(/[\\/:*?"<>|]/g, '_');
   const range = rs.range;
@@ -584,12 +584,12 @@ export function ExportRoom({ active }) {
               <button
                 class="path-btn"
                 onClick={async () => {
-                  const d = await api.chooseDir(s.dir || (await defaultExportDir()));
-                  if (d) setSettings({ dir: d });
+                  const d = await api.chooseDir(await defaultExportDir());
+                  if (d) rememberExportDir(d);
                 }}
               >
                 <FolderOpen size={14} />
-                <span>{s.dir || 'Movies/Reccut/Exports'}</span>
+                <span>{projectExportDir.value || DEFAULT_DIR_LABEL()}</span>
               </button>
             </Row>
           </Section>
@@ -599,7 +599,7 @@ export function ExportRoom({ active }) {
             {preparing?'Preparing Export…':id === PROJECT_SOURCE ? 'Export Project' : 'Convert File'}
           </Button>
           {hasCaptions(p) && (
-            <Button variant="secondary" onClick={() => exportCaptionsOnly(p, { range: so.range, captions: s.captions, name, dir: s.dir })}>
+            <Button variant="secondary" onClick={() => exportCaptionsOnly(p, { range: so.range, captions: s.captions, name })}>
               Export Captions Only
             </Button>
           )}

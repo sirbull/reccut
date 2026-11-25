@@ -2429,7 +2429,9 @@ A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:rem
 
 - Drag the yellow volume line on a clip, or use {{key:volumeUp}} and {{key:volumeDown}}. The waveform grows or shrinks with the level. Option (Alt) click the line once to add a volume keyframe.
 - Clip volume starts at **0 dB**. The clip shows its level, and hovering or dragging the volume line or a volume point shows the exact dB value next to the pointer. Positive values boost the level; negative values reduce it.
-- Drag a volume point to adjust it, or drag the line between two points to move both levels together. With four points, lower the middle segment to create a quiet section with smooth transitions and unchanged levels outside it. Right click a point to choose Linear, Ease In, Ease Out, Ease Both or Hold, or to delete it.
+- With just two volume keyframes, drag the yellow line between them up or down. Reccut adds two inner points and adjusts those, keeping the level before the first original point and after the second unchanged. Transitions are up to 0.1 seconds long, shorter for closely spaced points. Drag the middle segment again to refine its level without adding more points. This works in Edit and Voice Over Studio and needs no add-on or model download.
+- **Settings → Editing → Timeline → Auto-add volume keyframes** is on by default. Turn it off to move the two original points together instead. With an existing envelope of four or more points, dragging a segment continues to move its two endpoints. Drag a single volume point to adjust it; right click it to choose easing or delete it in Edit.
+- In Edit, **Clip → Lower Volume Between Keyframes 1 dB** and **Raise Volume Between Keyframes 1 dB** adjust the segment under the playhead on selected clips. They follow the same setting and are available in Quick Search and to the AI agent.
 - Drag the fade handles at the top corners of the audio to fade in and out.
 - **Expand Audio** ({{key:expandAudio}}) shows the audio below the video. Drag its edges past the video for J and L cuts.
 - The **Levels** at the top of the Audio tab show the waveform of the clip with its peak and average level. Red means the audio clips (goes over 0 dBFS). Audio Format shows the codec, sample rate and channels of the file.
@@ -2569,7 +2571,7 @@ You can also drop video or audio files into Export to convert them without putti
 - Captions can be burned in, embedded or saved as SRT or WebVTT.
 - **Loudness** makes the sound as loud as the platform expects: −14 LUFS for YouTube, TikTok and Spotify, −16 LUFS for podcasts, −23 LUFS for broadcast (EBU R128) or −24 LKFS for US broadcast. The whole mix is measured, raised or lowered, and a limiter keeps the peaks under −1 dBFS. The **YouTube and Web** preset uses −14 LUFS, and **Master** leaves the level as it is. The timeline is not changed.
 
-Exports are saved in the Exports folder of the project by default, and run in the background so you can keep working.
+Exports are saved in the Exports folder of the project by default, and run in the background so you can keep working. When you choose another folder with **Save to**, Reccut remembers it for that project, in Easy Export, the Export room, Export Frame and design exports. Another project starts in the default folder from **Settings › Export** until you choose a folder for it.
 
 If a file with the same name already exists, Reccut asks before exporting. **Replace** overwrites the old file, but only when the new export has finished, so a canceled or failed export leaves the old file unchanged. **Keep Both** saves the new export with a number added to its name, for example *My Video 2.mp4*. **Cancel** does not start the export. If the same file name is already in the export queue, you can only keep both.
 
@@ -2613,7 +2615,7 @@ Open Settings with {{key:prefs}}. The icons at the top switch between the parts,
 - **Playback**: skimming, viewer quality (better performance draws the viewer at half resolution), loop playback and keeping the pitch at other speeds.
 - **Import**: copy files into the project or leave them in place, create optimized media, and analyze video for stabilization.
 - **Audio**: how Auto Sync Audio groups audio and switches off the camera audio.
-- **Export**: whether exports go to the project's Exports folder or another folder.
+- **Export**: whether exports go to the project's Exports folder or another folder. A folder chosen with **Save to** while exporting is remembered for that project and is used instead.
 - **AI**: provider, API key, model, image support and local-server connections.
 - **Plugins**: open tools, configure defaults, share and remove plugins, and set up Higgsfield.
 

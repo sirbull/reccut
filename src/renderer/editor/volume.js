@@ -28,6 +28,26 @@ export function shiftVolume(clip, prop, delta, indices) {
   for (const i of indices) list[i][1] = clampDb(list[i][1] + shift);
 }
 
+// To punkter blir fire ved første segmentdrag. Senere drag bruker det indre paret,
+// slik at en ny justering ikke fortsetter å legge til punkter.
+export function dragVolumeSegment(clip, prop, T, delta, autoKeyframes = true, ease = 'easeInOut') {
+  let indices = volumeSegment(clip, prop, T);
+  const list = clip.kf?.[prop];
+  if (autoKeyframes && list?.length === 2 && indices.length === 2 && Math.abs(delta) >= 0.05) {
+    const [left, right] = list;
+    const shift = clamp(delta, -60 - Math.min(left[1], right[1]), 12 - Math.max(left[1], right[1]));
+    if (Math.abs(shift) < 0.05) return indices;
+    const s = kfTime(clip, T);
+    // Overgangene varer inntil 100 ms, og pekeren blir alltid innenfor det indre paret.
+    const inset = Math.min(0.1 * kfRate(clip), (right[0] - left[0]) / 4, (s - left[0]) / 2, (right[0] - s) / 2);
+    if (inset <= 1e-6) return indices;
+    list.splice(1, 0, [left[0] + inset, left[1], left[2] || 'linear'], [right[0] - inset, right[1], ease]);
+    indices = [1, 2];
+  }
+  shiftVolume(clip, prop, delta, indices);
+  return indices;
+}
+
 // Dra et punkt sidelengs: det holder seg mellom naboene, så rekkefølgen og indeksen ikke endres.
 export function moveVolumeKeyframe(clip, prop, index, to, step) {
   const list = clip.kf?.[prop];

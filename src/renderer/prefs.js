@@ -26,6 +26,7 @@ const DEFAULTS = {
   snapping: true,
   beatGrid: true,
   keyframeEasing: 'easeInOut',
+  autoVolumeKeyframes: true,
   preservePitch: true,
   syncMuteCamera: true,
   // Egne hurtigtaster: { kommando: 'CmdOrCtrl+Shift+B' }, tom streng betyr ingen.

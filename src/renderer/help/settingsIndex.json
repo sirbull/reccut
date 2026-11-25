@@ -183,6 +183,14 @@
   "pane": "editing",
   "paneLabel": "Editing",
   "section": "Timeline",
+  "label": "Auto-add volume keyframes",
+  "kind": "row",
+  "pref": "autoVolumeKeyframes"
+ },
+ {
+  "pane": "editing",
+  "paneLabel": "Editing",
+  "section": "Timeline",
   "label": "Snapping",
   "kind": "row"
  },

@@ -65,6 +65,7 @@ import { helpOpen, paletteOpen } from './registry.js';
 import wordmark from '../../assets/reccut-wordmark.svg';
 import { isTyping, isSpaceInput, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } from './keyboard.js';
 import { installFileDrop } from './fileDrop.js';
+import { useFitBar } from './fitBar.js';
 import { multicamMenu } from './editor/multicam.js';
 import { UpdateDialog } from './UpdateDialog.jsx';
 import { startUpdateChecks } from './updates.js';
@@ -202,26 +203,7 @@ if (winMenu) {
 // Tittellinjen krymper trinnvis når vinduet er smalt: først forsvinner knappetekstene (ikonene blir igjen),
 // til slutt prosjektnavnet. Trinnet er det laveste som får alt til å passe, så ingenting overlapper.
 const TITLEBAR_FOLDS = 5;
-function fitTitleBar(el) {
-  for (let i = 1; i <= TITLEBAR_FOLDS; i++) el.classList.remove(`c${i}`);
-  for (let i = 1; i <= TITLEBAR_FOLDS && el.scrollWidth > el.clientWidth + 1; i++) el.classList.add(`c${i}`);
-}
-function useFitTitleBar() {
-  const ref = useRef(null);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    let frame = 0;
-    const fit = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => fitTitleBar(el)); };
-    fitTitleBar(el);
-    const ro = new ResizeObserver(fit);
-    ro.observe(el);
-    const mo = new MutationObserver(fit);
-    mo.observe(el, { childList: true, subtree: true, characterData: true });
-    return () => { cancelAnimationFrame(frame); ro.disconnect(); mo.disconnect(); };
-  }, []);
-  return ref;
-}
+const useFitTitleBar = () => useFitBar(TITLEBAR_FOLDS);
 
 function TitleBar() {
   const barRef = useFitTitleBar();
@@ -592,4 +574,5 @@ window.__reccut = {
 };
 
 if (isMac) document.documentElement.classList.add('mac');
+if (winMenu) document.documentElement.classList.add('win');
 render(<App />, document.getElementById('root'));

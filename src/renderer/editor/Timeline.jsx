@@ -98,7 +98,7 @@ import { openQuick, quickOpen } from '../voiceover/quick.js';
 import { Button, IconButton } from '../ui.jsx';
 import * as commands from './commands.js';
 import { prefs, setPrefs } from '../prefs.js';
-import { fadePath, formatVolumeDb, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from './volume.js';
+import { dragVolumeSegment, fadePath, formatVolumeDb, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeY } from './volume.js';
 import { libraryDropTarget, mediaDropPreview, mediaDropProject, resizedTransitionDuration } from '../../shared/libraryDrop.js';
 import { endLibraryDrag, libraryDrag } from './libraryDrag.js';
 import { editMulticam } from './multicam.js';
@@ -554,7 +554,7 @@ export function Timeline() {
         return;
       }
       // Et punkt dras enten opp/ned eller sidelengs; den første bevegelsen bestemmer retningen.
-      dragRef.current = { ...base, kind: 'vol', prop, h: Number(el.dataset.height), kf: kfIndex, indices: kfIndex == null ? volumeSegment(clip, prop, T) : [kfIndex] };
+      dragRef.current = { ...base, kind: 'vol', prop, h: Number(el.dataset.height), kf: kfIndex, autoKeyframes: prefs.value.autoVolumeKeyframes, ease: prefs.value.keyframeEasing };
       volumePreview.value = kfIndex == null ? { clipId, prop, T, index: null, x: e.clientX, y: e.clientY } : null;
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
@@ -776,8 +776,13 @@ export function Timeline() {
         return;
       }
       const delta = volumeDelta(d.y - e.clientY, d.h);
-      updateTransient((p) => shiftVolume(p.clips[c.id], d.prop, delta, d.indices));
-      volumePreview.value = { clipId: c.id, prop: d.prop, T: d.T, index: d.indices.length === 1 ? d.indices[0] : null, x: e.clientX, y: e.clientY };
+      let indices;
+      updateTransient((p) => {
+        const clip = p.clips[c.id];
+        if (d.kf == null) indices = dragVolumeSegment(clip, d.prop, d.T, delta, d.autoKeyframes, d.ease);
+        else { indices = [d.kf]; shiftVolume(clip, d.prop, delta, indices); }
+      });
+      volumePreview.value = { clipId: c.id, prop: d.prop, T: d.T, index: indices.length === 1 ? indices[0] : null, x: e.clientX, y: e.clientY };
       return;
     }
     if (d.kind === 'move') {
@@ -1539,7 +1544,7 @@ function Wave({ clip, stream, componentKey, x, w, h, z, offset, lead = 0 }) {
         {fo > 0 && <path class="vol-line" d={fadeOut} />}
         <path class="vol-line" d={path} clip-path={fadeClip ? `url(#${fadeClip})` : undefined} />
         <path class="vol-line-hit" d={path} {...hit} onPointerMove={preview} onPointerEnter={preview} onPointerLeave={hidePreview}>
-          <title>{`${formatVolumeDb(displayDb)} · Drag to adjust volume. ${isMac ? 'Option' : 'Alt'} click to add a keyframe. Drag between keyframes to adjust both.`}</title>
+          <title>{`${formatVolumeDb(displayDb)} · Drag to adjust volume. ${isMac ? 'Option' : 'Alt'} click to add a keyframe. ${prefs.value.autoVolumeKeyframes ? 'With two keyframes, drag between them to adjust only the enclosed section.' : 'Drag between keyframes to adjust both.'}`}</title>
         </path>
       </svg>
       {w >= 24 && ['in', 'out'].map((which) => {

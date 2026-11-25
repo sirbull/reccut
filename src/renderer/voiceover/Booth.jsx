@@ -38,6 +38,7 @@ import {
   Keyboard,
 } from 'lucide-preact';
 import { Button, IconButton, Modal, NumberField, Segmented, Select, Slider, Toggle, toast } from '../ui.jsx';
+import { useFitBar } from '../fitBar.js';
 import { prefs, setPrefs } from '../prefs.js';
 import { project, room } from '../editor/store.js';
 import { isSpaceInput, isTyping } from '../keyboard.js';
@@ -215,6 +216,9 @@ export function VoiceoverBooth() {
   );
 }
 
+// Toppen krymper i trinn når vinduet er smalt (se .vo-head.c1–c5 i app.css).
+const VO_HEAD_FOLDS = 5;
+
 function BoothHeader() {
   const v = booth.vo.value;
   const { done, total } = progress(booth.blocks.value, v, booth.personId.value);
@@ -230,10 +234,11 @@ function BoothHeader() {
     booth.chooseDevice(kind, id);
     booth.openInput();
   };
+  const headRef = useFitBar(VO_HEAD_FOLDS);
   return (
-    <header class="vo-head">
+    <header class="vo-head" ref={headRef}>
       <StudioIcon size={16} />
-      <b>Voice Over Studio</b>
+      <b class="vo-head-title">Voice Over Studio</b>
       {v.script && (
         <span class="dim vo-progress" title="Lines with a usable take">
           {done} of {total} lines · about {formatDuration(readingTime(booth.blocks.value))} to read
@@ -242,15 +247,15 @@ function BoothHeader() {
       <div class="spacer" />
       <RoomTonePicker />
       <InputPicker />
-      <button class={`btn small ${video ? 'primary' : 'secondary'}`} title="Record the camera too, for a talking head" onClick={() => reopen({ voVideo: !video })}>
+      <button class={`btn small ${video ? 'primary' : 'secondary'}`} title="Record the camera too, for a talking head" aria-label="Camera" aria-pressed={video} onClick={() => reopen({ voVideo: !video })}>
         {video ? <Video size={14} /> : <VideoOff size={14} />}
-        Camera
+        <span class="vo-label">Camera</span>
       </button>
       {video && cams.length > 1 && <Select value={cams.some((c) => c.id === booth.opt('voCam')) ? booth.opt('voCam') : ''} options={[{ value: '', label: 'Default camera' }, ...cams.map((c) => ({ value: c.id, label: c.label }))]} onChange={(id) => reopenWith('cam', id)} />}
       <IconButton icon={PanelLeft} title={`${booth.opt('voBrowserVisible') ? 'Hide' : 'Show'} Effects & Templates`} active={!booth.opt('voPrompter') && booth.opt('voBrowserVisible')} aria-pressed={!booth.opt('voPrompter') && booth.opt('voBrowserVisible')} disabled={booth.opt('voPrompter')} onClick={() => setPrefs({ voBrowserVisible: !booth.opt('voBrowserVisible') })} />
       <IconButton icon={PanelRight} title={`${booth.opt('voInspectorVisible') ? 'Hide' : 'Show'} Properties`} active={!booth.opt('voPrompter') && booth.opt('voInspectorVisible')} aria-pressed={!booth.opt('voPrompter') && booth.opt('voInspectorVisible')} disabled={booth.opt('voPrompter')} onClick={() => setPrefs({ voInspectorVisible: !booth.opt('voInspectorVisible') })} />
-      <Button variant="primary" class="small vo-back" icon={ArrowLeft} onClick={backToEdit} title="Leave the studio and go back to Edit (Esc). The takes are kept.">
-        Back to Edit
+      <Button variant="primary" class="small vo-back" icon={ArrowLeft} onClick={backToEdit} aria-label="Back to Edit" title="Leave the studio and go back to Edit (Esc). The takes are kept.">
+        <span class="vo-label">Back to Edit</span>
       </Button>
     </header>
   );
@@ -290,8 +295,8 @@ function RoomTonePicker() {
       ) : (
         <span class="dim">None</span>
       )}
-      <Button class="small" icon={Plus} onClick={booth.newRoomTone} disabled={booth.busy()} title="Record a new room tone: countdown from 3, then 5 seconds">
-        New
+      <Button class="small" icon={Plus} onClick={booth.newRoomTone} disabled={booth.busy()} aria-label="New room tone" title="Record a new room tone: countdown from 3, then 5 seconds">
+        <span class="vo-label">New</span>
       </Button>
     </div>
   );

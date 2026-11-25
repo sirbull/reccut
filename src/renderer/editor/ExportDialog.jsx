@@ -3,7 +3,8 @@ import { useMemo, useState } from 'preact/hooks';
 import { Apple, Feather, FileVideo, Film, FolderOpen, Gem, Globe, Image as ImageIcon, Music } from 'lucide-preact';
 import { CAPTION_LANE, clampRange, exportFileName, exportRangeProblem, formatDuration } from '../../shared/model.js';
 import { AUDIO_FORMATS, CAPTION_EXPORT, CAPTION_EXPORT_AUDIO, PRESETS, QUALITIES, VIDEO_FORMATS, estimateSize, formatBytes, frameRateCheck, mediaCopies, outputSize } from '../../shared/formats.js';
-import { project, projectFolders, room } from './store.js';
+import { computed, effect, signal } from '@preact/signals';
+import { project, projectFolders, projectPath, room } from './store.js';
 import { prefs } from '../prefs.js';
 import { exportOpen } from './commands.js';
 import { captionItems, toSrt, toVtt } from '../../shared/srt.js';
@@ -31,11 +32,59 @@ export async function startExport(p, settings, thumbnailId = null) {
   return id;
 }
 
-// Eksporter legges i prosjektets Exports-mappe.
+// Mappen brukeren valgte under Save to huskes per prosjekt (prosjektfilen, eller id-en før
+// prosjektet er lagret). Et annet prosjekt starter i standardmappen til brukeren velger en ny.
+function readExportDirs() {
+  try {
+    const v = JSON.parse(localStorage.getItem('exportDirs') || '{}');
+    return v && typeof v === 'object' ? v : {};
+  } catch {
+    return {};
+  }
+}
+export const exportDirs = signal(readExportDirs());
+const projectKey = () => projectPath.value || (project.value?.id ? `id:${project.value.id}` : null);
+export const projectExportDir = computed(() => {
+  const key = projectKey();
+  return (key && exportDirs.value[key]) || null;
+});
+export function rememberExportDir(dir) {
+  const key = projectKey();
+  if (!key || !dir) return;
+  const next = { ...exportDirs.value, [key]: dir };
+  // Hold lista kort: de nyeste 200 prosjektene.
+  const keys = Object.keys(next);
+  for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete next[k];
+  exportDirs.value = next;
+  try {
+    localStorage.setItem('exportDirs', JSON.stringify(next));
+  } catch {}
+}
+// Samme prosjekt under ny fil (første lagring, flytting eller nytt navn) tar med seg mappen.
+// id-en huskes fra da nøkkelen sist endret seg, så et nytt prosjekt som åpnes (ny id først,
+// så ny fil) ikke arver mappen til det forrige.
+let last = { key: null, id: null };
+effect(() => {
+  const key = projectKey();
+  const id = project.value?.id || null;
+  if (key === last.key) return;
+  const prev = last;
+  last = { key, id };
+  if (!prev.key || !key || prev.id !== id) return;
+  const dir = exportDirs.peek()[prev.key];
+  if (dir && !exportDirs.peek()[key]) rememberExportDir(dir);
+});
+
+// Eksporter legges i mappen som er valgt for prosjektet, ellers i standardmappen fra Innstillinger
+// (prosjektets Exports-mappe eller en fast mappe).
 export async function defaultExportDir() {
+  if (projectExportDir.value) return projectExportDir.value;
   if (prefs.value.exportDirMode === 'custom' && prefs.value.exportDir) return prefs.value.exportDir;
   return projectFolders.value?.exports || `${await api.baseDir()}${api.platform === 'win32' ? '\\' : '/'}Exports`;
 }
+
+// Teksten på Save to-knappen når prosjektet ikke har en egen mappe.
+export const DEFAULT_DIR_LABEL = () => (prefs.value.exportDirMode === 'custom' && prefs.value.exportDir) || 'Project Exports folder';
 
 // Bare undertekstfila, uten å rendre video. VTT når det er valgt alene, ellers SRT.
 export async function exportCaptionsOnly(p, { range, captions, name, dir }) {
@@ -145,7 +194,7 @@ export function ExportDialog() {
   const [captions, setCaptions] = useState(hasCaptions ? 'burn' : 'none');
   const [name, setName] = useState(exportFileName(p));
   const [thumbnailId,setThumbnailId]=useState(null),[preparing,setPreparing]=useState(false);
-  const [dir, setDir] = useState(last?.dir || null);
+  const dir = projectExportDir.value;
   const audioOnly = Boolean(base.audioOnly);
 
   const pickPreset = (id) => {
@@ -184,7 +233,7 @@ export function ExportDialog() {
     const sep = api.platform === 'win32' ? '\\' : '/';
     const safe = (name || p.name).replace(/[\\/:*?"<>|]/g, '_');
     let output = `${folder}${sep}${safe}.${ext}`;
-    localStorage.setItem('exportSettings', JSON.stringify({ ...settingsObj, dir }));
+    localStorage.setItem('exportSettings', JSON.stringify(settingsObj));
     if(preparing)return;setPreparing(true);
     try { const jobId = await startExport(p, {
       ...settingsObj,
@@ -262,11 +311,11 @@ export function ExportDialog() {
               class="path-btn"
               onClick={async () => {
                 const d = await api.chooseDir(dir || (await defaultExportDir()));
-                if (d) setDir(d);
+                if (d) rememberExportDir(d);
               }}
             >
               <FolderOpen size={14} />
-              <span>{dir || 'Movies/Reccut/Exports'}</span>
+              <span>{dir || DEFAULT_DIR_LABEL()}</span>
             </button>
           </Row>
           {audioOnly ? (

@@ -43,7 +43,7 @@ test('preparing a project replaces stale conversion settings without starting an
   assert.equal(s.settings.value.size.h, 3840);
   assert.equal(s.settings.value.fpsMode, 'source');
   assert.equal(s.settings.value.fps, 59.94);
-  assert.equal(s.settings.value.dir, null, 'use the configured project export folder');
+  assert.equal(s.settings.value.dir, undefined, 'the export folder is remembered per project, not in the room settings');
   assert.equal(s.settings.value.sourceMedia, 'original');
   assert.equal(s.sourceOptions(s.PROJECT_SOURCE).crop, null);
   assert.deepEqual(JSON.parse(JSON.stringify(s.sourceOptions(s.PROJECT_SOURCE).range)), { in: 2, out: 9 });
