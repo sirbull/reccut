@@ -2,6 +2,7 @@
 // Reccut's local JSON-lines adapter for the pinned VoxCPM2 runtime. No sockets,
 // network, text logging or persistent script files. stdout is protocol only.
 #include "voxcpm2_runtime.h"
+#include "ggml-backend.h"
 #include "nlohmann/json.hpp"
 #include <algorithm>
 #include <cmath>
@@ -126,7 +127,13 @@ int main(int argc, char ** argv) {
         VoxCPM2Runtime runtime;
         if (!runtime.init(argv[2], argv[3], -1, gpu)) { reply({{"type", "fatal"}, {"error", "Could not load the voice model."}}); return 1; }
         if (threads) runtime.set_n_threads(threads);
-        reply({{"type", "ready"}, {"protocol", protocol}, {"rate", runtime.sample_rate()}});
+        // The device the runtime chose, in ggml_backend_init_best's order, so measurements show GPU or CPU.
+        ggml_backend_dev_t dev = nullptr;
+        if (gpu) dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
+        if (gpu && !dev) dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_IGPU);
+        if (!dev) dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
+        std::string device = dev ? std::string(ggml_backend_dev_name(dev)) + " (" + ggml_backend_dev_description(dev) + ")" : "unknown";
+        reply({{"type", "ready"}, {"protocol", protocol}, {"rate", runtime.sample_rate()}, {"device", device}});
         while (true) {
             // Bound input before parsing, including a request without a newline.
             std::string line; char c;

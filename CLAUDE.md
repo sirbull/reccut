@@ -4,6 +4,13 @@
 
 - `AGENTS.md` og `CLAUDE.md` skal ha identisk innhold. Når instruksjoner legges til, endres eller fjernes, skal begge filene oppdateres i samme endring.
 
+## Ventende tester (minn brukeren på dem)
+
+Brukeren har bedt om å bli minnet på disse testene. Nevn dem kort i første svar i en ny samtale på en maskin der testen kan gjøres, til brukeren sier at den er gjort eller ikke lenger trengs. Fjern da punktet her og i `AGENTS.md`, og lagre resultatet i `docs/voxcpm-cpu/`.
+
+- **macOS (brukerens Mac hjemme): VoxCPM2-referansemåling med Metal.** Gir tallene som Windows og Linux skal sammenlignes med (fase 9, [docs/voxcpm-cpu/README.md](docs/voxcpm-cpu/README.md)). Forutsetter at VoxCPM2 er installert i Reccut. Kjør uten `--cpu`: `node scripts/benchmark-voxcpm.mjs --out <tom mappe> <motor> <modellmappe>`. Motoren ligger i `~/Library/Application Support/<appnavn>/tts/voxcpm/engine/<sha>/reccut-voxcpm-mac`, og modellen i `.../tts/voxcpm/models/<fingeravtrykk>/`. Ta også med maskinmodell, brikke og minne.
+- **Windows med grafikkort: VoxCPM2 med Vulkan.** Bygg `vulkan`-varianten med `.github/workflows/voxcpm-cpu.yml` og kjør `node scripts/benchmark-voxcpm.mjs` uten `--cpu`. Sjekk i rapporten at motoren brukte grafikkortet og ikke falt tilbake til prosessoren.
+
 ## Nettsiden
 
 - Alt publisert innhold på nettsiden skal være på engelsk: tekst, bildetekster, alternativ tekst, tekst i skjermbilder, demomanus og tale i AI-stemmeeksempler.

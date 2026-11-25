@@ -1,11 +1,13 @@
-# Build the optional persistent adapter for Windows x64: CPU only, static
-# ggml and a static MSVC runtime, so the user needs no Visual C++ redistributable.
-# Usage: powershell -File native/voxcpm/build-windows.ps1 <llama.cpp-omni checkout> <output directory> [baseline|avx2]
-# baseline runs on every x64 CPU (SSE2 only); avx2 needs AVX2, FMA and F16C (2013 and newer).
+# Build the optional persistent adapter for Windows x64: static ggml and a static
+# MSVC runtime, so the user needs no Visual C++ redistributable.
+# Usage: powershell -File native/voxcpm/build-windows.ps1 <llama.cpp-omni checkout> <output directory> [baseline|avx2|vulkan]
+# baseline runs on every x64 CPU (SSE2 only); avx2 needs AVX2, FMA and F16C (2013 and newer);
+# vulkan is avx2 plus the Vulkan GPU backend, needs the Vulkan SDK (VULKAN_SDK) to build
+# and vulkan-1.dll, which GPU drivers install, to run.
 param(
   [Parameter(Mandatory = $true)][string]$SourceDir,
   [Parameter(Mandatory = $true)][string]$OutputDir,
-  [ValidateSet('baseline', 'avx2')][string]$Cpu = 'baseline'
+  [ValidateSet('baseline', 'avx2', 'vulkan')][string]$Cpu = 'baseline'
 )
 $ErrorActionPreference = 'Stop'
 function Check($what) { if ($LASTEXITCODE -ne 0) { throw "$what failed (exit $LASTEXITCODE)" } }
@@ -40,7 +42,11 @@ $build = Join-Path $OutputDir 'server-build'
 # No GPU backends or OpenMP. Every x86 extension is explicit because
 # GGML_NATIVE=OFF alone does not disable them. baseline gives MSVC no /arch flag
 # (x64 SSE2); avx2 gives /arch:AVX2, where ggml also enables FMA and F16C.
-$simd = if ($Cpu -eq 'avx2') {
+$gpu = if ($Cpu -eq 'vulkan') {
+  if (-not $env:VULKAN_SDK) { throw 'The vulkan variant needs the Vulkan SDK (VULKAN_SDK is not set).' }
+  '-DGGML_VULKAN=ON'
+} else { '-DGGML_VULKAN=OFF' }
+$simd = if ($Cpu -ne 'baseline') {
   '-DGGML_SSE42=ON', '-DGGML_BMI2=ON', '-DGGML_AVX=ON', '-DGGML_AVX2=ON', '-DGGML_AVX512=OFF', '-DGGML_AVX_VNNI=OFF'
 } else {
   '-DGGML_SSE42=OFF', '-DGGML_BMI2=OFF', '-DGGML_AVX=OFF', '-DGGML_AVX2=OFF', '-DGGML_AVX512=OFF', '-DGGML_AVX_VNNI=OFF'
@@ -48,8 +54,8 @@ $simd = if ($Cpu -eq 'avx2') {
 cmake -S (Join-Path $projectDir 'native\voxcpm') -B $build -G Ninja "-DVOXCPM_SOURCE_DIR=$SourceDir" `
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
   -DBUILD_SHARED_LIBS=OFF -DGGML_BACKEND_DL=OFF -DGGML_NATIVE=OFF `
-  -DGGML_METAL=OFF -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DENABLE_COREML=OFF -DGGML_OPENMP=OFF `
-  @simd `
+  -DGGML_METAL=OFF -DGGML_CUDA=OFF -DENABLE_COREML=OFF -DGGML_OPENMP=OFF `
+  $gpu @simd `
   -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF
 Check 'CMake configuration'
 cmake --build $build --target reccut-voxcpm --parallel 4; Check 'Engine build'
@@ -63,6 +69,8 @@ $deps = (dumpbin /NOLOGO /DEPENDENTS $exe) | Where-Object { $_ -match '^\s+\S+\.
 Check 'dumpbin'
 $deps | Set-Content -Encoding ascii (Join-Path $OutputDir 'dependencies.txt')
 foreach ($dll in $deps) {
+  # The Vulkan loader comes with the GPU driver; the app must check for it before offering this engine.
+  if ($Cpu -eq 'vulkan' -and $dll -ieq 'vulkan-1.dll') { continue }
   if ($dll -match '^(vcruntime|msvcp|ucrtbase|api-ms-win-crt|vcomp|libomp|libgomp)') { throw "Unexpected runtime dependency: $dll" }
   if (-not (Test-Path (Join-Path $env:SystemRoot "System32\$dll"))) { throw "Unexpected non-system dependency: $dll" }
 }
@@ -72,6 +80,12 @@ $manifest = Join-Path $OutputDir 'manifest.xml'
 mt.exe -nologo "-inputresource:$exe;#1" "-out:$manifest"; Check 'Reading the embedded manifest'
 if (-not (Select-String -Path $manifest -Pattern '<activeCodePage[^>]*>UTF-8</activeCodePage>' -Quiet)) { throw 'The UTF-8 manifest is not embedded' }
 
+# A build machine without a GPU driver has no Vulkan loader; borrow the SDK's for the smoke test only.
+if ($Cpu -eq 'vulkan' -and -not (Test-Path (Join-Path $env:SystemRoot 'System32\vulkan-1.dll'))) {
+  $loader = Get-ChildItem $env:VULKAN_SDK -Recurse -Filter vulkan-1.dll -ErrorAction SilentlyContinue | Where-Object { $_.DirectoryName -match 'x64|Bin$' } | Select-Object -First 1
+  if (-not $loader) { throw 'No Vulkan loader for the smoke test' }
+  $env:PATH = "$($loader.DirectoryName);$env:PATH"
+}
 & $exe --help > (Join-Path $OutputDir 'smoke.txt') 2>&1
 if (-not (Select-String -Path (Join-Path $OutputDir 'smoke.txt') -Pattern 'VoxCPM2 CLI' -Quiet)) { throw 'The help check failed' }
 $protocol = & $exe --protocol; Check 'Protocol check'

@@ -172,3 +172,14 @@ test('measurement flags (--cpu, --threads) reach the engine and never share a pr
   assert.deepEqual(native.children[1].args, ['--serve', ...config.models, '--cpu', '--threads', '4']);
   assert.equal(native.children[0].closed, true);
 });
+
+test('the ready device name reaches onReady only when it looks like a plain device name', async (t) => {
+  const seen = [];
+  for (const device of ['Vulkan0 (AMD Radeon(TM) Graphics)', 'A private script\nwith newlines', undefined]) {
+    const { native, client } = fixture(t, { announce: false });
+    const running = client.run(config, request, { onReady: (info) => seen.push(info.device) });
+    await tick(); native.children[0].respond({ type: 'ready', protocol: 1, rate: 48000, device });
+    await running; await client.stop();
+  }
+  assert.deepEqual(seen, ['Vulkan0 (AMD Radeon(TM) Graphics)', null, null]);
+});

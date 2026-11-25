@@ -103,13 +103,13 @@ let child = null, launches = 0, seq = 0;
 const client = createVoxcpmProcess({ spawnImpl: (...args) => { launches++; child = spawn(...args); return child; } });
 const config = { exe, models, args: engineArgs, sha256: await hashFile(exe), cwd: out };
 const base = { cfg: catalog.settings.cfg, steps: catalog.settings.steps, timesteps: catalog.settings.timesteps, temperature: catalog.settings.temperature, seed: catalog.settings.seed ?? 42 };
-const jobs = [];
+const jobs = [], devices = new Set();
 async function job(name, text, ref, moodId = 'neutral', extra = {}) {
   const output = path.join(out, `${String(++seq).padStart(3, '0')}-${name}.wav`);
   const started = performance.now(), launchesBefore = launches;
   let loadingAt = null, readyAt = null;
   await client.run(config, { ...base, reference: ref.file, output, text: `(${mood(moodId).prompt} ${catalog.settings.suffix})${text}` }, {
-    onLoading: () => { loadingAt = performance.now(); }, onReady: () => { readyAt = performance.now(); }, ...extra,
+    onLoading: () => { loadingAt = performance.now(); }, onReady: (info) => { readyAt = performance.now(); if (info?.device) devices.add(info.device); }, ...extra,
   });
   const ended = performance.now();
   const wav = await fs.readFile(output), audio = readWav(wav);
@@ -230,6 +230,8 @@ try {
 } finally {
   await client.stop();
   report.jobs = jobs;
+  // Compute device reported by the adapter (GPU or CPU); empty for engines older than this field.
+  report.devices = [...devices];
   report.wallSeconds = (performance.now() - t0) / 1000;
   report.finishedAt = new Date().toISOString();
   await fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2) + '\n');
