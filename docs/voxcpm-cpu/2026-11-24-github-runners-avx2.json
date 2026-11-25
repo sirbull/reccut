@@ -1,0 +1,255 @@
+{
+  "source": "GitHub Actions run 45410757984 (build run 45407673562), notices from scripts/summarize-voxcpm-benchmark.mjs",
+  "runs": {
+    "ubuntu-latest-avx2": {
+      "kind": "measurement",
+      "status": "completed",
+      "wallSeconds": 5872.151277462,
+      "environment": {
+        "platform": "linux",
+        "arch": "x64",
+        "osRelease": "7.0.0-1020-azure",
+        "osVersion": "#21-Ubuntu SMP PREEMPT Tue Oct 27 22:34:38 UTC 2026",
+        "cpu": "AMD EPYC 7763 64-Core Processor",
+        "logicalCpus": 4,
+        "availableParallelism": 4,
+        "totalMemoryBytes": 16759431168,
+        "node": "v26.13.1",
+        "reccutCommit": "c50a05dfd0e7de789cb77e1fd759a852f2b89b28",
+        "reccutDirty": false,
+        "wsl": false,
+        "distribution": "Ubuntu 26.04.1 LTS",
+        "cgroupMemoryMax": null,
+        "cgroupCpuMax": null
+      },
+      "engineSha256": "80bb101969b0d94dbef4b846017260a964f8fa3351a35b1bc9f731f92e5de7eb",
+      "engineArgs": [
+        "--cpu"
+      ],
+      "summary": {
+        "startupSeconds": {
+          "n": 3,
+          "median": 1.9231302730001043,
+          "p95": 1.9335012550000101,
+          "min": 1.903674058,
+          "max": 1.9335012550000101
+        },
+        "firstAudioSeconds": {
+          "n": 3,
+          "median": 29.176697958000005,
+          "p95": 29.250821611000227,
+          "min": 28.288742473,
+          "max": 29.250821611000227
+        },
+        "warmRtf": {
+          "n": 60,
+          "median": 13.120431649292387,
+          "p95": 20.191405842187578,
+          "min": 12.589698898060355,
+          "max": 20.644037324218882
+        },
+        "warmRtfByCase": {
+          "short-en": {
+            "n": 15,
+            "median": 18.76471458611106,
+            "p95": 19.108074284028007,
+            "min": 18.243026318750022,
+            "max": 19.108074284028007
+          },
+          "short-nb": {
+            "n": 15,
+            "median": 19.68576912109374,
+            "p95": 20.644037324218882,
+            "min": 19.502853557031266,
+            "max": 20.644037324218882
+          },
+          "medium-en": {
+            "n": 15,
+            "median": 12.655161870258626,
+            "p95": 12.73068241099138,
+            "min": 12.589698898060355,
+            "max": 12.73068241099138
+          },
+          "medium-nb": {
+            "n": 15,
+            "median": 12.988043935849047,
+            "p95": 13.120431649292387,
+            "min": 12.825305634433978,
+            "max": 13.120431649292387
+          }
+        },
+        "peakEngineMemoryBytes": 6236196864,
+        "cancelSeconds": {
+          "loading": 0.28736864199955015,
+          "generating": 0.30217199300043285
+        },
+        "jobs": 97,
+        "launches": 6
+      },
+      "proposedCriteria": {
+        "warmRtf": {
+          "goal": "median <= 3 and p95 <= 5",
+          "pass": false
+        },
+        "startup": {
+          "goal": "ready <= 60 s and first short WAV <= 90 s",
+          "pass": true
+        },
+        "memory": {
+          "goal": "engine peak <= 8 GiB",
+          "pass": true
+        },
+        "cancel": {
+          "goal": "child closed and cleanup possible within 2 s",
+          "pass": true
+        },
+        "stability": {
+          "goal": ">= 10 jobs, voice switching and a clean job after cancel",
+          "pass": true
+        }
+      },
+      "cancel": [
+        {
+          "phase": "loading",
+          "closedSeconds": 0.28736864199955015,
+          "cleanedUp": true
+        },
+        {
+          "phase": "generating",
+          "closedSeconds": 0.30217199300043285,
+          "cleanedUp": true
+        }
+      ],
+      "switchBackIdentical": true,
+      "firstJobMatchesWarm": [
+        true,
+        true,
+        true
+      ]
+    },
+    "windows-latest-avx2": {
+      "kind": "measurement",
+      "status": "completed",
+      "wallSeconds": 4205.5842879,
+      "environment": {
+        "platform": "win32",
+        "arch": "x64",
+        "osRelease": "10.0.26100",
+        "osVersion": "Windows Server 2025 Datacenter",
+        "cpu": "AMD EPYC 7763 64-Core Processor",
+        "logicalCpus": 4,
+        "availableParallelism": 4,
+        "totalMemoryBytes": 17174360064,
+        "node": "v26.13.1",
+        "reccutCommit": "c50a05dfd0e7de789cb77e1fd759a852f2b89b28",
+        "reccutDirty": false,
+        "powerScheme": "Power Scheme GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c  (High performance)",
+        "physicalCores": 2
+      },
+      "engineSha256": "17ddc7b491f46747f7a51e00435bef099adf8dddd1640f82d1d4c90a2bd1199d",
+      "engineArgs": [
+        "--cpu"
+      ],
+      "summary": {
+        "startupSeconds": {
+          "n": 3,
+          "median": 1.9915386,
+          "p95": 2.033193100000266,
+          "min": 1.9616816000000108,
+          "max": 2.033193100000266
+        },
+        "firstAudioSeconds": {
+          "n": 3,
+          "median": 26.252478900000003,
+          "p95": 26.33344439999992,
+          "min": 25.886100699999837,
+          "max": 26.33344439999992
+        },
+        "warmRtf": {
+          "n": 60,
+          "median": 11.376817740384451,
+          "p95": 12.657917670454745,
+          "min": 8.166345036057688,
+          "max": 17.76131039062498
+        },
+        "warmRtfByCase": {
+          "short-en": {
+            "n": 15,
+            "median": 11.534781057692305,
+            "p95": 11.807414615384634,
+            "min": 11.366499134615374,
+            "max": 11.807414615384634
+          },
+          "short-nb": {
+            "n": 15,
+            "median": 12.559345284091117,
+            "p95": 13.7377578409091,
+            "min": 12.299665454545455,
+            "max": 13.7377578409091
+          },
+          "medium-en": {
+            "n": 15,
+            "median": 8.248534615384614,
+            "p95": 9.806159218750004,
+            "min": 8.166345036057688,
+            "max": 9.806159218750004
+          },
+          "medium-nb": {
+            "n": 15,
+            "median": 8.31283814732143,
+            "p95": 17.76131039062498,
+            "min": 8.251477689732148,
+            "max": 17.76131039062498
+          }
+        },
+        "peakEngineMemoryBytes": 6044073984,
+        "cancelSeconds": {
+          "loading": 0.1284424000000581,
+          "generating": 0.11940480000013486
+        },
+        "jobs": 97,
+        "launches": 6
+      },
+      "proposedCriteria": {
+        "warmRtf": {
+          "goal": "median <= 3 and p95 <= 5",
+          "pass": false
+        },
+        "startup": {
+          "goal": "ready <= 60 s and first short WAV <= 90 s",
+          "pass": true
+        },
+        "memory": {
+          "goal": "engine peak <= 8 GiB",
+          "pass": true
+        },
+        "cancel": {
+          "goal": "child closed and cleanup possible within 2 s",
+          "pass": true
+        },
+        "stability": {
+          "goal": ">= 10 jobs, voice switching and a clean job after cancel",
+          "pass": true
+        }
+      },
+      "cancel": [
+        {
+          "phase": "loading",
+          "closedSeconds": 0.1284424000000581,
+          "cleanedUp": true
+        },
+        {
+          "phase": "generating",
+          "closedSeconds": 0.11940480000013486,
+          "cleanedUp": true
+        }
+      ],
+      "switchBackIdentical": true,
+      "firstJobMatchesWarm": [
+        true,
+        true,
+        true
+      ]
+    }
+  }
+}

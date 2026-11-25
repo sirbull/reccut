@@ -55,6 +55,11 @@ AMD Excavator/Zen, 2013 og nyere), og den er standardvalget i benchmarken. Velge
 den, må appen sjekke CPU-en før motoren startes, slik at eldre maskiner får en
 forklaring i stedet for en «illegal instruction»-krasj.
 
+Andre måling (24. november, `avx2` på GitHub-maskiner med 4 vCPU): oppstart, minne,
+avbryt og stabilitet består på både Windows og Linux, men varm sanntidsfaktor er
+11,4 (Windows) og 13,1 (Linux) mot målet ≤ 3. Ingen plattform slås på. Se
+[voxcpm-cpu/README.md](voxcpm-cpu/README.md).
+
 Merk: motoren distribueres nå som tilleggspakker ([addons.yml](../.github/workflows/addons.yml),
 `addonCatalog.json`, `scripts/package-addons.mjs`), ikke som vedlegg i `build.yml`.
 Trinn 7–8 må legge `voxcpm-win-x64` og `voxcpm-linux-x64` inn der når en plattform er godkjent.
