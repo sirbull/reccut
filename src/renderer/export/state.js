@@ -74,6 +74,7 @@ const DEFAULTS = {
   fpsMode: 'source',
   fps: 30,
   sourceMedia: 'original',
+  color: 'sdr',
   captions: 'burn',
   // Mål for lydstyrken i LUFS (0 = av), se shared/loudness.js.
   loudness: 0,
@@ -122,6 +123,8 @@ export function applyPreset(id) {
     preset: id,
     audioOnly: Boolean(pr.audioOnly),
     format: pr.format || settings.value.format,
+    color: pr.color || 'sdr',
+    ...(pr.color === 'hdr-pq' ? { sourceMedia: 'original' } : {}),
     audioFormat: pr.audioFormat || settings.value.audioFormat,
     quality: pr.quality,
     bitrate: 0,

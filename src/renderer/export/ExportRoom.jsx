@@ -50,7 +50,7 @@ import {
 import { createPlayer } from '../player.js';
 import { LOUDNESS_CEILING, LOUDNESS_TARGETS } from '../../shared/loudness.js';
 import { tasks } from '../editor/store.js';
-import { FrameRateWarning, SourceMediaChoice, defaultExportDir, exportCaptionsOnly, startExport } from '../editor/ExportDialog.jsx';
+import { ExportColorChoice, FrameRateWarning, SourceMediaChoice, defaultExportDir, exportCaptionsOnly, startExport } from '../editor/ExportDialog.jsx';
 import { ThumbnailChoice } from '../design/ThumbnailChoice.jsx';
 import { Button, IconButton, NumberField, Row, Section, Segmented, Select, toast } from '../ui.jsx';
 import {
@@ -108,6 +108,7 @@ function resolvedSettings(id) {
     crop: so.crop,
     fps: s.fpsMode === 'source' ? p.fps : s.fps,
     sourceMedia: s.sourceMedia,
+    color: s.color || 'sdr',
     range: so.range,
     captions: hasCaptions(p) ? (s.audioOnly ? (s.captions.includes('srt') ? 'srt' : s.captions === 'vtt' ? 'vtt' : 'none') : s.captions) : 'none',
   };
@@ -347,6 +348,7 @@ export function ExportRoom({ active }) {
                     <Select value={s.format} options={VIDEO_FORMATS.map((f) => ({ value: f.id, label: `${f.label}, ${f.note.toLowerCase()}` }))} onChange={(v) => setSettings({ format: v, preset: 'custom' })} />
                   </Row>
                 )}
+                <ExportColorChoice project={p} settings={rs} value={s.color} onChange={color => setSettings({ color, preset: 'custom', ...(color === 'hdr-pq' ? { format: 'mp4-hevc', sourceMedia: 'original' } : {}) })} />
               </>
             )}
           </Section>
@@ -441,7 +443,7 @@ export function ExportRoom({ active }) {
               </Section>
               {Object.values(mediaCopies(p)).some(Boolean) && (
                 <Section title="Source media">
-                  <SourceMediaChoice project={p} value={s.sourceMedia} onChange={(v) => setSettings({ sourceMedia: v })} />
+                  <SourceMediaChoice project={p} color={s.color} value={s.sourceMedia} onChange={(v) => setSettings({ sourceMedia: v })} />
                 </Section>
               )}
             </>

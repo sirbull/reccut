@@ -11,6 +11,7 @@ import { startExportWithThumbnail } from '../design/videoThumbnail.js';
 import { ThumbnailChoice } from '../design/ThumbnailChoice.jsx';
 import { Button, Modal, Row, Segmented, Select, toast } from '../ui.jsx';
 import { LOUDNESS_TARGETS } from '../../shared/loudness.js';
+import { HDR_COLOR, hdrExportIssues } from '../../shared/hdr.js';
 
 const api = window.api;
 const ICONS = { film: Film, globe: Globe, feather: Feather, apple: Apple, gem: Gem, image: ImageIcon, music: Music };
@@ -24,6 +25,8 @@ function loadLast() {
 }
 
 export async function startExport(p, settings, thumbnailId = null) {
+  const issues = hdrExportIssues(p, settings);
+  if (issues.length) throw new Error(issues.slice(0, 5).join('\n'));
   const id = await startExportWithThumbnail(p, settings, thumbnailId);
   return id;
 }
@@ -84,22 +87,35 @@ export function FrameRateWarning({ project: p, fps, candidates, onUse }) {
 }
 
 // Originalene eller kopiene (optimalisert media og proxyer). Vises bare når sekvensen har kopier.
-export function SourceMediaChoice({ project: p, value, onChange }) {
+export function SourceMediaChoice({ project: p, value, onChange, color = 'sdr' }) {
   const { optimized, proxies } = useMemo(() => mediaCopies(p), [p]);
   if (!optimized && !proxies) return null;
   const clips = (n) => `${n} file${n > 1 ? 's' : ''}`;
   return (
     <>
       <Row label="Source media">
-        <Segmented value={value} onChange={onChange} options={[{ value: 'original', label: 'Originals' }, { value: 'optimized', label: 'Optimized media' }]} />
+        {color === HDR_COLOR ? <span>Originals (required for HDR)</span> : <Segmented value={value} onChange={onChange} options={[{ value: 'original', label: 'Originals' }, { value: 'optimized', label: 'Optimized media' }]} />}
       </Row>
       <p class="hint">
-        {value === 'original'
+        {color === HDR_COLOR ? 'HDR export reads original video without the SDR tone mapping used for editing. Missing originals stop the export.' : value === 'original'
           ? 'Full quality from the original files. ProRes, DNxHD and similar formats are decoded during the export, so it takes longer. Colors match the preview, also for HDR, which is tone mapped the same way.'
           : `Faster, using the copies you edit with.${optimized ? ` ${clips(optimized)} use optimized media, at full resolution.` : ''}${proxies ? ` ${clips(proxies)} only have a proxy of at most 1920 pixels and will be softer in a larger export. Use Optimize Media first to avoid this.` : ''}`}
       </p>
     </>
   );
+}
+
+export function ExportColorChoice({ value, onChange, project: p, settings }) {
+  const issues = hdrExportIssues(p, settings);
+  return <>
+    <Row label="Output color" stacked>
+      <Select value={value || 'sdr'} options={[{ value: 'sdr', label: 'SDR (standard)' }, { value: HDR_COLOR, label: 'HDR PQ — Early Access' }]} onChange={onChange} />
+    </Row>
+    {value === HDR_COLOR && <div class="callout" role="status">
+      <p>10-bit HEVC, BT.2020/PQ. The preview remains tone-mapped SDR. Supports cuts, trims, video transforms, opacity, exposure, SDR images, titles and captions. Video effects, transitions, tracking, LOG/LUTs and recordings are not supported yet. Requires WebGL 2 with floating-point buffers. No extra download.</p>
+      {issues.slice(0, 5).map(issue => <p key={issue}>{issue}</p>)}
+    </div>}
+  </>;
 }
 
 export function ExportDialog() {
@@ -113,6 +129,7 @@ export function ExportDialog() {
   const [res, setRes] = useState(last?.res ?? base.res ?? 0);
   const [fps, setFps] = useState(base.fps || p.fps);
   const [sourceMedia, setSourceMedia] = useState(last?.sourceMedia || 'original');
+  const [color, setColor] = useState(last?.color || base.color || 'sdr');
   // Lydstyrkemål i LUFS (0 = av). YouTube-forhåndsinnstillingen velger -14.
   const [loudness, setLoudness] = useState(last?.loudness ?? base.loudness ?? 0);
   const [useRange, setUseRange] = useState(Boolean(p.range));
@@ -126,6 +143,8 @@ export function ExportDialog() {
   const pickPreset = (id) => {
     const pr = PRESETS.find((x) => x.id === id);
     setPreset(id);
+    setColor(pr.color || 'sdr');
+    if (pr.color === HDR_COLOR) setSourceMedia('original');
     if (pr.format) setFormat(pr.format);
     if (pr.audioFormat) setAudioFormat(pr.audioFormat);
     setQuality(pr.quality);
@@ -140,7 +159,7 @@ export function ExportDialog() {
   const a = useRange && p.range ? p.range.in : 0;
   const b = useRange && p.range ? p.range.out : p.duration;
   const duration = Math.max(0, b - a);
-  const settingsObj = { preset, format, audioFormat, quality, res, fps, audioOnly, sourceMedia, loudness };
+  const settingsObj = { preset, format, audioFormat, quality, res, fps, audioOnly, sourceMedia, loudness, color };
   const size = useMemo(() => estimateSize(settingsObj, duration, w, h), [preset, format, audioFormat, quality, res, fps, duration, w, h]);
   const ext = audioOnly ? afmt.ext : fmt.ext;
 
@@ -250,6 +269,7 @@ export function ExportDialog() {
                 <Select value={format} options={VIDEO_FORMATS.map((f) => ({ value: f.id, label: f.label }))} onChange={setFormat} />
               </Row>
               <p class="hint right">{fmt.note}</p>
+              <ExportColorChoice project={p} settings={{ ...settingsObj, range: useRange && p.range ? p.range : null }} value={color} onChange={v => { setColor(v); if (v === HDR_COLOR) { setFormat('mp4-hevc'); setSourceMedia('original'); } }} />
               <Row label="Resolution">
                 <Select value={String(res)} options={resOptions.map((o) => ({ value: String(o.value), label: o.label }))} onChange={(v) => setRes(Number(v))} />
               </Row>
@@ -257,7 +277,7 @@ export function ExportDialog() {
                 <Select value={String(fps)} options={[...new Set([p.fps, 15, 24, 25, 30, 50, 60])].sort((x, y) => x - y).map((f) => ({ value: String(f), label: f === p.fps ? `${f} (project)` : String(f) }))} onChange={(v) => setFps(Number(v))} />
               </Row>
               <FrameRateWarning project={p} fps={fps} candidates={[p.fps, 24, 25, 30, 50, 60]} onUse={setFps} />
-              <SourceMediaChoice project={p} value={sourceMedia} onChange={setSourceMedia} />
+              <SourceMediaChoice project={p} color={color} value={sourceMedia} onChange={setSourceMedia} />
             </>
           )}
           {!(audioOnly && (audioFormat === 'wav' || audioFormat === 'flac')) && format !== 'mov-prores' && (

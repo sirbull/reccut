@@ -1171,7 +1171,8 @@ async function renderProject(payload, ctx) {
     if (m.kind === 'image') continue;
     for (const st of Object.values(m.streams)) if (st.hasVideo && st.needsProxy) st.decodeFilters = ff.decodeFilters(st);
   }
-  for (const c of payload.settings.frame ? [] : Object.values(p.clips)) {
+  // HDR reads originals at source time; the reversed editing copy is tone-mapped SDR.
+  for (const c of payload.settings.frame || payload.settings.color === 'hdr-pq' ? [] : Object.values(p.clips)) {
     const m = c.reverse && !p.media[c.mediaId]?.offline && p.media[c.mediaId];
     if (!m) continue;
     for (const [key, st] of Object.entries(m.streams)) {

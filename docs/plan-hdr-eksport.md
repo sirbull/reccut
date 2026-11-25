@@ -1,6 +1,34 @@
 # Plan: Eksport i HDR (PQ og HLG)
 
-Status: Windows-utprøvingen er gjennomført 24. november 2026. HDR-eksport i produktet er ikke implementert. Opprinnelig plan skrevet 13. november 2026.
+Status: Første avgrensede PQ-eksport er implementert som «HDR PQ (Early Access)» 24. november 2026. Full HDR-redigering og HDR10-mastering er ikke ferdig. Opprinnelig plan skrevet 13. november 2026.
+
+## Første implementasjon
+
+Produktets eksportarbeider bruker nå originalvideo → FFmpeg float32 → lineær BT.2020 i WebGL2/RGBA16F → FFmpeg HEVC Main10/PQ. Referansehvitt er 203 nit. HLG-inngang korrigeres med luminansavhengig OOTF (1000 nit/gamma 1,2) før interpolering. SDR er fortsatt standard, og forhåndsvisningen er fortsatt SDR. Valget ligger i eksportrommet og Easy Export, i Quick Search og hos agenten som `export:hdr`.
+
+Dette er en avgrenset del av I1–I5: kutt/trimming, fart, vanlig videogeometri, opasitet, fades og lineær eksponering, med SDR-rasteriserte bilder/titler/undertekster og eksisterende lydmiks. Forhåndskontroll avviser øvrige videoeffekter/fargekorrigering, overganger, tracking, slideshows, andre blend modes, kamera-LUT/LOG, opptaksklipp og videoalfa. SDR-kopier kan ikke brukes som HDR-originaler. Ingen mastering display-/CLL-verdier konstrueres; bare faktiske PQ-/BT.2020-tagger settes. HDR10-mastering, HLG-utgang, full effektstøtte, ytelsesgodkjenning og fysisk HDR-avspilling gjenstår.
+
+`scripts/test-hdr-export.cjs` kjører den faktiske bygde eksportarbeideren i Electron med isolert profil og uavhengige syntetiske PQ-/HLG-felt. Den kontrollerer lysverdier, primærfarger, lineær eksponering/alfablanding, SDR-referansehvitt, bilderekkefølge etter trimming og reversering, 10-bit-/PQ-metadata og avvisning av ustøttede redigeringer. `--samples` tester MP4-kontrollklipp uten å endre originalene; `--baseline-ref` sammenligner dekodede SDR-bilder med eksportarbeideren fra en angitt Git-revisjon. `test/hdr.test.mjs` kontrollerer referansematematikk, innstillinger og forhåndskontroll.
+
+### Kontrollert 25. november 2026
+
+[Resultater fra produktets eksportarbeider](hdr-export-validation.json), Windows/Electron 45.1.0, AMD Radeon PRO/D3D11:
+
+- PQ-felt og primærfarger har høyst 1,766 % relativ feil eller feil målt mot referansehvitt; HLG → PQ har høyst 1,263 %. Dette inkluderer den faktiske tapskodingen med HEVC, ikke bare en matematisk rundtur.
+- Et 1000-nit-felt blir 501,64 nit ved −1 stopp, og blandingen 50 % av 1000 og 250 nit blir 626,21 nit (forventet 625). En hvit SDR-bildeflate ved 50 % opasitet blir 101,05 nit (forventet 101,5).
+- Trimming og baklengs avspilling har riktig kildebilde i samtlige kontrollerte bilder. Testen fant og rettet en feil ved rekonstruksjon av tidsstempler etter FFmpeg-søk; HDR bruker nå opprinnelige, heltallsbaserte tidsstempler.
+- Begge MP4-filene fra brukerens testmappe ble eksportert som både SDR og PQ, med lydmiks/muksing. SDR-bildene er identiske med eksportarbeideren i `c50a05d` målt med dekodet `framemd5`. Originalenes størrelse og endringstid er uendret. Disse klippene er SDR-kontroller, ikke dokumentasjon på ekte HDR-innhold.
+- `scripts/test-hdr-ui.cjs` kontrollerte den virkelige appen med isolert profil: Quick Search kjører HDR-kommandoen, forhåndsinnstillingen velger PQ/HEVC, Standard gjenoppretter SDR, og HDR-veiledningen vises både i håndbokvinduet og på den genererte Docs-siden. Ingen modellnedlasting.
+- Bygg og relevante tester for HDR, eksportrom, formater, bildeeksport, prosjektmodell, lyd, Quick Search, agent og generert dokumentasjon består.
+
+Gjenta etter `npm run build` og `npm run docs`:
+
+```powershell
+node scripts/test-hdr-export.cjs --ffprobe C:/path/to/ffprobe.exe --samples C:/path/to/samples --baseline-ref c50a05d
+node scripts/test-hdr-ui.cjs
+```
+
+Alle videoutfiler og testprofiler skrives til en ny midlertidig mappe. Kjøring uten `--samples` trenger bare syntetisk materiale. Dette er korte korrekthetstester ved 320×180 ut, også når kontrollkilden er 4K. De godkjenner ikke lange 4K-jobber, total RAM/VRAM, HDR-skjerm, andre operativsystemer eller en leveranseplattform.
 
 ## Resultat og valg etter Windows-utprøvingen
 
@@ -28,7 +56,7 @@ HLG-testen bruker en 1000-nits skjerm, systemgamma 1,2 og svartnivå 0. HLG er r
 
 **Ikke godkjent eller utført:** Mac/Linux-matrisen, full minnemåling, ytelse i den ferdige HDR-kompositoren, avspilling som HDR i QuickTime/Windows-spiller/VLC, fysisk HDR-skjerm og brukerens private YouTube-opplasting. Kodektesten er teknisk bestått på Windows; den er ikke en offentlig HDR-kompatibilitetsgodkjenning.
 
-Neste arbeid er fase I1 og deretter den lineære WebGL-veien, med HLG-korreksjonen og SDR-regresjonstester som eksplisitte krav. HDR-valg skal fortsatt ikke vises i produktet før fargekjeden, ytelsen og eksportvalgene er ferdige.
+Opprinnelig anbefaling etter utprøvingen var I1, deretter lineær WebGL, HLG-korreksjon og SDR-regresjonstester før et fullt HDR-valg. Den avgrensede implementasjonen over er nå tilgjengelig som eksplisitt Early Access med forhåndskontroll; dette betyr ikke at I1–I5 eller ytelseskravene under er fullt godkjent.
 
 Målet er at Reccut kan eksportere HDR-video (HDR10/PQ og HLG) med riktig metadata, uten at HDR-klippene først tonemappes til SDR. SDR-eksport skal fungere som før, og være standard.
 

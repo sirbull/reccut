@@ -613,7 +613,7 @@ The files are saved in the Optimized Media folder of the project and used for pl
 
 You can also choose Create optimized media when you import.
 
-**Proxies and export.** Formats the preview cannot play directly, such as ProRes, DNxHD, MPEG-2, interlaced and HDR video, get a proxy when you import them: a copy of at most 1920 pixels that is light to edit. H.264, HEVC, VP9 and AV1 play directly. By default the export reads the original files, also ProRes, so the proxy never limits the quality. The proxy and the export prepare the picture the same way (HDR is tone mapped, other color spaces become Rec. 709), so color corrections look the same in the export as in the preview. Choose **Source media › Optimized media** in the export settings for a faster export from the copies you edit with; files that only have a proxy are then at most 1920 pixels. If an original is missing, the export uses the proxy or optimized media.
+**Proxies and export.** Formats the preview cannot play directly, such as ProRes, DNxHD, MPEG-2, interlaced and HDR video, get a proxy when you import them: a copy of at most 1920 pixels that is light to edit. H.264, HEVC, VP9 and AV1 play directly. By default the export reads the original files, also ProRes, so the proxy never limits the quality. With **SDR** output, the proxy and export prepare the picture the same way: HDR is tone mapped and other color spaces become Rec. 709. Choose **Source media › Optimized media** for a faster SDR export from the copies you edit with; proxy-only files are then at most 1920 pixels. If an original is missing, SDR export can use a copy. **HDR PQ** always requires the original and bypasses the SDR tone mapper; see HDR, 10-bit and RAW for its current limits.
 
 [[run:optimize|Optimize Selected Media]]
 `,
@@ -626,7 +626,19 @@ You can also choose Create optimized media when you import.
     summary: 'How Reccut handles HDR video, 10-bit clips and camera RAW photos.',
     keywords: 'hdr pq hlg 10 bit raw dng cr2 nef arw tone mapping log lut cube apple log slog s-log3 vlog flog logc braw r3d prores raw',
     body: `
-**HDR video** (PQ and HLG, for example from iPhones and mirrorless cameras) is detected when you import it, and marked HDR in the browser. Reccut shows and exports it tone mapped to normal SDR, so it looks right on every screen, and keeps 10 bits in the working copy for color correction. Exporting in HDR is not supported yet.
+**HDR video** (PQ and HLG, for example from iPhones and mirrorless cameras) is detected on import and marked HDR in the browser. Editing and the Export preview remain tone-mapped SDR. SDR is still the default output.
+
+## Export HDR PQ (Early Access)
+
+Open **Export → Preset → HDR PQ (Early Access)**, or search for **Prepare HDR PQ Export** in Quick Search. You can also choose **Output color → HDR PQ — Early Access**. This selects HEVC and Originals. Choose the size, frame rate, range and destination, then export. The AI Agent can prepare the same preset with the registered command.
+
+The output is 10-bit HEVC with BT.2020 primaries and PQ transfer in MP4, MOV or MKV. Original PQ highlights are preserved. HLG input is converted to PQ using a nominal 1000-nit display, system gamma 1.2 and zero black. HLG output is not available yet. There is no additional model or codec download. The graphics device must support WebGL 2 and floating-point color buffers.
+
+This first stage supports video cuts and trims, speed changes, position, scale, rotation, crop, anchor, opacity, fades and exposure, plus SDR images, titles, captions and the existing audio mix. Video exposure and layer compositing operate in linear light. SDR graphics use a 203-nit reference white; placing SDR video in a PQ file does not create additional highlight detail. Untagged video is treated as limited-range BT.709.
+
+**Current limits:** video effects, other video color corrections, transitions, tracking links, slideshows, non-Normal blend modes, camera LOG/LUTs, screen-recording clips and video alpha are not supported by HDR export yet. The export stops and identifies unsupported edits instead of dropping them. Originals must be available; SDR proxies cannot replace them. HDR still-image formats are not developed as HDR sources. Existing image/title styling is rasterized as SDR before linear layer compositing.
+
+PQ signals encode up to 10,000 nits. Export writes the actual PQ/BT.2020 signal tags but does not invent mastering-display or content-light metadata. This is early-access PQ export, not a certified HDR10 mastering workflow. Export is currently software-encoded and can be slow, especially at 4K. The preview and scopes do not show the delivered HDR luminance. Check the resulting file on an HDR-capable display and player; Mac/Linux and physical HDR playback still need validation.
 
 **10-bit clips** keep their precision: optimized media stays 10-bit, and color correction is calculated in 16-bit floating point.
 

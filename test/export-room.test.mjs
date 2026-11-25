@@ -67,3 +67,20 @@ test('preparing another project clears a previous range and uses the new sequenc
   assert.equal(s.settings.value.fps, 23.976);
   assert.equal(s.sourceOptions(s.PROJECT_SOURCE).range, null);
 });
+
+test('HDR preset requires originals and regular presets reset output to SDR', () => {
+  const { s, starts } = setup();
+  s.setSettings({ sourceMedia: 'optimized', audioOnly: true });
+  s.applyPreset('hdr-pq');
+  assert.equal(s.settings.value.color, 'hdr-pq');
+  assert.equal(s.settings.value.format, 'mp4-hevc');
+  assert.equal(s.settings.value.sourceMedia, 'original');
+  assert.equal(s.settings.value.audioOnly, false);
+  assert.equal(starts(), 0);
+  s.applyPreset('standard');
+  assert.equal(s.settings.value.color, 'sdr');
+  assert.equal(s.settings.value.format, 'mp4-h264');
+  s.applyPreset('hdr-pq');
+  s.prepareProjectExport();
+  assert.equal(s.settings.value.color, 'sdr', 'opening a regular project export keeps the safe default');
+});

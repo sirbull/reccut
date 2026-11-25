@@ -1,0 +1,351 @@
+{
+  "date": "2026-11-25T08:47:05.519Z",
+  "productWorker": true,
+  "cases": [
+    {
+      "name": "pq input → PQ",
+      "maxRelativeOrWhiteError": 0.017664670944213423,
+      "seconds": 13.567,
+      "fields": [
+        {
+          "name": "0 nits",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "measured": [
+            0,
+            0,
+            0
+          ],
+          "relativeOrWhiteError": 0
+        },
+        {
+          "name": "100 nits",
+          "expected": [
+            0.49261083743842365,
+            0.49261083743842365,
+            0.49261083743842365
+          ],
+          "measured": [
+            0.4922050535678861,
+            0.4922050535678861,
+            0.4922050535678861
+          ],
+          "relativeOrWhiteError": 0.00040578387053757936
+        },
+        {
+          "name": "203 nits",
+          "expected": [
+            1,
+            1,
+            1
+          ],
+          "measured": [
+            1.0034980773925781,
+            1.0034980773925781,
+            1.0034980773925781
+          ],
+          "relativeOrWhiteError": 0.003498077392578125
+        },
+        {
+          "name": "400 nits",
+          "expected": [
+            1.9704433497536946,
+            1.9704433497536946,
+            1.9704433497536946
+          ],
+          "measured": [
+            1.977393746376038,
+            1.977393746376038,
+            1.977393746376038
+          ],
+          "relativeOrWhiteError": 0.003527326285839288
+        },
+        {
+          "name": "1000 nits",
+          "expected": [
+            4.926108374384237,
+            4.926108374384237,
+            4.926108374384237
+          ],
+          "measured": [
+            4.946972370147704,
+            4.946972370147704,
+            4.946972370147704
+          ],
+          "relativeOrWhiteError": 0.00423539113998391
+        },
+        {
+          "name": "4000 nits",
+          "expected": [
+            19.704433497536947,
+            19.704433497536947,
+            19.704433497536947
+          ],
+          "measured": [
+            19.77483940124512,
+            19.77483940124512,
+            19.77483940124512
+          ],
+          "relativeOrWhiteError": 0.0035730996131898367
+        },
+        {
+          "name": "10000 nits",
+          "expected": [
+            49.26108374384236,
+            49.26108374384236,
+            49.26108374384236
+          ],
+          "measured": [
+            49.261085510253906,
+            49.261085510253906,
+            49.261085510253906
+          ],
+          "relativeOrWhiteError": 3.585815432813888e-8
+        },
+        {
+          "name": "BT.2020 red",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "measured": [
+            1.0176646709442134,
+            0,
+            0
+          ],
+          "relativeOrWhiteError": 0.017664670944213423
+        },
+        {
+          "name": "BT.2020 green",
+          "expected": [
+            0,
+            1,
+            0
+          ],
+          "measured": [
+            7.512134629905636e-7,
+            0.9942182183265684,
+            5.663826270208005e-8
+          ],
+          "relativeOrWhiteError": 0.005781781673431574
+        },
+        {
+          "name": "BT.2020 blue",
+          "expected": [
+            0,
+            0,
+            1
+          ],
+          "measured": [
+            0,
+            0,
+            0.9953526258468627
+          ],
+          "relativeOrWhiteError": 0.004647374153137318
+        }
+      ]
+    },
+    {
+      "name": "linear exposure and two-layer alpha",
+      "minusOneStopNits": 501.6391265392302,
+      "blendNits": 626.2104322910308
+    },
+    {
+      "name": "unsupported grading and SDR proxies rejected",
+      "passed": true
+    },
+    {
+      "name": "hlg input → PQ",
+      "maxRelativeOrWhiteError": 0.012626290321350098,
+      "seconds": 5.951,
+      "fields": [
+        {
+          "name": "0 nits",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "measured": [
+            0,
+            0,
+            0
+          ],
+          "relativeOrWhiteError": 0
+        },
+        {
+          "name": "20 nits",
+          "expected": [
+            0.09852216748768473,
+            0.09852216748768473,
+            0.09852216748768473
+          ],
+          "measured": [
+            0.09884866327047351,
+            0.09884866327047351,
+            0.09884866327047351
+          ],
+          "relativeOrWhiteError": 0.00032649578278877434
+        },
+        {
+          "name": "100 nits",
+          "expected": [
+            0.49261083743842365,
+            0.49261083743842365,
+            0.49261083743842365
+          ],
+          "measured": [
+            0.4922050535678861,
+            0.4922050535678861,
+            0.4922050535678861
+          ],
+          "relativeOrWhiteError": 0.00040578387053757936
+        },
+        {
+          "name": "203 nits",
+          "expected": [
+            1,
+            1,
+            1
+          ],
+          "measured": [
+            1.0034980773925781,
+            1.0034980773925781,
+            1.0034980773925781
+          ],
+          "relativeOrWhiteError": 0.003498077392578125
+        },
+        {
+          "name": "400 nits",
+          "expected": [
+            1.9704433497536946,
+            1.9704433497536946,
+            1.9704433497536946
+          ],
+          "measured": [
+            1.977393746376038,
+            1.977393746376038,
+            1.977393746376038
+          ],
+          "relativeOrWhiteError": 0.003527326285839288
+        },
+        {
+          "name": "700 nits",
+          "expected": [
+            3.4482758620689653,
+            3.4482758620689653,
+            3.4482758620689653
+          ],
+          "measured": [
+            3.4271190166473393,
+            3.4271190166473393,
+            3.4271190166473393
+          ],
+          "relativeOrWhiteError": 0.006135485172271538
+        },
+        {
+          "name": "1000 nits",
+          "expected": [
+            4.926108374384237,
+            4.926108374384237,
+            4.926108374384237
+          ],
+          "measured": [
+            4.9771020889282225,
+            4.935139846801758,
+            4.946972370147704
+          ],
+          "relativeOrWhiteError": 0.010351724052429121
+        },
+        {
+          "name": "BT.2020 red",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "measured": [
+            1.01262629032135,
+            2.6608077519085793e-7,
+            0.0000061148462009441616
+          ],
+          "relativeOrWhiteError": 0.012626290321350098
+        },
+        {
+          "name": "BT.2020 green",
+          "expected": [
+            0,
+            1,
+            0
+          ],
+          "measured": [
+            1.2180454689314502e-8,
+            1.001067340373993,
+            2.2251137770656901e-7
+          ],
+          "relativeOrWhiteError": 0.00106734037399292
+        },
+        {
+          "name": "BT.2020 blue",
+          "expected": [
+            0,
+            0,
+            1
+          ],
+          "measured": [
+            9.63993784353079e-7,
+            6.559051541898955e-8,
+            0.9941417455673217
+          ],
+          "relativeOrWhiteError": 0.005858254432678289
+        }
+      ]
+    },
+    {
+      "name": "203 nit SDR reference white",
+      "videoWhite": 204.97061252593994,
+      "imageWhite": 201.4581418633461,
+      "imageHalfWhite": 101.04556995630264,
+      "titleWhite": 190.73999601602554,
+      "captionWhite": 201,
+      "textMeasurement": "Caption uses modal opaque-interior nits; lossy HEVC edge ringing is excluded."
+    },
+    {
+      "name": "original frame timing after trim and reverse",
+      "forwardNits": [
+        501.63912653923035,
+        600.3191604614258,
+        702.942403793335,
+        797.4256660938263
+      ],
+      "reverseNits": [
+        904.3603382110596,
+        797.4256660938263,
+        702.942403793335,
+        600.3191604614258
+      ]
+    },
+    {
+      "name": "SDR control: 12618384_1920_1080_25fps.mp4",
+      "hdrAndSdrExport": true,
+      "audioMuxed": true,
+      "originalUnchanged": true,
+      "sdrFramesMatchBaseline": true
+    },
+    {
+      "name": "SDR control: 72398-542491316.mp4",
+      "hdrAndSdrExport": true,
+      "audioMuxed": true,
+      "originalUnchanged": true,
+      "sdrFramesMatchBaseline": true
+    }
+  ],
+  "platform": "win32",
+  "electron": "45.1.0",
+  "gpu": "ANGLE (AMD, AMD Radeon PRO Graphics (0x00001681) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "sdrBaselineRef": "c50a05d"
+}

@@ -39,7 +39,7 @@ import { feedPreview, showSafeZones, canFeedPreview, toggleFeedPreview, toggleSa
 import { chooseImage, pasteImage, copyLayers } from './design/assets.js';
 import { toggleViewerFullscreen } from './editor/fullscreen.js';
 import { LAYOUTS, modifierInfo, settings as recordSettings } from './recorder/settings.js';
-import { addFiles, roomActions } from './export/state.js';
+import { addFiles, applyPreset, prepareProjectExport, roomActions } from './export/state.js';
 import { boothOpen, openBooth } from './voiceover/state.js';
 import { aiChatOpen } from './aiChatOpen.js';
 import { openQuick } from './voiceover/quick.js';
@@ -262,6 +262,7 @@ export const COMMANDS = [
 
   /* Export */
   { id: 'export:start', label: 'Export', menu: 'Export', keys: 'CmdOrCtrl+E', register: true, allowWhileTyping: true, rooms: EXPORT, run: () => roomActions.start(), help: 'export', desc: 'Export the selected project or file with the settings in the Export room.' },
+  { id: 'export:hdr', label: 'Prepare HDR PQ Export', menu: 'File', rooms: [...EDIT, ...EXPORT], allowWhileTyping: true, keywords: 'hdr pq 10 bit bt2020 hevc highlights high dynamic range', desc: 'Open the project in Export with the early-access HDR PQ preset. Preserves HDR highlights from original PQ/HLG video with supported basic edits; preview stays SDR. Review the settings, then export.', help: 'hdr', run: () => { prepareProjectExport(); applyPreset('hdr-pq'); } },
   { id: 'export:addFiles', label: 'Import Files to Convert', menu: 'Export', keys: 'CmdOrCtrl+I', register: true, rooms: EXPORT, run: () => api.openMediaDialog().then(addFiles), help: 'export' },
 
   /* Mark */
