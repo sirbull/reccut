@@ -13,5 +13,5 @@ export async function startExportWithThumbnail(p,settings,thumbnailId=null,{api=
  };
  cleanup.push(api.onExportDone(done));
  cleanup.push(api.onTasks(tasks=>{const task=tasks.find(t=>t.id===id);if(task&&['canceled','error'].includes(task.state))stop();}));
- try{id=await api.startExport({project:p,settings});early.forEach(done);return id;}catch(err){stop();throw err;}
+ try{id=await api.startExport({project:p,settings});if(id===null){stop();return null;}early.forEach(done);return id;}catch(err){stop();throw err;}
 }

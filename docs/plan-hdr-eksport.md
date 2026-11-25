@@ -55,6 +55,14 @@ Alle videoutfiler og testprofiler skrives til en ny midlertidig mappe. Kjøring 
 
 ## Resultat og valg etter Windows-utprøvingen
 
+### HDR-skjerm: ny visningsprøve 25. november 2026
+
+En isolert Electron 45.1.0/Chromium 156-prøve på AMD RDNA 2 bekrefter at WebGPU kan konfigurere en faktisk canvas-overflate med `rgba16float`, `toneMapping: { mode: 'extended' }` og bevare kanalverdiene `[5, 2, 1, 1]` i overflatens GPU-tekstur. Dette er verken en måling av utsendt skjermlys eller ferdig HDR-forhåndsvisning. Testmiljøet rapporterer bare en 8-bits SDR-visning og `dynamic-range: high = false`. Resultatet ligger i [hdr-display-spike-results.json](hdr-display-spike-results.json). Ingen eksperimentelle funksjonsflagg ble slått på.
+
+WebGLs `drawingBufferToneMapping` finnes ikke i denne versjonen. Den separate prøvebanen for `drawingBufferStorage` ga GL-feil og regnes ikke som en godkjent presentasjonsvei. WebGPU er derfor den bekreftede API-kandidaten til skjermpresentasjon. Chrome dokumenterer HDR-canvas med WebGPU her: https://developer.chrome.com/blog/new-in-webgpu-129.
+
+Neste produktsteg er en visningsbro fra den lineære HDR-komposisjonen til WebGPU, med uttrykkelig kontroll av overføringsfunksjon, primærfarger og referansehvitt. Den må håndtere HDR/SDR automatisk per visningsvindu og skifte når et vindu flyttes mellom skjermer, samt tilby SDR-kontrollvisning. Dagens separate forhåndsvisning bruker `canvas.captureStream` og WebRTC fra SDR-canvas; å bare merke mottakervinduet som HDR vil ikke gjenopprette tapte høylys. HDR-komposisjonen må føres til HDR-visningen før denne SDR-kopieringen. Ytelse og faktisk lys-/fargegjengivelse må kontrolleres på en HDR-skjerm med HDR aktivert, også etter skjermbytte. Dette er fortsatt planlagt arbeid, ikke implementert produktstøtte.
+
 **Velg vei C som kandidat på Windows: sammensetting i lineært lys i WebGL2/RGBA16F, med flyttallsdekoding og HDR-koding gjennom FFmpeg.** Et bytte til float16-Canvas alene er ikke tilstrekkelig. Arkitekturen må kontrolleres på Mac og Linux før valget regnes som verifisert der.
 
 Målingene finnes i [hdr-spike-results.json](hdr-spike-results.json), siste validerte kjøring. [Kjøreskript og metode](../scripts/hdr-spike/README.md) beskriver hvordan de kan gjentas. Testen kjører isolert, bruker bare syntetisk materiale og endrer ingen produktkode eller brukerprosjekter. Binærfiler og videomateriale ligger bare i en midlertidig mappe; rapporten inneholder ikke brukerens lokale filstier.

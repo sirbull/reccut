@@ -250,9 +250,9 @@ export function PluginsButton() {
   const list = allPlugins.value.filter((p) => pluginRoom(p) === r);
   return (
     <div class="tasks" ref={ref}>
-      <button class="btn secondary small" aria-expanded={open} onClick={() => setOpen(!open)} title={`${name} plugins: tools for this section, installed or made with the AI Agent`}>
+      <button class="btn secondary small plugins-btn" aria-label="Plugins" aria-expanded={open} onClick={() => setOpen(!open)} title={`${name} plugins: tools for this section, installed or made with the AI Agent`}>
         <Puzzle size={14} />
-        Plugins
+        <span class="fold-1">Plugins</span>
       </button>
       {open && (
         <div class="popover plugins-pop">

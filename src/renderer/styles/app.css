@@ -2303,6 +2303,7 @@ input[type='color'].color::-webkit-color-swatch {
 
 .tasks {
   position: relative;
+  min-width: 48px;
 }
 .tasks-btn {
   display: flex;
@@ -2312,9 +2313,19 @@ input[type='color'].color::-webkit-color-swatch {
   background: var(--bg-1);
   border-radius: 7px;
   height: 28px;
+  max-width: 100%;
   padding: 0 10px;
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
+}
+.tasks-btn > svg {
+  flex-shrink: 0;
+}
+.tasks-btn > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tasks-btn.busy {
   color: var(--text);
@@ -2538,6 +2549,38 @@ input[type='color'].color::-webkit-color-swatch {
 .slider.scrub {
   flex: 1;
 }
+.ex-scrub {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.ex-scrub .slider.scrub {
+  width: 100%;
+}
+.ex-range-handle {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 18px;
+  margin-top: -9px;
+  border: 2px solid var(--accent);
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 1;
+}
+.ex-range-handle.in {
+  margin-left: -7px;
+  border-right: none;
+  border-radius: 3px 0 0 3px;
+}
+.ex-range-handle.out {
+  border-left: none;
+  border-radius: 0 3px 3px 0;
+}
+.ex-range-handle:hover {
+  border-color: var(--text);
+}
 .play-btn.small {
   width: 28px;
   height: 28px;
@@ -2671,7 +2714,7 @@ input[type='color'].color::-webkit-color-swatch {
   display: none;
   position: absolute;
   left: 0;
-  top: 26px;
+  top: 0;
   width: 1px;
   background: #ff9f0a;
   box-shadow: 0 0 4px rgba(255, 159, 10, 0.8);
@@ -7472,3 +7515,26 @@ button.vo-badge { border: 0; cursor: pointer; }
 .fs-inspector { min-height: 0; overflow-y: auto; border-left: 1px solid var(--line); padding: 4px 14px 14px; background: var(--bg-1); }
 .fs-inspector h4 { margin: 12px 0 4px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ruler-preview { position: absolute; bottom: 0; height: 3px; background: #52c78a; pointer-events: none; }
+
+/* Tittellinjen når vinduet er smalt: useFitTitleBar i app.jsx setter c1 til c5 til alt passer. Prosjektnavnet
+   krymper først, så forsvinner tekstene trinnvis (ikonene og verktøytipsene blir igjen). Ingenting overlapper. */
+.titlebar > * { flex-shrink: 0; }
+.titlebar > .spacer { flex: 1 1 0; min-width: 0; }
+.titlebar > .project-btn { flex-shrink: 1; min-width: 120px; }
+.titlebar.c1 .fold-1 { display: none; }
+.titlebar.c1 .plugins-btn, .titlebar.c1 .ai-btn { padding: 0 7px; }
+.titlebar.c2 { gap: 10px; }
+.titlebar.c2 .rooms button:not(.active) .room-label { display: none; }
+.titlebar.c2 .rooms button:not(.active) { padding: 5px 9px; }
+.titlebar.c3 .fold-3 { display: none; }
+.titlebar.c3 .actions .btn.primary, .titlebar.c3 .actions > .btn.secondary { padding: 0 9px; }
+.titlebar.c3 .record-btn kbd { display: none; }
+.titlebar.c4 { gap: 6px; padding-right: 8px; }
+.titlebar.c4 .fold-4 { display: none; }
+.titlebar.c4 .room-label { display: none; }
+.titlebar.c4 .rooms button { padding: 5px 9px; }
+.titlebar.c4 .project-btn { margin-left: 0; }
+.titlebar.c4 .help-btn { margin-right: 0; }
+.titlebar.c5 .fold-5 { display: none; }
+.titlebar.c5 > .project-btn { min-width: 0; }
+.titlebar.c5 .actions .sep { display: none; }

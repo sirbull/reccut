@@ -277,6 +277,23 @@ export function Timeline() {
     return onTime(place);
   }, [z]);
 
+  // Når avspillingen stopper med spillhodet langt til høyre, rulles visningen så spillhodet
+  // står i det gylne snitt fra venstre, og man ser hva som kommer. Bare når mer enn
+  // 8 sekunder av tidslinjen er synlig; ved tett zoom er det ingen vits.
+  useEffect(() => {
+    let was = playing.value;
+    return playing.subscribe((now) => {
+      const stopped = was && !now;
+      was = now;
+      const sc = scrollRef.current;
+      if (!stopped || !sc || sc.clientWidth / pps.value <= 8) return;
+      const x = tx(getTime()) - sc.scrollLeft;
+      const golden = sc.clientWidth * 0.382;
+      if (x <= sc.clientWidth * 0.618) return;
+      sc.scrollTo({ left: Math.max(0, sc.scrollLeft + x - golden), behavior: 'smooth' });
+    });
+  }, []);
+
   useEffect(() => {
     const sc = scrollRef.current;
     const update = () => (view.value = { left: sc.scrollLeft, width: sc.clientWidth });
@@ -581,10 +598,18 @@ export function Timeline() {
       const over = tool.value === 'blade' && !d && e.target.closest('[data-clip]');
       bladeRef.current.style.display = over ? 'block' : 'none';
       if (over) {
-        const r = e.target.closest('[data-clip]').getBoundingClientRect();
+        // Hele klippet, ikke bare delen under pekeren (etikett, lydstyrkelinje,
+        // nøkkelbilder) og med det løsrevne lydbåndet.
+        const id = over.getAttribute('data-clip');
+        let top = Infinity, bottom = -Infinity;
+        for (const el of contentRef.current.querySelectorAll(`[data-hit="clip"][data-clip="${CSS.escape(id)}"]`)) {
+          const r = el.getBoundingClientRect();
+          top = Math.min(top, r.top);
+          bottom = Math.max(bottom, r.bottom);
+        }
         const crect = contentRef.current.getBoundingClientRect();
-        bladeRef.current.style.transform = `translate(${tx(snap(T).t)}px, ${r.top - crect.top}px)`;
-        bladeRef.current.style.height = `${r.height}px`;
+        bladeRef.current.style.transform = `translate(${tx(snap(T).t)}px, ${top - crect.top}px)`;
+        bladeRef.current.style.height = `${bottom - top}px`;
       }
     }
     // Skumming: visningen følger pekeren, og lyden spilles i korte utdrag.

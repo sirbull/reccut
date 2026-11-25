@@ -1,7 +1,7 @@
 // Eksport: velg en forhåndsinnstilling, juster om du vil, og trykk Eksporter.
 import { useMemo, useState } from 'preact/hooks';
 import { Apple, Feather, FileVideo, Film, FolderOpen, Gem, Globe, Image as ImageIcon, Music } from 'lucide-preact';
-import { CAPTION_LANE, formatDuration } from '../../shared/model.js';
+import { CAPTION_LANE, clampRange, exportFileName, exportRangeProblem, formatDuration } from '../../shared/model.js';
 import { AUDIO_FORMATS, CAPTION_EXPORT, CAPTION_EXPORT_AUDIO, PRESETS, QUALITIES, VIDEO_FORMATS, estimateSize, formatBytes, frameRateCheck, mediaCopies, outputSize } from '../../shared/formats.js';
 import { project, projectFolders, room } from './store.js';
 import { prefs } from '../prefs.js';
@@ -140,9 +140,10 @@ export function ExportDialog() {
   // Lydstyrkemål i LUFS (0 = av). YouTube-forhåndsinnstillingen velger -14.
   const [loudness, setLoudness] = useState(last?.loudness ?? base.loudness ?? 0);
   const [useRange, setUseRange] = useState(Boolean(p.range));
+  const range = clampRange(p.range, p.duration);
   const hasCaptions = Object.values(p.clips).some((c) => c.lane === CAPTION_LANE);
   const [captions, setCaptions] = useState(hasCaptions ? 'burn' : 'none');
-  const [name, setName] = useState(p.name);
+  const [name, setName] = useState(exportFileName(p));
   const [thumbnailId,setThumbnailId]=useState(null),[preparing,setPreparing]=useState(false);
   const [dir, setDir] = useState(last?.dir || null);
   const audioOnly = Boolean(base.audioOnly);
@@ -163,8 +164,8 @@ export function ExportDialog() {
   const fmt = VIDEO_FORMATS.find((f) => f.id === format);
   const afmt = AUDIO_FORMATS.find((f) => f.id === audioFormat);
   const { w, h } = outputSize(p, res);
-  const a = useRange && p.range ? p.range.in : 0;
-  const b = useRange && p.range ? p.range.out : p.duration;
+  const a = useRange && range ? range.in : 0;
+  const b = useRange && range ? range.out : p.duration;
   const duration = Math.max(0, b - a);
   const settingsObj = { preset, format, audioFormat, quality, res, fps, audioOnly, sourceMedia, loudness, color };
   const size = useMemo(() => estimateSize(settingsObj, duration, w, h), [preset, format, audioFormat, quality, res, fps, duration, w, h]);
@@ -174,8 +175,9 @@ export function ExportDialog() {
   for (const r of [2160, 1440, 1080, 720, 480]) if (r < Math.min(p.width, p.height)) resOptions.push({ value: r, label: `${r}p` });
 
   const doExport = async () => {
-    if (duration <= 0) {
-      toast('The timeline is empty. Add some clips first.');
+    const problem = exportRangeProblem(p, useRange ? p.range : null);
+    if (problem) {
+      toast(problem, { kind: 'error' });
       return;
     }
     const folder = dir || (await defaultExportDir());
@@ -184,12 +186,13 @@ export function ExportDialog() {
     let output = `${folder}${sep}${safe}.${ext}`;
     localStorage.setItem('exportSettings', JSON.stringify({ ...settingsObj, dir }));
     if(preparing)return;setPreparing(true);
-    try { await startExport(p, {
+    try { const jobId = await startExport(p, {
       ...settingsObj,
       output,
-      range: useRange && p.range ? p.range : null,
+      range: useRange && range ? range : null,
       captions: audioOnly ? (captions.includes('srt') ? 'srt' : captions === 'vtt' ? 'vtt' : 'none') : captions,
     }, audioOnly?null:thumbnailId);
+    if (jobId === null) return; // Brukeren ville ikke erstatte filen som fantes.
     exportOpen.value = false;
     toast('Exporting in the background. You can keep editing.', { timeout: 5000 }); } catch(err) { toast(`Could not start export: ${err.message}`,{kind:'error'}); } finally { setPreparing(false); }
   };
@@ -222,7 +225,7 @@ export function ExportDialog() {
             Cancel
           </Button>
           {hasCaptions && (
-            <Button variant="secondary" onClick={() => exportCaptionsOnly(p, { range: useRange && p.range ? p.range : null, captions, name, dir })}>
+            <Button variant="secondary" onClick={() => exportCaptionsOnly(p, { range: useRange && range ? range : null, captions, name, dir })}>
               Captions Only
             </Button>
           )}
@@ -276,7 +279,7 @@ export function ExportDialog() {
                 <Select value={format} options={VIDEO_FORMATS.map((f) => ({ value: f.id, label: f.label }))} onChange={setFormat} />
               </Row>
               <p class="hint right">{fmt.note}</p>
-              <ExportColorChoice project={p} settings={{ ...settingsObj, range: useRange && p.range ? p.range : null }} value={color} onChange={v => { setColor(v); if (v === HDR_COLOR) { setFormat('mp4-hevc'); setSourceMedia('original'); } }} />
+              <ExportColorChoice project={p} settings={{ ...settingsObj, range: useRange && range ? range : null }} value={color} onChange={v => { setColor(v); if (v === HDR_COLOR) { setFormat('mp4-hevc'); setSourceMedia('original'); } }} />
               <Row label="Resolution">
                 <Select value={String(res)} options={resOptions.map((o) => ({ value: String(o.value), label: o.label }))} onChange={(v) => setRes(Number(v))} />
               </Row>

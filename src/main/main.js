@@ -868,7 +868,7 @@ const designCleanup = require('./designCleanup');
 designCleanup.onCollected(value=>send('design:cutoutsCollected',value));
 ipcMain.handle('design:retainCutouts',(_e,id,paths)=>designCleanup.retain(id,paths));
 ipcMain.handle('design:discardCutout',(_e,file)=>designCleanup.discard(file));
-ipcMain.handle('design:videoThumbnail',(_e,file,data)=>require('./design').writeVideoThumbnail(file,data));
+ipcMain.handle('design:videoThumbnail',(_e,file,data)=>require('./design').writeVideoThumbnail(file,data,{replace:replacedOutputs.has(file)}));
 ipcMain.handle('design:readableImage', (_e, file) => media.readableImage(file));
 ipcMain.handle('design:imageExtensions', () => media.imageExtensions());
 ipcMain.handle('design:writeImage', async (_e, file, data) => designCleanup.register(await require('./design').writeImage(file, data)));
@@ -1200,15 +1200,73 @@ const previewRenderer = require('./previews').createPreviewRenderer({ root: path
 ipcMain.handle('preview:start', (_e, { project, ranges }) => previewRenderer.start(project, ranges));
 ipcMain.handle('preview:release', (_e, files) => previewRenderer.release(files));
 
-ipcMain.handle('export:start', (_e, payload) => {
-  payload = { ...payload, settings: { ...payload.settings, output: uniqueOutput(payload.settings.output) } };
+// Finnes filen fra før, spør vi før den erstattes. Stille eksporter (bilder til design) og eksporter der
+// brukeren allerede har svart i lagringsdialogen (overwrite), spør ikke. Erstatning skrives til en midlertidig
+// fil ved siden av, og den gamle filen byttes først når den nye er ferdig.
+const replacedOutputs = new Set();
+async function chooseOutput(settings) {
+  const file = settings.output;
+  const busy = reservedOutputs.has(file);
+  const exists = fs.existsSync(file);
+  if (settings.overwrite && !busy) return { output: file, replace: exists };
+  if (settings.quiet || (!exists && !busy)) return { output: uniqueOutput(file), replace: false };
+  const name = path.basename(file);
+  const buttons = busy ? ['Keep Both', 'Cancel'] : ['Replace', 'Keep Both', 'Cancel'];
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'warning',
+    buttons,
+    defaultId: buttons.length - 1,
+    cancelId: buttons.length - 1,
+    noLink: true,
+    title: 'File Already Exists',
+    message: busy ? `“${name}” is already being exported.` : `“${name}” already exists. Do you want to replace it?`,
+    detail: busy
+      ? 'Keep Both saves this export as a new file with a number added to its name.'
+      : `A file with the same name is already in ${path.dirname(file)}. Replace overwrites it when the new export has finished. Keep Both saves the new export with a number added to its name.`,
+  });
+  const choice = buttons[response];
+  if (choice === 'Cancel') return null;
+  if (choice === 'Replace') return { output: file, replace: true };
+  return { output: uniqueOutput(file), replace: false };
+}
+
+const SIDECARS = ['.srt', '.vtt'];
+function outputFiles(file) {
+  const base = file.slice(0, -path.extname(file).length);
+  return [file, ...SIDECARS.map((ext) => base + ext)];
+}
+
+ipcMain.handle('export:start', async (_e, payload) => {
+  const target = await chooseOutput(payload.settings);
+  if (!target) return null;
+  const final = target.output;
+  if (target.replace) reservedOutputs.add(final);
+  // Ved erstatning rendres det til en egen fil; den gamle røres ikke før eksporten er ferdig.
+  const output = target.replace ? uniqueOutput(final.replace(/(\.[^.\\/]+)$/, '.reccut-partial$1')) : final;
+  payload = { ...payload, settings: { ...payload.settings, output } };
   const { id, done } = jobs.add({
     kind: 'export',
-    title: `Exporting ${path.basename(payload.settings.output)}`,
+    title: `Exporting ${path.basename(final)}`,
     queue: 'heavy',
-    run: (ctx) => renderProject(payload, ctx),
+    run: async (ctx) => {
+      const file = await renderProject(payload, ctx);
+      if (!target.replace || file !== output) return file;
+      const from = outputFiles(output);
+      const to = outputFiles(final);
+      for (const [i, f] of from.entries()) if (fs.existsSync(f)) await fs.promises.rename(f, to[i]);
+      replacedOutputs.add(final);
+      setTimeout(() => replacedOutputs.delete(final), 10 * 60 * 1000).unref?.();
+      return final;
+    },
   });
-  done.finally(() => reservedOutputs.delete(payload.settings.output)).catch(() => {});
+  // En avbrutt eller mislykket eksport skal ikke etterlate en halvferdig fil.
+  done.catch(() => {
+    for (const f of outputFiles(output)) fs.promises.rm(f, { force: true }).catch(() => {});
+  });
+  done.finally(() => {
+    reservedOutputs.delete(output);
+    reservedOutputs.delete(final);
+  }).catch(() => {});
   done.then(
     (file) => {
       send('export:done', { id, file, quiet: Boolean(payload.settings.quiet) });

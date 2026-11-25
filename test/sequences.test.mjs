@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { produce } from 'immer';
-import { addSequence, currentSequence, deleteSequence, newProject, openSequence, renameSequence, sequenceList } from '../src/shared/model.js';
+import { addSequence, currentSequence, deleteSequence, exportFileName, newProject, openSequence, renameSequence, sequenceList } from '../src/shared/model.js';
 import { reduceProject, trimProject } from '../src/shared/package.js';
 
 const medium = (id) => ({ id, name: `${id}.mp4`, path: `/m/${id}.mp4`, kind: 'video', duration: 100, streams: { main: { path: `/m/${id}.mp4`, duration: 100, hasVideo: true, hasAudio: true } } });
@@ -54,4 +54,16 @@ test('packaging keeps media and ranges used by closed sequences', () => {
   const closed = Object.values(trimmed.sequences)[0];
   assert.equal(trimmed.media[closed.clips.c1.mediaId].trimmedFrom.path, '/m/a.mp4');
   assert.equal(closed.clips.c1.in, 0);
+});
+
+test('sequences: export suggests the name of the sequence being exported', () => {
+  let p = newProject('Clip_02-TheDarkKnight');
+  assert.equal(exportFileName(p), 'Clip_02-TheDarkKnight');
+  const firstId = currentSequence(p).id;
+  p = produce(p, (d) => void addSequence(d, { name: 'Trailer cut' }));
+  assert.equal(exportFileName(p), 'Trailer cut');
+  p = produce(p, (d) => void openSequence(d, firstId));
+  assert.equal(exportFileName(p), 'Sequence 1');
+  p = produce(p, (d) => void renameSequence(d, firstId, 'Full movie'));
+  assert.equal(exportFileName(p), 'Full movie');
 });

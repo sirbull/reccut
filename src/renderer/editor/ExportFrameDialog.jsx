@@ -53,7 +53,8 @@ export function ExportFrameDialog({ request }) {
       // Keep the selected encoding and filename extension in agreement on every platform.
       const matchingExtension = fmt.id === 'jpeg' ? /\.jpe?g$/i : new RegExp(`\\.${fmt.ext}$`, 'i');
       const file = matchingExtension.test(output) ? output : output.replace(/\.(png|jpe?g|webp)$/i, '') + `.${fmt.ext}`;
-      await startExport(p, { frame, output: file, sourceMedia: 'original' });
+      // Lagringsdialogen har allerede spurt om filen skal erstattes. Er endelsen rettet, spør Reccut selv.
+      if ((await startExport(p, { frame, output: file, sourceMedia: 'original', overwrite: file === output })) === null) return;
       frameExportOpen.value = null;
       toast('Exporting the frame in the background. You will be notified when it is ready.');
     } catch (e) {

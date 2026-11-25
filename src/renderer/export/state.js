@@ -1,6 +1,6 @@
 // Tilstand for eksportfanen: kilder (prosjektet eller importerte filer) og innstillinger.
 import { batch, computed, signal } from '@preact/signals';
-import { CAPTION_LANE, newProject } from '../../shared/model.js';
+import { CAPTION_LANE, currentSequence, newProject } from '../../shared/model.js';
 import { addMediaClip, autoFormat } from '../../shared/ops.js';
 import { PRESETS } from '../../shared/formats.js';
 import { playing, project as editorProject, reportFailed, room, withAnalysis } from '../editor/store.js';
@@ -138,12 +138,19 @@ export function applyPreset(id) {
 // Beskjæring og område gjelder per kilde, siden filene har ulike formater og lengder.
 export const perSource = signal({});
 
+// For prosjektet gjelder valgene bare sekvensen de ble gjort i: et område fra en lengre sekvens
+// skal ikke følge med når en annen sekvens åpnes.
+const projectSequence = () => currentSequence(editorProject.value).id;
+
 export function sourceOptions(id) {
-  return perSource.value[id] || { crop: null, range: null };
+  const o = perSource.value[id];
+  if (!o || (id === PROJECT_SOURCE && o.seq !== projectSequence())) return { crop: null, range: null };
+  return o;
 }
 
 export function setSourceOptions(id, patch) {
-  perSource.value = { ...perSource.value, [id]: { ...sourceOptions(id), ...patch } };
+  const seq = id === PROJECT_SOURCE ? { seq: projectSequence() } : {};
+  perSource.value = { ...perSource.value, [id]: { ...sourceOptions(id), ...patch, ...seq } };
 }
 
 export function hasCaptions(p) {

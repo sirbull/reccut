@@ -5,7 +5,7 @@ import { CAMERA_LOGS, setLut } from '../shared/grade.js';
 import { ALL_FORMATS, CanvasSource, CustomSource, Input, MkvOutputFormat, MovOutputFormat, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, WebMOutputFormat, canEncodeVideo } from 'mediabunny';
 import { motionFramePlan, needsNaturalMotion } from '../shared/motionBlur.js';
 import { TemporalFrames, snapshotSample } from '../shared/temporalFrames.js';
-import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sealProject, sideBackgroundMedia, sourceTime, visualStreams, workPath } from '../shared/model.js';
+import { CAPTION_LANE, audioComponents, clampRange, clipHasAudio, exportRangeProblem, computeAudio, computeFrame, sealProject, sideBackgroundMedia, sourceTime, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
 import { colorExportPlan, hdrAnalysisFilters, hdrDecodeFilters, hdrEncoderArgs, hdrExportIssues, sdrOutputFilters } from '../shared/hdr.js';
 import { HdrCompositor } from '../shared/renderHdr.js';
@@ -19,7 +19,26 @@ import { LOUDNESS_CEILING, LoudnessMeter, normalizeTo } from '../shared/loudness
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const childProcess = require('child_process');
+
+// Hovedprosessen får vite hvilke FFmpeg-prosesser som kjører, så de kan stoppes hvis dette vinduet
+// må lukkes fordi et avbrudd ikke ble besvart.
+const liveProcs = new Set();
+const reportProcs = () => ipcRenderer.send('worker:procs', [...liveProcs].map((p) => p.pid).filter(Boolean));
+function spawn(...args) {
+  const proc = childProcess.spawn(...args);
+  liveProcs.add(proc);
+  reportProcs();
+  proc.once('exit', () => {
+    liveProcs.delete(proc);
+    reportProcs();
+  });
+  proc.once('error', () => {
+    liveProcs.delete(proc);
+    reportProcs();
+  });
+  return proc;
+}
 
 const RATE = 48000;
 const canceled = new Set();
@@ -964,9 +983,13 @@ async function runExport(jobId, payload) {
   for (const m of Object.values(project.media)) {
     if (m.cameraLut && !CAMERA_LOGS.some((x) => x.id === m.cameraLut)) setLut(m.cameraLut, fs.readFileSync(m.cameraLut, 'utf8'));
   }
-  const a = still ? still.time : settings.range ? settings.range.in : 0;
-  const b = still ? a + 1 / project.fps : settings.range ? settings.range.out : project.duration;
-  if (b - a <= 0) throw new Error('The timeline is empty.');
+  const range = clampRange(settings.range, project.duration);
+  const a = still ? still.time : range ? range.in : 0;
+  const b = still ? a + 1 / project.fps : range ? range.out : project.duration;
+  if (b - a <= 0) throw new Error(settings.range && project.duration > 0 ? 'The In/Out range is outside the timeline.' : 'The timeline is empty.');
+  // Siste vern for eksporter som ikke går via dialogene (agenten, menyen): ingen tom fil.
+  const problem = still ? null : exportRangeProblem(project, settings.range);
+  if (problem) throw new Error(problem);
   const q = QUALITIES.find((x) => x.id === settings.quality) || QUALITIES[2];
   const wavPath = path.join(tmp, 'mix.wav');
 

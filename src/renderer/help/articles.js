@@ -182,7 +182,7 @@ Canvas offers Make Variant. Export in the bottom strip offers Compare Variants. 
 
 Resize in the toolbar creates designs for one or more selected sizes, scaling and positioning layers using anchors or relative centers. Resize current design requires exactly one target size. Export All Sizes saves the selected designs to a folder as PNG, JPEG or WebP, with dimensions in their file names. Existing files get unique names.
 
-The Export room and Easy Export offer Also save thumbnail when the project has designs. Choose a design to save a JPEG next to the completed video with the same base name. Its appearance is prepared before video export starts, so later edits do not change it. An existing JPEG is kept and an error is shown rather than overwriting it.
+The Export room and Easy Export offer Also save thumbnail when the project has designs. Choose a design to save a JPEG next to the completed video with the same base name. Its appearance is prepared before video export starts, so later edits do not change it. An existing JPEG is kept and an error is shown rather than overwriting it, unless you chose to replace the video, in which case its thumbnail is replaced too.
 
 ## Open Image and canvas tools
 
@@ -1309,7 +1309,7 @@ Return to the project and sequence where it was started, using the same Reccut p
     summary: 'Mark a part of the timeline with I and O.',
     keywords: 'range in out mark selection',
     body: `
-Set the start of a range with {{key:setIn}} and the end with {{key:setOut}}, or drag with the Range tool ({{key:tool:range}}). {{key:rangeClip}} marks the clip under the playhead. Playback and export can use the range. Clear it with {{key:clearRange}}, or press {{key:setIn}} and {{key:setOut}} at the same spot.
+Set the start of a range with {{key:setIn}} and the end with {{key:setOut}}, or drag with the Range tool ({{key:tool:range}}). {{key:rangeClip}} marks the clip under the playhead. The range shows what will be exported; playback still runs before and past it. With Loop playback turned on, playback started inside the range loops over the range. Clear it with {{key:clearRange}}, or press {{key:setIn}} and {{key:setOut}} at the same spot.
 
 When you work in the browser, the same keys mark a range in the clip under the pointer instead. See The Browser.
 `,
@@ -2225,7 +2225,7 @@ When a clip follows a track in **Live** mode, the track controls position and ro
     summary: 'Record a script line by line with retakes, read it as a teleprompter, and stitch the takes together on the timeline.',
     keywords: 'ai voice style dark bright deep cinematic trailer narrator documentary text to speech tts kokoro narrator generate read aloud record audio quick microphone voice over studio voiceover narration narrator script teleprompter prompter talking head monologue dialogue retake takes pickup punch in stitch assemble room tone typeloom word pdf markdown fountain final draft read mirror',
     body: `
-Open the studio with **Voice Over Studio** in the toolbar of Edit, the headset and microphone button in the timeline toolbar, or {{key:voiceover}}.
+Open the studio with the headset and microphone button at the top right of Edit (hover over it to see its name), the same button in the timeline toolbar, or {{key:voiceover}}.
 
 ## Just record audio
 
@@ -2553,9 +2553,8 @@ Every matching color is affected, including other red objects. To isolate an obj
     section: 'Export',
     title: 'Exporting',
     summary: 'Use Easy Export for presets, the Export room for more options, or Export Frame for a still image.',
-    keywords: 'export render share format mp4 mov prores gif audio crop size loudness lufs normalize normalise ebu r128 youtube podcast',
     body: `
-Choose **File → Easy Export** ({{key:export}}) to open the simple project export dialog. Choose a preset, file name, destination, format, resolution and frame rate, then click **Export**. **More Options** opens the Export room.
+Choose **File → Easy Export** ({{key:export}}) to open the simple project export dialog. Choose a preset, file name, destination, format, resolution and frame rate, then click **Export**. The file name starts as the name of the open sequence, so each sequence in a project gets its own file. A project with a single, unrenamed sequence uses the project name. **More Options** opens the Export room.
 
 Click **Export Project** in the Edit room to open the current project in the Export room. It starts with MP4 (H.264), high quality, and the sequence’s size and frame rate. A marked timeline range is carried over. Review the settings, then click **Export Project** in the Export room to start the job. **View → Export Room** ({{key:roomExport}}) opens the room with your current settings.
 
@@ -2565,12 +2564,18 @@ You can also drop video or audio files into Export to convert them without putti
 
 - Formats include MP4 (H.264, HEVC), MOV, ProRes, WebM, MKV, animated GIF and audio only.
 - Choose a preset, or set the size, frame rate, quality or bit rate yourself.
+- The preview shows the whole source, with the part that will be exported highlighted in blue on the scrubber. Drag the In and Out handles on the scrubber to change it, or use **Range** in the settings. Dragging a handle when no range is set creates one.
 - Crop to another aspect ratio, for example 9:16 for Shorts, and move the crop in the preview.
 - Captions can be burned in, embedded or saved as SRT or WebVTT.
 - **Loudness** makes the sound as loud as the platform expects: −14 LUFS for YouTube, TikTok and Spotify, −16 LUFS for podcasts, −23 LUFS for broadcast (EBU R128) or −24 LKFS for US broadcast. The whole mix is measured, raised or lowered, and a limiter keeps the peaks under −1 dBFS. The **YouTube and Web** preset uses −14 LUFS, and **Master** leaves the level as it is. The timeline is not changed.
 
 Exports are saved in the Exports folder of the project by default, and run in the background so you can keep working.
+
+If a file with the same name already exists, Reccut asks before exporting. **Replace** overwrites the old file, but only when the new export has finished, so a canceled or failed export leaves the old file unchanged. **Keep Both** saves the new export with a number added to its name, for example *My Video 2.mp4*. **Cancel** does not start the export. If the same file name is already in the export queue, you can only keep both.
+
+Cancel an export with the cross in the export queue. The job stops, is marked **Canceled** with a red cross, and the next job in the queue starts. A canceled or failed export does not leave a half-finished file behind.
 `,
+    keywords: 'export render share format mp4 mov prores gif audio crop size loudness lufs normalize normalise ebu r128 youtube podcast replace overwrite existing file same name keep both cancel canceled queue',
     see: ['export-frame', 'captions', 'range'],
   },
   {
