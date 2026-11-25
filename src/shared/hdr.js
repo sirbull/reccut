@@ -1,12 +1,39 @@
 // Display-linear BT.2020 throughout HDR export. One working unit is 203 cd/m².
-// SDR export and the tone-mapped editing preview retain their existing pipeline.
-import { defaultProps } from './model.js';
+// Mixed HDR/SDR exports share this working space; only the output transform differs.
+import { defaultProps, SHADOW_DEFAULTS, TRANSITIONS } from './model.js';
 import { videoFormat } from './formats.js';
+import { GRADE_PROPS } from './grade.js';
+import { VIDEO_EFFECTS } from './videoEffects.js';
 
 export const HDR_WHITE = 203;
 export const HDR_PEAK = 10000;
 export const HDR_COLOR = 'hdr-pq';
 export const isHdrExport = (s) => s.color === HDR_COLOR && !s.audioOnly && !s.frame;
+export const SDR_KNEE = .75;
+
+// One fixed, smooth shoulder for the completed picture. Keep midtones unchanged,
+// preserve highlight ordering, and avoid exposure pumping between shots.
+export function sdrShoulder(y) {
+  if (y <= SDR_KNEE) return Math.max(0, y);
+  const headroom = 1 - SDR_KNEE, x = y - SDR_KNEE;
+  return SDR_KNEE + headroom * x / (x + headroom);
+}
+
+export function colorExportPlan(project, settings) {
+  const hdr = isHdrExport(settings);
+  if (settings.audioOnly || settings.frame) return { hdr: false, hasHdr: false, linear: false, fallback: [] };
+  const a = settings.range?.in ?? 0, b = settings.range?.out ?? project.duration;
+  const hasHdr = Object.values(project.clips).some(c => c.enabled !== false && c.type !== 'audio' && c.type !== 'gap' && c.start < b && c.start + c.dur > a && !project.lanes?.[c.lane]?.hidden &&
+    Object.values(project.media[c.mediaId]?.streams || {}).some(s => s.hasVideo !== false && (s.color?.hdr || ['smpte2084', 'arib-std-b67'].includes(s.color?.transfer))));
+  // Existing SDR-only projects retain their established rendering. Unsupported
+  // mixed edits still render through the SDR preview conversion, with a UI notice.
+  const fallback = !hdr && hasHdr ? hdrExportIssues(project, { ...settings, color: HDR_COLOR, format: 'mp4-hevc' }) : [];
+  return { hdr, hasHdr, linear: hdr || hasHdr && !fallback.length, fallback };
+}
+
+export function sdrOutputFilters() {
+  return 'zscale=pin=bt709:tin=linear:min=gbr:rin=full:t=bt709:p=bt709:m=bt709:r=limited:dither=error_diffusion';
+}
 
 export function pqEncode(nits) {
   const y = Math.max(0, Math.min(10000, nits)) / 10000;
@@ -41,9 +68,18 @@ export function hdrDecodeFilters(stream) {
   return { vf: [stream.interlaced && 'bwdif=mode=send_frame:deint=interlaced', z, 'format=gbrpf32le', 'zscale=p=bt2020'].filter(Boolean).join(','), hlg: hdr === 'hlg' };
 }
 
+// Difference-key references are captured in the SDR viewer. Reproduce that
+// signal for the matte only; the composited RGB always comes from HDR originals.
+export function hdrAnalysisFilters(stream){
+  if(stream.decodeFilters)return stream.decodeFilters;
+  if(stream.color?.hdr||['smpte2084','arib-std-b67'].includes(stream.color?.transfer))return `${hdrDecodeFilters(stream).vf},zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv444p10le,scale=in_color_matrix=bt709:in_range=tv:out_range=pc`;
+  return 'scale=in_color_matrix=bt709:in_range=tv:out_range=pc';
+}
+
 // First public stage deliberately accepts a finite set of edits. Unknown visual
 // edits fail preflight, rather than silently rendering an SDR approximation.
-const VIDEO_PROPS = new Set(['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'vFadeIn', 'vFadeOut', 'cropL', 'cropR', 'cropT', 'cropB', 'exposure']);
+export const HDR_EFFECT_TYPES = new Set(['blur','saturation','contrast','opacity','solid','gradient','noise','rgbSplit','chromatic','scanlines','glitch','glow','motionBlur','naturalMotionBlur','hueSaturation','filmGrain','vhs','chroma','luma','lights','lightLeak','lensFlare','difference']);
+const VIDEO_PROPS = new Set(['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'vFadeIn', 'vFadeOut', 'cropL', 'cropR', 'cropT', 'cropB', ...Object.keys(GRADE_PROPS),...Object.keys(SHADOW_DEFAULTS), 'film','blur','sepia','grayscale','invert','hue','vignette','masks','radius','border','borderColor','shadow']);
 const AUDIO_PROPS = new Set(['volume', 'aFadeIn', 'aFadeOut', 'aLead', 'aTail', 'audioOff', 'audioGain', 'audioMono', 'cleanVoice', 'audioEffects', 'preservePitch', 'pan', 'afx']);
 const empty = v => v == null || v === false || v === 0 || v === '' || (Array.isArray(v) && !v.length);
 
@@ -58,24 +94,32 @@ export function hdrExportIssues(project, settings) {
     if (clip.enabled === false || clip.type === 'audio' || clip.type === 'gap' || clip.start >= b || clip.start + clip.dur <= a || project.lanes?.[clip.lane]?.hidden) continue;
     const name = clip.name || clip.type;
     const fail = why => issues.add(`${name}: ${why}`);
-    if (!['video', 'image', 'title', 'caption'].includes(clip.type)) { fail('this clip type is not supported by HDR export yet.'); continue; }
-    if (clip.transition || clip.transitionOut || clip.slideshowId || clip.linkedTo || clip.props?.follow) fail('transitions, slideshows and tracking links are not supported by HDR export yet.');
+    if (!['video', 'image', 'title', 'caption','adjustment'].includes(clip.type)) { fail('this clip type is not supported by HDR export yet.'); continue; }
+    if (clip.slideshowId || clip.linkedTo || clip.props?.follow) fail('slideshows and tracking links are not supported by HDR export yet.');
+    for(const tr of [clip.transition,clip.transitionOut])if(tr&&!TRANSITIONS.some(t=>t.id===tr.type))fail(`unknown HDR transition “${tr.type}”.`);
     if (clip.props?.blendMode && clip.props.blendMode !== 'source-over') fail('HDR currently supports Normal blend mode.');
+    if(clip.type==='adjustment'&&clip.props?.shadow>0)fail('drop shadows require a source clip.');
     const media = project.media[clip.mediaId];
     if (media?.offline) fail('the original media is offline.');
     if (media?.cameraLut) fail('camera LOG/LUT processing is not supported by HDR export yet.');
-    if (clip.type !== 'video') continue;
+    if (clip.type !== 'video'&&clip.type!=='adjustment') continue;
     const stream = media?.streams?.main;
-    if (!stream?.path) fail('the original video is unavailable.');
+    if (clip.type==='video'&&!stream?.path) fail('the original video is unavailable.');
     if (stream?.alpha) fail('video with an alpha channel is not supported by HDR export yet.');
     if ((stream?.color?.hdr || ['smpte2084', 'arib-std-b67'].includes(stream?.color?.transfer)) && known(stream.color.primaries) && stream.color.primaries !== 'bt2020') fail('HDR input must use BT.2020 primaries.');
-    const defaults = defaultProps('video', media);
+    const defaults = defaultProps(clip.type, media);
+    for(const e of clip.props?.vfx||[]){
+      if(e.on===false)continue;
+      if(!HDR_EFFECT_TYPES.has(e.type))fail(`“${e.type}” is not supported by HDR effects yet.`);
+      if(clip.type==='adjustment'&&VIDEO_EFFECTS.find(d=>d.type===e.type)?.adjustment===false)fail(`“${e.type}” requires source video and cannot run on an adjustment layer.`);
+      if(e.target&&e.target!=='main')fail(`effect target “${e.target}” is not supported by HDR export.`);
+    }
     for (const [key, value] of Object.entries(clip.props || {})) {
-      if (VIDEO_PROPS.has(key) || AUDIO_PROPS.has(key) || empty(value) || JSON.stringify(value) === JSON.stringify(defaults[key])) continue;
+      if (key==='vfx' || key.startsWith('mask.') || VIDEO_PROPS.has(key) || AUDIO_PROPS.has(key) || empty(value) || JSON.stringify(value) === JSON.stringify(defaults[key])) continue;
       fail(`“${key}” is not supported by HDR export yet.`);
     }
     for (const key of Object.keys(clip.kf || {})) {
-      if (!VIDEO_PROPS.has(key) && !AUDIO_PROPS.has(key) && clip.kf[key]?.length) fail(`animated “${key}” is not supported by HDR export yet.`);
+      if (!key.startsWith('vfx.') && !key.startsWith('mask.') && !VIDEO_PROPS.has(key) && !AUDIO_PROPS.has(key) && clip.kf[key]?.length) fail(`animated “${key}” is not supported by HDR export yet.`);
     }
   }
   return [...issues];

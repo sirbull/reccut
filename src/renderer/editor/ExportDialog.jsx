@@ -11,7 +11,7 @@ import { startExportWithThumbnail } from '../design/videoThumbnail.js';
 import { ThumbnailChoice } from '../design/ThumbnailChoice.jsx';
 import { Button, Modal, Row, Segmented, Select, toast } from '../ui.jsx';
 import { LOUDNESS_TARGETS } from '../../shared/loudness.js';
-import { HDR_COLOR, hdrExportIssues } from '../../shared/hdr.js';
+import { HDR_COLOR, colorExportPlan, hdrExportIssues } from '../../shared/hdr.js';
 
 const api = window.api;
 const ICONS = { film: Film, globe: Globe, feather: Feather, apple: Apple, gem: Gem, image: ImageIcon, music: Music };
@@ -98,7 +98,7 @@ export function SourceMediaChoice({ project: p, value, onChange, color = 'sdr' }
       </Row>
       <p class="hint">
         {color === HDR_COLOR ? 'HDR export reads original video without the SDR tone mapping used for editing. Missing originals stop the export.' : value === 'original'
-          ? 'Full quality from the original files. ProRes, DNxHD and similar formats are decoded during the export, so it takes longer. Colors match the preview, also for HDR, which is tone mapped the same way.'
+          ? 'Full quality from the original files. ProRes, DNxHD and similar formats are decoded during export, which can take longer. For mixed HDR/SDR projects, Output color explains the conversion used.'
           : `Faster, using the copies you edit with.${optimized ? ` ${clips(optimized)} use optimized media, at full resolution.` : ''}${proxies ? ` ${clips(proxies)} only have a proxy of at most 1920 pixels and will be softer in a larger export. Use Optimize Media first to avoid this.` : ''}`}
       </p>
     </>
@@ -107,12 +107,19 @@ export function SourceMediaChoice({ project: p, value, onChange, color = 'sdr' }
 
 export function ExportColorChoice({ value, onChange, project: p, settings }) {
   const issues = hdrExportIssues(p, settings);
+  const plan = colorExportPlan(p, settings);
   return <>
     <Row label="Output color" stacked>
       <Select value={value || 'sdr'} options={[{ value: 'sdr', label: 'SDR (standard)' }, { value: HDR_COLOR, label: 'HDR PQ — Early Access' }]} onChange={onChange} />
     </Row>
+    <div class="callout" role="status">
+      <p>HDR and SDR clips can share one timeline. Choose the output here; the project and original files stay unchanged. In HDR, SDR white is 203 nits. In SDR, HDR highlights roll off smoothly and wide colors fit Rec.709.</p>
+      {value !== HDR_COLOR && plan.hasHdr && <p>{plan.linear
+        ? 'Original HDR and SDR media are combined before the final SDR conversion. Midtones are preserved; bright whites leave room for highlight detail. The editing preview is approximate. No extra download.'
+        : `This project uses the SDR preview conversion instead: ${plan.fallback.slice(0, 3).join(' ')} The improved mixed-color conversion requires Originals and the edits supported by HDR export.`}</p>}
+    </div>
     {value === HDR_COLOR && <div class="callout" role="status">
-      <p>10-bit HEVC, BT.2020/PQ. The preview remains tone-mapped SDR. Supports cuts, trims, video transforms, opacity, exposure, SDR images, titles and captions. Video effects, transitions, tracking, LOG/LUTs and recordings are not supported yet. Requires WebGL 2 with floating-point buffers. No extra download.</p>
+      <p>10-bit HEVC, BT.2020/PQ. Supports timeline transitions, video effects, color grading, film looks, masks and adjustment layers. Use their usual controls in Edit. The preview remains tone-mapped SDR. Tracking, slideshows, stabilization, non-Normal clip blending, camera LOG/LUTs, recording clips and source-video alpha are not supported yet. Requires WebGL 2 with floating-point buffers. No extra download.</p>
       {issues.slice(0, 5).map(issue => <p key={issue}>{issue}</p>)}
     </div>}
   </>;

@@ -7,7 +7,7 @@ import { motionFramePlan, needsNaturalMotion } from '../shared/motionBlur.js';
 import { TemporalFrames, snapshotSample } from '../shared/temporalFrames.js';
 import { CAPTION_LANE, audioComponents, clipHasAudio, computeAudio, computeFrame, sealProject, sideBackgroundMedia, sourceTime, visualStreams, workPath } from '../shared/model.js';
 import { drawFrame } from '../shared/render.js';
-import { hdrDecodeFilters, hdrEncoderArgs, hdrExportIssues, isHdrExport } from '../shared/hdr.js';
+import { colorExportPlan, hdrAnalysisFilters, hdrDecodeFilters, hdrEncoderArgs, hdrExportIssues, sdrOutputFilters } from '../shared/hdr.js';
 import { HdrCompositor } from '../shared/renderHdr.js';
 import { loadFlareSprites } from '../shared/lensFlareRender.js';
 import { AUDIO_FORMATS, QUALITIES, audioKbps, outputGeometry, videoBitrate, videoFormat } from '../shared/formats.js';
@@ -474,14 +474,14 @@ class Reader {
 // Originaler WebCodecs ikke kan lese (ProRes, DNxHD, MPEG-2 ...): FFmpeg dekoder dem til RGBA-bilder
 // med samme filtre som arbeidskopien, så eksporten får full kvalitet mens redigeringen bruker proxyen.
 class FfmpegReader {
-  constructor(bin, file, { vf, duration, linear = false }) {
-    Object.assign(this, { bin, file, vf, linear, first: 0, end: duration || Infinity, ready: Promise.resolve(), cur: null, next: null, iter: null });
+  constructor(bin, file, { vf, duration, linear = false, sourceTimestamps = false }) {
+    Object.assign(this, { bin, file, vf, linear, sourceTimestamps, first: 0, end: duration || Infinity, ready: Promise.resolve(), cur: null, next: null, iter: null });
   }
 
   restart(t) {
     this.close();
     // Litt før t, så bildet som vises ved t også kommer med.
-    this.iter = ffmpegFrames(this.bin, this.file, this.vf, Math.max(0, t - 0.1), this.linear);
+    this.iter = ffmpegFrames(this.bin, this.file, this.vf, Math.max(0, t - 0.1), this.linear,this.sourceTimestamps);
   }
 
   close() {
@@ -494,11 +494,12 @@ class FfmpegReader {
 FfmpegReader.prototype.frameAt = Reader.prototype.frameAt;
 
 // Bildene fra FFmpeg kommer på stdout, tidspunktene fra showinfo på stderr, i samme rekkefølge.
-async function* ffmpegFrames(bin, file, vf, start, linear = false) {
+async function* ffmpegFrames(bin, file, vf, start, linear = false, sourceTimestamps = false) {
+  const absolute=linear||sourceTimestamps;
   const pix = linear ? 'gbrpf32le' : 'rgba', bytesPerPixel = linear ? 12 : 4;
   // Preserve source timestamps for float decoding. Reconstructing them by adding
   // -ss to rounded output times can select the preceding frame after a trim.
-  const args = ['-hide_banner', '-nostdin', ...(linear ? ['-copyts', '-start_at_zero'] : []), '-ss', start.toFixed(6), '-i', file, '-map', '0:v:0', '-an', '-sn', '-dn', '-vf', `${vf},format=${pix},showinfo`, '-fps_mode', 'passthrough', '-f', 'rawvideo', 'pipe:1'];
+  const args = ['-hide_banner', '-nostdin', ...(absolute ? ['-copyts', '-start_at_zero'] : []), '-ss', start.toFixed(6), '-i', file, '-map', '0:v:0', '-an', '-sn', '-dn', '-vf', `${vf},format=${pix},showinfo`, '-fps_mode', 'passthrough', '-f', 'rawvideo', 'pipe:1'];
   const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let size = null;
   let err = '';
@@ -527,7 +528,7 @@ async function* ffmpegFrames(bin, file, vf, start, linear = false) {
       const base = /config in time_base:\s*(\d+)\/(\d+)/.exec(complete);
       if (base) timeBase = Number(base[1]) / Number(base[2]);
       for (const m of complete.matchAll(/pts:\s*(-?\d+)\s+pts_time:\s*(-?[\d.]+)/g)) {
-        times.push(linear ? timeBase ? Number(m[1]) * timeBase : Number(m[2]) : start + Number(m[2]));
+        times.push(absolute ? timeBase ? Number(m[1]) * timeBase : Number(m[2]) : start + Number(m[2]));
       }
       lines = lines.slice(last + 1);
     }
@@ -826,13 +827,13 @@ function videoArgsCrf(fmt, q) {
   }
 }
 
-async function renderHdrVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, bitrate, akbps, burnCaptions, embedPath, wavPath, output, hasAudio }) {
+async function renderLinearVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality, bitrate, akbps, burnCaptions, embedPath, wavPath, output, hasAudio, hdr }) {
   const { project, ffmpegBin, tmp } = ctx;
   const readers = new Map(), images = new Map();
   let compositor, encoder;
   const canvas = new OffscreenCanvas(w, h), g = canvas.getContext('2d', { alpha: true });
-  const q = { ...(QUALITIES.find(x => x.id === quality) || QUALITIES[2]), audioKbps: akbps };
-  const encoded = path.join(tmp, `hdr.${fmt.ext}`);
+  const q = { ...(QUALITIES.find(x => x.id === quality) || QUALITIES[2]), audioKbps: akbps, bitrate };
+  const encoded = path.join(tmp, `linear.${fmt.ext}`);
   try {
     compositor = new HdrCompositor(w, h);
     const args = ['-f', 'rawvideo', '-pix_fmt', 'gbrpf32le', '-s', `${w}x${h}`, '-r', String(fps), '-i', 'pipe:0'];
@@ -841,7 +842,15 @@ async function renderHdrVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, qualit
     args.push('-map', '0:v:0');
     if (hasAudio) args.push('-map', '1:a:0', ...audioArgs(fmt.audio, q), '-disposition:a:0', 'default');
     if (embedPath) args.push(...subtitleArgs(fmt, hasAudio ? 2 : 1));
-    args.push(...hdrEncoderArgs({ crf: q.crf + 4, bitrate, container: fmt.container }), '-t', String(b - a));
+    if (hdr) args.push(...hdrEncoderArgs({ crf: q.crf + 4, bitrate, container: fmt.container }));
+    else {
+      const codecArgs = videoArgs(fmt, q, w, h, fps), filter = codecArgs.indexOf('-vf');
+      // GIF's palette filter must follow the same SDR output conversion.
+      if (filter >= 0) codecArgs[filter + 1] = `${sdrOutputFilters()},${codecArgs[filter + 1]}`;
+      else codecArgs.push('-vf', sdrOutputFilters());
+      args.push(...codecArgs, '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', '-color_range', 'tv');
+    }
+    args.push('-t', String(b - a));
     if (fmt.container === 'mp4' || fmt.container === 'mov') args.push('-movflags', '+faststart');
     args.push(encoded);
     encoder = ffmpeg(ffmpegBin, args, { stdin: true });
@@ -858,10 +867,11 @@ async function renderHdrVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, qualit
       checkCancel(jobId);
       const T = a + i / fps, frame = computeFrame(project, T, { captions: burnCaptions }), used = new Set();
       compositor.clear(project, matrix);
-      for (const layer of frame.layers) {
-        // Preflight prevents transitions; retain the guard for future frame-model changes.
-        if (layer.transition || layer.companions?.length) throw new Error('This layer composition is not supported by HDR export yet.');
-        const clip = layer.clip, media = project.media[clip.mediaId];
+      const drawSide=async layer=>{
+        if(!layer)return;
+        if (layer.companions?.length) throw new Error('This layer composition is not supported by HDR export yet.');
+        const clip = layer.clip, T=layer.T, media = project.media[clip.mediaId];
+        if(clip.type==='adjustment'){compositor.adjustment(clip,T,project,matrix);return;}
         if (clip.type === 'video') {
           const st = media.streams.main, key = `${clip.id}:${st.path}`;
           used.add(key);
@@ -872,10 +882,29 @@ async function renderHdrVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, qualit
             r = new FfmpegReader(ffmpegBin, st.path, { vf, duration: st.duration || media.duration, linear: true });
             r.hlg = hlg; readers.set(key, r);
           }
-          const sample = await r.frameAt(sourceTime(clip, T) - (st.offset || 0));
+          let sample,temporal=null;
+          if(needsNaturalMotion(clip,'main',T)){
+            const plan=motionFramePlan(clip,st,T,fps),cache=r.hdrFrames||=new Map(),samples=[];
+            for(const t of plan.times){
+              checkCancel(jobId);const key=t.toFixed(6);let s=cache.get(key);
+              if(!s){const frame=await r.frameAt(t);if(!frame)throw new Error(`Could not read HDR motion frames from ${media.name}.`);s={...frame,pixels:frame.pixels.slice()};cache.set(key,s);}samples.push(s);
+            }
+            const keep=new Set(plan.times.map(t=>t.toFixed(6)));for(const key of cache.keys())if(!keep.has(key))cache.delete(key);
+            sample=samples[1];temporal={previous:samples[0],current:samples[1],next:samples[2],times:plan.times,exposure:plan.exposure,direction:plan.direction};
+          }else sample = await r.frameAt(sourceTime(clip, T) - (st.offset || 0));
           checkCancel(jobId);
           if (!sample) throw new Error(`Could not read an HDR export frame from ${media.name}.`);
-          compositor.draw({ ...sample, hlg: r.hlg }, project, clip, T, matrix);
+          let analysis=null;const analysisFrames=[];
+          try{
+          if(clip.props?.vfx?.some(e=>e.type==='difference'&&e.on!==false&&e.p?.reference)){
+            const analysisKey=`${key}:analysis`;used.add(analysisKey);
+            let reader=readers.get(analysisKey);
+            if(!reader){reader=new FfmpegReader(ffmpegBin,st.path,{vf:hdrAnalysisFilters(st),duration:st.duration||media.duration,sourceTimestamps:true});readers.set(analysisKey,reader);}
+            for(const t of temporal?.times||[sourceTime(clip,T)-(st.offset||0)]){const frame=await reader.frameAt(t);if(!frame)throw new Error('Could not read the background-key analysis frame.');analysisFrames.push(frame.toCanvasImageSource().clone());}
+            analysis=analysisFrames[temporal?1:0];if(temporal){temporal.analysisPrevious=analysisFrames[0];temporal.analysisNext=analysisFrames[2];}
+          }
+          checkCancel(jobId);compositor.draw({ ...sample, hlg: r.hlg,analysis,temporal }, project, clip, T, matrix);
+          }finally{for(const frame of analysisFrames)frame.close();}
         } else {
           if (clip.type === 'image' && !images.has(media.id)) {
             if (!exists(media.path)) throw new Error(`HDR export needs the original image: ${media.name}`);
@@ -886,15 +915,22 @@ async function renderHdrVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, qualit
             return img ? { img, w: img.width, h: img.height } : null;
           });
         }
+      };
+      for(const layer of frame.layers){
+        if(layer.transition){
+          const left=compositor.beginSide('a');await drawSide(layer.a);
+          const right=compositor.beginSide('b');await drawSide(layer.b);
+          compositor.transition(left,right,layer.transition,project,matrix,layer.overlay,fps);
+        }else await drawSide(layer);
       }
       if (frame.captions.length) raster({ ...frame, layers: [] });
-      const data = compositor.read();
+      const data = compositor.read(!hdr);
       await Promise.race([
         new Promise((resolve, reject) => encoder.proc.stdin.write(Buffer.from(data.buffer, data.byteOffset, data.byteLength), e => e ? reject(e) : resolve())),
-        encoder.done.then(() => { throw new Error('HDR encoder stopped before all frames were written.'); }),
+        encoder.done.then(() => { throw new Error('Video encoder stopped before all frames were written.'); }),
       ]);
-      for (const [key, r] of readers) if (!used.has(key)) { r.close(); readers.delete(key); }
-      progress(jobId, .15 + .8 * (i + 1) / frames, 'Rendering HDR PQ');
+      for (const [key, r] of readers) if (!used.has(key)) { r.hdrFrames?.clear();r.close(); readers.delete(key); }
+      progress(jobId, .15 + .8 * (i + 1) / frames, hdr ? 'Rendering HDR PQ' : 'Rendering mixed HDR/SDR to SDR');
     }
     encoder.proc.stdin.end();
     await encoder.done;
@@ -902,7 +938,7 @@ async function renderHdrVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, qualit
     fs.copyFileSync(encoded, output);
   } finally {
     if (encoder && encoder.proc.exitCode === null) encoder.proc.kill();
-    for (const r of readers.values()) r.close();
+    for (const r of readers.values()){r.hdrFrames?.clear();r.close();}
     for (const img of images.values()) img.close();
     compositor?.close();
   }
@@ -911,7 +947,7 @@ async function renderHdrVideo(jobId, ctx, { a, b, w, h, matrix, fps, fmt, qualit
 async function runExport(jobId, payload) {
   const { project, settings, ffmpeg: ffmpegBin } = payload;
   const still = settings.frame ? frameExportSettings(project, settings.frame) : null;
-  const hdr = isHdrExport(settings);
+  const { hdr, linear } = colorExportPlan(project, settings);
   const issues = hdrExportIssues(project, settings);
   if (issues.length) throw new Error(`Cannot export HDR PQ:\n${issues.slice(0, 10).join('\n')}`);
   // Eksporten endrer ikke prosjektet, så tidsindeksen kan gjenbrukes for hvert bilde og hver lydblokk.
@@ -972,7 +1008,7 @@ async function runExport(jobId, payload) {
       }
     }
     let useWebCodecs = false;
-    if (!hdr && fmt.codec && !settings.forceFfmpeg) {
+    if (!linear && fmt.codec && !settings.forceFfmpeg) {
       try {
         useWebCodecs = await canEncodeVideo(fmt.codec, { width: w, height: h, bitrate: videoBitrate(fmt, settings.quality, w, h, fps, settings.bitrate) });
       } catch {
@@ -989,7 +1025,7 @@ async function runExport(jobId, payload) {
         fs.writeFileSync(embedPath, toSrt(items));
       }
     }
-    await (hdr ? renderHdrVideo : renderVideo)(jobId, ctx, { a, b, w, h, matrix, fps, fmt, quality: settings.quality, bitrate: settings.bitrate, akbps: audioKbps(settings), burnCaptions, embedPath, useWebCodecs, wavPath, output: settings.output, hasAudio });
+    await (linear ? renderLinearVideo : renderVideo)(jobId, ctx, { a, b, w, h, matrix, fps, fmt, hdr, quality: settings.quality, bitrate: settings.bitrate, akbps: audioKbps(settings), burnCaptions, embedPath, useWebCodecs, wavPath, output: settings.output, hasAudio });
     writeSidecar(project, settings, a, b);
     return settings.output;
   } finally {

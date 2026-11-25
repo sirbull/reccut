@@ -613,7 +613,7 @@ The files are saved in the Optimized Media folder of the project and used for pl
 
 You can also choose Create optimized media when you import.
 
-**Proxies and export.** Formats the preview cannot play directly, such as ProRes, DNxHD, MPEG-2, interlaced and HDR video, get a proxy when you import them: a copy of at most 1920 pixels that is light to edit. H.264, HEVC, VP9 and AV1 play directly. By default the export reads the original files, also ProRes, so the proxy never limits the quality. With **SDR** output, the proxy and export prepare the picture the same way: HDR is tone mapped and other color spaces become Rec. 709. Choose **Source media › Optimized media** for a faster SDR export from the copies you edit with; proxy-only files are then at most 1920 pixels. If an original is missing, SDR export can use a copy. **HDR PQ** always requires the original and bypasses the SDR tone mapper; see HDR, 10-bit and RAW for its current limits.
+**Proxies and export.** Formats the preview cannot play directly, such as ProRes, DNxHD, MPEG-2, interlaced and HDR video, get a proxy when you import them: a copy of at most 1920 pixels that is light to edit. H.264, HEVC, VP9 and AV1 play directly. By default the export reads the original files, also ProRes, so the proxy never limits the quality. Projects containing HDR use a shared linear-light export for both HDR and SDR when their edits support it; SDR highlight conversion happens after composition. The editing preview uses an approximate, separate SDR conversion. Choose **Source media › Optimized media** for a faster SDR export from the copies you edit with; proxy-only files are then at most 1920 pixels and use the preview conversion. If an original is missing, SDR export can use a copy. **HDR PQ** always requires the original. See HDR, 10-bit and RAW for mixed-color behavior and current limits.
 
 [[run:optimize|Optimize Selected Media]]
 `,
@@ -628,15 +628,35 @@ You can also choose Create optimized media when you import.
     body: `
 **HDR video** (PQ and HLG, for example from iPhones and mirrorless cameras) is detected on import and marked HDR in the browser. Editing and the Export preview remain tone-mapped SDR. SDR is still the default output.
 
+## Mix HDR and SDR; choose either output
+
+Place PQ, HLG and SDR clips on the same timeline, including layers, transitions, images, titles and captions. You do not need to convert the source files or maintain separate projects. In **Export → Output color**, choose **SDR (standard)** or **HDR PQ — Early Access**. Quick Search and the AI Agent can open **Prepare SDR Export** or **Prepare HDR PQ Export**; review the settings and start Export. No extra download is required.
+
+With **Originals**, supported projects containing HDR share one floating-point, linear-light composition for either output. Effects, grading, opacity and transitions happen before the output conversion. In HDR, SDR reference white is 203 nits while original HDR highlights remain brighter. In SDR, the final picture becomes Rec.709: midtones retain their linear brightness, a smooth fixed shoulder reserves space for bright highlights, and wide colors are reduced toward neutral to fit the SDR gamut. SDR white becomes slightly softer to leave highlight room. This does not add HDR detail to an SDR source or make SDR as bright as HDR.
+
+The improved SDR conversion supports the same edits as HDR export, with SDR H.264, HEVC, AV1, VP9, ProRes and GIF output. If the project uses an unsupported edit, unavailable originals or **Optimized media**, SDR export instead uses the editing preview's source conversion; the Output color notice explains why. SDR-only projects keep their existing renderer. The editing preview and scopes remain approximate SDR and may differ from the final mixed-color export. Check a short exported section before a long render. SDR is useful for ordinary displays; HDR delivery requires an HDR-capable player and display.
+
 ## Export HDR PQ (Early Access)
 
 Open **Export → Preset → HDR PQ (Early Access)**, or search for **Prepare HDR PQ Export** in Quick Search. You can also choose **Output color → HDR PQ — Early Access**. This selects HEVC and Originals. Choose the size, frame rate, range and destination, then export. The AI Agent can prepare the same preset with the registered command.
 
 The output is 10-bit HEVC with BT.2020 primaries and PQ transfer in MP4, MOV or MKV. Original PQ highlights are preserved. HLG input is converted to PQ using a nominal 1000-nit display, system gamma 1.2 and zero black. HLG output is not available yet. There is no additional model or codec download. The graphics device must support WebGL 2 and floating-point color buffers.
 
-This first stage supports video cuts and trims, speed changes, position, scale, rotation, crop, anchor, opacity, fades and exposure, plus SDR images, titles, captions and the existing audio mix. Video exposure and layer compositing operate in linear light. SDR graphics use a 203-nit reference white; placing SDR video in a PQ file does not create additional highlight detail. Untagged video is treated as limited-range BT.709.
+HDR export supports video cuts and trims, speed changes, position, scale, rotation, crop, anchor, opacity and fades, plus SDR images, titles, captions and the existing audio mix. Video exposure and layer compositing operate in linear light. SDR graphics use a 203-nit reference white; placing SDR video in a PQ file does not create additional highlight detail. Untagged video is treated as limited-range BT.709.
 
-**Current limits:** video effects, other video color corrections, transitions, tracking links, slideshows, non-Normal blend modes, camera LOG/LUTs, screen-recording clips and video alpha are not supported by HDR export yet. The export stops and identifies unsupported edits instead of dropping them. Originals must be available; SDR proxies cannot replace them. HDR still-image formats are not developed as HDR sources. Existing image/title styling is rasterized as SDR before linear layer compositing.
+### Transitions, effects and grading
+
+Add effects, transitions and color corrections with their normal controls in **Edit**, then choose HDR PQ in Export. Quick Search and the AI Agent use the same effect and transition controls; no separate HDR effects need to be downloaded or enabled.
+
+All ten timeline transitions are supported: Cross Dissolve, Fade to Black, Fade to White, Push Left, Push Right, Push Up, Wipe, Circle Reveal, Zoom and Blur. They also work as entrances/exits on upper video tracks. Moving transitions support their Motion Blur option. Transitions combine HDR images in linear light; Fade to White uses the 203-nit reference white.
+
+All source effects in the Effects browser have an HDR path: blur, glow, color fills, gradients, noise, film grain, glitch, VHS, RGB split, chromatic aberration, scanlines, light leaks, blinking lights, lens flare, color/luma/reference keys, Advanced Hue / Saturation, saturation, contrast, opacity, Motion Blur and Natural Motion Blur. Stack order, keyframes and effect masks are respected. Rounded corners, borders and drop shadows are supported on video clips. Clip visibility masks and adjustment layers work with HDR; source-dependent effects such as Natural Motion Blur and the reference key require a video source.
+
+Exposure, white balance, highlights/shadows, color wheels, contrast and saturation operate on floating-point HDR values. Exposure follows the existing editor scale: +50 is one stop and +100 is two stops. Film looks preserve the highlight scale while applying their creative color transform; they are separate from camera LOG conversion. Generated colors and light fields use SDR reference white and can be blended with HDR footage without reducing the footage to SDR. Effects can intentionally replace, darken or brighten highlights according to their settings.
+
+Natural Motion Blur reconstructs neighboring original frames in linear light. The reference key compares an SDR analysis image with the captured viewer reference to compute transparency, while retaining original HDR colors in the foreground. These analysis images are local and do not replace the HDR export image.
+
+**Current limits:** tracking links, slideshows, stabilization, non-Normal clip blend modes, camera LOG/LUTs, recording clips and source-video alpha are not supported by HDR export yet. The export stops and identifies unsupported edits instead of dropping them. Originals must be available; SDR proxies cannot replace them. HDR still-image formats are not developed as HDR sources. Existing image/title styling is rasterized as SDR before linear layer compositing.
 
 PQ signals encode up to 10,000 nits. Export writes the actual PQ/BT.2020 signal tags but does not invent mastering-display or content-light metadata. This is early-access PQ export, not a certified HDR10 mastering workflow. Export is currently software-encoded and can be slow, especially at 4K. The preview and scopes do not show the delivered HDR luminance. Check the resulting file on an HDR-capable display and player; Mac/Linux and physical HDR playback still need validation.
 
