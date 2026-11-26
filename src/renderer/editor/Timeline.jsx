@@ -98,7 +98,7 @@ import { openQuick, quickOpen } from '../voiceover/quick.js';
 import { Button, IconButton } from '../ui.jsx';
 import * as commands from './commands.js';
 import { prefs, setPrefs } from '../prefs.js';
-import { fadePath, formatVolumeDb, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from './volume.js';
+import { dragVolumeSegment, fadePath, formatVolumeDb, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeY } from './volume.js';
 import { libraryDropTarget, mediaDropPreview, mediaDropProject, resizedTransitionDuration } from '../../shared/libraryDrop.js';
 import { endLibraryDrag, libraryDrag } from './libraryDrag.js';
 import { editMulticam } from './multicam.js';
@@ -276,6 +276,23 @@ export function Timeline() {
     place(getTime());
     return onTime(place);
   }, [z]);
+
+  // Når avspillingen stopper med spillhodet langt til høyre, rulles visningen så spillhodet
+  // står i det gylne snitt fra venstre, og man ser hva som kommer. Bare når mer enn
+  // 8 sekunder av tidslinjen er synlig; ved tett zoom er det ingen vits.
+  useEffect(() => {
+    let was = playing.value;
+    return playing.subscribe((now) => {
+      const stopped = was && !now;
+      was = now;
+      const sc = scrollRef.current;
+      if (!stopped || !sc || sc.clientWidth / pps.value <= 8) return;
+      const x = tx(getTime()) - sc.scrollLeft;
+      const golden = sc.clientWidth * 0.382;
+      if (x <= sc.clientWidth * 0.618) return;
+      sc.scrollTo({ left: Math.max(0, sc.scrollLeft + x - golden), behavior: 'smooth' });
+    });
+  }, []);
 
   useEffect(() => {
     const sc = scrollRef.current;
@@ -537,7 +554,7 @@ export function Timeline() {
         return;
       }
       // Et punkt dras enten opp/ned eller sidelengs; den første bevegelsen bestemmer retningen.
-      dragRef.current = { ...base, kind: 'vol', prop, h: Number(el.dataset.height), kf: kfIndex, indices: kfIndex == null ? volumeSegment(clip, prop, T) : [kfIndex] };
+      dragRef.current = { ...base, kind: 'vol', prop, h: Number(el.dataset.height), kf: kfIndex, autoKeyframes: prefs.value.autoVolumeKeyframes, ease: prefs.value.keyframeEasing };
       volumePreview.value = kfIndex == null ? { clipId, prop, T, index: null, x: e.clientX, y: e.clientY } : null;
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
@@ -581,10 +598,18 @@ export function Timeline() {
       const over = tool.value === 'blade' && !d && e.target.closest('[data-clip]');
       bladeRef.current.style.display = over ? 'block' : 'none';
       if (over) {
-        const r = e.target.closest('[data-clip]').getBoundingClientRect();
+        // Hele klippet, ikke bare delen under pekeren (etikett, lydstyrkelinje,
+        // nøkkelbilder) og med det løsrevne lydbåndet.
+        const id = over.getAttribute('data-clip');
+        let top = Infinity, bottom = -Infinity;
+        for (const el of contentRef.current.querySelectorAll(`[data-hit="clip"][data-clip="${CSS.escape(id)}"]`)) {
+          const r = el.getBoundingClientRect();
+          top = Math.min(top, r.top);
+          bottom = Math.max(bottom, r.bottom);
+        }
         const crect = contentRef.current.getBoundingClientRect();
-        bladeRef.current.style.transform = `translate(${tx(snap(T).t)}px, ${r.top - crect.top}px)`;
-        bladeRef.current.style.height = `${r.height}px`;
+        bladeRef.current.style.transform = `translate(${tx(snap(T).t)}px, ${top - crect.top}px)`;
+        bladeRef.current.style.height = `${bottom - top}px`;
       }
     }
     // Skumming: visningen følger pekeren, og lyden spilles i korte utdrag.
@@ -751,8 +776,13 @@ export function Timeline() {
         return;
       }
       const delta = volumeDelta(d.y - e.clientY, d.h);
-      updateTransient((p) => shiftVolume(p.clips[c.id], d.prop, delta, d.indices));
-      volumePreview.value = { clipId: c.id, prop: d.prop, T: d.T, index: d.indices.length === 1 ? d.indices[0] : null, x: e.clientX, y: e.clientY };
+      let indices;
+      updateTransient((p) => {
+        const clip = p.clips[c.id];
+        if (d.kf == null) indices = dragVolumeSegment(clip, d.prop, d.T, delta, d.autoKeyframes, d.ease);
+        else { indices = [d.kf]; shiftVolume(clip, d.prop, delta, indices); }
+      });
+      volumePreview.value = { clipId: c.id, prop: d.prop, T: d.T, index: indices.length === 1 ? indices[0] : null, x: e.clientX, y: e.clientY };
       return;
     }
     if (d.kind === 'move') {
@@ -1514,7 +1544,7 @@ function Wave({ clip, stream, componentKey, x, w, h, z, offset, lead = 0 }) {
         {fo > 0 && <path class="vol-line" d={fadeOut} />}
         <path class="vol-line" d={path} clip-path={fadeClip ? `url(#${fadeClip})` : undefined} />
         <path class="vol-line-hit" d={path} {...hit} onPointerMove={preview} onPointerEnter={preview} onPointerLeave={hidePreview}>
-          <title>{`${formatVolumeDb(displayDb)} · Drag to adjust volume. ${isMac ? 'Option' : 'Alt'} click to add a keyframe. Drag between keyframes to adjust both.`}</title>
+          <title>{`${formatVolumeDb(displayDb)} · Drag to adjust volume. ${isMac ? 'Option' : 'Alt'} click to add a keyframe. ${prefs.value.autoVolumeKeyframes ? 'With two keyframes, drag between them to adjust only the enclosed section.' : 'Drag between keyframes to adjust both.'}`}</title>
         </path>
       </svg>
       {w >= 24 && ['in', 'out'].map((which) => {

@@ -127,6 +127,10 @@ void main(){
  result=color(mix(light(original),sum/float(count),maskAt(uv)));
 }`;
 
+// The HDR compositor uses the same flow solver and reconstruction, with linear
+// float inputs/outputs instead of the SDR upload and display transfer functions.
+export const MOTION_GLSL = { flow: FLOW, natural: NATURAL };
+
 let gpu, failure, thumb;
 function setup() {
   if (gpu || failure) return gpu;

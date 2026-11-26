@@ -82,6 +82,8 @@ function createVoxcpmProcess({ spawnImpl = spawn, idleTimeoutMs = 60000, startup
   function message(s, value) {
     if (s.stopping || s.ended) return;
     if (value?.type === 'ready' && !s.loaded && value.protocol === PROTOCOL && value.rate === 48000) {
+      // The compute device name (for measurements) is kept only if it looks like a plain device name.
+      s.device = typeof value.device === 'string' && /^[\w .,:;()+@/-]{1,200}$/.test(value.device) ? value.device : null;
       s.loaded = true; clearTimeout(s.startupTimer); s.ready.resolve();
     } else if (value?.type === 'done' && s.loaded && s.pending?.id === value.id && value.rate === 48000) {
       const request = s.pending;
@@ -140,7 +142,7 @@ function createVoxcpmProcess({ spawnImpl = spawn, idleTimeoutMs = 60000, startup
     signal?.addEventListener('abort', abort, { once: true });
     try {
       const s = await ready(config, signal, onLoading);
-      onReady();
+      onReady({ device: s.device ?? null });
       signal?.throwIfAborted();
       const id = ++sequence, line = JSON.stringify({ ...request, id }) + '\n';
       if (Buffer.byteLength(line) > 65536) throw new Error('The voice request is too long.');

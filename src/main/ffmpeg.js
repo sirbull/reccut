@@ -288,7 +288,8 @@ async function thumbnails(file, outDir, duration, onProgress) {
   await fs.promises.mkdir(outDir, { recursive: true });
   const interval = Math.max(1, duration / 240);
   await run(
-    ['-i', file, '-an', '-vf', `fps=1/${interval.toFixed(3)},scale=-2:90`, '-q:v', '6', path.join(outDir, 't%04d.jpg')],
+    // Keep a frame even when the clip is shorter than half the sampling interval.
+    ['-i', file, '-an', '-vf', `fps=1/${interval.toFixed(3)}:eof_action=pass,scale=-2:90`, '-q:v', '6', path.join(outDir, 't%04d.jpg')],
     { onProgress: (s) => onProgress?.(s / Math.max(duration, 0.1)) }
   ).promise;
   const files = (await fs.promises.readdir(outDir)).filter((f) => f.endsWith('.jpg')).sort();

@@ -1,8 +1,67 @@
 # Plan: Eksport i HDR (PQ og HLG)
 
-Status: Windows-utprøvingen er gjennomført 24. november 2026. HDR-eksport i produktet er ikke implementert. Opprinnelig plan skrevet 13. november 2026.
+Status: Blandet HDR/SDR med valgfri SDR- eller PQ-utgang, alle ti overganger og alle 23 kildeeffekter er implementert 25. november 2026. Første avgrensede eksport kom 24. november. Funksjonen er fortsatt «HDR PQ (Early Access)»: HDR-forhåndsvisning, ytelsesgodkjenning og HDR10-mastering er ikke ferdig. Opprinnelig plan skrevet 13. november 2026.
+
+## Implementert i produktet
+
+Produktets eksportarbeider bruker nå originalvideo → FFmpeg float32 → lineær BT.2020 i WebGL2/RGBA16F → valgt utgangstransformasjon og FFmpeg-koding. Referansehvitt er 203 nit. HLG-inngang korrigeres med luminansavhengig OOTF (1000 nit/gamma 1,2) før interpolering. SDR er fortsatt standard, og forhåndsvisningen er fortsatt omtrentlig SDR. Valget ligger i eksportrommet og Easy Export, i Quick Search og hos agenten som `export:hdr` og `export:sdr`.
+
+Prosjekter med original PQ/HLG-video og støttede redigeringer deler nå den lineære sammensettingen for både HDR og SDR. SDR-utgang bruker en fast, jevn skulder på luminansen etter sammensetting: identitet til 0,75 i referansehvit-enheter, deretter `0,75 + 0,25*(Y-0,75)/(Y-0,5)`. Dette beholder mellomtonene, unngår eksponeringspumping og reserverer høylysrom; referansehvitt blir 0,875 lineært i SDR. Fargene konverteres fra BT.2020 til Rec.709 og tilpasses gamut mot en nøytral verdi med samme luminans før BT.709-koding. Det er en egen enkel leveransekurve, ikke en påstand om BT.2390-mastering. H.264, HEVC, AV1, VP9, ProRes og GIF er prøvd.
+
+Rene SDR-prosjekter beholder eksisterende eksport. SDR med optimaliserte kopier, manglende originaler eller redigeringer uten støtte i den lineære veien bruker den eksisterende SDR-konverteringen før sammensetting; UI viser årsaken. HDR fortsetter å avvise slike redigeringer før jobben starter. Forhåndsvisning og scopes bruker fremdeles den separate SDR-visningskonverteringen og kan avvike fra den nye SDR-leveransen. Ingen modellnedlasting eller endring av originalfiler.
+
+Gjeldende støtte omfatter kutt/trimming, fart, videogeometri, opasitet, fades, fargekorrigering, filmlooks, alle kildeeffekter og overganger, masker, avrundede hjørner/kanter/skygger og effektklipp. Bilder/titler/undertekster rasteriseres som SDR-grafikk før lineær sammensetting. Eksponeringskontrollen følger samme skala som editoren: lagret 0,5 (50 i kontrollen) er ett trinn. Forhåndskontroll avviser fremdeles tracking, slideshows, stabilisering, andre klipp-blandingsmoduser enn Normal, kamera-LUT/LOG, opptaksklipp og kildevideo med alfa. SDR-kopier kan ikke brukes som HDR-originaler. Ingen mastering display-/CLL-verdier konstrueres. HDR10-mastering, HLG-utgang, ytelsesgodkjenning, HDR-forhåndsvisning og fysisk HDR-avspilling gjenstår.
+
+Effekt- og overgangspassene i `hdrShaders.js` bruker lineær BT.2020 og RGBA16F. Gaussian blur og romlig bevegelsesuskarphet filtrerer premultipliserte farger, med mip-nedskalering for brede blur-kjerner. Overgangssider lagres premultiplisert og blandes før de legges over sporene under; Fade to White bruker 203 nit. Film-LUT-er brukes som relative kreative fargetransformasjoner med separat høylysskala. Lens Flare gjenbruker de eksisterende optiske formlene, teksturene og lysbufferen, og henter selve emisjonen som flyttall uten å sende HDR-bildet via Canvas.
+
+`hdrMotion.js` gjenbruker bevegelsesfelt- og rekonstruksjonsshadere fra SDR-motoren, men med lineær lysintegrasjon og en komprimert måleskala for korrespondansevurderingen. Arbeideren holder egne uforanderlige nabo-bilder fra originalfilen, følger eksportens bildefrekvens og frigjør bufferne etter bruk. Bakgrunnsreferansenøkkelen bruker et separat SDR-analysebilde for å sammenligne med den eksisterende referansen fra visningen; den beholder original HDR-RGB i forgrunnen. Analysestegene endrer ikke eksportens fargesignal.
+
+`scripts/test-hdr-export.cjs` kjører den faktiske bygde eksportarbeideren i Electron med isolert profil og uavhengige syntetiske PQ-/HLG-felt. Den kontrollerer lysverdier, primærfarger, lineær eksponering/alfablanding, SDR-referansehvitt, bilderekkefølge etter trimming og reversering, 10-bit-/PQ-metadata og avvisning av ustøttede redigeringer. `--samples` tester MP4-kontrollklipp uten å endre originalene; `--baseline-ref` sammenligner dekodede SDR-bilder med eksportarbeideren fra en angitt Git-revisjon. `test/hdr.test.mjs` kontrollerer referansematematikk, innstillinger og forhåndskontroll.
+
+### Kontrollert 25. november 2026
+
+[Resultater fra produktets eksportarbeider](hdr-export-validation.json), Windows/Electron 45.1.0, AMD Radeon PRO/D3D11:
+
+- PQ-felt og primærfarger har høyst 1,766 % relativ feil eller feil målt mot referansehvitt; HLG → PQ har høyst 1,263 %. Dette inkluderer den faktiske tapskodingen med HEVC, ikke bare en matematisk rundtur.
+- Et 1000-nit-felt blir 501,64 nit ved −1 stopp, og blandingen 50 % av 1000 og 250 nit blir 626,21 nit (forventet 625). En hvit SDR-bildeflate ved 50 % opasitet blir 102,22 nit (forventet 101,5).
+- Trimming og baklengs avspilling har riktig kildebilde i samtlige kontrollerte bilder. Testen fant og rettet en feil ved rekonstruksjon av tidsstempler etter FFmpeg-søk; HDR bruker nå opprinnelige, heltallsbaserte tidsstempler.
+- Begge MP4-filene fra brukerens testmappe ble eksportert som både SDR og PQ, med lydmiks/muksing. SDR-bildene er identiske med eksportarbeideren i `c50a05d` målt med dekodet `framemd5`. Originalenes størrelse og endringstid er uendret. Disse klippene er SDR-kontroller, ikke dokumentasjon på ekte HDR-innhold.
+- `scripts/test-hdr-ui.cjs` kontrollerte den virkelige appen med isolert profil: Quick Search kjører HDR-kommandoen, forhåndsinnstillingen velger PQ/HEVC, Standard gjenoppretter SDR, og HDR-veiledningen vises både i håndbokvinduet og på den genererte Docs-siden. Ingen modellnedlasting.
+- Bygg og relevante tester for HDR, eksportrom, formater, bildeeksport, prosjektmodell, lyd, Quick Search, agent og generert dokumentasjon består.
+
+### Utvidet kontroll: effekter og overganger
+
+Den oppdaterte [valideringsrapporten](hdr-export-validation.json) har 22 kontrollgrupper, inkludert alle 23 kildeeffekter og alle ti overganger. De kjører i den faktiske eksportarbeideren. HDR-feltene og SDR-sammenligningen over består fortsatt.
+
+- Overgangene er kontrollert før, midt i og etter skiftet, også på øvre spor og med lukkersampling. En 50/50-overgang mellom 1000 og 250 nit treffer den lineære blandingen, og Fade to White bruker 203 nit.
+- Natural Motion Blur ble prøvd på en bevegelig 1000-nit-kant: åtte mellomnivåpiksler etter rekonstruksjon mot null uten uskarphet, med bevart HDR-topp. En konstant 50 %-maske gir målt styrke 49,28 % over hele kantprofilen, med RMS-feil 3,66 nit. Full maske gir samme profil som uten maske. Kontrollen bruker hele kantprofilen fordi tapskodingen kan gi ringing i enkeltpiksler.
+- Referansenøkkelen fjerner en matchende SDR-visningsreferanse til svart, men beholder omtrent 1004 nit når referansen er forskjellig. Fargen i forgrunnen kommer fra HDR-originalen, ikke fra analysebildet.
+- Fargeskift, metning og generert rødfarge er målt mot BT.2020. Grått forblir nøytralt ved Hue Shift. Effektmasker, synlighetsmasker, effektklipp og deres alfa er kontrollert; avrundede hjørner, kanter og skygger bevarer HDR-bildet under.
+- Nøkkel → bred Gaussian blur → opasitet holder den prøvde 1000-nit-raden mellom 983 og 1004 nit, uten mørke alfafrynser. En halv hvit fyllfarge over en nøkklet forgrunn gir omtrent 600,3 nit i de flate regionene, mot forventet 601,5.
+- De to virkelige MP4-klippene er også satt sammen til en 12-bilders prøve med uskarphet, glød, filmlook, lyd og kryssoppløsning. PQ-eksporten består, og SDR-kontrollene er fortsatt pikselidentiske med `c50a05d`. Originalfilene er uendret.
+- En og samme komposisjon med PQ, HLG og SDR gir omtrent 1004 nit i PQ-høylyset, 401 nit i HLG-høylyset og 204 nit i SDR-hvitt i HDR-eksport. SDR-utgangene i H.264, HEVC, AV1, VP9 og ProRes har riktige Rec.709-tagger, nøytrale gråfelt, bevarte mellomtoner og graderte høylys. GIF-utgangen opprettes også. Gamut-felt, 50 % SDR-over-HDR-alfa og kryssoppløsning kontrollerer at SDR-kurven brukes etter sammensetting.
+- 68 målrettede tester består, i tillegg til den numeriske eksportkjøringen, bygget og den virkelige app-/håndbok-/nettsidetesten. App-testen importerer de korte HDR-/SDR-fixturene via den vanlige import-API-en og kontrollerer ferdig SDR-arbeidskopi/miniatyrbilder, begge Quick Search-kommandoer og eksportmeldingene. En feil der svært korte HDR-kopier kunne gi null miniatyrbilder, er rettet med `fps`-filterets `eof_action=pass`. Ingen gjenstående FFmpeg-prosesser etter eksportprøvene.
+
+Disse kontrollene godkjenner funksjon og fargesignal på Windows-maskinen, ikke lange 4K-jobber, samlet minnebruk eller fysisk HDR-avspilling.
+
+Gjenta etter `npm run build` og `npm run docs`:
+
+```powershell
+node scripts/test-hdr-export.cjs --ffprobe C:/path/to/ffprobe.exe --samples C:/path/to/samples --baseline-ref c50a05d
+node scripts/test-hdr-ui.cjs --fixtures C:/path/to/reccut-hdr-export-RESULT
+```
+
+Alle videoutfiler og testprofiler skrives til en ny midlertidig mappe. Kjøring uten `--samples` trenger bare syntetisk materiale. Dette er korte korrekthetstester ved 320×180 ut, også når kontrollkilden er 4K. De godkjenner ikke lange 4K-jobber, total RAM/VRAM, HDR-skjerm, andre operativsystemer eller en leveranseplattform.
 
 ## Resultat og valg etter Windows-utprøvingen
+
+### HDR-skjerm: ny visningsprøve 25. november 2026
+
+En isolert Electron 45.1.0/Chromium 156-prøve på AMD RDNA 2 bekrefter at WebGPU kan konfigurere en faktisk canvas-overflate med `rgba16float`, `toneMapping: { mode: 'extended' }` og bevare kanalverdiene `[5, 2, 1, 1]` i overflatens GPU-tekstur. Dette er verken en måling av utsendt skjermlys eller ferdig HDR-forhåndsvisning. Testmiljøet rapporterer bare en 8-bits SDR-visning og `dynamic-range: high = false`. Resultatet ligger i [hdr-display-spike-results.json](hdr-display-spike-results.json). Ingen eksperimentelle funksjonsflagg ble slått på.
+
+WebGLs `drawingBufferToneMapping` finnes ikke i denne versjonen. Den separate prøvebanen for `drawingBufferStorage` ga GL-feil og regnes ikke som en godkjent presentasjonsvei. WebGPU er derfor den bekreftede API-kandidaten til skjermpresentasjon. Chrome dokumenterer HDR-canvas med WebGPU her: https://developer.chrome.com/blog/new-in-webgpu-129.
+
+Neste produktsteg er en visningsbro fra den lineære HDR-komposisjonen til WebGPU, med uttrykkelig kontroll av overføringsfunksjon, primærfarger og referansehvitt. Den må håndtere HDR/SDR automatisk per visningsvindu og skifte når et vindu flyttes mellom skjermer, samt tilby SDR-kontrollvisning. Dagens separate forhåndsvisning bruker `canvas.captureStream` og WebRTC fra SDR-canvas; å bare merke mottakervinduet som HDR vil ikke gjenopprette tapte høylys. HDR-komposisjonen må føres til HDR-visningen før denne SDR-kopieringen. Ytelse og faktisk lys-/fargegjengivelse må kontrolleres på en HDR-skjerm med HDR aktivert, også etter skjermbytte. Dette er fortsatt planlagt arbeid, ikke implementert produktstøtte.
 
 **Velg vei C som kandidat på Windows: sammensetting i lineært lys i WebGL2/RGBA16F, med flyttallsdekoding og HDR-koding gjennom FFmpeg.** Et bytte til float16-Canvas alene er ikke tilstrekkelig. Arkitekturen må kontrolleres på Mac og Linux før valget regnes som verifisert der.
 
@@ -28,7 +87,7 @@ HLG-testen bruker en 1000-nits skjerm, systemgamma 1,2 og svartnivå 0. HLG er r
 
 **Ikke godkjent eller utført:** Mac/Linux-matrisen, full minnemåling, ytelse i den ferdige HDR-kompositoren, avspilling som HDR i QuickTime/Windows-spiller/VLC, fysisk HDR-skjerm og brukerens private YouTube-opplasting. Kodektesten er teknisk bestått på Windows; den er ikke en offentlig HDR-kompatibilitetsgodkjenning.
 
-Neste arbeid er fase I1 og deretter den lineære WebGL-veien, med HLG-korreksjonen og SDR-regresjonstester som eksplisitte krav. HDR-valg skal fortsatt ikke vises i produktet før fargekjeden, ytelsen og eksportvalgene er ferdige.
+Opprinnelig anbefaling etter utprøvingen var I1, deretter lineær WebGL, HLG-korreksjon og SDR-regresjonstester før et fullt HDR-valg. Den avgrensede implementasjonen over er nå tilgjengelig som eksplisitt Early Access med forhåndskontroll; dette betyr ikke at I1–I5 eller ytelseskravene under er fullt godkjent.
 
 Målet er at Reccut kan eksportere HDR-video (HDR10/PQ og HLG) med riktig metadata, uten at HDR-klippene først tonemappes til SDR. SDR-eksport skal fungere som før, og være standard.
 
@@ -39,7 +98,7 @@ Planen har to deler:
 
 ---
 
-## Slik virker det i dag
+## Utgangspunkt før implementasjonen
 
 Bildekjeden er SDR fra dekodingen til fila:
 
@@ -142,9 +201,9 @@ Resultatet, valget og begrunnelsen skrives øverst i denne planen før del 2 sta
 
 ---
 
-## Del 2: Implementasjon
+## Del 2: Opprinnelig implementasjonsplan
 
-Fasene bygger på hverandre. Hver fase skal kunne slås sammen alene, med HDR skjult bak et internt flagg til I5 er ferdig.
+Fasene under beskriver den opprinnelige planen. Gjeldende gjennomføring og avgrensninger står øverst: eksportvalget er tilgjengelig som Early Access, med forhåndskontroll og dokumenterte begrensninger. Prosjektets visning er fortsatt SDR; utgangsfargen velges og lagres med eksportinnstillingene. PQ/HEVC er implementert, mens andre HDR-utganger, full HDR-visning, plattformmatrisen og ytelsesgodkjenningen gjenstår.
 
 ### I1. Fargerom i prosjektet
 

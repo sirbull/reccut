@@ -554,7 +554,7 @@ Start by choosing the right recording, then process it. A quiet microphone compo
 
 1. Import the music and connect it on an audio lane below the storyline. Trim it to the edit.
 2. Lower the music while listening to the dialogue. For example, try −18 dB as a starting point, then adjust by ear.
-3. Option/Alt-click the music's volume line to add four points around a spoken section. Lower the middle pair to create a quiet section with a transition on each side.
+3. Option/Alt-click the music's volume line to add two points around a spoken section. With **Settings → Editing → Auto-add volume keyframes** enabled (the default), drag between them to lower only that section: Reccut adds the inner pair and keeps the outside level unchanged. Drag the middle segment again to refine it. If the setting is off, add four points yourself and lower the middle pair.
 4. Drag the top-corner fade handles to fade music in and out. Play through the full mix and the ending.
 
 ## Check the delivery

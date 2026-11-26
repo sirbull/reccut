@@ -245,17 +245,32 @@ test('søk til slutt viser siste bilde også for brøkdels-fps og korte sekvense
   }
 });
 
-test('et avspillingsområde slutter på bildet før utpunktet, også ved et kutt', () => {
+test('In/Out stopper ikke vanlig avspilling, verken foran eller forbi området', () => {
   const p = project([{ dur: 2, in: 4 }, { dur: 2, in: 10 }]);
   p.range = { in: 1, out: 2 };
   const s = setup(p, 1.5);
-  s.tick(); s.videos.forEach(v => v.finish()); s.tick();
-  s.player.play(); s.tick(600);
-  s.videos.forEach(v => v.finish()); s.tick();
-  assert.equal(s.playing.value, false);
-  assert.match(s.canvas.pixel, /media0/);
-  assert.equal(s.getTime(), 59 / 30);
-  assert.ok(s.videos.every(v => v.paused));
+  s.player.play(); s.tick(600); s.tick(16);
+  assert.equal(s.playing.value, true, 'spiller forbi utpunktet');
+  assert.ok(s.getTime() > 2);
+  s.player.pause();
+  s.player.seek(0.2);
+  s.player.play(); s.tick(16);
+  assert.ok(s.getTime() < 1, 'starter foran innpunktet uten å hoppe');
+  s.player.pause();
+  s.player.seek(2);
+  s.player.play(); s.tick(16);
+  assert.ok(s.getTime() >= 2, 'starter på utpunktet uten å hoppe til innpunktet');
+});
+
+test('løkke inne i In/Out går i løkke over området', () => {
+  const p = project([{ dur: 2, in: 4 }, { dur: 2, in: 10 }]);
+  p.range = { in: 1, out: 2 };
+  const s = setup(p, 1.5);
+  s.setLoop(true);
+  s.player.play(); s.tick(600); s.tick(16);
+  assert.equal(s.playing.value, true);
+  assert.ok(s.getTime() >= 1 && s.getTime() < 2, 'tilbake til innpunktet');
+  s.setLoop(false);
 });
 
 test('slutt med et bevisst tomt område forblir svart og løkke starter på nytt', () => {

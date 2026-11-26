@@ -3,11 +3,18 @@ name: Build VoxCPM2 CPU engines (Windows/Linux)
 # Phase 9 measurement builds. Manual only: uploads workflow artifacts, never a
 # release or add-on package, and downloads no model weights. Windows and Linux
 # stay disabled in the app until docs/voxcpm-cpu has measurements for them.
+# Variants: baseline (SSE2), avx2, and vulkan (avx2 + Vulkan GPU backend, built
+# with the pinned LunarG Vulkan SDK below).
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  VULKAN_VERSION: 1.4.321.1
+  VULKAN_SHA256_WINDOWS: baaa4f7ca11ed3d82aa1c102b21208915485bbaa473068c763daa425cca468bd
+  VULKAN_SHA256_LINUX: f22a3625bd4d7a32e7a0d926ace16d5278c149e938dac63cecc00537626cbf73
 
 jobs:
   windows:
@@ -15,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cpu: [baseline, avx2]
+        cpu: [baseline, avx2, vulkan]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -27,7 +34,18 @@ jobs:
           ref: d30f00feadb7ebce95bacd55b0d104e3ef501481
           path: .voxcpm-source
           persist-credentials: false
-      - name: Bygg VoxCPM2 (Windows x64 / CPU)
+      - name: Vulkan SDK
+        if: matrix.cpu == 'vulkan'
+        shell: pwsh
+        run: |
+          $installer = "$env:RUNNER_TEMP\vulkansdk.exe"
+          curl.exe -fsSL -o $installer "https://sdk.lunarg.com/sdk/download/$env:VULKAN_VERSION/windows/vulkansdk-windows-X64-$env:VULKAN_VERSION.exe"
+          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne $env:VULKAN_SHA256_WINDOWS) { throw 'Vulkan SDK checksum mismatch' }
+          $p = Start-Process $installer -ArgumentList '--accept-licenses', '--default-answer', '--confirm-command', 'install' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Vulkan SDK install failed ($($p.ExitCode))" }
+          Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\$env:VULKAN_VERSION"
+          Add-Content $env:GITHUB_PATH "C:\VulkanSDK\$env:VULKAN_VERSION\Bin"
+      - name: Bygg VoxCPM2 (Windows x64)
         shell: pwsh
         run: ./native/voxcpm/build-windows.ps1 .voxcpm-source voxcpm-artifacts ${{ matrix.cpu }}
       - name: Avhengigheter og protokoll
@@ -49,12 +67,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cpu: [baseline, avx2]
+        cpu: [baseline, avx2, vulkan]
     steps:
       - name: Byggeverktøy
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends build-essential cmake ninja-build git ca-certificates binutils
+          apt-get install -y --no-install-recommends build-essential cmake ninja-build git ca-certificates binutils curl xz-utils
+      - name: Vulkan SDK
+        if: matrix.cpu == 'vulkan'
+        run: |
+          curl -fsSL -o /tmp/vulkansdk.tar.xz "https://sdk.lunarg.com/sdk/download/$VULKAN_VERSION/linux/vulkansdk-linux-x86_64-$VULKAN_VERSION.tar.xz"
+          echo "$VULKAN_SHA256_LINUX  /tmp/vulkansdk.tar.xz" | sha256sum -c
+          mkdir -p /opt/vulkan && tar -xJf /tmp/vulkansdk.tar.xz -C /opt/vulkan
+          sdk="/opt/vulkan/$VULKAN_VERSION/x86_64"
+          echo "VULKAN_SDK=$sdk" >> "$GITHUB_ENV"
+          echo "$sdk/bin" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$sdk/lib" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -65,7 +93,7 @@ jobs:
           ref: d30f00feadb7ebce95bacd55b0d104e3ef501481
           path: .voxcpm-source
           persist-credentials: false
-      - name: Bygg VoxCPM2 (Linux x64 / CPU)
+      - name: Bygg VoxCPM2 (Linux x64)
         run: |
           git config --global --add safe.directory "$PWD/.voxcpm-source"
           bash native/voxcpm/build-linux.sh .voxcpm-source voxcpm-artifacts ${{ matrix.cpu }}

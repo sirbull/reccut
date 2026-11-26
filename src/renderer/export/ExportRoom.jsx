@@ -6,6 +6,7 @@ import {
   Apple,
   CheckCircle2,
   CircleAlert,
+  CircleX,
   Clapperboard,
   Feather,
   FileVideo,
@@ -23,7 +24,7 @@ import {
   Unlink,
   X,
 } from 'lucide-preact';
-import { formatDuration, formatTimecode } from '../../shared/model.js';
+import { clampRange, exportFileName, exportRangeProblem, formatDuration, formatTimecode } from '../../shared/model.js';
 import {
   AUDIO_FORMATS,
   CAPTION_EXPORT,
@@ -50,7 +51,7 @@ import {
 import { createPlayer } from '../player.js';
 import { LOUDNESS_CEILING, LOUDNESS_TARGETS } from '../../shared/loudness.js';
 import { tasks } from '../editor/store.js';
-import { FrameRateWarning, SourceMediaChoice, defaultExportDir, exportCaptionsOnly, startExport } from '../editor/ExportDialog.jsx';
+import { DEFAULT_DIR_LABEL, ExportColorChoice, FrameRateWarning, SourceMediaChoice, defaultExportDir, exportCaptionsOnly, projectExportDir, rememberExportDir, startExport } from '../editor/ExportDialog.jsx';
 import { ThumbnailChoice } from '../design/ThumbnailChoice.jsx';
 import { Button, IconButton, NumberField, Row, Section, Segmented, Select, toast } from '../ui.jsx';
 import {
@@ -108,7 +109,8 @@ function resolvedSettings(id) {
     crop: so.crop,
     fps: s.fpsMode === 'source' ? p.fps : s.fps,
     sourceMedia: s.sourceMedia,
-    range: so.range,
+    color: s.color || 'sdr',
+    range: clampRange(so.range, p.duration),
     captions: hasCaptions(p) ? (s.audioOnly ? (s.captions.includes('srt') ? 'srt' : s.captions === 'vtt' ? 'vtt' : 'none') : s.captions) : 'none',
   };
 }
@@ -126,19 +128,63 @@ function extFor(s) {
 async function exportSource(id, name, thumbnailId=null) {
   const p = sourceProject(id);
   const rs = resolvedSettings(id);
-  const folder = settings.value.dir || (await defaultExportDir());
+  const folder = await defaultExportDir();
   const sep = api.platform === 'win32' ? '\\' : '/';
   const safe = (name || p.name).replace(/[\\/:*?"<>|]/g, '_');
   const range = rs.range;
-  if ((range ? range.out - range.in : p.duration) <= 0) {
-    toast(`${p.name} is empty and was not exported.`);
+  const problem = exportRangeProblem(p, range);
+  if (problem) {
+    toast(`${p.name} was not exported. ${problem}`, { kind: 'error' });
     return false;
   }
-  await startExport(p,{ ...rs, output: `${folder}${sep}${safe}.${extFor(rs)}` },rs.audioOnly?null:thumbnailId);
-  return true;
+  // null: filen fantes, og brukeren valgte Cancel i spørsmålet om å erstatte den.
+  const jobId = await startExport(p,{ ...rs, output: `${folder}${sep}${safe}.${extFor(rs)}` },rs.audioOnly?null:thumbnailId);
+  return jobId !== null;
 }
 
 roomActions.togglePlay = player.toggle;
+
+// Inn- og utpunkt som kan dras på skrubbelinjen, som i Compressor og Media Encoder. Forhåndsvisningen
+// viser hele kilden; området er det som eksporteres. Å dra et håndtak lager et område om det ikke finnes.
+const THUMB = 12; // bredden på skrubbeknappen; linjen går fra midten av knappen i hver ende
+function RangeHandle({ edge, id, project: p, range }) {
+  const dur = Math.max(0.01, p.duration);
+  const t = range ? range[edge] : edge === 'in' ? 0 : p.duration;
+  const frame = 1 / (p.fps || 30);
+  const onPointerDown = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const rect = el.parentElement.getBoundingClientRect();
+    player.pause();
+    const move = (ev) => {
+      const x = (ev.clientX - rect.left - THUMB / 2) / Math.max(1, rect.width - THUMB);
+      let v = Math.round((Math.min(1, Math.max(0, x)) * p.duration) / frame) * frame;
+      const r = clampRange(sourceOptions(id).range, p.duration) || { in: 0, out: p.duration };
+      v = edge === 'in' ? Math.min(v, r.out - frame) : Math.min(p.duration, Math.max(v, r.in + frame));
+      v = Math.max(0, v);
+      setSourceOptions(id, { range: { ...r, [edge]: v } });
+      player.seek(edge === 'out' ? Math.max(r.in, v - frame) : v);
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
+  return (
+    <span
+      class={`ex-range-handle ${edge}`}
+      style={{ left: `calc(${THUMB / 2}px + (100% - ${THUMB}px) * ${t / dur})` }}
+      title={`${edge === 'in' ? 'In' : 'Out'}: ${formatTimecode(t, p.fps)}. Drag to change what is exported.`}
+      onPointerDown={onPointerDown}
+    />
+  );
+}
 
 export function ExportRoom({ active }) {
   const [over, setOver] = useState(false);
@@ -157,20 +203,21 @@ export function ExportRoom({ active }) {
     const c = { ...custom, ...patch };
     setSettings({ format: customFormatId(c.container, c.video, c.audio), preset: 'custom' });
   };
-  const a = so.range ? so.range.in : 0;
-  const b = so.range ? so.range.out : p.duration;
+  const a = rs.range ? rs.range.in : 0;
+  const b = rs.range ? rs.range.out : p.duration;
   const duration = Math.max(0, b - a);
   const size = estimateSize({ ...rs }, duration, geo.w, geo.h);
-  const [name, setName] = useState(p.name);
+  const [name, setName] = useState(exportFileName(p));
   const [thumbnailId,setThumbnailId]=useState(null),[preparing,setPreparing]=useState(false);
 
-  useEffect(() => setName(p.name), [id, p.name]);
+  const suggested = exportFileName(p);
+  useEffect(() => setName(suggested), [id, suggested]);
   useEffect(() => {
     if (!active) player.pause();
   }, [active]);
   useEffect(() => {
     player.pause();
-    player.seek(0);
+    player.seek(sourceOptions(id).range?.in || 0);
     player.invalidate();
   }, [id]);
 
@@ -252,17 +299,22 @@ export function ExportRoom({ active }) {
           <button class="play-btn small" onClick={player.toggle} title="Play or pause">
             {previewPlaying.value ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
           </button>
-          <input
-            type="range"
-            class="slider scrub"
-            min={0}
-            max={Math.max(0.01, p.duration)}
-            step={1 / p.fps}
-            value={previewTime.value}
-            style={{ '--lo': `${(a / Math.max(0.01, p.duration)) * 100}%`, '--hi': `${(b / Math.max(0.01, p.duration)) * 100}%` }}
-            onInput={(e) => player.seek(Number(e.currentTarget.value))}
-            onPointerUp={(e) => e.currentTarget.blur()}
-          />
+          <div class="ex-scrub">
+            <input
+              type="range"
+              class="slider scrub"
+              min={0}
+              max={Math.max(0.01, p.duration)}
+              step={1 / p.fps}
+              value={previewTime.value}
+              style={{ '--lo': `${(a / Math.max(0.01, p.duration)) * 100}%`, '--hi': `${(b / Math.max(0.01, p.duration)) * 100}%` }}
+              onInput={(e) => player.seek(Number(e.currentTarget.value))}
+              onPointerUp={(e) => e.currentTarget.blur()}
+            />
+            {['in', 'out'].map((edge) => (
+              <RangeHandle key={edge} edge={edge} id={id} project={p} range={rs.range} />
+            ))}
+          </div>
           <span class="tc">{formatTimecode(previewTime.value, p.fps)}</span>
           {!s.audioOnly && (
             <Segmented
@@ -347,6 +399,7 @@ export function ExportRoom({ active }) {
                     <Select value={s.format} options={VIDEO_FORMATS.map((f) => ({ value: f.id, label: `${f.label}, ${f.note.toLowerCase()}` }))} onChange={(v) => setSettings({ format: v, preset: 'custom' })} />
                   </Row>
                 )}
+                <ExportColorChoice project={p} settings={rs} value={s.color} onChange={color => setSettings({ color, preset: 'custom', ...(color === 'hdr-pq' ? { format: 'mp4-hevc', sourceMedia: 'original' } : {}) })} />
               </>
             )}
           </Section>
@@ -441,7 +494,7 @@ export function ExportRoom({ active }) {
               </Section>
               {Object.values(mediaCopies(p)).some(Boolean) && (
                 <Section title="Source media">
-                  <SourceMediaChoice project={p} value={s.sourceMedia} onChange={(v) => setSettings({ sourceMedia: v })} />
+                  <SourceMediaChoice project={p} color={s.color} value={s.sourceMedia} onChange={(v) => setSettings({ sourceMedia: v })} />
                 </Section>
               )}
             </>
@@ -531,12 +584,12 @@ export function ExportRoom({ active }) {
               <button
                 class="path-btn"
                 onClick={async () => {
-                  const d = await api.chooseDir(s.dir || (await defaultExportDir()));
-                  if (d) setSettings({ dir: d });
+                  const d = await api.chooseDir(await defaultExportDir());
+                  if (d) rememberExportDir(d);
                 }}
               >
                 <FolderOpen size={14} />
-                <span>{s.dir || 'Movies/Reccut/Exports'}</span>
+                <span>{projectExportDir.value || DEFAULT_DIR_LABEL()}</span>
               </button>
             </Row>
           </Section>
@@ -546,7 +599,7 @@ export function ExportRoom({ active }) {
             {preparing?'Preparing Export…':id === PROJECT_SOURCE ? 'Export Project' : 'Convert File'}
           </Button>
           {hasCaptions(p) && (
-            <Button variant="secondary" onClick={() => exportCaptionsOnly(p, { range: so.range, captions: s.captions, name, dir: s.dir })}>
+            <Button variant="secondary" onClick={() => exportCaptionsOnly(p, { range: so.range, captions: s.captions, name })}>
               Export Captions Only
             </Button>
           )}
@@ -716,7 +769,7 @@ function ExportQueue() {
         {list.map((t) => (
           <div key={t.id} class={`task ${t.state}`}>
             <div class="task-head">
-              {t.state === 'done' ? <CheckCircle2 size={14} class="ok" /> : t.state === 'error' ? <CircleAlert size={14} class="err" /> : <Loader2 size={14} class="spin" />}
+              {t.state === 'done' ? <CheckCircle2 size={14} class="ok" /> : t.state === 'error' ? <CircleAlert size={14} class="err" /> : t.state === 'canceled' ? <CircleX size={14} class="err" /> : <Loader2 size={14} class="spin" />}
               <span class="title">{t.title.replace(/^Eksporterer /, '')}</span>
               {(t.state === 'running' || t.state === 'queued') && <IconButton icon={X} size={13} title="Cancel" onClick={() => api.cancelTask(t.id)} />}
               {t.state === 'done' && t.result && (

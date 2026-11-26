@@ -1,0 +1,51 @@
+{
+  "electron": "45.1.0",
+  "chromium": "156.0.8078.49",
+  "displays": [
+    {
+      "size": {
+        "width": 1280,
+        "height": 800
+      },
+      "colorSpace": "{primaries:BT709, transfer:SRGB, matrix:RGB, range:FULL}",
+      "depthPerComponent": 8
+    }
+  ],
+  "renderer": {
+    "secureContext": true,
+    "screenHdr": false,
+    "videoHdr": false,
+    "p3": false,
+    "webgl": {
+      "storage": "function",
+      "toneMapping": "undefined",
+      "pixel": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "error": 1280
+    },
+    "adapter": {
+      "vendor": "amd",
+      "architecture": "rdna-2",
+      "device": "",
+      "description": ""
+    },
+    "webgpu": {
+      "format": "rgba16float",
+      "colorSpace": "srgb",
+      "toneMapping": {
+        "mode": "extended"
+      },
+      "pixel": [
+        5,
+        2,
+        1,
+        1
+      ]
+    }
+  },
+  "physicalHdrVerified": false
+}

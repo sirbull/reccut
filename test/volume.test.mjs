@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { computeAudio, dbToGain, kfTime, makeClip, newProject, setKeyframe, setKeyframeEase, valueAt } from '../src/shared/model.js';
-import { fadePath, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from '../src/renderer/editor/volume.js';
+import { dragVolumeSegment, fadePath, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from '../src/renderer/editor/volume.js';
 import { prefs, setPrefs } from '../src/renderer/prefs.js';
 import { setKeyframe as setEditorKeyframe } from '../src/renderer/editor/keyframes.js';
 
@@ -14,6 +14,74 @@ function audio() {
   p.duration = 18;
   return { p, c };
 }
+
+test('dragging between two volume keyframes creates an isolated four-point adjustment in actual audio', () => {
+  for (const delta of [-24, 6]) {
+    const { p, c } = audio();
+    for (const t of [7, 11]) setKeyframe(c, 'volume', t, 0);
+    assert.deepEqual(dragVolumeSegment(c, 'volume', 14, delta), [1, 2]);
+    assert.deepEqual(c.kf.volume.map(([t, v]) => [t, v]), [[7, 0], [7.1, delta], [10.9, delta], [11, 0]]);
+    for (const T of [10, 11.9, 12, 16, 17.9]) {
+      assert.equal(valueAt(c, 'volume', T), 0, `outside stays unchanged at ${T}`);
+      assert.equal(computeAudio(p, T)[0].gain, 1);
+    }
+    assert.equal(valueAt(c, 'volume', 14), delta);
+    assert.ok(Math.abs(computeAudio(p, 14)[0].gain - dbToGain(delta)) < 1e-12);
+    assert.ok(Math.abs(valueAt(c, 'volume', 12.05) - delta / 2) < 1e-9);
+    dragVolumeSegment(c, 'volume', 14, 1);
+    assert.equal(c.kf.volume.length, 4, 'repeated adjustments reuse the inner pair');
+    assert.deepEqual(c.kf.volume.map((k) => k[1]), [0, delta + 1, delta + 1, 0]);
+  }
+});
+
+test('automatic volume points are optional and never appear for zero change, single points or outside the pair', () => {
+  const { c } = audio();
+  for (const t of [7, 11]) setKeyframe(c, 'volume', t, 0);
+  const original = structuredClone(c);
+  dragVolumeSegment(c, 'volume', 14, 0);
+  assert.deepEqual(c, original);
+  dragVolumeSegment(c, 'volume', 14, -6, false);
+  assert.deepEqual(c.kf.volume.map((k) => k[1]), [-6, -6]);
+  dragVolumeSegment(c, 'volume', 10, -3);
+  assert.deepEqual(c.kf.volume.map((k) => k[1]), [-9, -6]);
+  c.kf.volume.pop();
+  dragVolumeSegment(c, 'volume', 14, 3);
+  assert.deepEqual(c.kf.volume, [[7, -6, 'easeInOut']]);
+  c.kf.volume = [];
+  dragVolumeSegment(c, 'volume', 14, -12);
+  assert.equal(c.props.volume, -12);
+});
+
+test('isolated adjustment clamps a sloped pair together and uses the selected transition easing', () => {
+  const { c } = audio();
+  setKeyframe(c, 'volume', 7, -12, 'hold');
+  setKeyframe(c, 'volume', 11, 6, 'easeOut');
+  dragVolumeSegment(c, 'volume', 14, 40, true, 'linear');
+  assert.deepEqual(c.kf.volume, [[7, -12, 'hold'], [7.1, -6, 'hold'], [10.9, 12, 'linear'], [11, 6, 'easeOut']]);
+  assert.equal(valueAt(c, 'volume', 11.9), -12);
+  assert.equal(valueAt(c, 'volume', 16.1), 6);
+  c.kf.volume = [[7, 12, 'linear'], [11, 12, 'linear']];
+  dragVolumeSegment(c, 'volume', 14, 1);
+  assert.equal(c.kf.volume.length, 2, 'no new points at the volume ceiling');
+});
+
+test('new volume transitions fit short intervals, the grab location and the clip animation rate', () => {
+  for (const options of [{ speed: 2 }, { reverse: true }, { ramp: [[0, 0.25], [1, 4]] }, {}]) {
+    const { c } = audio();
+    Object.assign(c, options);
+    const rate = options.speed || 1;
+    c.kf.volume = [[7, 0], [11, 0]];
+    dragVolumeSegment(c, 'volume', c.start + 4 / rate, -6);
+    assert.ok(Math.abs(c.kf.volume[1][0] - 7 - 0.1 * rate) < 1e-12);
+    assert.equal(c.kf.volume[1][2], 'linear', 'inner segment keeps its interpolation');
+    c.kf.volume = [[7, 0], [7.02, 0]];
+    const T = c.start + 2.001 / rate;
+    dragVolumeSegment(c, 'volume', T, -6);
+    assert.equal(c.kf.volume.length, 4);
+    assert.equal(valueAt(c, 'volume', T), -6, 'the grab point stays between the two inner points');
+    assert.ok(c.kf.volume.every((k, i, a) => !i || k[0] > a[i - 1][0]), 'points remain distinct and ordered');
+  }
+});
 
 test('four-point volume duck changes only the middle pair and eases both transitions in actual audio', () => {
   const { p, c } = audio();

@@ -22,6 +22,7 @@ export const EXAMPLES = [
     { text: 'Make the flashback scene black and white with film grain.', tools: ['set_clip_properties', 'add_video_effect'] },
   ]],
   ['Sound', [
+    { text: 'Lower the section between the selected clip’s two volume keyframes by 3 dB, keeping the outside level unchanged. The playhead is between them.', tools: ['load_skill', 'find_commands', 'run_command'] },
     { text: 'Put the music on its own lane at −15 dB, duck it under my voice and fade it out at the end.', tools: ['move_clip', 'set_clip_properties', 'run_command'] },
     { text: 'Remove the background noise from my microphone.', tools: ['set_clip_properties'] },
     { text: 'Read this script as a voice-over: “Welcome to the course. In this lesson…”', tools: ['list_voices', 'generate_voiceover'] },

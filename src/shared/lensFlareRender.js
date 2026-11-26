@@ -12,6 +12,7 @@
 // Uten WebGL2 tegnes spritene med Canvas 2D (gammakodet, uten Flare color, elementfarge og smuss), og de
 // prosedyriske elementene som enkle radielle gradienter.
 import { assetOf, flareDraws } from './lensFlare.js';
+import { effectParams } from './videoEffects.js';
 
 const makeCanvas = () => (typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas'));
 
@@ -65,8 +66,8 @@ export function loadFlareSprites(project) {
   const assets = new Map();
   for (const clip of Object.values(project.clips || {}))
     for (const e of clip.props?.vfx || []) if (e.type === 'lensFlare' && e.on !== false)
-      for (const el of e.p?.elements || []) {
-        const a = assetOf(e.p, el.asset);
+      for (const el of effectParams(e).elements || []) {
+        const a = assetOf(effectParams(e), el.asset);
         if (a && (a.file || a.url) && !(a.kit && flareOptions.analytic && setup())) assets.set(a.id, a);
       }
   return Promise.all([...assets.values()].map(load));
@@ -298,7 +299,7 @@ function spriteTexture(asset) {
   return t;
 }
 
-function gpuFlare(img, w, h, draws, screen) {
+function gpuFlare(img, w, h, draws, screen, emissionOnly = false) {
   const { gl, canvas, sprite, shape, composite } = g;
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w;
@@ -366,6 +367,12 @@ function gpuFlare(img, w, h, draws, screen) {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
   gl.disable(gl.BLEND);
+  if(emissionOnly){
+    if(!g.hdrPixels||g.hdrPixels.length!==w*h*4)g.hdrPixels=new Float32Array(w*h*4);
+    gl.readPixels(0,0,w,h,gl.RGBA,gl.FLOAT,g.hdrPixels);
+    if(gl.getError()!==gl.NO_ERROR)throw new Error('Could not read the HDR lens-flare light field.');
+    return g.hdrPixels;
+  }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, w, h);
   gl.bindTexture(gl.TEXTURE_2D, g.video);
@@ -380,6 +387,14 @@ function gpuFlare(img, w, h, draws, screen) {
   gl.activeTexture(gl.TEXTURE0);
   return canvas;
 }
+
+// Shared optical formulas/assets, without sending the HDR source through Canvas.
+// Returned rows follow OpenGL's bottom-up orientation; RGB is linear Rec.709 light.
+export function hdrFlareEmission(w,h,p,visibility=1){
+  if(!setup()||!g.half)throw new Error('HDR Lens Flare needs floating-point WebGL buffers.');
+  return gpuFlare(null,w,h,flareDraws(p,w,h,null,visibility),false,true);
+}
+export function releaseHdrFlarePixels(){if(g)g.hdrPixels=null;}
 
 // Okklusjon: hvor stor del av lyskilden som synes, 0–1. Bildet rundt lyskilden (en sirkel på 2 % av høyden)
 // leses i 24 × 24 punkter; et punkt teller som lys når lysstyrken er over Threshold. Punkter utenfor bildet

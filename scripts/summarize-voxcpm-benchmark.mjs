@@ -6,7 +6,7 @@ const [file, label = 'VoxCPM2 benchmark'] = process.argv.slice(2);
 const report = JSON.parse(fs.readFileSync(file, 'utf8'));
 const brief = {
   kind: report.kind, status: report.status, error: report.error, wallSeconds: report.wallSeconds,
-  environment: report.environment, engineSha256: report.inputs?.engineSha256, engineArgs: report.engineArgs,
+  environment: report.environment, engineSha256: report.inputs?.engineSha256, engineArgs: report.engineArgs, devices: report.devices,
   summary: report.summary, proposedCriteria: report.proposedCriteria, cancel: report.cancel,
   switchBackIdentical: report.switchBackIdentical, firstJobMatchesWarm: report.firstJobMatchesWarm,
 };

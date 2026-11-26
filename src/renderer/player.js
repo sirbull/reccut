@@ -559,10 +559,13 @@ export function createPlayer({ getProject, getPreviews = () => NO_PREVIEWS, play
     return true;
   }
 
-  // Området avspillingen holder seg innenfor. Et område på et par bilder (O helt i starten gir ett)
-  // ville hoppet til start og stoppet med en gang, så det gjelder ikke for avspilling.
-  function playRange(p) {
-    return p.range && p.range.out - p.range.in > 0.05 ? p.range : { in: 0, out: p.duration };
+  // Området avspillingen holder seg innenfor. In/Out viser bare hva som eksporteres, så vanlig
+  // avspilling går forbi markeringen begge veier. Bare avspilling i løkke som starter inne i
+  // området, går i løkke over området. Et område på et par bilder gjelder aldri.
+  function playRange(p, T) {
+    const r = p.range;
+    if (prefs.value.loopPlayback && r && r.out - r.in > 0.05 && T >= r.in - 0.05 && T < r.out) return r;
+    return { in: 0, out: p.duration };
   }
 
   function loop() {
@@ -573,7 +576,7 @@ export function createPlayer({ getProject, getPreviews = () => NO_PREVIEWS, play
       const now = performance.now();
       T = clockBase + ((now - clockStart) / 1000) * rate;
       if (rate > 0) {
-        const r = playRange(p);
+        const r = playRange(p, clockBase);
         const end = r.out;
         if (T >= end) {
           if (prefs.value.loopPlayback && end > 0) {
@@ -615,7 +618,7 @@ export function createPlayer({ getProject, getPreviews = () => NO_PREVIEWS, play
     audioCtx.resume();
     const p = getProject();
     let T = getTime();
-    const range = playRange(p);
+    const range = playRange(p, T);
     if (r > 0 && T >= range.out - 0.05) T = range.in;
     rate = r;
     clockBase = T;

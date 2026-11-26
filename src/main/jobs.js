@@ -153,6 +153,21 @@ function getWorker(kind) {
   return win;
 }
 
+const CANCEL_GRACE_MS = 5000;
+// Prosesser (FFmpeg) som arbeidsvinduene har startet, per vindustype.
+const workerProcs = {};
+ipcMain.on('worker:procs', (e, pids) => {
+  const kind = Object.keys(workers).find((k) => workers[k] && !workers[k].isDestroyed() && workers[k].webContents === e.sender);
+  if (kind) workerProcs[kind] = Array.isArray(pids) ? pids.filter(Number.isInteger) : [];
+});
+function killWorkerProcs(kind) {
+  for (const pid of workerProcs[kind] || []) {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {}
+  }
+  workerProcs[kind] = [];
+}
 function runInWorker(kind, payload, ctx) {
   const win = getWorker(kind);
   const jobId = jobSeq++;
@@ -170,6 +185,16 @@ function runInWorker(kind, payload, ctx) {
         return;
       }
       if (!win.isDestroyed()) win.webContents.send('worker:cancel', jobId);
+      // Arbeidsvinduet stopper ved neste bilde. Svarer det ikke (for eksempel midt i en FFmpeg-kjøring
+      // eller lydmiksing), slutter vi å vente og starter vinduet på nytt, så køen ikke blir stående.
+      const timer = setTimeout(() => {
+        if (!pending.has(jobId)) return;
+        pending.delete(jobId);
+        reject(new Error('Canceled'));
+        killWorkerProcs(kind);
+        if (!win.isDestroyed()) win.destroy();
+      }, CANCEL_GRACE_MS);
+      timer.unref?.();
     });
   });
 }

@@ -138,7 +138,7 @@ Use the Speed inspector or Clip → Speed Ramp. The graph shows the speed change
     id: 'export-formats', section: 'Export', title: 'Export Format and Preset Reference',
     summary: 'Every simple format, advanced codec/container combination and audio-only format.',
     keywords: 'formats codecs container prores 422 proxy lt hq mp4 mov mkv webm av1 hevc h264 vp9 pcm aac mp3 wav flac opus gif presets quality fit',
-    body: `These lists come from the Export room definitions. Hardware encoding depends on the computer; software paths are available where supported. Format choice does not enable HDR output: imported HDR is exported as SDR in this version.
+    body: `These lists come from the Export room definitions. Hardware encoding depends on the computer; software paths are available where supported. Mix PQ, HLG and SDR in one project and choose **Output color → SDR or HDR PQ**. Supported projects combine original media in linear light before SDR highlight roll-off and Rec.709 gamut fitting, or 10-bit HEVC BT.2020/PQ encoding. Transitions, source effects, grading, film looks, masks and adjustment layers are supported. SDR remains the default; selecting HEVC alone does not enable HDR. The preview remains approximate SDR. Unsupported edits and optimized SDR copies use the preview conversion with a notice. See HDR, 10-bit and RAW for requirements and limits.
 
 ## Simple video formats
 

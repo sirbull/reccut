@@ -5,7 +5,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { FolderOpen } from 'lucide-preact';
 import { FRAME_FORMATS } from '../../shared/frameExport.js';
 import { DESIGN_SIZES } from '../../shared/design.js';
-import { defaultExportDir } from '../editor/ExportDialog.jsx';
+import { defaultExportDir, rememberExportDir } from '../editor/ExportDialog.jsx';
 import { saveDesignImage, designSaved } from './export.js';
 import { currentDesign, exportDesignOpen } from './store.js';
 import { Button, Modal, Row, Select, Slider, Toggle, NumberField } from '../ui.jsx';
@@ -41,7 +41,7 @@ export function ExportDesignDialog() {
     {(width > 8192 || height > 8192) && <p class="warn">Export width and height must be at most 8192 pixels.</p>}
     <Row label="Keep under"><NumberField value={limit} min={0} max={1000} step={0.5} precision={1} unit="MB" width={95} onChange={setLimit} /><span class="hint">0 = no limit</span></Row>
     <Row label="File name" stacked><input class="text-input" value={name} onInput={(e) => setName(e.currentTarget.value)} /></Row>
-    <Row label="Save to" stacked><Button icon={FolderOpen} disabled={busy} onClick={async () => { const path = await window.api.chooseDir(dir); if (path) setDir(path); }}>{dir || 'Choose folder…'}</Button></Row>
+    <Row label="Save to" stacked><Button icon={FolderOpen} disabled={busy} onClick={async () => { const path = await window.api.chooseDir(dir); if (path) { setDir(path); rememberExportDir(path); } }}>{dir || 'Choose folder…'}</Button></Row>
     <Button onClick={async()=>{const sources=[...new Set(d.layers.filter(l=>!l.hidden).map(l=>l.asset))].map(id=>project.value.designAssets[id]?.source).filter(Boolean);const text=credits(sources);if(text){await window.api.writeDesignClipboard(text);toast('Credits copied.')}else toast('This design has no third-party image credits.')}}>Copy Credits</Button>
     {error && <p class="warn" role="alert">{error}</p>}
   </Modal>;

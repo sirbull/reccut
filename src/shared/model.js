@@ -385,6 +385,44 @@ export function currentSequence(p) {
   return p.sequence || { id: 'main', name: 'Sequence 1', created: 0 };
 }
 
+// Filnavnet en eksport foreslår: navnet på sekvensen som eksporteres. Bare et prosjekt med én
+// sekvens som aldri har fått eget navn («Sequence 1»), bruker prosjektnavnet.
+export function exportFileName(p) {
+  const seq = currentSequence(p);
+  const lone = !Object.keys(p.sequences || {}).length;
+  if (lone && (!p.sequence || seq.name === 'Sequence 1')) return p.name;
+  return seq.name || p.name;
+}
+
+// Et eksportområde innenfor tidslinjen. Et område som ligger etter slutten (for eksempel fra en lengre
+// sekvens eller fra før tidslinjen ble kortet ned), blir tomt i stedet for å gi en svart, stille fil.
+export function clampRange(range, duration) {
+  if (!range) return null;
+  const end = Math.max(0, duration || 0);
+  const out = Math.min(Math.max(0, range.out), end);
+  return { in: Math.min(Math.max(0, range.in), out), out };
+}
+
+// Om noe kan ses eller høres mellom a og b. Mellomrom, tekstspor, justeringslag og sladd alene gir en
+// tom eksport, så da sier eksporten fra i stedet for å lage en svart, stille fil.
+const NO_CONTENT = new Set(['gap', 'caption', 'adjustment', 'redact']);
+export function rangeHasContent(p, a, b) {
+  return Object.values(p.clips || {}).some((c) => c.lane !== CAPTION_LANE && !NO_CONTENT.has(c.type) && c.start < b && c.start + c.dur > a);
+}
+
+// Hva som er galt når et eksportområde ikke kan eksporteres, eller null når det er i orden.
+export function exportRangeProblem(p, range) {
+  const r = clampRange(range, p.duration);
+  const a = r ? r.in : 0;
+  const b = r ? r.out : p.duration;
+  if (!rangeHasContent(p, a, b)) {
+    if (!p.duration || !Object.keys(p.clips || {}).length) return 'The timeline is empty. Add some clips first.';
+    if (range) return 'There is no video or sound between In and Out. Move the range over your clips, or export the whole timeline.';
+    return 'There is no video or sound on the timeline to export.';
+  }
+  return null;
+}
+
 // Alle sekvensene sortert etter når de ble laget. Den åpne har active: true.
 export function sequenceList(p) {
   const cur = { ...currentSequence(p), duration: p.duration, width: p.width, height: p.height, fps: p.fps, clipCount: Object.keys(p.clips).length, active: true };

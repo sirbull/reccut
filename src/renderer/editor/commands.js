@@ -89,6 +89,7 @@ import { toast } from '../ui.jsx';
 import { prefs, setPrefs } from '../prefs.js';
 import { droppedPaths } from '../fileDrop.js';
 import { setKeyframe } from './keyframes.js';
+import { dragVolumeSegment, volumeSegment } from './volume.js';
 import { enableKenBurns } from '../../shared/imageMotion.js';
 import { addSlideshow, slideshowOptions } from '../../shared/slideshow.js';
 import { mediaRemovalPlan, removeProjectMedia } from '../../shared/mediaRemoval.js';
@@ -990,6 +991,22 @@ export function addVolumeKeyframe(clipId, T, prop = 'volume') {
     const c = p.clips[clipId];
     if (!c) return;
     setKeyframe(c, prop, kfTime(c, T), valueAt(c, prop, T) ?? 0);
+  });
+}
+
+export function adjustVolumeSegment(db) {
+  const T = getTime();
+  const ids = selection.value.length ? selection.value : targetClipsAtPlayhead();
+  const targets = ids.flatMap((id) => {
+    const c = project.value.clips[id];
+    if (!c || project.value.lanes?.[c.lane]?.locked || T < c.start || T >= c.start + c.dur) return [];
+    const comp = selectedComponent.value;
+    const prop = comp?.clipId === id ? componentVolumeProp(c, comp.key) : c.type === 'recording' ? 'micVolume' : 'volume';
+    return volumeSegment(c, prop, T).length === 2 ? [{ id, prop }] : [];
+  });
+  if (!targets.length) return toast('Place the playhead between two volume keyframes.');
+  commit((p) => {
+    for (const { id, prop } of targets) dragVolumeSegment(p.clips[id], prop, T, db, prefs.value.autoVolumeKeyframes, prefs.value.keyframeEasing);
   });
 }
 

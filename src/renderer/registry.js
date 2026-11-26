@@ -41,7 +41,7 @@ import { feedPreview, showSafeZones, canFeedPreview, toggleFeedPreview, toggleSa
 import { chooseImage, pasteImage, copyLayers } from './design/assets.js';
 import { toggleViewerFullscreen } from './editor/fullscreen.js';
 import { LAYOUTS, modifierInfo, settings as recordSettings } from './recorder/settings.js';
-import { addFiles, roomActions } from './export/state.js';
+import { addFiles, applyPreset, prepareProjectExport, roomActions } from './export/state.js';
 import { boothOpen, openBooth } from './voiceover/state.js';
 import { aiChatOpen } from './aiChatOpen.js';
 import { openQuick } from './voiceover/quick.js';
@@ -266,6 +266,8 @@ export const COMMANDS = [
 
   /* Export */
   { id: 'export:start', label: 'Export', menu: 'Export', keys: 'CmdOrCtrl+E', register: true, allowWhileTyping: true, rooms: EXPORT, run: () => roomActions.start(), help: 'export', desc: 'Export the selected project or file with the settings in the Export room.' },
+  { id: 'export:sdr', label: 'Prepare SDR Export', menu: 'File', rooms: [...EDIT, ...EXPORT], allowWhileTyping: true, keywords: 'sdr hdr mix mixed rec709 tone mapping standard highlights', desc: 'Open the project in Export with standard SDR H.264 settings and Originals. Mixed HDR/SDR projects use a final highlight roll-off and Rec.709 gamut fit when their edits support linear export. Review the settings, then export.', help: 'hdr', run: () => { prepareProjectExport(); applyPreset('standard'); } },
+  { id: 'export:hdr', label: 'Prepare HDR PQ Export', menu: 'File', rooms: [...EDIT, ...EXPORT], allowWhileTyping: true, keywords: 'hdr pq 10 bit bt2020 hevc highlights high dynamic range effects transitions', desc: 'Open the project in Export with the early-access HDR PQ preset. Supports video effects, transitions, grading, film looks, masks and adjustment layers from original PQ/HLG video; preview stays SDR. Review the settings, then export.', help: 'hdr', run: () => { prepareProjectExport(); applyPreset('hdr-pq'); } },
   { id: 'export:addFiles', label: 'Import Files to Convert', menu: 'Export', keys: 'CmdOrCtrl+I', register: true, rooms: EXPORT, run: () => api.openMediaDialog().then(addFiles), help: 'export' },
 
   /* Mark */
@@ -301,6 +303,9 @@ export const COMMANDS = [
   { id: 'duckMusic', label: 'Duck Music Under Speech', menu: 'Clip', group: 'audio', run: () => commands.duckSelectedMusic(), help: 'ducking', keywords: 'duck ducking auto lower music voice speech dialogue sidechain volume keyframes', desc: 'Lower the selected music while someone speaks, with volume keyframes you can adjust.' },
   { id: 'volumeUp', label: 'Volume Up 1 dB', menu: 'Clip', group: 'audio', mac: 'Ctrl+=', win: 'Alt+=', run: () => commands.adjustVolume(1), help: 'audio' },
   { id: 'volumeDown', label: 'Volume Down 1 dB', menu: 'Clip', group: 'audio', mac: 'Ctrl+-', win: 'Alt+-', run: () => commands.adjustVolume(-1), help: 'audio' },
+  { id: 'volumeSegmentUp', label: 'Raise Volume Between Keyframes 1 dB', menu: 'Clip', group: 'audio', run: () => commands.adjustVolumeSegment(1), help: 'audio', keywords: 'audio segment section keyframes louder increase', desc: 'Raise the volume segment under the playhead on selected clips by 1 dB. With Auto-add volume keyframes enabled and exactly two points, add two inner points to keep the outside level unchanged.' },
+  { id: 'volumeSegmentDown', label: 'Lower Volume Between Keyframes 1 dB', menu: 'Clip', group: 'audio', run: () => commands.adjustVolumeSegment(-1), help: 'audio', keywords: 'audio segment section keyframes quieter decrease duck', desc: 'Lower the volume segment under the playhead on selected clips by 1 dB. With Auto-add volume keyframes enabled and exactly two points, add two inner points to keep the outside level unchanged.' },
+  { id: 'autoVolumeKeyframes', label: 'Auto-add Volume Keyframes', menu: 'Clip', group: 'audio', run: () => setPrefs({ autoVolumeKeyframes: !prefs.value.autoVolumeKeyframes }), checked: () => prefs.value.autoVolumeKeyframes, help: 'audio', keywords: 'audio segment section automatic keyframes preserve outside level', desc: 'Toggle automatic creation of two inner volume points when dragging between a clip’s two volume keyframes. Enabled by default; also available in Settings → Editing.' },
   { id: 'retime', label: 'Show Speed Controls', menu: 'Clip', submenu: 'Retime', run: commands.openRetime, help: 'speed' },
   { id: 'speedNormal', label: 'Normal Speed (100%)', menu: 'Clip', submenu: 'Retime', keys: 'Alt+CmdOrCtrl+R', run: () => commands.setSpeedSelected(1), help: 'speed' },
   { id: 'speedSlow', label: 'Slow 50%', menu: 'Clip', submenu: 'Retime', keys: 'Shift+Alt+-', run: () => commands.setSpeedSelected(0.5), help: 'speed' },

@@ -3,10 +3,11 @@ import { PluginWindows, PluginsButton } from './Plugins.jsx';
 import { DesignStockWindow, stockPopout } from './design/Online.jsx';
 import { EditStockWindow } from './editor/Browser.jsx';
 import { render } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import {
   CheckCircle2,
   CircleAlert,
+  CircleX,
   CircleHelp,
   Clapperboard,
   FolderOpen,
@@ -64,6 +65,7 @@ import { helpOpen, paletteOpen } from './registry.js';
 import wordmark from '../../assets/reccut-wordmark.svg';
 import { isTyping, isSpaceInput, commandsBlocked, dialogOwnsKeyboard, watchKeyboardScope } from './keyboard.js';
 import { installFileDrop } from './fileDrop.js';
+import { useFitBar } from './fitBar.js';
 import { multicamMenu } from './editor/multicam.js';
 import { UpdateDialog } from './UpdateDialog.jsx';
 import { startUpdateChecks } from './updates.js';
@@ -132,7 +134,7 @@ function TasksIndicator() {
         ) : (
           <ListChecks size={16} />
         )}
-        {main && <span>{main.kind === 'preview' ? `Pre-rendering ${pct} %` : main.kind === 'export' ? `Exporting ${pct} %` : main.kind === 'transcribe' ? `Transcribing ${pct} %` : 'Analyzing media'}</span>}
+        {main && <span class="fold-4">{main.kind === 'preview' ? `Pre-rendering ${pct} %` : main.kind === 'export' ? `Exporting ${pct} %` : main.kind === 'transcribe' ? `Transcribing ${pct} %` : 'Analyzing...'}</span>}
       </button>
       {open && (
         <div class="popover tasks-pop">
@@ -146,7 +148,7 @@ function TasksIndicator() {
           {list.map((t) => (
             <div key={t.id} class={`task ${t.state}`}>
               <div class="task-head">
-                {t.state === 'done' ? <CheckCircle2 size={14} class="ok" /> : t.state === 'error' ? <CircleAlert size={14} class="err" /> : <Loader2 size={14} class="spin" />}
+                {t.state === 'done' ? <CheckCircle2 size={14} class="ok" /> : t.state === 'error' ? <CircleAlert size={14} class="err" /> : t.state === 'canceled' ? <CircleX size={14} class="err" /> : <Loader2 size={14} class="spin" />}
                 <span class="title">{t.title}</span>
                 {(t.state === 'running' || t.state === 'queued') && <IconButton icon={X} size={13} title="Cancel" onClick={() => api.cancelTask(t.id)} />}
                 {t.state === 'done' && t.kind === 'export' && t.result && (
@@ -200,44 +202,50 @@ if (winMenu) {
   }, true);
 }
 
+// Tittellinjen krymper trinnvis når vinduet er smalt: først forsvinner knappetekstene (ikonene blir igjen),
+// til slutt prosjektnavnet. Trinnet er det laveste som får alt til å passe, så ingenting overlapper.
+const TITLEBAR_FOLDS = 5;
+const useFitTitleBar = () => useFitBar(TITLEBAR_FOLDS);
+
 function TitleBar() {
+  const barRef = useFitTitleBar();
   const r = room.value;
   const rec = engine.recording.value;
   const mod = modifierInfo();
   historyVersion.value;
   designHistoryVersion.value;
   return (
-    <header class={`titlebar${isMac ? ' mac' : ''}`}>
+    <header ref={barRef} class={`titlebar${isMac ? ' mac' : ''}`}>
       <div class="brand">
         <img class="wordmark" src={`data:image/svg+xml,${encodeURIComponent(wordmark)}`} alt="Reccut" />
       </div>
       <div class="rooms">
-        <button class={r === 'record' ? 'active' : ''} onClick={() => (room.value = 'record')} title={`Record (${isMac ? '⌘' : 'Ctrl+'}1)`}>
+        <button class={r === 'record' ? 'active' : ''} onClick={() => (room.value = 'record')} title={`Record (${isMac ? '⌘' : 'Ctrl+'}1)`} aria-label="Record">
           <Video size={14} />
-          Record
+          <span class="room-label">Record</span>
           {rec && <span class="live-dot" />}
         </button>
-        <button class={r === 'edit' ? 'active' : ''} onClick={() => (room.value = 'edit')} title={`Edit (${isMac ? '⌘' : 'Ctrl+'}2)`}>
+        <button class={r === 'edit' ? 'active' : ''} onClick={() => (room.value = 'edit')} title={`Edit (${isMac ? '⌘' : 'Ctrl+'}2)`} aria-label="Edit">
           <Clapperboard size={14} />
-          Edit
+          <span class="room-label">Edit</span>
         </button>
-        <button class={r === 'export' ? 'active' : ''} onClick={() => (room.value = 'export')} title={`Export (${isMac ? '⌘' : 'Ctrl+'}3)`}>
+        <button class={r === 'export' ? 'active' : ''} onClick={() => (room.value = 'export')} title={`Export (${isMac ? '⌘' : 'Ctrl+'}3)`} aria-label="Export">
           <Share size={14} />
-          Export
+          <span class="room-label">Export</span>
         </button>
-        <button class={r === 'design' ? 'active' : ''} onClick={() => (room.value = 'design')} title="Design"><Palette size={14} />Design</button>
+        <button class={r === 'design' ? 'active' : ''} onClick={() => (room.value = 'design')} title="Design" aria-label="Design"><Palette size={14} /><span class="room-label">Design</span></button>
       </div>
       <button class="project-btn" title={`${project.value.name}. Click for project info, or to open or create projects.`} onClick={() => (commands.projectsOpen.value = true)}>
         <FolderOpen size={14} />
-        <span>{project.value.name}</span>
-        {project.value.sequences && Object.keys(project.value.sequences).length > 0 && <span class="dim">/ {currentSequence(project.value).name}</span>}
+        <span class="fold-5">{project.value.name}</span>
+        {project.value.sequences && Object.keys(project.value.sequences).length > 0 && <span class="dim fold-3">/ {currentSequence(project.value).name}</span>}
       </button>
       <div class="spacer" />
       <TasksIndicator />
       <PluginsButton />
-      <button class="btn secondary small ai-btn" onClick={() => (aiChatOpen.value = true)} title="AI Agent: describe an edit and it does it. The first time, it helps you set it up.">
+      <button class="btn secondary small ai-btn" aria-label="AI Agent" onClick={() => (aiChatOpen.value = true)} title="AI Agent: describe an edit and it does it. The first time, it helps you set it up.">
         <Sparkles size={14} />
-        AI Agent
+        <span class="fold-1">AI Agent</span>
       </button>
 
       <IconButton icon={CircleHelp} class="help-btn" title={`Help and command search (${isMac ? '⌘K' : 'Ctrl+K'})`} onClick={() => (paletteOpen.value = true)} />
@@ -250,20 +258,17 @@ function TitleBar() {
           <IconButton icon={Redo2} title="Redo" disabled={!canRedo()} onClick={redo} />
           <span class="sep" />
           <IconButton icon={Settings} title={`Settings (${isMac ? '⌘' : 'Ctrl+'},)`} onClick={() => (commands.prefsOpen.value = true)} />
-          <button class="btn secondary vo-open-btn" onClick={openBooth} title={`Voice Over Studio: record narration or a talking head from a script, with retakes, and stitch it to the timeline (${isMac ? '⌥⌘' : 'Ctrl+Alt+'}B)`}>
-            <StudioIcon size={15} />
-            Voice Over Studio
-          </button>
-          <button class="btn primary" onClick={prepareProjectExport} title="Prepare project in Export">
+          <IconButton icon={StudioIcon} class="vo-open-btn" aria-label="Voice Over Studio" onClick={openBooth} title={`Voice Over Studio: record narration or a talking head from a script, with retakes, and stitch it to the timeline (${isMac ? '⌥⌘' : 'Ctrl+Alt+'}B)`} />
+          <button class="btn primary" onClick={prepareProjectExport} title="Prepare project in Export" aria-label="Export Project">
             <Share size={15} />
-            Export Project
+            <span class="fold-3">Export Project</span>
           </button>
         </div>
       ) : r === 'design' ? (
         <div class="actions">
           <IconButton icon={Undo2} title="Undo Design" disabled={!canDesignUndo()} onClick={designUndo} />
           <IconButton icon={Redo2} title="Redo Design" disabled={!canDesignRedo()} onClick={designRedo} />
-          <button class="btn primary" disabled={!currentDesign.value} onClick={() => { exportDesignOpen.value = true; }}><Share size={15}/>Export Design…</button>
+          <button class="btn primary" disabled={!currentDesign.value} onClick={() => { exportDesignOpen.value = true; }} title="Export Design" aria-label="Export Design"><Share size={15}/><span class="fold-3">Export Design…</span></button>
         </div>
       ) : r === 'export' ? (
         <div class="actions" />
@@ -281,9 +286,9 @@ function TitleBar() {
             <kbd>{mod.short}0</kbd>
           </button>
           {!rec && (
-            <button class="btn secondary" onClick={() => (room.value = 'edit')}>
+            <button class="btn secondary" onClick={() => (room.value = 'edit')} title="Edit" aria-label="Edit">
               <Clapperboard size={15} />
-              Edit
+              <span class="fold-3">Edit</span>
             </button>
           )}
         </div>
@@ -572,4 +577,5 @@ window.__reccut = {
 };
 
 if (isMac) document.documentElement.classList.add('mac');
+if (winMenu) document.documentElement.classList.add('win');
 render(<App />, document.getElementById('root'));

@@ -3,7 +3,7 @@ import { FolderOpen } from 'lucide-preact';
 import { formatTimecode } from '../../shared/model.js';
 import { FRAME_FORMATS, frameExportSettings } from '../../shared/frameExport.js';
 import { frameExportOpen } from './commands.js';
-import { defaultExportDir, startExport } from './ExportDialog.jsx';
+import { DEFAULT_DIR_LABEL, defaultExportDir, projectExportDir, rememberExportDir, startExport } from './ExportDialog.jsx';
 import { Button, Modal, Row, Select, toast } from '../ui.jsx';
 
 const api = window.api;
@@ -15,7 +15,7 @@ export function ExportFrameDialog({ request }) {
   const [linked, setLinked] = useState(true);
   const [format, setFormat] = useState('png');
   const [alpha, setAlpha] = useState(false);
-  const [dir, setDir] = useState(null);
+  const dir = projectExportDir.value;
   const [busy, setBusy] = useState(false);
   const fmt = FRAME_FORMATS.find((f) => f.id === format);
   let frame, error;
@@ -53,7 +53,8 @@ export function ExportFrameDialog({ request }) {
       // Keep the selected encoding and filename extension in agreement on every platform.
       const matchingExtension = fmt.id === 'jpeg' ? /\.jpe?g$/i : new RegExp(`\\.${fmt.ext}$`, 'i');
       const file = matchingExtension.test(output) ? output : output.replace(/\.(png|jpe?g|webp)$/i, '') + `.${fmt.ext}`;
-      await startExport(p, { frame, output: file, sourceMedia: 'original' });
+      // Lagringsdialogen har allerede spurt om filen skal erstattes. Er endelsen rettet, spør Reccut selv.
+      if ((await startExport(p, { frame, output: file, sourceMedia: 'original', overwrite: file === output })) === null) return;
       frameExportOpen.value = null;
       toast('Exporting the frame in the background. You will be notified when it is ready.');
     } catch (e) {
@@ -106,9 +107,9 @@ export function ExportFrameDialog({ request }) {
           <button class="path-btn" disabled={busy} onClick={async () => {
             try {
               const folder = await api.chooseDir(dir || await defaultExportDir());
-              if (folder) setDir(folder);
+              if (folder) rememberExportDir(folder);
             } catch (e) { toast(e.message, { kind: 'error' }); }
-          }}><FolderOpen size={14} /><span>{dir || 'Project export folder'}</span></button>
+          }}><FolderOpen size={14} /><span>{dir || DEFAULT_DIR_LABEL()}</span></button>
         </Row>
         <p class="hint">Choose the final file name and location when you click Export Frame. A different aspect ratio fits the picture inside the chosen size.</p>
         {error && <p class="hint" role="alert">{error}</p>}

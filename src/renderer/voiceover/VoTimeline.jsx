@@ -7,7 +7,7 @@ import { Headphones, Magnet, Maximize2, SlidersHorizontal, StretchHorizontal, Tr
 import { AudioLines, ChevronRight, Sparkles, Timer, Eye, EyeOff, Minus, Play, Plus, RotateCcw, Square, Diamond, Copy, UserPlus, Volume2, VolumeX, Wand2, Scissors, MousePointer2, X } from 'lucide-preact';
 import { Button, IconButton, Modal, NumberField, Slider, toast } from '../ui.jsx';
 import { formatDuration, kfTime, valueAt } from '../../shared/model.js';
-import { formatVolumeDb, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeSegment, volumeY } from '../editor/volume.js';
+import { dragVolumeSegment, formatVolumeDb, moveVolumeKeyframe, shiftVolume, volumeDelta, volumePath, volumeY } from '../editor/volume.js';
 import { addCut, itemParts, normalizeGain, peakDbIn, personOf, pickKey, takeParts, takeFades, allStudioTakes, deleteStudioClips, studioGapKey } from '../../shared/voiceover.js';
 import { prefs, setPrefs } from '../prefs.js';
 import { audioSkimming, skimming, snapping } from '../editor/store.js';
@@ -222,22 +222,25 @@ function volumeDrag(e, it, pps, H, kfIndex = null) {
     const list = [...(base.kf.volume || []), [Math.round(kfTime(base, T) * 1000) / 1000, Math.round((valueAt(base, 'volume', T) ?? 0) * 10) / 10]];
     return booth.setTake(it.take.id, { volKf: list.sort((a, b) => a[0] - b[0]) });
   }
-  const indices = kfIndex == null ? volumeSegment(base, 'volume', T) : [kfIndex];
+  const autoKeyframes = prefs.value.autoVolumeKeyframes;
+  const ease = prefs.value.keyframeEasing;
   const x0 = e.clientX;
   const y0 = e.clientY;
   let dir = kfIndex == null ? 'y' : null; // et punkt dras opp/ned eller sidelengs, etter første bevegelse
   let changed = false;
   const move = (ev) => {
-    if (!changed) { booth.beginGesture(); changed = true; }
     const dx = ev.clientX - x0;
     const dy = y0 - ev.clientY;
+    if (!changed && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
     if (!dir) {
       if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
       dir = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
     }
+    if (!changed) { booth.beginGesture(); changed = true; }
     const c = asClip(it, 0);
     if (dir === 'x') moveVolumeKeyframe(c, 'volume', kfIndex, base.kf.volume[kfIndex][0] + dx / pps, 0.01);
-    else shiftVolume(c, 'volume', volumeDelta(dy, H), indices);
+    else if (kfIndex == null) dragVolumeSegment(c, 'volume', T, volumeDelta(dy, H), autoKeyframes, ease);
+    else shiftVolume(c, 'volume', volumeDelta(dy, H), [kfIndex]);
     saveVolume(it.take, c);
   };
   const up = () => {
@@ -269,7 +272,7 @@ function VolumeLine({ it, pps, w, H }) {
       <svg class="vt-vol" width={w} height={H}>
         <path class="vol-line" d={path} />
         <path class="vol-line-hit" d={path} onPointerDown={(e) => volumeDrag(e, it, pps, H)}>
-          <title>{`${it.take.volKf?.length ? 'Volume keyframes' : formatVolumeDb(c.props.volume)} · Drag to adjust the volume. ${alt} click to add a keyframe.`}</title>
+          <title>{`${it.take.volKf?.length ? 'Volume keyframes' : formatVolumeDb(c.props.volume)} · Drag to adjust the volume. ${alt} click to add a keyframe. ${prefs.value.autoVolumeKeyframes ? 'With two keyframes, drag between them to adjust only the enclosed section.' : 'Drag between keyframes to adjust both.'}`}</title>
         </path>
       </svg>
       {(c.kf.volume || []).map(([t, v], i) => t >= c.in - 1e-6 && t <= c.in + c.dur + 1e-6 && (
