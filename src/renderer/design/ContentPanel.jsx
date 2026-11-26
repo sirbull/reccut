@@ -18,7 +18,10 @@ import { openDesignPanel } from './panels.js';
 import { LibraryCard, LibraryPreview, StyleCard, StylesPanel } from './LibraryPanel.jsx';
 import { savedStyles } from './library.js';
 import { ensureImage, getImageAtPath, imageVersion } from './assets.js';
-import { brandLayerSets, brandLayersDialog, deleteBrandLayers, openSaveBrandLayers, placeBrandLayers, renameBrandLayers, saveBrandLayers } from './brand.js';
+import { brandLayerSets, brandLayersDialog, canSaveBrandLayers, deleteBrandLayers, moveBrandLayers, openSaveBrandLayers, placeBrandLayers, renameBrandLayers, saveBrandLayers, updateBrandLayers } from './brand.js';
+import { BrandProfileBar } from '../BrandProfiles.jsx';
+import { profiles } from '../brandProfiles.js';
+import { activeProfileId } from '../../shared/brandLibrary.js';
 import { selectedLayers } from './store.js';
 import { LibrarySections } from './LibrarySection.jsx';
 import { chooseImage, chooseOpenImage, openImageFiles, requestPlace } from './assets.js';
@@ -65,7 +68,7 @@ export function BrandElementCard({ set }) {
   const paths = { ...Object.fromEntries(Object.entries(set.assets || {}).map(([id, a]) => [id, a?.path])), ...Object.fromEntries(Object.entries(set.media || {}).map(([id, a]) => [`media:${id}`, a?.path])) };
   useEffect(() => { Object.values(paths).forEach((path) => path && ensureImage(path)); }, [set.id]);
   const images = Object.fromEntries(Object.entries(paths).map(([id, path]) => [id, getImageAtPath(path)]).filter(([, img]) => img));
-  return <LibraryCard id={`brand-element:${set.id}`} apply={(_, point) => placeBrandLayers(set, point)} title={`${set.name}. Click to add to the design, or drag it to a place on the canvas. Right click to rename or delete.`} menuItems={[{ id: 'rename', label: 'Rename…', run: () => { brandLayersDialog.value = { rename: set.id, name: set.name }; } }, { id: 'delete', label: 'Delete from Brand', run: () => { if (confirm(`Delete “${set.name}” from Brand? Designs that use it keep their layers.`)) deleteBrandLayers(set.id); } }]}><LibraryPreview design={brandElementDesign(set)} images={images}/><b>{set.name}</b></LibraryCard>;
+  return <LibraryCard id={`brand-element:${set.id}`} apply={(_, point) => placeBrandLayers(set, point)} title={`${set.name}. Click to add to the design, or drag it to a place on the canvas. Right click to rename or delete.`} menuItems={[{ id: 'update', label: 'Update from Selection', enabled: canSaveBrandLayers(), run: async () => { await updateBrandLayers(set.id); toast(`${set.name} was updated.`, { timeout: 2500 }); } }, { id: 'rename', label: 'Rename…', run: () => { brandLayersDialog.value = { rename: set.id, name: set.name }; } }, ...profiles().filter((p) => p.id !== activeProfileId(prefs.value)).map((p) => ({ id: `move:${p.id}`, label: `Move to ${p.name}`, run: () => moveBrandLayers(set.id, p.id) })), { id: 'delete', label: 'Delete from Brand', run: () => { if (confirm(`Delete “${set.name}” from Brand? Designs that use it keep their layers.`)) deleteBrandLayers(set.id); } }]}><LibraryPreview design={brandElementDesign(set)} images={images}/><b>{set.name}</b></LibraryCard>;
 }
 export function BrandLayersDialog() {
   const d = brandLayersDialog.value, [name, setName] = useState(d.name || ''), [busy, setBusy] = useState(false);
@@ -78,14 +81,14 @@ export function BrandLayersDialog() {
     catch (err) { toast(err.message, { kind: 'error' }); }
     finally { setBusy(false); }
   };
-  return <Modal title={d.rename ? 'Rename Brand Element' : 'Save to Brand'} width={400} onClose={close} footer={<><Button disabled={busy} onClick={close}>Cancel</Button><Button variant="primary" disabled={!name.trim() || busy} onClick={save}>{busy ? 'Saving…' : d.rename ? 'Rename' : 'Save'}</Button></>}><Row label="Name" stacked><input class="text-input" autoFocus maxLength={120} value={name} onInput={e => setName(e.currentTarget.value)} onKeyDown={e => { if (e.key === 'Enter') save(); }}/></Row>{!d.rename && <p class="hint">The selected layers are saved with their text, fonts, colors, effects and images. Whole groups are included. Brand Elements are available in every project.</p>}</Modal>;
+  return <Modal title={d.rename ? 'Rename Brand Element' : 'Save to Brand'} width={400} onClose={close} footer={<><Button disabled={busy} onClick={close}>Cancel</Button><Button variant="primary" disabled={!name.trim() || busy} onClick={save}>{busy ? 'Saving…' : d.rename ? 'Rename' : 'Save'}</Button></>}><Row label="Name" stacked><input class="text-input" autoFocus maxLength={120} value={name} onInput={e => setName(e.currentTarget.value)} onKeyDown={e => { if (e.key === 'Enter') save(); }}/></Row>{!d.rename && <p class="hint">The selected layers are saved with their text, fonts, colors, effects and images. Whole groups are included. Brand Elements are available in every project, in the active Brand profile.</p>}</Modal>;
 }
 export function BrandPanel({ query = '' }) {
   const logo = brandLogo.value, colors = brandColors(),fonts=prefs.value.designBrandFonts||{},palette={id:'brand',name:'Brand Palette',colors:[currentBrand().roles.background,currentBrand().roles.title,currentBrand().roles.cta,currentBrand().roles.secondary,currentBrand().roles.stroke]}, [color, setColor] = useState('#ffd60a');
   const items = filterLibraryItems(colors.map(hex => ({ id: hex, name: hex })), query);
   const brand=currentBrand(),[kitName,setKitName]=useState(''),kits=Array.isArray(prefs.value.designBrandKits)?prefs.value.designBrandKits:[];
   const elements = brandLayerSets(), styles = savedStyles();
-  return <div class="dz-brand"><p class="hint">Your reusable defaults for new text, shapes and emoji. Font changes update matching text in this design. Use Apply Brand to restyle existing elements. Explicit library styles keep their example colors.</p><Row label="Use Brand defaults"><Toggle checked={brand.enabled} onChange={enabled=>updateBrand({enabled})}/></Row><LibrarySections query={query} sections={[
+  return <div class="dz-brand"><BrandProfileBar/><p class="hint">Your reusable defaults for new text, shapes and emoji. Font changes update matching text in this design. Use Apply Brand to restyle existing elements. Explicit library styles keep their example colors.</p><Row label="Use Brand defaults"><Toggle checked={brand.enabled} onChange={enabled=>updateBrand({enabled})}/></Row><LibrarySections query={query} sections={[
     { id: 'brand-elements', title: `Brand Elements (${elements.length})`, items: filterLibraryItems(elements, query), actions: <IconButton icon={Plus} title="Save Selection to Brand" disabled={!selectedLayers().length} onClick={openSaveBrandLayers}/>, empty: 'Style a title, lower third, badge or logo, select it and choose Save Selection to Brand.', render: set => <BrandElementCard key={set.id} set={set}/> },
     { id: 'brand-styles', title: 'My Styles', items: filterLibraryItems(styles, query), empty: "Save a layer's appearance with Save Style to reuse it here.", render: s => <StyleCard key={s.id} style={s} user/> },
     { id: 'logo', title: 'Logo', items: filterLibraryItems(logo ? [{ id: 'logo', name: logo.name }] : [], query), actions: <IconButton icon={Upload} title={logo ? 'Replace Logo' : 'Choose Logo'} onClick={() => chooseBrandLogo().catch(err => toast(err.message, { kind: 'error' }))}/>, empty: 'Choose a logo to reuse in your designs.', render: item => <ImageCard key={item.id} item={item} source={{ path: logo.path, name: logo.name }} prefix="brand"/> },

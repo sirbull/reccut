@@ -8,7 +8,7 @@ import {currentDesign,changeDesign,designCommit,openDesign,selection,tool} from 
 import { groupSelectionIds, newDesign } from '../../shared/design.js';
 import { uid } from '../../shared/model.js';
 import { project } from '../editor/store.js';
-import { BRAND_LIMIT, designBrandLayers } from '../../shared/brandLibrary.js';
+import { BRAND_LIMIT, activeProfileId, designBrandLayers, inProfile } from '../../shared/brandLibrary.js';
 import { clearLibraryPreview } from './library.js';
 export function currentBrand(){return designBrand(prefs.value.designBrand);}
 export function updateBrand(patch){setPrefs({designBrand:designBrand({...currentBrand(),...patch})});}
@@ -28,7 +28,9 @@ export async function chooseBrandLogo(){const path=await window.api.openFileDial
 
 /* Brand Elements: layers the user styled (titles, lower thirds, badges, logos), saved across projects. */
 export const brandLayersDialog = signal(null);
-export function brandLayerSets() { return designBrandLayers(prefs.value.designBrandLayers); }
+const allBrandLayers = () => designBrandLayers(prefs.value.designBrandLayers);
+// The elements of the active Brand profile.
+export function brandLayerSets() { return inProfile(allBrandLayers(), activeProfileId(prefs.value)); }
 function selectedForBrand() {
   const d = currentDesign.value;
   if (!d) return [];
@@ -43,12 +45,13 @@ export function openSaveBrandLayers() {
   brandLayersDialog.value = { name: first.groupName || (first.type === 'text' ? String(first.text || '').split('\n')[0].slice(0, 60) : first.name) || 'Brand Element' };
 }
 // Saves the selected layers (whole groups) with copies of their images in Reccut's own Brand folder,
-// so the element still works when the project is moved or deleted.
-export async function saveBrandLayers(name) {
+// so the element still works when the project is moved or deleted. replaceId updates a saved element.
+export async function saveBrandLayers(name, replaceId = null) {
   const d = currentDesign.value, layers = selectedForBrand();
   if (!d || !layers.length) throw new Error('Select the layers to save to Brand.');
-  const sets = brandLayerSets();
-  if (sets.length >= BRAND_LIMIT) throw new Error(`Brand can hold up to ${BRAND_LIMIT} elements. Delete one first.`);
+  const old = replaceId ? allBrandLayers().find((s) => s.id === replaceId) : null;
+  if (replaceId && !old) throw new Error('That Brand element no longer exists.');
+  if (!old && brandLayerSets().length >= BRAND_LIMIT) throw new Error(`A Brand profile can hold up to ${BRAND_LIMIT} elements. Delete one first.`);
   const payload = structuredClone(layerPayload(d, layers.map((l) => ({ ...l, locked: false, hidden: false }))));
   const files = [...Object.values(payload.assets), ...Object.values(payload.media)].filter((a) => typeof a?.path === 'string' && !a.path.startsWith('data:') && !a.missing);
   if (files.length) {
@@ -56,10 +59,16 @@ export async function saveBrandLayers(name) {
     const copies = await window.api.copyIntoProject(files.map((a) => a.path), `${await window.api.baseDir()}${sep}Brand${sep}Design`, { unique: true });
     files.forEach((a, i) => { if (copies?.[i]) { a.path = copies[i]; a.copied = true; } });
   }
-  const set = { ...payload, id: uid(), name: String(name || '').trim().slice(0, 120) || 'Brand Element', created: Date.now(), project: null, design: null };
+  const set = { ...payload, id: old?.id || uid(), name: old ? old.name : String(name || '').trim().slice(0, 120) || 'Brand Element', created: Date.now(), project: null, design: null, profile: old?.profile || activeProfileId(prefs.value) };
   if (JSON.stringify(set).length > 4e6) throw new Error('These layers are too large to save to Brand. Use images from files instead of pasted pictures.');
-  setPrefs({ designBrandLayers: [...brandLayerSets(), set] });
+  setPrefs({ designBrandLayers: old ? allBrandLayers().map((s) => (s.id === old.id ? set : s)) : [...allBrandLayers(), set] });
   return set;
+}
+export const updateBrandLayers = (id) => saveBrandLayers(null, id);
+export function canSaveBrandLayers() { return selectedForBrand().length > 0; }
+export function moveBrandLayers(id, profileId) {
+  if (inProfile(allBrandLayers(), profileId).length >= BRAND_LIMIT) throw new Error(`That profile already has ${BRAND_LIMIT} elements.`);
+  setPrefs({ designBrandLayers: allBrandLayers().map((s) => (s.id === id ? { ...s, profile: profileId } : s)) });
 }
 // Places a saved element, scaled to the canvas. A new design is made when none is open.
 export async function placeBrandLayers(set, point = null) {
@@ -74,8 +83,8 @@ export async function placeBrandLayers(set, point = null) {
   return placed;
 }
 export function renameBrandLayers(id, name) {
-  setPrefs({ designBrandLayers: brandLayerSets().map((s) => (s.id === id ? { ...s, name: String(name || '').trim().slice(0, 120) || s.name } : s)) });
+  setPrefs({ designBrandLayers: allBrandLayers().map((s) => (s.id === id ? { ...s, name: String(name || '').trim().slice(0, 120) || s.name } : s)) });
 }
 export function deleteBrandLayers(id) {
-  setPrefs({ designBrandLayers: brandLayerSets().filter((s) => s.id !== id) });
+  setPrefs({ designBrandLayers: allBrandLayers().filter((s) => s.id !== id) });
 }

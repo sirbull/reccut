@@ -11,7 +11,7 @@ import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../../shared/videoEffect
 import { createMulticamFromSelection, editMulticam, newMulticamClip, setActiveAudioAngle, setActiveVideoAngle } from './multicam.js';
 import { angleHasAudio, angleLabel, isVideoAngle, multicamOfClip } from '../../shared/multicam.js';
 import { ALL_GROUPS, groupsWithContent, pasteAttributes, removeAttributes } from '../../shared/attributes.js';
-import { BRAND_LIMIT, applyBrandEffects, brandEffectGroups, brandEffectsItem, brandItems, brandTitleClip, brandTitleItem, canApplyBrandEffects, renameBrandItem } from '../../shared/brandLibrary.js';
+import { BRAND_LIMIT, activeProfileId, applyBrandEffects, brandEffectGroups, brandEffectsItem, brandItems, brandTitleClip, brandTitleItem, canApplyBrandEffects, inProfile, renameBrandItem, updatedBrandItem } from '../../shared/brandLibrary.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
 import {
   adjacentAudioPairs,
@@ -727,7 +727,9 @@ export function removeEffects() {
 /* Brand: titler, supringer og effekter brukeren har stylet, lagret på tvers av prosjekter (prefs.brandItems). */
 
 export const brandDialog = signal(null);
-export const brandList = () => brandItems(prefs.value.brandItems);
+// All saved items, in every profile, and the items of the active profile.
+const allBrand = () => brandItems(prefs.value.brandItems);
+export const brandList = () => inProfile(allBrand(), activeProfileId(prefs.value));
 const storeBrand = (items) => setPrefs({ brandItems: items });
 
 // Clip to save from: the given clip, else the first selected one, else the one at the playhead.
@@ -750,11 +752,30 @@ export function openSaveToBrand(clipId = null) {
 export function saveToBrand(clipId, { kind, name, groups } = {}) {
   const c = project.value.clips[clipId];
   if (!c) throw new Error('The clip is no longer in the project.');
-  const items = brandList();
-  if (items.length >= BRAND_LIMIT) throw new Error(`Brand can hold up to ${BRAND_LIMIT} items. Delete one first.`);
+  if (brandList().length >= BRAND_LIMIT) throw new Error(`A Brand profile can hold up to ${BRAND_LIMIT} items. Delete one first.`);
   const item = (kind || (c.type === 'title' ? 'title' : 'effects')) === 'title' ? brandTitleItem(c, { name, templates: project.value.templates || {} }) : brandEffectsItem(c, { name, groups });
-  storeBrand([...items, item]);
+  item.profile = activeProfileId(prefs.value);
+  storeBrand([...allBrand(), item]);
   return item;
+}
+
+// Replaces a saved item with the selected clip as it looks now. The name, profile and place are kept;
+// an effect preset keeps the parts it had.
+export function updateBrandItem(id, clipId = null) {
+  const old = allBrand().find((i) => i.id === id);
+  if (!old) throw new Error('That Brand item no longer exists.');
+  const c = brandSource(clipId);
+  if (!c) throw new Error('Select the clip to update it from.');
+  if (old.kind === 'title' && c.type !== 'title') throw new Error('Select a title or lower third to update this item from.');
+  const next = updatedBrandItem(old, c, project.value.templates || {});
+  storeBrand(allBrand().map((i) => (i.id === id ? next : i)));
+  return next;
+}
+export function canUpdateBrandItem(item) {
+  const c = brandSource();
+  if (!c) return false;
+  if (item.kind === 'title') return c.type === 'title';
+  return brandEffectGroups(c).available.some((g) => item.groups.includes(g));
 }
 
 export function confirmSaveToBrand({ kind, name, groups }) {
@@ -771,7 +792,7 @@ export function confirmSaveToBrand({ kind, name, groups }) {
 
 // A saved title or lower third at the playhead. A custom template it uses is added to the project.
 export function addBrandTitle(id, T = getTime(), lane = 1) {
-  const item = brandList().find((i) => i.id === id && i.kind === 'title');
+  const item = allBrand().find((i) => i.id === id && i.kind === 'title');
   if (!item) return toast('That Brand item no longer exists.');
   const { clip, template } = brandTitleClip(item, T, lane);
   commit((p) => {
@@ -785,7 +806,7 @@ export function addBrandTitle(id, T = getTime(), lane = 1) {
 
 // Applies a Brand item: titles are added at the playhead, effect presets go on the selected clips.
 export function applyBrandItem(id, clipIds = null) {
-  const item = brandList().find((i) => i.id === id);
+  const item = allBrand().find((i) => i.id === id);
   if (!item) return toast('That Brand item no longer exists.');
   if (item.kind === 'title') return addBrandTitle(id);
   const p = project.value;
@@ -800,7 +821,7 @@ export function applyBrandItem(id, clipIds = null) {
 
 // Shows an effect preset on the selected clips while the pointer is over it.
 export function previewBrandItem(id) {
-  const item = brandList().find((i) => i.id === id && i.kind === 'effects');
+  const item = allBrand().find((i) => i.id === id && i.kind === 'effects');
   const p = project.value;
   const ids = item ? selection.value.filter((cid) => canApplyBrandEffects(item, p.clips[cid])) : [];
   if (ids.length) editTargets(previewEdit, (q) => ids.forEach((cid) => applyBrandEffects(item, q.clips[cid])));
@@ -808,10 +829,14 @@ export function previewBrandItem(id) {
 }
 
 export function renameBrand(id, name) {
-  storeBrand(renameBrandItem(brandList(), id, name));
+  storeBrand(renameBrandItem(allBrand(), id, name));
 }
 export function deleteBrand(id) {
-  storeBrand(brandList().filter((i) => i.id !== id));
+  storeBrand(allBrand().filter((i) => i.id !== id));
+}
+export function moveBrandItem(id, profileId) {
+  if (inProfile(allBrand(), profileId).length >= BRAND_LIMIT) throw new Error(`That profile already has ${BRAND_LIMIT} items.`);
+  storeBrand(allBrand().map((i) => (i.id === id ? { ...i, profile: profileId } : i)));
 }
 
 /* Lydeffekter */

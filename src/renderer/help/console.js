@@ -18,7 +18,10 @@ import { FILM_LOOKS } from '../../shared/filmLooks.js';
 
 import { commit, project, room, selection } from '../editor/store.js';
 import * as commands from '../editor/commands.js';
-import { brandLayerSets, placeBrandLayers } from '../design/brand.js';
+import { brandLayerSets, placeBrandLayers, updateBrandLayers } from '../design/brand.js';
+import { profiles, switchBrandProfile } from '../brandProfiles.js';
+import { activeProfileId } from '../../shared/brandLibrary.js';
+import { prefs } from '../prefs.js';
 import { COMMANDS, menuTemplate, runCommand } from '../registry.js';
 import SETTINGS from './settingsIndex.json';
 import { ARTICLES } from './articles.js';
@@ -309,6 +312,10 @@ function itemsFor() {
     const what = b.kind === 'effects' ? 'Effect preset for the selected clips' : b.section === 'lowerThird' ? 'Saved lower third at the playhead' : 'Saved title at the playhead';
     out.push({ kind: 'Brand', id: `brand:${b.id}`, label: b.name, sub: `Brand › ${what}`, keywords: `brand saved my own ${b.kind === 'effects' ? 'effects preset look' : 'title lower third text'}`, run: () => commands.applyBrandItem(b.id) });
   }
+  for (const b of commands.brandList()) out.push({ kind: 'Brand', id: `brand-update:${b.id}`, label: `Update ${b.name} from Selection`, sub: 'Brand › Replace the saved item with the selected clip', keywords: 'brand update replace saved', run: () => toast(`${commands.updateBrandItem(b.id).name} was updated.`, { timeout: 2500 }) });
+  const active = activeProfileId(prefs.value);
+  for (const p of profiles()) if (p.id !== active) out.push({ kind: 'Brand', id: `brand-profile:${p.id}`, label: `Switch to ${p.name}`, sub: 'Brand profile', keywords: 'brand profile switch client channel', run: () => switchBrandProfile(p.id) });
+  for (const set of brandLayerSets()) out.push({ kind: 'Brand', id: `brand-design-update:${set.id}`, label: `Update ${set.name} from Selection`, sub: 'Brand › Replace the Design element with the selected layers', keywords: 'brand update replace saved design element', room: 'design', run: () => updateBrandLayers(set.id) });
   for (const set of brandLayerSets()) out.push({ kind: 'Brand', id: `brand-design:${set.id}`, label: set.name, sub: 'Brand › Design element', keywords: 'brand saved my own design element layers thumbnail', room: 'design', run: () => placeBrandLayers(set) });
   for (const a of ARTICLES) out.push({ kind: 'Help', id: `help:${a.id}`, label: a.title, sub: a.summary, keywords: a.keywords || '', article: a.id });
   return out;

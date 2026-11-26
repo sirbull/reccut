@@ -1528,7 +1528,7 @@ Import the template ({{key:importTemplate}}), drop the .reccut-title file on Rec
     section: 'Editing',
     title: 'Brand: Your Saved Titles, Lower Thirds and Effects',
     summary: 'Save titles, lower thirds, effect presets and Design elements you styled, and reuse them in any project.',
-    keywords: 'brand kit profile style my titles my lower thirds favorite preset effect preset saved look reuse every project design element thumbnail',
+    keywords: 'brand kit profile client channel style my titles my lower thirds favorite preset effect preset saved look reuse every project design element thumbnail update export import share backup reccut-brand',
     body: `
 Brand keeps the things you have styled yourself, so you can use the same look in every video. What you save is stored in Reccut, not in the project, so it is there in all your projects.
 
@@ -1541,12 +1541,33 @@ Brand keeps the things you have styled yourself, so you can use the same look in
 
 Titles go under **Titles**, lower thirds under **Lower Thirds** and effect presets under **Effects** in the Brand tab of the browser ([[run:browser:brand|Show Brand]]). A title made from your own template keeps a copy of the template, so it works in other projects too.
 
+![The Brand tab with saved titles, lower thirds and effect presets for the Northwind Studio profile. The saved Host lower third is in the viewer.](brand.jpg)
+
 ## Use them
 
 - **Titles and lower thirds**: click to add at the playhead, or drag to the timeline. Then type the new name and title in the Text tab. The length, animation and styling are as you saved them.
 - **Effect presets**: hold the pointer over one to preview it on the selected clips, click to apply it to the selected clips, or drag it onto a clip. The preset replaces those parts of the clip, with their keyframes, like Paste Attributes.
-- Right click an item to rename or delete it. Deleting it does not change clips that already use it.
 - Type the name in Quick Search ({{key:findCommand}}) and press Enter to use it from anywhere.
+
+## Change a saved item
+
+Right click an item in the Brand tab:
+
+- **Update from Selected Clip** replaces the saved item with the selected clip as it looks now. The name and the place in Brand stay the same, and an effect preset keeps the parts it had. Clips that already use the old version are not changed.
+- **Rename…** and **Delete from Brand**. Deleting does not change clips that already use the item.
+- **Move to Profile** moves the item to another Brand profile.
+
+## Profiles for each channel or client
+
+At the top of the Brand tab, and of Brand in Design, **Profile** chooses which brand you work with. Each profile has its own titles, lower thirds, effect presets and Design elements, and its own brand colors, color roles, fonts and logo in Design. Switch profile and everything in Brand changes with it.
+
+The **…** button next to Profile has **New Profile…**, **Rename Profile…** and **Delete Profile…**. A new profile starts with Reccut's standard colors and fonts, or as a copy of the current colors, fonts and logo if you turn on **Start from current colors, fonts and logo**. These commands are also in View › Brand.
+
+## Export and import
+
+**Export Brand…** saves the active profile as a .reccut-brand file, with all its items, Design elements, colors, fonts, the logo and copies of the images. Use it to move your brand to another computer, keep a backup or share it with someone you work with.
+
+**Import Brand…** adds a .reccut-brand file as a new profile and switches to it. An existing profile with the same name is kept, and the new one gets a number after its name. Both commands are in the **…** menu and in View › Brand.
 
 ## Design
 
@@ -1555,9 +1576,12 @@ In the Design room, **Brand** in the left rail has **Brand Elements** and **My S
 - Select the layers you want to keep, for example a styled title with its box, a badge or your logo with a shape, and choose **Save Selection to Brand** (the + button by Brand Elements, or Design › Save Selection to Brand). Whole groups are included.
 - The layers are saved with their text, fonts, colors, effects and images. Reccut keeps its own copies of the images, so the element still works if the project is moved or deleted.
 - Click a Brand Element to add it to the open design, or drag it to a place on the canvas. It is scaled to the canvas, so a 16:9 element also fits a square or tall design. With no design open, a new one is made.
+- Right click a Brand Element to **Update from Selection**, rename it, move it to another profile or delete it.
 - My Styles shows the layer styles saved with Save Style, so text and shape styles are in the same place.
 
-The AI assistant can use Brand too: ask it to add your lower third or apply your color preset, and it finds them by name.
+![Brand in Design, with the profile, Brand Elements and My Styles above the logo, colors and fonts.](brand-design.jpg)
+
+The AI assistant can use Brand too: ask it to add your lower third, apply your color preset or switch to another client's profile, and it finds them by name.
 `,
     see: ['titles', 'lower-thirds', 'paste-attributes', 'design'],
   },

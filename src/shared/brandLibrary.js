@@ -4,7 +4,8 @@ import { deepClone, makeClip, uid } from './model.js';
 import { ATTRIBUTE_GROUPS, groupsWithContent, pasteAttributes } from './attributes.js';
 import { findTemplate } from './titletemplates.js';
 
-export const BRAND_LIMIT = 500;
+export const BRAND_LIMIT = 500; // per profile
+const STORE_LIMIT = BRAND_LIMIT * 20;
 export const BRAND_SECTIONS = [
   { id: 'title', label: 'Titles' },
   { id: 'lowerThird', label: 'Lower Thirds' },
@@ -30,7 +31,7 @@ function validItem(item) {
   return false;
 }
 export function brandItems(raw) {
-  return (Array.isArray(raw) ? raw : []).filter(validItem).slice(0, BRAND_LIMIT);
+  return (Array.isArray(raw) ? raw : []).filter(validItem).slice(0, STORE_LIMIT);
 }
 export function brandSection(items, section) {
   return items.filter((i) => i.section === section);
@@ -121,5 +122,56 @@ export function renameBrandItem(items, id, name) {
 export function designBrandLayers(raw) {
   return (Array.isArray(raw) ? raw : [])
     .filter((s) => plain(s) && typeof s.id === 'string' && typeof s.name === 'string' && s.width > 0 && s.height > 0 && Array.isArray(s.layers) && s.layers.length > 0 && s.layers.length <= 2000)
-    .slice(0, BRAND_LIMIT);
+    .slice(0, STORE_LIMIT);
+}
+
+/* Profiles: one Brand per channel or client. Items and Design elements carry the id of their profile;
+   older items without one belong to the first profile. The Design defaults (color roles, fonts, saved
+   colors and logo) are stored per profile and swapped when the user switches. */
+export const DEFAULT_PROFILE = 'default';
+export const PROFILE_LIMIT = 50;
+export function brandProfiles(prefs = {}) {
+  const list = (Array.isArray(prefs.brandProfiles) ? prefs.brandProfiles : [])
+    .filter((p) => plain(p) && typeof p.id === 'string' && /^[\w-]{1,64}$/.test(p.id) && typeof p.name === 'string')
+    .slice(0, PROFILE_LIMIT);
+  return list.some((p) => p.id === DEFAULT_PROFILE) ? list : [{ id: DEFAULT_PROFILE, name: 'My Brand' }, ...list];
+}
+export function activeProfileId(prefs = {}) {
+  const id = prefs.brandProfile;
+  return brandProfiles(prefs).some((p) => p.id === id) ? id : DEFAULT_PROFILE;
+}
+export const profileOf = (item) => (typeof item?.profile === 'string' ? item.profile : DEFAULT_PROFILE);
+export const inProfile = (list, id) => list.filter((i) => profileOf(i) === id);
+// A unique name among the profiles: "Client", "Client 2", ...
+export function uniqueProfileName(profiles, name, exceptId = null) {
+  const base = cleanName(name, 'Brand').slice(0, 60);
+  const taken = new Set(profiles.filter((p) => p.id !== exceptId).map((p) => p.name.toLocaleLowerCase()));
+  let next = base, n = 2;
+  while (taken.has(next.toLocaleLowerCase())) next = `${base} ${n++}`;
+  return next;
+}
+
+// Replaces a saved item with a new version made from a clip, keeping its id, name and profile.
+export function updatedBrandItem(old, clip, templates = {}) {
+  const next = old.kind === 'title'
+    ? brandTitleItem(clip, { name: old.name, templates })
+    : brandEffectsItem(clip, { name: old.name, groups: brandEffectGroups(clip).available.filter((g) => old.groups.includes(g)) });
+  return { ...next, id: old.id, name: old.name, profile: profileOf(old), created: Date.now() };
+}
+
+/* Export and import: a .reccut-brand file with one profile. Images are embedded by the main process. */
+export const BRAND_PACK_FORMAT = 'reccut-brand';
+export function brandPack({ profile, items, elements, design }) {
+  const strip = (x) => { const { profile: _p, ...rest } = x; return rest; };
+  return { format: BRAND_PACK_FORMAT, version: 1, name: profile.name, items: items.map(strip), elements: elements.map(strip), design: plain(design) ? design : {} };
+}
+// Checks an imported pack and gives the items and elements new ids in the new profile.
+export function readBrandPack(raw, profileId) {
+  if (!plain(raw) || raw.format !== BRAND_PACK_FORMAT) throw new Error('This is not a Reccut Brand file.');
+  if (raw.version > 1) throw new Error('This Brand file was made by a newer version of Reccut. Update Reccut to import it.');
+  const fresh = (x) => ({ ...x, id: uid(), profile: profileId });
+  const items = brandItems(raw.items).map(fresh);
+  const elements = designBrandLayers(raw.elements).map(fresh);
+  const design = plain(raw.design) ? raw.design : {};
+  return { name: cleanName(raw.name, 'Imported Brand'), items, elements, design, skipped: (Array.isArray(raw.items) ? raw.items.length : 0) - items.length + (Array.isArray(raw.elements) ? raw.elements.length : 0) - elements.length };
 }

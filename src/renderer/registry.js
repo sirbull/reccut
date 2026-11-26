@@ -36,6 +36,7 @@ import { startRefine, refineSession } from './design/refine.js';
 import { fillTextWithImage } from './design/masks.js';
 import { openSaveStyle, openSaveTemplate, importTemplate } from './design/library.js';
 import { openSaveBrandLayers } from './design/brand.js';
+import { deleteProfile, exportProfile, importProfile, openNewProfile, openRenameProfile, profiles } from './brandProfiles.js';
 import { feedPreview, showSafeZones, canFeedPreview, toggleFeedPreview, toggleSafeZones } from './design/tools.js';
 import { chooseImage, pasteImage, copyLayers } from './design/assets.js';
 import { toggleViewerFullscreen } from './editor/fullscreen.js';
@@ -351,6 +352,11 @@ export const COMMANDS = [
   { id: 'browser:effects', label: 'Show Effects', menu: 'View', group: 'browser', keys: 'CmdOrCtrl+5', run: () => showBrowser('effects'), help: 'effects' },
   { id: 'browser:audio', label: 'Show Audio Effects', menu: 'View', group: 'browser', keys: 'Shift+CmdOrCtrl+6', run: () => showBrowser('audio'), help: 'audio-effects' },
   { id: 'browser:brand', label: 'Show Brand', menu: 'View', group: 'browser', run: () => showBrowser('brand'), help: 'brand', keywords: 'brand kit saved titles lower thirds effect presets my styles profile', desc: 'Show your saved titles, lower thirds and effect presets in the browser.' },
+  { id: 'brand:newProfile', label: 'New Brand Profile…', menu: 'View', submenu: 'Brand', rooms: EDIT_DESIGN, run: () => openNewProfile(), help: 'brand', keywords: 'brand profile client channel kit new add', desc: 'Make a new Brand profile, for example for another channel or client, with its own titles, lower thirds, effect presets, Design elements, colors, fonts and logo.' },
+  { id: 'brand:renameProfile', label: 'Rename Brand Profile…', menu: 'View', submenu: 'Brand', rooms: EDIT_DESIGN, run: () => openRenameProfile(), help: 'brand', keywords: 'brand profile rename name', desc: 'Rename the active Brand profile.' },
+  { id: 'brand:deleteProfile', label: 'Delete Brand Profile…', menu: 'View', submenu: 'Brand', rooms: EDIT_DESIGN, run: () => deleteProfile().catch((err) => toast(err.message, { kind: 'error' })), enabled: () => profiles().length > 1, help: 'brand', keywords: 'brand profile delete remove', desc: 'Delete the active Brand profile and everything saved in it. Clips and designs that use it keep their look.' },
+  { id: 'brand:exportProfile', label: 'Export Brand…', menu: 'View', submenu: 'Brand', rooms: EDIT_DESIGN, run: () => exportProfile().catch((err) => toast(err.message, { kind: 'error' })), help: 'brand', keywords: 'brand profile export share backup file reccut-brand another computer', desc: 'Save the active Brand profile, with its images and logo, as a .reccut-brand file to use on another computer or share with others.' },
+  { id: 'brand:importProfile', label: 'Import Brand…', menu: 'View', submenu: 'Brand', rooms: EDIT_DESIGN, run: () => importProfile().catch((err) => toast(err.message, { kind: 'error' })), help: 'brand', keywords: 'brand profile import open file reccut-brand', desc: 'Add a Brand profile from a .reccut-brand file and switch to it.' },
   { id: 'browser:captions', label: 'Show Captions', menu: 'View', group: 'browser', keys: 'Shift+CmdOrCtrl+7', run: () => showBrowser('captions'), help: 'captions' },
   { id: 'inspector:video', label: 'Show Video Inspector', menu: 'View', group: 'inspector', keys: 'CmdOrCtrl+4', run: () => showInspector('video'), help: 'inspector' },
   { id: 'inspector:audio', label: 'Show Audio Inspector', menu: 'View', group: 'inspector', keys: 'Alt+CmdOrCtrl+4', run: () => showInspector('audio'), help: 'audio' },

@@ -48,7 +48,9 @@ import { prefs } from '../prefs.js';
 import { AUDIO_EFFECTS, AUDIO_FX_CATEGORIES, AUDIO_PRESETS, AUDIO_PRESET_CATEGORIES } from '../../shared/audiofx.js';
 import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../../shared/videoEffects.js';
 import { ATTRIBUTE_GROUPS } from '../../shared/attributes.js';
-import { BRAND_LIMIT, BRAND_SECTIONS, applyBrandEffects, brandSection, isLowerThird } from '../../shared/brandLibrary.js';
+import { BRAND_LIMIT, BRAND_SECTIONS, activeProfileId, applyBrandEffects, brandSection, isLowerThird } from '../../shared/brandLibrary.js';
+import { BrandProfileBar } from '../BrandProfiles.jsx';
+import { profiles } from '../brandProfiles.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -989,15 +991,24 @@ function brandEffectsFrameAt(item) {
 function brandMenu(item) {
   return async (e) => {
     e.preventDefault();
+    const others = profiles().filter((p) => p.id !== activeProfileId(prefs.value));
     const id = await api.popupMenu([
       { id: 'apply', label: item.kind === 'title' ? 'Add at Playhead' : 'Apply to Selected Clips' },
+      { id: 'update', label: 'Update from Selected Clip', enabled: commands.canUpdateBrandItem(item) },
       { id: 'rename', label: 'Rename…' },
+      ...(others.length ? [{ label: 'Move to Profile', submenu: others.map((p) => ({ id: `move:${p.id}`, label: p.name })) }] : []),
       { separator: true },
       { id: 'delete', label: 'Delete from Brand' },
     ]);
-    if (id === 'apply') commands.applyBrandItem(item.id);
-    else if (id === 'rename') commands.brandDialog.value = { rename: item.id, name: item.name };
-    else if (id === 'delete' && confirm(`Delete “${item.name}” from Brand? Clips that use it keep their look.`)) commands.deleteBrand(item.id);
+    try {
+      if (id === 'apply') commands.applyBrandItem(item.id);
+      else if (id === 'update') toast(`${commands.updateBrandItem(item.id).name} was updated.`, { timeout: 2500 });
+      else if (id === 'rename') commands.brandDialog.value = { rename: item.id, name: item.name };
+      else if (id?.startsWith('move:')) commands.moveBrandItem(item.id, id.slice(5));
+      else if (id === 'delete' && confirm(`Delete “${item.name}” from Brand? Clips that use it keep their look.`)) commands.deleteBrand(item.id);
+    } catch (err) {
+      toast(err.message, { kind: 'error' });
+    }
   };
 }
 function BrandCard({ item }) {
@@ -1029,6 +1040,7 @@ function BrandTab() {
   const hints = { title: 'Style a title, select it and choose Save to Brand.', lowerThird: 'Style a lower third, select it and choose Save to Brand.', effects: 'Select a clip with effects, color or audio effects and choose Save to Brand.' };
   return (
     <div class="brand-tab">
+      <BrandProfileBar />
       <div class="tab-actions">
         <Button variant="secondary" icon={Plus} disabled={!selected.length || items.length >= BRAND_LIMIT} onClick={() => commands.openSaveToBrand()} title="Save the selected title, lower third or the effects of the selected clip">
           Save to Brand
@@ -1050,7 +1062,7 @@ function BrandTab() {
           </div>
         );
       })}
-      <p class="hint small">Brand keeps your own titles, lower thirds and effect presets in every project. Right click a clip and choose Save to Brand. Saved titles keep their text, font, colors, animation and length. Effect presets keep the parts you choose, with their keyframes.</p>
+      <p class="hint small">Brand keeps your own titles, lower thirds and effect presets in every project. Right click a clip and choose Save to Brand. Saved titles keep their text, font, colors, animation and length. Effect presets keep the parts you choose, with their keyframes. Right click an item to update it from the selected clip. Use a profile for each channel or client, and export a profile to use it on another computer.</p>
     </div>
   );
 }

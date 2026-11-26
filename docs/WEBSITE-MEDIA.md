@@ -2,6 +2,16 @@
 
 Refreshed on 5 November 2026 using the current Reccut source. No application version change is required for a website media update.
 
+## Brand — 26 November 2026
+
+`assets/help/brand.jpg` and `assets/help/brand-design.jpg` show the Brand tab in Edit and Brand in Design for an English demo profile, Northwind Studio, with saved titles, lower thirds, effect presets and Design elements. No media files are used; the previews draw Reccut's own sample scene. To photograph them again after `npm run build`:
+
+```sh
+node scripts/capture-brand.cjs
+```
+
+The script uses a temporary, isolated app profile and does not open or change the user's projects or Brand. Run `npm run docs` afterwards to copy the images to the website.
+
 ## Voice Over Studio — 12 November 2026
 
 `media/voice-over-studio.jpg` shows the actual studio renderer with a four-paragraph English demo script, real narration waveforms, a starred take, audio effect templates, AI Clean Voice and the Send to Edit subtitle option. The spoken narration is also in English (`en-us`), generated locally with Kokoro-82M, voice `af_heart`, using the model and eSpeak NG pronunciation add-on pinned in `ttsCatalog.json`. No Lingit voices or other system speech engines are used for the finished image. No user recording or manuscript is included.
