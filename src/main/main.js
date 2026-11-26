@@ -882,6 +882,12 @@ ipcMain.handle('design:templates:save',(_e,data,id)=>getDesignLibrary().save(dat
 ipcMain.handle('design:templates:remove',(_e,id)=>getDesignLibrary().remove(id));
 ipcMain.handle('design:brand:logo',()=>getDesignLibrary().logo());
 ipcMain.handle('design:brand:setLogo',(_e,file)=>getDesignLibrary().setLogo(file));
+// Brand profiles: each keeps its own logo while another is active (see brandProfiles.js in the renderer).
+ipcMain.handle('brand:switchLogo',async(_e,from,to)=>{const lib=getDesignLibrary();await lib.stashLogo(from);return lib.restoreLogo(to);});
+ipcMain.handle('brand:removeProfile',(_e,id)=>getDesignLibrary().removeProfile(id));
+ipcMain.handle('brand:setProfileLogo',(_e,id,logo)=>getDesignLibrary().setProfileLogo(id,logo?.path,logo?.name));
+ipcMain.handle('brand:export',async(_e,file,pack,profileId)=>{const lib=getDesignLibrary();return require('./brandPack').exportBrandPack(file,pack,profileId?await lib.profileLogo(profileId):await lib.logo());});
+ipcMain.handle('brand:import',async(_e,file)=>require('./brandPack').importBrandPack(file,path.join(await baseDir(),'Brand','Imported')));
 // Modellene for å fjerne bakgrunn lastes ned når de trengs (Settings → AI eller spørsmålet i Design).
 const backgroundModels = require('./modelPacks').createModelPacks({
   dir: path.join(app.getPath('userData'), 'background-models'),

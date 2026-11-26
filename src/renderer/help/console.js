@@ -18,6 +18,10 @@ import { FILM_LOOKS } from '../../shared/filmLooks.js';
 
 import { commit, project, room, selection } from '../editor/store.js';
 import * as commands from '../editor/commands.js';
+import { brandLayerSets, placeBrandLayers, updateBrandLayers } from '../design/brand.js';
+import { profiles, switchBrandProfile } from '../brandProfiles.js';
+import { activeProfileId } from '../../shared/brandLibrary.js';
+import { prefs } from '../prefs.js';
 import { COMMANDS, menuTemplate, runCommand } from '../registry.js';
 import SETTINGS from './settingsIndex.json';
 import { ARTICLES } from './articles.js';
@@ -303,6 +307,16 @@ function itemsFor() {
       keywords: `settings preferences option ${s.paneLabel} ${s.section} ${s.pref || ''}`,
       run: () => openSetting(s),
     });
+  // Brand: the user's own saved titles, lower thirds, effect presets and Design elements.
+  for (const b of commands.brandList()) {
+    const what = b.kind === 'effects' ? 'Effect preset for the selected clips' : b.section === 'lowerThird' ? 'Saved lower third at the playhead' : 'Saved title at the playhead';
+    out.push({ kind: 'Brand', id: `brand:${b.id}`, label: b.name, sub: `Brand › ${what}`, keywords: `brand saved my own ${b.kind === 'effects' ? 'effects preset look' : 'title lower third text'}`, run: () => commands.applyBrandItem(b.id) });
+  }
+  for (const b of commands.brandList()) out.push({ kind: 'Brand', id: `brand-update:${b.id}`, label: `Update ${b.name} from Selection`, sub: 'Brand › Replace the saved item with the selected clip', keywords: 'brand update replace saved', run: () => toast(`${commands.updateBrandItem(b.id).name} was updated.`, { timeout: 2500 }) });
+  const active = activeProfileId(prefs.value);
+  for (const p of profiles()) if (p.id !== active) out.push({ kind: 'Brand', id: `brand-profile:${p.id}`, label: `Switch to ${p.name}`, sub: 'Brand profile', keywords: 'brand profile switch client channel', run: () => switchBrandProfile(p.id) });
+  for (const set of brandLayerSets()) out.push({ kind: 'Brand', id: `brand-design-update:${set.id}`, label: `Update ${set.name} from Selection`, sub: 'Brand › Replace the Design element with the selected layers', keywords: 'brand update replace saved design element', room: 'design', run: () => updateBrandLayers(set.id) });
+  for (const set of brandLayerSets()) out.push({ kind: 'Brand', id: `brand-design:${set.id}`, label: set.name, sub: 'Brand › Design element', keywords: 'brand saved my own design element layers thumbnail', room: 'design', run: () => placeBrandLayers(set) });
   for (const a of ARTICLES) out.push({ kind: 'Help', id: `help:${a.id}`, label: a.title, sub: a.summary, keywords: a.keywords || '', article: a.id });
   return out;
 }
@@ -320,14 +334,14 @@ function score(item, words) {
   }
   if (label === words.join(' ')) total += 10;
   // Effekter, verktøy og innstillinger først når de passer like godt, som i FX Console.
-  total += { Effect: 0.6, Setting: 0.5, Transition: 0.4, Title: 0.4, 'Lower Third': 0.4, Look: 0.3, Command: 0.3, Option: 0.25, Animation: 0.2, Media: 0.1, Help: 0 }[item.kind] || 0;
+  total += { Brand: 0.7, Effect: 0.6, Setting: 0.5, Transition: 0.4, Title: 0.4, 'Lower Third': 0.4, Look: 0.3, Command: 0.3, Option: 0.25, Animation: 0.2, Media: 0.1, Help: 0 }[item.kind] || 0;
   return total;
 }
 
 const DEFAULT = ['cmd:import', 'fx:blur', 'param:exposure', 'tr:dissolve', 'title:lower', 'cmd:syncAudio', 'cmd:blade', 'cmd:retime', 'param:wheels', 'cmd:export'];
 
-const KIND_ORDER = ['Command', 'Effect', 'Transition', 'Title', 'Lower Third', 'Look', 'Animation', 'Setting', 'Option', 'Media', 'Help'];
-const plural = (kind) => (kind === 'Media' || kind === 'Help' ? kind : `${kind}s`);
+const KIND_ORDER = ['Command', 'Brand', 'Effect', 'Transition', 'Title', 'Lower Third', 'Look', 'Animation', 'Setting', 'Option', 'Media', 'Help'];
+const plural = (kind) => (['Media', 'Help', 'Brand'].includes(kind) ? kind : `${kind}s`);
 
 // Uten søkeord: forslagene først, så alt annet gruppert etter type, så du kan bla og lære. group gir overskriften.
 function browseAll(items) {
@@ -367,7 +381,7 @@ function highlightFor(cmd) {
 
 export function runItem(item, openArticle) {
   if (item.article) return openArticle(item.article);
-  if (!['Command', 'Option'].includes(item.kind) && room.value !== 'edit') room.value = 'edit';
+  if (!['Command', 'Option'].includes(item.kind) && room.value !== (item.room || 'edit')) room.value = item.room || 'edit';
   const hl = highlightFor(item.cmd);
   Promise.resolve()
     .then(() => item.run())

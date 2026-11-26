@@ -148,6 +148,8 @@ Templates offers 22 built-in layouts for wide, tall and square designs, plus My 
 
 Brand has the reusable Logo, Brand Colors, title/body Brand Fonts and a Brand Palette. Click a color to apply it to selected text or shapes, or to the background when nothing is selected. My Colors also stores up to 20 colors beside color controls. Save Color in Brand adds the chosen color; right click a swatch to remove it. My Logo is copied into each new design that uses it, so replacing the saved logo keeps existing projects intact.
 
+Brand Elements keeps layers you styled yourself, such as a title with its box, a badge or a logo with a shape. Select them and choose Save Selection to Brand (the + button by Brand Elements, or Design › Save Selection to Brand). Click an element to add it to the open design, or drag it to a place on the canvas; it is scaled to the canvas size. My Styles is shown in Brand as well. See [[article:brand|Brand]].
+
 ## Elements, palettes and search
 
 Elements offers editable shapes and badges, hand-drawn arrows, circles and underlines, system emoji, stickers, solid/gradient backgrounds and textures. Click or press Enter to add an item; drag places it at that canvas point. Badges remain text layers, including the sequence duration badge. Backgrounds, including gradients, create separate editable layers. New backgrounds are placed above older background layers and below normal content. Dots and grids have Pattern controls for background and foreground colors, symbol size or line width, and independent X/Y spacing. Symbols include circles, squares, diamonds, triangles, stars and hexagons. Size Variation randomizes their sizes; Random Seed selects a repeatable arrangement. Size Distribution makes symbols or grid lines larger in the center, at the edges, or toward the left, right, top or bottom. Distribution Strength controls how strongly sizes change. Older raster textures offer Make Pattern Editable, which can be undone. Right click an element to save it to My Elements. Emoji offers 3,781 choices, English search, categories and paged grids. Brand selects System, Flat or Outline as its default; the library follows this choice and Properties can change one emoji. Flat/Outline use bundled OpenMoji graphics with CC BY-SA 4.0 credits; their appearance depends on the installed system fonts.
@@ -593,7 +595,7 @@ Use **Row** above the filmstrips to choose how much time each row shows, from th
 - Right click for more: Synchronize Audio, Optimize Media, Reveal in Finder and Remove from Project.
 - Drag several selected clips to the timeline to place them one after another.
 
-The browser tabs hold titles, transitions, effects and captions. Show them with {{key:browser:media}}, {{key:browser:titles}}, {{key:browser:transitions}}, {{key:browser:effects}} and {{key:browser:captions}}.
+The browser tabs hold titles, transitions, effects, captions, stock media and Brand, your own saved titles, lower thirds and effect presets. Show them with {{key:browser:media}}, {{key:browser:titles}}, {{key:browser:transitions}}, {{key:browser:effects}} and {{key:browser:captions}}.
 `,
     see: ['adding', 'skimming', 'sync'],
   },
@@ -1493,8 +1495,10 @@ Add Title ({{key:addTitle}}) adds a title at the playhead. The Titles browser ({
 ![The Titles browser.](titles.jpg)
 
 Select the title to change it in the inspector: the text in the Text tab, and position, size, rotation and opacity in the Video tab. You can also drag the title in the viewer.
+
+When a title looks the way you want, right click it and choose Save to Brand. It is then in the Brand tab of the browser in every project.
 `,
-    see: ['lower-thirds', 'templates'],
+    see: ['lower-thirds', 'templates', 'brand'],
   },
   {
     id: 'lower-thirds',
@@ -1513,10 +1517,11 @@ Add Lower Third ({{key:addLowerThird}}) puts an animated lower third at the play
 - Change the **colors** and the **font**, or switch to another design with Template. Your text is kept.
 - Move it and change its size in the Video tab, or drag it in the viewer.
 - In vertical and square projects the lower third stays in its corner.
+- Right click it and choose **Save to Brand** to reuse your styled lower third in other projects. It appears under Lower Thirds in the Brand tab.
 
 ![The Text tab for a lower third.](lowerthird.jpg)
 `,
-    see: ['templates', 'titles'],
+    see: ['templates', 'titles', 'brand'],
   },
   {
     id: 'templates',
@@ -1549,6 +1554,68 @@ Import the template ({{key:importTemplate}}), drop the .reccut-title file on Rec
 [[run:templateKit|Get the Template Kit]] [[run:importTemplate|Import Template]]
 `,
     see: ['lower-thirds'],
+  },
+  {
+    id: 'brand',
+    section: 'Editing',
+    title: 'Brand: Your Saved Titles, Lower Thirds and Effects',
+    summary: 'Save titles, lower thirds, effect presets and Design elements you styled, and reuse them in any project.',
+    keywords: 'brand kit profile client channel style my titles my lower thirds favorite preset effect preset saved look reuse every project design element thumbnail update export import share backup reccut-brand',
+    body: `
+Brand keeps the things you have styled yourself, so you can use the same look in every video. What you save is stored in Reccut, not in the project, so it is there in all your projects.
+
+## Save a title, lower third or effects
+
+1. Style a title or lower third the way you want it: text, font, colors, animation and length. Or give a clip the effects, color correction or audio effects you want to reuse.
+2. Select the clip and choose [[run:saveToBrand|Save to Brand]]. It is also in the Edit menu, when you right click a clip, and at the top of the Brand tab.
+3. Type a name. For a clip with effects, tick what the effect preset keeps: Effects, Color, Compositing, Masks and Audio Effects are ticked to begin with. Transform, Crop, Volume and the fades can be added too. A title can be saved as a title or as an effect preset.
+4. Choose **Save**.
+
+Titles go under **Titles**, lower thirds under **Lower Thirds** and effect presets under **Effects** in the Brand tab of the browser ([[run:browser:brand|Show Brand]]). A title made from your own template keeps a copy of the template, so it works in other projects too.
+
+![The Brand tab with saved titles, lower thirds and effect presets for the Northwind Studio profile. The saved Host lower third is in the viewer.](brand.jpg)
+
+## Use them
+
+- **Titles and lower thirds**: click to add at the playhead, or drag to the timeline. Then type the new name and title in the Text tab. The length, animation and styling are as you saved them.
+- **Effect presets**: hold the pointer over one to preview it on the selected clips, click to apply it to the selected clips, or drag it onto a clip. The preset replaces those parts of the clip, with their keyframes, like Paste Attributes.
+- Type the name in Quick Search ({{key:findCommand}}) and press Enter to use it from anywhere.
+
+## Change a saved item
+
+Right click an item in the Brand tab:
+
+- **Update from Selected Clip** replaces the saved item with the selected clip as it looks now. The name and the place in Brand stay the same, and an effect preset keeps the parts it had. Clips that already use the old version are not changed.
+- **Rename…** and **Delete from Brand**. Deleting does not change clips that already use the item.
+- **Move to Profile** moves the item to another Brand profile.
+
+## Profiles for each channel or client
+
+At the top of the Brand tab, and of Brand in Design, **Profile** chooses which brand you work with. Each profile has its own titles, lower thirds, effect presets and Design elements, and its own brand colors, color roles, fonts and logo in Design. Switch profile and everything in Brand changes with it.
+
+The **…** button next to Profile has **New Profile…**, **Rename Profile…** and **Delete Profile…**. A new profile starts with Reccut's standard colors and fonts, or as a copy of the current colors, fonts and logo if you turn on **Start from current colors, fonts and logo**. These commands are also in View › Brand.
+
+## Export and import
+
+**Export Brand…** saves the active profile as a .reccut-brand file, with all its items, Design elements, colors, fonts, the logo and copies of the images. Use it to move your brand to another computer, keep a backup or share it with someone you work with.
+
+**Import Brand…** adds a .reccut-brand file as a new profile and switches to it. An existing profile with the same name is kept, and the new one gets a number after its name. Both commands are in the **…** menu and in View › Brand.
+
+## Design
+
+In the Design room, **Brand** in the left rail has **Brand Elements** and **My Styles** next to your logo, colors and fonts.
+
+- Select the layers you want to keep, for example a styled title with its box, a badge or your logo with a shape, and choose **Save Selection to Brand** (the + button by Brand Elements, or Design › Save Selection to Brand). Whole groups are included.
+- The layers are saved with their text, fonts, colors, effects and images. Reccut keeps its own copies of the images, so the element still works if the project is moved or deleted.
+- Click a Brand Element to add it to the open design, or drag it to a place on the canvas. It is scaled to the canvas, so a 16:9 element also fits a square or tall design. With no design open, a new one is made.
+- Right click a Brand Element to **Update from Selection**, rename it, move it to another profile or delete it.
+- My Styles shows the layer styles saved with Save Style, so text and shape styles are in the same place.
+
+![Brand in Design, with the profile, Brand Elements and My Styles above the logo, colors and fonts.](brand-design.jpg)
+
+The AI assistant can use Brand too: ask it to add your lower third, apply your color preset or switch to another client's profile, and it finds them by name.
+`,
+    see: ['titles', 'lower-thirds', 'paste-attributes', 'design'],
   },
   {
     id: 'captions',
@@ -2414,9 +2481,11 @@ Select the clip that has the effects you want and copy it ({{key:copy}}). Then s
 
 Keyframes come along. **Maintain Timing** keeps them at the same time from the start of the clip, and **Stretch to Fit** stretches them to the length of the clip you paste into.
 
+To keep a look for later, choose **Save to Brand** and tick the parts to keep. The effect preset is then in the Brand tab in every project.
+
 A pasted attribute replaces what the clip had. Use **Remove Effects** ({{key:removeEffects}}) to remove effects, audio effects and masks, or **Remove Attributes** ({{key:removeAttributes}}) to choose what to reset. All of these are also in the Edit menu and when you right click a clip.
 `,
-    see: ['effects', 'audio-effects'],
+    see: ['effects', 'audio-effects', 'brand'],
   },
   {
     id: 'audio',

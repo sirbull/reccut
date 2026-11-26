@@ -79,6 +79,8 @@ import { AiModelsDialog, aiModelsOpen, maybeAskFirstRun } from './AiModels.jsx';
 import { VoicePackagesDialog } from './VoicePackages.jsx';
 import { voicePackagesOpen } from './voicePackages.js';
 import { SystemShortcutsDialog, checkSystemShortcuts } from './SystemShortcuts.jsx';
+import { BrandProfileDialog } from './BrandProfiles.jsx';
+import { profileDialog } from './brandProfiles.js';
 
 const api = window.api;
 const isMac = api.platform === 'darwin';
@@ -485,6 +487,7 @@ function App() {
       {sequenceSettingsOpen.value && <SequenceSettingsDialog />}
       {commands.packageOpen.value && <PackageDialog />}
       {commands.historyOpen.value && <HistoryDialog />}
+      {profileDialog.value && <BrandProfileDialog key={profileDialog.value.id || 'new'} />}
       {aiChatOpen.value && <AIChat key={project.value.id} />}
       <PluginWindows />
       {r === 'design' && stockPopout.value.includes('design') && <DesignStockWindow />}

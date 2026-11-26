@@ -11,11 +11,11 @@ import { rankLibraryItems, filterLibraryItems } from '../../shared/designLibrary
 import { newDesign, solidFill, effectMargin } from '../../shared/design.js';
 import { LibraryCard, LibraryPreview, TemplateCard, StyleCard } from './LibraryPanel.jsx';
 import { LibrarySections } from './LibrarySection.jsx';
-import { ImageCard, ColorCard } from './ContentPanel.jsx';
+import { ImageCard, ColorCard, BrandElementCard } from './ContentPanel.jsx';
 import { fontAvailable, fontVersion } from './fonts.js';
 import { applyElement, previewElement, brandedElement,backgroundElementLayer, applyAppearance, previewAppearance, savedContent, saveContent, removeContent } from './content.js';
 import { savedStyles, userTemplates, clearLibraryPreview } from './library.js';
-import { brandColors, brandLogo } from './brand.js';
+import { brandColors, brandLogo, brandLayerSets } from './brand.js';
 import { framePalette, sampleCurrentPalette, canSampleFrame } from './videoLibrary.js';
 import { fitDesignBadges } from './badges.js';
 import { useVideoLibrary, videoSection } from './VideoCards.jsx';
@@ -63,6 +63,7 @@ export function SearchPanel({query=''}){
     {id:'fonts',title:'Font Pairs',items:pairs,render:pair=><AppearanceCard key={pair.id} pair={pair} user={savedContent('FontPairs').some(p=>p.id===pair.id)}/>},
     {id:'images',title:'Project Images',items:[...Object.values(p.designAssets||{}).filter(a=>a.origin==='placed').map(a=>({...a,source:{asset:a}})),...Object.values(p.media).filter(m=>m.kind==='image').map(m=>({...m,source:{media:m}}))],render:item=><ImageCard key={item.id} item={item} source={item.source} prefix="search-image"/>},
     {id:'brand-colors',title:'Brand Colors',items:brandColors().map(color=>({id:color,name:color,tags:['brand','color']})),render:item=><ColorCard key={item.id} color={item.id}/>},
+    {id:'brand-elements',title:'Brand Elements',items:brandLayerSets().map(set=>({...set,tags:['brand','element']})),render:set=><BrandElementCard key={set.id} set={set}/>},
     {id:'brand',title:'Brand',items:brandLogo.value?[{id:'logo',name:brandLogo.value.name,tags:['logo','brand'],path:brandLogo.value.path}]:[],render:item=><ImageCard key={item.id} item={item} source={item} prefix="search-brand"/>},
   ].map(g=>({...g,items:rankLibraryItems(g.items,query)})).filter(g=>g.items.length);
   return groups.length?<LibrarySections query={query} sections={groups}/>:<p class="hint">No matching items.</p>;

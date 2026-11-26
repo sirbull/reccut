@@ -25,13 +25,31 @@ function createDesignLibrary(root,validate) {
   const remove=async(id)=>{const target=fileFor(id);const trash=path.join(directory,'.trash');await fs.promises.mkdir(trash,{recursive:true});await fs.promises.rename(target,path.join(trash,`${id}-${Date.now()}.json`));};
   const brand=path.join(root,'brand'),brandFile=path.join(brand,'logo.json');
   const logo=async()=>{try{const value=JSON.parse(await fs.promises.readFile(brandFile,'utf8'));if(typeof value.file!=='string'||!/^logo-[a-zA-Z0-9-]+\.(png|jpe?g|webp|svg|gif|bmp)$/i.test(value.file))return null;const target=path.join(brand,value.file);await fs.promises.access(target);return {path:target,name:value.name||'My Logo'};}catch{return null;}};
-  const setLogo=async(source)=>{
+  const setLogo=async(source,name=null)=>{
     if(typeof source!=='string'||!path.isAbsolute(source)||!/^\.(png|jpe?g|webp|svg|gif|bmp)$/i.test(path.extname(source)))throw new Error('Choose a PNG, JPEG, WebP, SVG, GIF or BMP logo.');
     await fs.promises.mkdir(brand,{recursive:true});const old=await logo(),file=`logo-${crypto.randomUUID()}${path.extname(source).toLowerCase()}`;
     await fs.promises.copyFile(source,path.join(brand,file),fs.constants.COPYFILE_EXCL);
-    await fs.promises.writeFile(brandFile+'.tmp',JSON.stringify({file,name:path.basename(source)}));await fs.promises.rename(brandFile+'.tmp',brandFile);
+    await fs.promises.writeFile(brandFile+'.tmp',JSON.stringify({file,name:name||path.basename(source)}));await fs.promises.rename(brandFile+'.tmp',brandFile);
     if(old)await fs.promises.unlink(old.path).catch(()=>{});return logo();
   };
-  return {list,save,remove,logo,setLogo};
+  const clearLogo=async()=>{const old=await logo();await fs.promises.rm(brandFile,{force:true});if(old)await fs.promises.unlink(old.path).catch(()=>{});return null;};
+  // Each Brand profile keeps its own logo while another profile is active.
+  const profileDir=(id)=>{if(typeof id!=='string'||!/^[\w-]{1,64}$/.test(id))throw new Error('Invalid profile id.');return path.join(brand,'profiles',id);};
+  const stashLogo=async(id)=>{
+    const dir=profileDir(id),current=await logo();await fs.promises.rm(dir,{recursive:true,force:true});
+    if(!current)return null;await fs.promises.mkdir(dir,{recursive:true});
+    const file=`logo${path.extname(current.path).toLowerCase()}`;await fs.promises.copyFile(current.path,path.join(dir,file));
+    await fs.promises.writeFile(path.join(dir,'logo.json'),JSON.stringify({file,name:current.name}));return {path:path.join(dir,file),name:current.name};
+  };
+  const profileLogo=async(id)=>{try{const dir=profileDir(id),value=JSON.parse(await fs.promises.readFile(path.join(dir,'logo.json'),'utf8'));if(!/^logo\.(png|jpe?g|webp|svg|gif|bmp)$/i.test(value.file))return null;const target=path.join(dir,value.file);await fs.promises.access(target);return {path:target,name:value.name||'My Logo'};}catch{return null;}};
+  const restoreLogo=async(id)=>{const saved=await profileLogo(id);if(!saved)return clearLogo();await setLogo(saved.path,saved.name);return logo();};
+  const setProfileLogo=async(id,source,name)=>{
+    const dir=profileDir(id);await fs.promises.rm(dir,{recursive:true,force:true});
+    if(typeof source!=='string'||!path.isAbsolute(source)||!/^\.(png|jpe?g|webp|svg|gif|bmp)$/i.test(path.extname(source)))return null;
+    await fs.promises.mkdir(dir,{recursive:true});const file=`logo${path.extname(source).toLowerCase()}`;await fs.promises.copyFile(source,path.join(dir,file));
+    await fs.promises.writeFile(path.join(dir,'logo.json'),JSON.stringify({file,name:name||path.basename(source)}));return profileLogo(id);
+  };
+  const removeProfile=async(id)=>{await fs.promises.rm(profileDir(id),{recursive:true,force:true});};
+  return {list,save,remove,logo,setLogo,clearLogo,stashLogo,profileLogo,setProfileLogo,restoreLogo,removeProfile};
 }
 module.exports={createDesignLibrary};

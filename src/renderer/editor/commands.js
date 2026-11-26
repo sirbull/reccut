@@ -11,6 +11,7 @@ import { BROWSER_VIDEO_EFFECTS, makeVideoEffect } from '../../shared/videoEffect
 import { createMulticamFromSelection, editMulticam, newMulticamClip, setActiveAudioAngle, setActiveVideoAngle } from './multicam.js';
 import { angleHasAudio, angleLabel, isVideoAngle, multicamOfClip } from '../../shared/multicam.js';
 import { ALL_GROUPS, groupsWithContent, pasteAttributes, removeAttributes } from '../../shared/attributes.js';
+import { BRAND_LIMIT, activeProfileId, applyBrandEffects, brandEffectGroups, brandEffectsItem, brandItems, brandTitleClip, brandTitleItem, canApplyBrandEffects, inProfile, renameBrandItem, updatedBrandItem } from '../../shared/brandLibrary.js';
 import { applyMediaSync, applySync, clipAudioSource, mediaReference, planMediaSync, planSync, removeMediaSync } from '../../shared/sync.js';
 import {
   adjacentAudioPairs,
@@ -722,6 +723,121 @@ export function removeEffects() {
   const ids = attributeTargets();
   if (!ids.length) return;
   commit((q) => ids.forEach((id) => removeAttributes(q.clips[id], ['effects', 'afx', 'masks'])));
+}
+
+/* Brand: titler, supringer og effekter brukeren har stylet, lagret på tvers av prosjekter (prefs.brandItems). */
+
+export const brandDialog = signal(null);
+// All saved items, in every profile, and the items of the active profile.
+const allBrand = () => brandItems(prefs.value.brandItems);
+export const brandList = () => inProfile(allBrand(), activeProfileId(prefs.value));
+const storeBrand = (items) => setPrefs({ brandItems: items });
+
+// Clip to save from: the given clip, else the first selected one, else the one at the playhead.
+function brandSource(clipId) {
+  const p = project.value;
+  const id = clipId || selection.value.find((cid) => p.clips[cid] && !['gap', 'caption'].includes(p.clips[cid].type));
+  return id ? p.clips[id] : null;
+}
+
+// Opens Save to Brand for a clip. Titles can be saved as a title or lower third, or as an effect preset.
+export function openSaveToBrand(clipId = null) {
+  const c = brandSource(clipId);
+  if (!c) return toast('Select a title, lower third or a clip with effects, then choose Save to Brand.');
+  const { available, preferred } = brandEffectGroups(c);
+  if (c.type !== 'title' && !available.length) return toast('The clip has no effects to save. Add effects, color or audio effects first.');
+  brandDialog.value = { clipId: c.id, kind: c.type === 'title' ? 'title' : 'effects', available, preferred, name: c.type === 'title' ? c.name || c.props.text || 'Title' : `${c.name || 'Clip'} Effects` };
+}
+
+// Saves the clip to Brand. kind: 'title' or 'effects'. groups: attribute groups for an effect preset.
+export function saveToBrand(clipId, { kind, name, groups } = {}) {
+  const c = project.value.clips[clipId];
+  if (!c) throw new Error('The clip is no longer in the project.');
+  if (brandList().length >= BRAND_LIMIT) throw new Error(`A Brand profile can hold up to ${BRAND_LIMIT} items. Delete one first.`);
+  const item = (kind || (c.type === 'title' ? 'title' : 'effects')) === 'title' ? brandTitleItem(c, { name, templates: project.value.templates || {} }) : brandEffectsItem(c, { name, groups });
+  item.profile = activeProfileId(prefs.value);
+  storeBrand([...allBrand(), item]);
+  return item;
+}
+
+// Replaces a saved item with the selected clip as it looks now. The name, profile and place are kept;
+// an effect preset keeps the parts it had.
+export function updateBrandItem(id, clipId = null) {
+  const old = allBrand().find((i) => i.id === id);
+  if (!old) throw new Error('That Brand item no longer exists.');
+  const c = brandSource(clipId);
+  if (!c) throw new Error('Select the clip to update it from.');
+  if (old.kind === 'title' && c.type !== 'title') throw new Error('Select a title or lower third to update this item from.');
+  const next = updatedBrandItem(old, c, project.value.templates || {});
+  storeBrand(allBrand().map((i) => (i.id === id ? next : i)));
+  return next;
+}
+export function canUpdateBrandItem(item) {
+  const c = brandSource();
+  if (!c) return false;
+  if (item.kind === 'title') return c.type === 'title';
+  return brandEffectGroups(c).available.some((g) => item.groups.includes(g));
+}
+
+export function confirmSaveToBrand({ kind, name, groups }) {
+  const d = brandDialog.value;
+  if (!d) return;
+  try {
+    const item = saveToBrand(d.clipId, { kind, name, groups });
+    brandDialog.value = null;
+    toast(`${item.name} was saved to Brand.`, { timeout: 2500 });
+  } catch (err) {
+    toast(err.message, { kind: 'error' });
+  }
+}
+
+// A saved title or lower third at the playhead. A custom template it uses is added to the project.
+export function addBrandTitle(id, T = getTime(), lane = 1) {
+  const item = allBrand().find((i) => i.id === id && i.kind === 'title');
+  if (!item) return toast('That Brand item no longer exists.');
+  const { clip, template } = brandTitleClip(item, T, lane);
+  commit((p) => {
+    if (template && !p.templates?.[template.id]) p.templates = { ...(p.templates || {}), [template.id]: template };
+    placeFree(p, clip, T, lane);
+  });
+  selection.value = [clip.id];
+  inspectorTab.value = clip.props.patternKind ? 'video' : 'text';
+  return clip.id;
+}
+
+// Applies a Brand item: titles are added at the playhead, effect presets go on the selected clips.
+export function applyBrandItem(id, clipIds = null) {
+  const item = allBrand().find((i) => i.id === id);
+  if (!item) return toast('That Brand item no longer exists.');
+  if (item.kind === 'title') return addBrandTitle(id);
+  const p = project.value;
+  const ids = (clipIds || selection.value).filter((cid) => canApplyBrandEffects(item, p.clips[cid]));
+  if (!ids.length) return toast('Select the clips to apply the effect preset to, or drag it onto a clip.');
+  endPreview();
+  editTargets(commit, (q) => ids.forEach((cid) => applyBrandEffects(item, q.clips[cid])));
+  selection.value = ids;
+  inspectorTab.value = item.groups.includes('effects') ? 'effects' : item.groups.includes('color') ? 'color' : inspectorTab.value;
+  return ids.length;
+}
+
+// Shows an effect preset on the selected clips while the pointer is over it.
+export function previewBrandItem(id) {
+  const item = allBrand().find((i) => i.id === id && i.kind === 'effects');
+  const p = project.value;
+  const ids = item ? selection.value.filter((cid) => canApplyBrandEffects(item, p.clips[cid])) : [];
+  if (ids.length) editTargets(previewEdit, (q) => ids.forEach((cid) => applyBrandEffects(item, q.clips[cid])));
+  else endPreview();
+}
+
+export function renameBrand(id, name) {
+  storeBrand(renameBrandItem(allBrand(), id, name));
+}
+export function deleteBrand(id) {
+  storeBrand(allBrand().filter((i) => i.id !== id));
+}
+export function moveBrandItem(id, profileId) {
+  if (inProfile(allBrand(), profileId).length >= BRAND_LIMIT) throw new Error(`That profile already has ${BRAND_LIMIT} items.`);
+  storeBrand(allBrand().map((i) => (i.id === id ? { ...i, profile: profileId } : i)));
 }
 
 /* Lydeffekter */
@@ -1476,7 +1592,7 @@ export async function handleDrop(dt, lane, T, options = {}) {
   const raw = dt.getData('application/x-reccut');
   if (raw) {
     const item = JSON.parse(raw);
-    const targeted = ['effect', 'afx', 'apreset', 'transition', 'frameFx', 'redact', 'adjustment'].includes(item.kind);
+    const targeted = ['effect', 'afx', 'apreset', 'transition', 'frameFx', 'redact', 'adjustment', 'brandEffects'].includes(item.kind);
     const target = targeted ? libraryDropTarget(project.value, item, lane, T, { transitionDur: prefs.value.transitionDur, ...options }) : null;
     if (targeted && !target) {
       if (!project.value.lanes?.[lane]?.locked && ['effect', 'afx', 'apreset'].includes(item.kind)) {
@@ -1510,6 +1626,10 @@ export async function handleDrop(dt, lane, T, options = {}) {
       addAdjustmentLayer(item.id === 'empty' ? null : item.id, T, lane > 0 && lane !== CAPTION_LANE ? lane : null);
     } else if (item.kind === 'title') {
       addTitle(item.id, T);
+    } else if (item.kind === 'brandTitle') {
+      addBrandTitle(item.id, T, lane > 0 && lane !== CAPTION_LANE ? lane : 1);
+    } else if (item.kind === 'brandEffects') {
+      applyBrandItem(item.id, [target.id]);
     } else if (item.kind === 'effect') {
       if (target.kind === 'layer') addAdjustmentLayer(item.id, T, lane > 0 && lane !== CAPTION_LANE ? lane : null);
       else addEffect(item.id, target.id);
@@ -1613,6 +1733,7 @@ export async function clipContextMenu(clipId, T) {
       { id: 'pasteAttributes', label: 'Paste Attributes…', accelerator: 'Shift+CmdOrCtrl+V', enabled: Boolean(clipboard?.length) },
       { id: 'removeEffects', label: 'Remove Effects', accelerator: 'Alt+CmdOrCtrl+X' },
       { id: 'removeAttributes', label: 'Remove Attributes…', accelerator: 'Shift+CmdOrCtrl+X' },
+      { id: 'saveToBrand', label: 'Save to Brand…' },
       { separator: true }
     );
   }
@@ -1651,6 +1772,9 @@ export async function clipContextMenu(clipId, T) {
       break;
     case 'pasteAttributes':
       openPasteAttributes();
+      break;
+    case 'saveToBrand':
+      openSaveToBrand(clipId);
       break;
     case 'removeEffects':
       removeEffects();
